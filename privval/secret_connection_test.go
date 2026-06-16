@@ -9,41 +9,20 @@ import (
 	"time"
 
 	gogotypes "github.com/cosmos/gogoproto/types"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/crypto/ed25519"
 	"github.com/dashpay/tenderdash/internal/libs/protoio"
+	"github.com/dashpay/tenderdash/internal/libs/x25519"
 )
-
-// TestIsLowOrderPoint verifies that every blocklisted Curve25519 point is
-// detected in both encodings (high bit clear and set) and that ordinary keys
-// are accepted.
-func TestIsLowOrderPoint(t *testing.T) {
-	for i := range lowOrderPoints {
-		p := lowOrderPoints[i]
-		assert.True(t, isLowOrderPoint(&p), "point %d must be detected", i)
-
-		// Setting the high bit of the final byte must not bypass the check.
-		highBitSet := p
-		highBitSet[31] |= 0x80
-		assert.True(t, isLowOrderPoint(&highBitSet), "point %d with high bit set must be detected", i)
-	}
-
-	var legitimate [32]byte
-	for i := range legitimate {
-		legitimate[i] = byte(i + 1)
-	}
-	assert.False(t, isLowOrderPoint(&legitimate), "an ordinary key must not be flagged")
-}
 
 // TestMakeSecretConnectionRejectsLowOrderKey drives MakeSecretConnection over a
 // net.Pipe against a scripted peer that sends a low-order ephemeral key. The
 // scripted peer concurrently reads the local key frame so the in-tandem
 // exchange in shareEphPubKey does not deadlock.
 func TestMakeSecretConnectionRejectsLowOrderKey(t *testing.T) {
-	for i := range lowOrderPoints {
-		point := lowOrderPoints[i]
+	for i := range x25519.LowOrderPoints {
+		point := x25519.LowOrderPoints[i]
 		t.Run("point-"+strconv.Itoa(i), func(t *testing.T) {
 			local, remote := net.Pipe()
 			defer local.Close()
@@ -60,9 +39,9 @@ func TestMakeSecretConnectionRejectsLowOrderKey(t *testing.T) {
 			_, err := MakeSecretConnection(local, ed25519.GenPrivKey())
 			require.ErrorIs(t, err, ErrSmallOrderRemotePubKey)
 
-			// Drain the scripted peer goroutine.
 			select {
-			case <-scriptDone:
+			case err := <-scriptDone:
+				require.NoError(t, err)
 			case <-time.After(5 * time.Second):
 				t.Fatal("scripted peer did not finish")
 			}
