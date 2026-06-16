@@ -181,17 +181,19 @@ func TestJSONRPCBatchLimit(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name      string
-		payload   string
-		wantBatch bool // response is a JSON array
-		wantCount int  // number of responses when wantBatch
-		wantErr   bool // single error response naming the limit
-		wantEmpty bool // no response body at all
+		name            string
+		payload         string
+		wantBatch       bool   // response is a JSON array
+		wantCount       int    // number of responses when wantBatch
+		wantErr         bool   // single error response (CodeInvalidRequest)
+		wantErrContains string // substring required in combined message+data; defaults to maxBatchRequests when empty and wantErr
+		wantEmpty       bool   // no response body at all
 	}{
 		{name: "batch of 100 processed", payload: makeBatch(maxBatchRequests, false), wantBatch: true, wantCount: maxBatchRequests},
 		{name: "batch of 101 rejected", payload: makeBatch(maxBatchRequests+1, false), wantErr: true},
 		{name: "single request unaffected", payload: `{"jsonrpc":"2.0","method":"c","id":0,"params":["a","10"]}`, wantBatch: false, wantCount: 1},
 		{name: "batch of 100 notifications no response", payload: makeBatch(maxBatchRequests, true), wantEmpty: true},
+		{name: "empty batch rejected", payload: `[]`, wantErr: true, wantErrContains: "empty batch"},
 	}
 
 	for _, tc := range testCases {
@@ -214,7 +216,11 @@ func TestJSONRPCBatchLimit(t *testing.T) {
 				require.NoError(t, json.Unmarshal(blob, &resp))
 				require.NotNil(t, resp.Error)
 				assert.Equal(t, int(rpctypes.CodeInvalidRequest), resp.Error.Code)
-				assert.Contains(t, resp.Error.Message+resp.Error.Data, fmt.Sprintf("%d", maxBatchRequests))
+				wantContains := tc.wantErrContains
+				if wantContains == "" {
+					wantContains = fmt.Sprintf("%d", maxBatchRequests)
+				}
+				assert.Contains(t, resp.Error.Message+resp.Error.Data, wantContains)
 			case tc.wantBatch:
 				var resps []rpctypes.RPCResponse
 				require.NoError(t, json.Unmarshal(blob, &resps))

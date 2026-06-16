@@ -58,9 +58,6 @@ func Handler(rpcConfig *config.RPCConfig, routes core.RoutesMap, logger log.Logg
 	mux := http.NewServeMux()
 	wmLogger := logger.With("protocol", "websocket")
 
-	// TODO: eventBus is never assigned, so this nil interface would fail when the
-	// disconnect callback runs. The callback fires on every websocket disconnect,
-	// not only when subscriptions exist; assign a real unsubscriber before use.
 	var eventBus eventBusUnsubscriber
 
 	websocketDisconnectFn := func(remoteAddr string) {

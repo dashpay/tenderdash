@@ -50,6 +50,12 @@ func makeJSONRPCHandler(funcMap map[string]*RPCFunc, logger log.Logger) http.Han
 			return
 		}
 
+		if len(requests) == 0 {
+			writeRPCResponse(w, logger, rpctypes.RPCRequest{}.MakeErrorf(
+				rpctypes.CodeInvalidRequest, "empty batch request"))
+			return
+		}
+
 		if len(requests) > maxBatchRequests {
 			writeRPCResponse(w, logger, rpctypes.RPCRequest{}.MakeErrorf(
 				rpctypes.CodeInvalidRequest,

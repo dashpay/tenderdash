@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -74,6 +75,7 @@ func TestBlockSearchQueryLength(t *testing.T) {
 			require.Error(t, err) // both cases error; only the cause differs
 			if tc.lengthErr {
 				assert.Contains(t, err.Error(), "maximum query length exceeded")
+				assert.True(t, errors.Is(err, coretypes.ErrInvalidRequest), "expected ErrInvalidRequest, got %v", err)
 			} else {
 				// A query at the limit passes the length gate and fails later
 				// (query parse), but never with the length-cap message.
