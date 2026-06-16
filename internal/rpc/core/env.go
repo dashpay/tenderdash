@@ -290,6 +290,7 @@ func (env *Environment) StartService(ctx context.Context, conf *config.Config) (
 				}),
 				rpcserver.ReadLimit(cfg.MaxBodyBytes),
 			)
+			wm.CheckOrigin = rpcserver.OriginChecker(conf.RPC.CORSAllowedOrigins)
 			mux.HandleFunc("/websocket", wm.WebsocketHandler)
 		}
 

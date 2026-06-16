@@ -2,6 +2,7 @@
 package server
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -122,6 +123,9 @@ func ServeTLS(ctx context.Context, listener net.Listener, handler http.Handler, 
 // writeInternalError writes an internal server error (500) to w with the text
 // of err in the body. This is a fallback used when a handler is unable to
 // write the expected response.
+//
+// NOTE(intentional): the error text is written to the client as-is; the inputs
+// on this path are server-side encoding/recovery errors and the detail aids debugging.
 func writeInternalError(w http.ResponseWriter, err error) {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusInternalServerError)
@@ -249,16 +253,26 @@ func (h maxBytesHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 func newStatusWriter(w http.ResponseWriter, code *int) statusWriter {
 	return statusWriter{
 		ResponseWriter: w,
-		Hijacker:       w.(http.Hijacker),
 		code:           code,
 	}
 }
 
 type statusWriter struct {
 	http.ResponseWriter
-	http.Hijacker // to support websocket upgrade
 
 	code *int
+}
+
+// Hijack implements http.Hijacker to support websocket upgrades. It delegates
+// to the wrapped writer when it supports hijacking, and returns an error
+// otherwise so transports without hijack support (e.g. HTTP/2) degrade cleanly
+// instead of faulting.
+func (w statusWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hj, ok := w.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, errors.New("underlying response writer does not support connection hijacking")
+	}
+	return hj.Hijack()
 }
 
 // WriteHeader implements part of http.ResponseWriter. It delegates to the

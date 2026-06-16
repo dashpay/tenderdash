@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -36,26 +38,76 @@ type WebsocketManager struct {
 
 // NewWebsocketManager returns a new WebsocketManager that passes a map of
 // functions, connection options and logger to new WS connections.
+//
+// The default origin policy accepts requests without an Origin header
+// (non-browser clients) and same-host origins, and denies other cross-origin
+// requests. Callers that need to permit specific browser origins can override
+// the embedded Upgrader.CheckOrigin with OriginChecker.
 func NewWebsocketManager(logger log.Logger, funcMap map[string]*RPCFunc, wsConnOptions ...func(*wsConnection)) *WebsocketManager {
 	return &WebsocketManager{
 		funcMap: funcMap,
 		Upgrader: websocket.Upgrader{
-			CheckOrigin: func(r *http.Request) bool {
-				// TODO ???
-				//
-				// The default behavior would be relevant to browser-based clients,
-				// afaik. I suppose having a pass-through is a workaround for allowing
-				// for more complex security schemes, shifting the burden of
-				// AuthN/AuthZ outside the Tendermint RPC.
-				// I can't think of other uses right now that would warrant a TODO
-				// though. The real backstory of this TODO shall remain shrouded in
-				// mystery
-				return true
-			},
+			CheckOrigin: OriginChecker(nil),
 		},
 		logger:        logger,
 		wsConnOptions: wsConnOptions,
 	}
+}
+
+// OriginChecker returns a CheckOrigin function for websocket upgrades. It
+// accepts requests without an Origin header (non-browser clients), requests
+// whose Origin host matches the request host, and requests whose Origin
+// matches an entry in allowedOrigins. Matching is case-insensitive; an entry
+// of "*" allows any origin, and an entry may contain a single "*" wildcard
+// (e.g. "http://*.example.com"), mirroring the CORS allow-list semantics.
+func OriginChecker(allowedOrigins []string) func(*http.Request) bool {
+	matchers := compileOriginMatchers(allowedOrigins)
+	return func(r *http.Request) bool {
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true
+		}
+		u, err := url.Parse(origin)
+		if err != nil {
+			return false
+		}
+		if strings.EqualFold(u.Host, r.Host) {
+			return true
+		}
+		origin = strings.ToLower(origin)
+		for _, m := range matchers {
+			if m(origin) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// compileOriginMatchers turns the configured origins into case-insensitive
+// matchers. The semantics mirror github.com/rs/cors so operators relying on
+// wildcard CORS origins keep working: a single "*" matches all, an entry with
+// one embedded "*" matches by prefix/suffix, and any other entry matches
+// exactly.
+func compileOriginMatchers(allowedOrigins []string) []func(string) bool {
+	matchers := make([]func(string) bool, 0, len(allowedOrigins))
+	for _, o := range allowedOrigins {
+		o = strings.ToLower(o)
+		if o == "*" {
+			return []func(string) bool{func(string) bool { return true }}
+		}
+		if i := strings.IndexByte(o, '*'); i >= 0 {
+			prefix, suffix := o[:i], o[i+1:]
+			matchers = append(matchers, func(s string) bool {
+				return len(s) >= len(prefix)+len(suffix) &&
+					strings.HasPrefix(s, prefix) && strings.HasSuffix(s, suffix)
+			})
+		} else {
+			exact := o
+			matchers = append(matchers, func(s string) bool { return s == exact })
+		}
+	}
+	return matchers
 }
 
 // WebsocketHandler upgrades the request/response (via http.Hijack) and starts
