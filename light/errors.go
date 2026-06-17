@@ -82,7 +82,7 @@ var ErrNoWitnesses = errors.New("no witnesses connected. please reset light clie
 // differs from the primary's. The primary's header is not trusted while the
 // conflict is unresolved.
 //
-// By design this favours safety over availability: a single conflicting
+// By design this favors safety over availability: a single conflicting
 // witness fails verification, and there is intentionally no automatic
 // primary swap or recovery. Witness selection is therefore availability-
 // critical — a misbehaving witness can stall verification until an operator
