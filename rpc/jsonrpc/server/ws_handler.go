@@ -94,6 +94,9 @@ func OriginChecker(logger log.Logger, allowedOrigins []string) func(*http.Reques
 // rendering the entry dead. Such entries are reported via logger at compile
 // time.
 func compileOriginMatchers(logger log.Logger, allowedOrigins []string) []func(string) bool {
+	if logger == nil {
+		logger = log.NewNopLogger()
+	}
 	matchers := make([]func(string) bool, 0, len(allowedOrigins))
 	for _, o := range allowedOrigins {
 		o = strings.ToLower(o)

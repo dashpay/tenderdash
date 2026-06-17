@@ -172,6 +172,21 @@ func TestWebsocketOriginCheck(t *testing.T) {
 	}
 }
 
+// TestOriginCheckerNilLogger verifies that OriginChecker does not panic when
+// called with a nil logger, even when the allow-list entry contains more than
+// one '*' (the path that previously called logger.Warn without a nil guard).
+func TestOriginCheckerNilLogger(t *testing.T) {
+	require.NotPanics(t, func() {
+		check := OriginChecker(nil, []string{"http://*.foo.*.bar"})
+		require.NotNil(t, check)
+		// The double-wildcard entry can never match a real origin, but the
+		// checker itself must be usable without crashing.
+		r := httptest.NewRequest(http.MethodGet, "http://node.example.com/ws", nil)
+		r.Header.Set("Origin", "http://app.foo.baz.bar")
+		_ = check(r)
+	})
+}
+
 // TestJSONRPCBatchLimit verifies the hardcoded per-batch request cap.
 func TestJSONRPCBatchLimit(t *testing.T) {
 	mux := testMux()
