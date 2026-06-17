@@ -169,13 +169,14 @@ func (p *http) validatorSet(ctx context.Context, height *int64, proposer types.P
 	const maxPages = 100
 
 	var (
-		perPage         = 100
-		vals            []*types.Validator
-		thresholdPubKey crypto.PubKey
-		quorumType      btcjson.LLMQType
-		quorumHash      crypto.QuorumHash
-		page            = 1
-		total           = -1
+		perPage                 = 100
+		vals                    []*types.Validator
+		thresholdPubKey         crypto.PubKey
+		quorumType              btcjson.LLMQType
+		quorumHash              crypto.QuorumHash
+		page                    = 1
+		total                   = -1
+		thresholdPubKeyReceived bool
 	)
 
 	for len(vals) != total && page <= maxPages {
@@ -183,7 +184,10 @@ func (p *http) validatorSet(ctx context.Context, height *int64, proposer types.P
 		// is negative we will keep repeating.
 		attempt := uint16(0)
 		for {
-			reqThresholdPubKey := attempt == 0
+			// The threshold public key and quorum info are returned only once, with
+			// the first page. Re-request them until received so a timed-out first
+			// attempt is retried rather than silently dropping them.
+			reqThresholdPubKey := !thresholdPubKeyReceived
 			res, err := p.client.Validators(ctx, height, &page, &perPage, &reqThresholdPubKey)
 			switch e := err.(type) {
 			case nil: // success!! Now we validate the response
@@ -226,18 +230,31 @@ func (p *http) validatorSet(ctx context.Context, height *int64, proposer types.P
 				// terminate the connection with the peer.
 				return nil, provider.ErrUnreliableProvider{Reason: e}
 			}
-			// update the total and increment the page index so we can fetch the
-			// next page of validators if need be
-			total = res.Total
-			vals = append(vals, res.Validators...)
 			if reqThresholdPubKey {
+				if res.ThresholdPublicKey == nil || res.QuorumHash == nil {
+					return nil, provider.ErrBadLightBlock{
+						Reason: fmt.Errorf("validator response missing threshold public key or quorum hash (height: %d, page: %d)",
+							height, page),
+					}
+				}
 				thresholdPubKey = *res.ThresholdPublicKey
 				quorumHash = *res.QuorumHash
 				quorumType = res.QuorumType
+				thresholdPubKeyReceived = true
 			}
+			// update the total and advance to the next page so we can fetch the
+			// remaining validators if need be
+			total = res.Total
+			vals = append(vals, res.Validators...)
+			page++
 			break
 		}
 	}
+
+	if !thresholdPubKeyReceived {
+		return nil, provider.ErrBadLightBlock{Reason: fmt.Errorf("validator response did not provide a threshold public key")}
+	}
+
 	valSet := types.NewValidatorSet(vals, thresholdPubKey, quorumType, quorumHash, false, nil)
 
 	if valSet == nil || valSet.IsNilOrEmpty() {
