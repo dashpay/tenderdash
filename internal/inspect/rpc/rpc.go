@@ -61,6 +61,9 @@ func Handler(rpcConfig *config.RPCConfig, routes core.RoutesMap, logger log.Logg
 	var eventBus eventBusUnsubscriber
 
 	websocketDisconnectFn := func(remoteAddr string) {
+		if eventBus == nil {
+			return
+		}
 		err := eventBus.UnsubscribeAll(context.Background(), remoteAddr)
 		if err != nil && err != pubsub.ErrSubscriptionNotFound {
 			wmLogger.Error("Failed to unsubscribe addr from events", "addr", remoteAddr, "err", err)
