@@ -105,6 +105,13 @@ func (p *Proxy) listen(ctx context.Context) (net.Listener, *http.ServeMux, error
 		}),
 		rpcserver.ReadLimit(p.Config.MaxBodyBytes),
 	)
+	// Preserve the light proxy's historic permissive websocket origin policy:
+	// allow every origin. The proxy is configured via rpcserver.Config, which
+	// exposes no CORS allow-list knob, so the WebsocketManager default
+	// (same-host/Origin-less only) would silently reject browser clients that
+	// worked before. Operators that need origin restrictions are expected to
+	// enforce AuthN/AuthZ in front of the proxy.
+	wm.CheckOrigin = func(*http.Request) bool { return true }
 
 	mux.HandleFunc("/websocket", wm.WebsocketHandler)
 
