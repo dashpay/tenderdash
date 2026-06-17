@@ -308,7 +308,7 @@ func (txi *TxIndex) match(
 			}
 		}
 		if err := it.Error(); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("prefix iterator failed during scan: %w", err)
 		}
 
 	case syntax.TExists:
@@ -332,7 +332,7 @@ func (txi *TxIndex) match(
 			}
 		}
 		if err := it.Error(); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("prefix iterator failed during scan: %w", err)
 		}
 
 	case syntax.TContains:
@@ -363,7 +363,7 @@ func (txi *TxIndex) match(
 			}
 		}
 		if err := it.Error(); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("prefix iterator failed during scan: %w", err)
 		}
 	default:
 		panic("other operators should be handled already")
@@ -467,7 +467,7 @@ iter:
 		}
 	}
 	if err := it.Error(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("prefix iterator failed during scan: %w", err)
 	}
 
 	if len(tmpHashes) == 0 || firstRun {
