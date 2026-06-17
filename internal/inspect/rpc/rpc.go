@@ -8,7 +8,6 @@ import (
 	"github.com/rs/cors"
 
 	"github.com/dashpay/tenderdash/config"
-	"github.com/dashpay/tenderdash/internal/pubsub"
 	"github.com/dashpay/tenderdash/internal/rpc/core"
 	"github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/state/indexer"
@@ -22,10 +21,6 @@ type Server struct {
 	Handler http.Handler
 	Logger  log.Logger
 	Config  *config.RPCConfig
-}
-
-type eventBusUnsubscriber interface {
-	UnsubscribeAll(ctx context.Context, subscriber string) error
 }
 
 // Routes returns the set of routes used by the Inspector server.
@@ -56,22 +51,8 @@ func Routes(cfg config.RPCConfig, s state.Store, bs state.BlockStore, es []index
 // and the CORS handler if specified by the configuration options.
 func Handler(rpcConfig *config.RPCConfig, routes core.RoutesMap, logger log.Logger) http.Handler {
 	mux := http.NewServeMux()
-	wmLogger := logger.With("protocol", "websocket")
 
-	var eventBus eventBusUnsubscriber
-
-	websocketDisconnectFn := func(remoteAddr string) {
-		if eventBus == nil {
-			return
-		}
-		err := eventBus.UnsubscribeAll(context.Background(), remoteAddr)
-		if err != nil && err != pubsub.ErrSubscriptionNotFound {
-			wmLogger.Error("Failed to unsubscribe addr from events", "addr", remoteAddr, "err", err)
-		}
-	}
-	wm := server.NewWebsocketManager(logger, routes,
-		server.OnDisconnect(websocketDisconnectFn),
-		server.ReadLimit(rpcConfig.MaxBodyBytes))
+	wm := server.NewWebsocketManager(logger, routes, server.ReadLimit(rpcConfig.MaxBodyBytes))
 	mux.HandleFunc("/websocket", wm.WebsocketHandler)
 
 	server.RegisterRPCFuncs(mux, routes, logger)
