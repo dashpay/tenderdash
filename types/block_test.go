@@ -1000,7 +1000,10 @@ func TestStateID_Copy(t *testing.T) {
 	state2 := state1.Copy()
 	assert.Equal(t, state1, state2)
 
-	state2.AppHash[5] = 0x12
+	// Flip the bits of a byte so the mutated value is guaranteed to differ
+	// from the original. Assigning a fixed constant would be a no-op whenever
+	// RandStateID happened to produce that same byte, making the test flaky.
+	state2.AppHash[5] = ^state2.AppHash[5]
 	assert.NotEqual(t, state1, state2)
 }
 

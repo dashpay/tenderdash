@@ -212,8 +212,19 @@ func waitForAndValidateBlock(
 	}
 
 	wg.Wait()
-	if err := ctx.Err(); errors.Is(err, context.DeadlineExceeded) {
-		t.Fatal("encountered timeout")
+	if err := ctx.Err(); err != nil {
+		// DeadlineExceeded is the usual stall symptom; Canceled means an
+		// upstream worker (or the parent test) aborted. Either way we did not
+		// collect a block from every node.
+		t.Fatalf("encountered timeout: %s", err)
+	}
+	// A worker can also bail out without a context error if its subscription is
+	// terminated (e.g. its buffer overflowed because consensus raced ahead while
+	// another node stalled), leaving a nil entry. Fail cleanly here rather than
+	// returning nils for the caller to dereference into a panic that would crash
+	// the whole package test binary.
+	for j, block := range blocks {
+		require.NotNilf(t, block, "node %d did not deliver a block before the deadline", j)
 	}
 	return blocks
 }
