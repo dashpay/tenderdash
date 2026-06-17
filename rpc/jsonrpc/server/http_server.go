@@ -270,7 +270,7 @@ type statusWriter struct {
 func (w statusWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	hj, ok := w.ResponseWriter.(http.Hijacker)
 	if !ok {
-		return nil, nil, errors.New("underlying response writer does not support connection hijacking")
+		return nil, nil, http.ErrNotSupported
 	}
 	return hj.Hijack()
 }

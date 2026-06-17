@@ -73,6 +73,7 @@ func TestRecoverAndLogHandlerHTTP2(t *testing.T) {
 
 func TestOriginChecker(t *testing.T) {
 	const host = "node.example.com:26657"
+	logger := log.NewNopLogger()
 
 	testCases := []struct {
 		name           string
@@ -98,7 +99,7 @@ func TestOriginChecker(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			check := OriginChecker(tc.allowedOrigins)
+			check := OriginChecker(logger, tc.allowedOrigins)
 			r := httptest.NewRequest(http.MethodGet, "http://"+host+"/websocket", nil)
 			r.Host = host
 			if tc.origin != "" {
@@ -134,7 +135,7 @@ func TestWebsocketOriginCheck(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			wm := NewWebsocketManager(logger, funcMap)
-			wm.CheckOrigin = OriginChecker(tc.allowedOrigins)
+			wm.CheckOrigin = OriginChecker(logger, tc.allowedOrigins)
 
 			mux := http.NewServeMux()
 			mux.HandleFunc("/websocket", wm.WebsocketHandler)

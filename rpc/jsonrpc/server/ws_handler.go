@@ -47,7 +47,7 @@ func NewWebsocketManager(logger log.Logger, funcMap map[string]*RPCFunc, wsConnO
 	return &WebsocketManager{
 		funcMap: funcMap,
 		Upgrader: websocket.Upgrader{
-			CheckOrigin: OriginChecker(nil),
+			CheckOrigin: OriginChecker(logger, nil),
 		},
 		logger:        logger,
 		wsConnOptions: wsConnOptions,
@@ -60,8 +60,9 @@ func NewWebsocketManager(logger log.Logger, funcMap map[string]*RPCFunc, wsConnO
 // matches an entry in allowedOrigins. Matching is case-insensitive; an entry
 // of "*" allows any origin, and an entry may contain a single "*" wildcard
 // (e.g. "http://*.example.com"), mirroring the CORS allow-list semantics.
-func OriginChecker(allowedOrigins []string) func(*http.Request) bool {
-	matchers := compileOriginMatchers(allowedOrigins)
+// logger is used to warn about unusable allow-list entries at compile time.
+func OriginChecker(logger log.Logger, allowedOrigins []string) func(*http.Request) bool {
+	matchers := compileOriginMatchers(logger, allowedOrigins)
 	return func(r *http.Request) bool {
 		origin := r.Header.Get("Origin")
 		if origin == "" {
@@ -88,8 +89,11 @@ func OriginChecker(allowedOrigins []string) func(*http.Request) bool {
 // matchers. The semantics mirror github.com/rs/cors so operators relying on
 // wildcard CORS origins keep working: a single "*" matches all, an entry with
 // one embedded "*" matches by prefix/suffix, and any other entry matches
-// exactly.
-func compileOriginMatchers(allowedOrigins []string) []func(string) bool {
+// exactly. Only the first "*" in an entry is honored (rs/cors semantics); any
+// further "*" is matched literally and so can never match a browser Origin,
+// rendering the entry dead. Such entries are reported via logger at compile
+// time.
+func compileOriginMatchers(logger log.Logger, allowedOrigins []string) []func(string) bool {
 	matchers := make([]func(string) bool, 0, len(allowedOrigins))
 	for _, o := range allowedOrigins {
 		o = strings.ToLower(o)
@@ -97,6 +101,9 @@ func compileOriginMatchers(allowedOrigins []string) []func(string) bool {
 			return []func(string) bool{func(string) bool { return true }}
 		}
 		if i := strings.IndexByte(o, '*'); i >= 0 {
+			if strings.ContainsRune(o[i+1:], '*') {
+				logger.Warn("CORS origin pattern has more than one '*'; only the first is honored, the rest match literally and will never match a browser Origin", "origin", o)
+			}
 			prefix, suffix := o[:i], o[i+1:]
 			matchers = append(matchers, func(s string) bool {
 				return len(s) >= len(prefix)+len(suffix) &&

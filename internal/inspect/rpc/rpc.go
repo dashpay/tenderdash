@@ -73,7 +73,7 @@ func Handler(rpcConfig *config.RPCConfig, routes core.RoutesMap, logger log.Logg
 	// mirroring the node RPC (internal/rpc/core/env.go) and the HTTP CORS path
 	// below. Without this the WS default (same-host/Origin-less only) would 403
 	// allow-listed browser origins that the HTTP endpoint accepts.
-	wm.CheckOrigin = server.OriginChecker(rpcConfig.CORSAllowedOrigins)
+	wm.CheckOrigin = server.OriginChecker(wmLogger, rpcConfig.CORSAllowedOrigins)
 	mux.HandleFunc("/websocket", wm.WebsocketHandler)
 
 	server.RegisterRPCFuncs(mux, routes, logger)
