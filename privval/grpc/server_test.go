@@ -102,6 +102,25 @@ func TestSignerServerChainIDValidation(t *testing.T) {
 			quorumHash, err := spy.GetFirstQuorumHash(ctx)
 			require.NoError(t, err)
 
+			t.Run("unconfigured server rejected", func(t *testing.T) {
+				// A server without a chain ID must refuse every request instead
+				// of treating an empty request chain ID as a match.
+				unconfiguredSpy := &spyPV{MockPV: types.NewMockPV()}
+				unconfigured := tmgrpc.NewSignerServer(logger, "", unconfiguredSpy)
+				err := handler(ctx, unconfigured, quorumHash, "")
+				require.Error(t, err)
+				assert.Equal(t, codes.FailedPrecondition, status.Code(err))
+				assert.False(t, unconfiguredSpy.called, "privVal must not be invoked when server chain ID is unconfigured")
+			})
+
+			t.Run("empty request rejected", func(t *testing.T) {
+				spy.called = false
+				err := handler(ctx, s, quorumHash, "")
+				require.Error(t, err)
+				assert.Equal(t, codes.InvalidArgument, status.Code(err))
+				assert.False(t, spy.called, "privVal must not be invoked when request chain ID is empty")
+			})
+
 			t.Run("mismatch rejected", func(t *testing.T) {
 				spy.called = false
 				err := handler(ctx, s, quorumHash, "other-chain")

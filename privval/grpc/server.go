@@ -32,9 +32,17 @@ func NewSignerServer(logger log.Logger, chainID string, privVal types.PrivValida
 
 var _ privvalproto.PrivValidatorAPIServer = (*SignerServer)(nil)
 
-// validateChainID returns an InvalidArgument error when the request chain ID
-// does not match the chain ID the server was configured with.
+// validateChainID guards the signer against serving requests for the wrong
+// chain. It returns FailedPrecondition when the server itself has no chain ID
+// configured, and InvalidArgument when the request omits the chain ID or does
+// not match the chain ID the server was configured with.
 func (ss *SignerServer) validateChainID(reqChainID string) error {
+	if ss.chainID == "" {
+		return status.Error(codes.FailedPrecondition, "server chain ID is not configured")
+	}
+	if reqChainID == "" {
+		return status.Error(codes.InvalidArgument, "missing chain ID")
+	}
 	if reqChainID != ss.chainID {
 		return status.Errorf(codes.InvalidArgument, "unexpected chain ID: want %s, got %s", ss.chainID, reqChainID)
 	}
