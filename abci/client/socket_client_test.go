@@ -24,7 +24,14 @@ func TestSocketClientTimeout(t *testing.T) {
 		FailDuringEnqueue    = 1
 		FailDuringProcessing = 2
 
-		baseTime = 10 * time.Millisecond
+		// baseTime is the unit on which every case's timeout and sleep are
+		// scaled, so cases are defined by their *relative* timing. It must be
+		// comfortably larger than the fixed cost of a socket round-trip
+		// (goroutine scheduling + the serialized Info+CheckTx requests over the
+		// unix socket) under the race detector on a loaded CI host; otherwise
+		// the no-delay "immediate" case (timeout == baseTime) spuriously trips
+		// its deadline before the response arrives.
+		baseTime = 50 * time.Millisecond
 	)
 	type testCase struct {
 		name            string
