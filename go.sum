@@ -138,11 +138,12 @@ github.com/breml/errchkjson v0.4.1 h1:keFSS8D7A2T0haP9kzZTi7o26r7kE3vymjZNeNDRDw
 github.com/breml/errchkjson v0.4.1/go.mod h1:a23OvR6Qvcl7DG/Z4o0el6BRAjKnaReoPQFciAl9U3s=
 github.com/brianvoe/gofakeit/v6 v6.28.0 h1:Xib46XXuQfmlLS2EXRuJpqcw8St6qSZz75OUo0tgAW4=
 github.com/brianvoe/gofakeit/v6 v6.28.0/go.mod h1:Xj58BMSnFqcn/fAQeSK+/PLtC5kSb7FJIq4JyGa8vEs=
+github.com/btcsuite/btcd v0.20.1-beta h1:Ik4hyJqN8Jfyv3S4AGBOmyouMsYE3EdYODkMbQjwPGw=
 github.com/btcsuite/btcd v0.20.1-beta/go.mod h1:wVuoA8VJLEcwgqHBwHmzLRazpKxTv13Px/pDuV7OomQ=
-github.com/btcsuite/btcd/btcec/v2 v2.3.6 h1:IzlsEr9olcSRKB/n7c4351F3xHKxS2lma+1UFGCYd4E=
-github.com/btcsuite/btcd/btcec/v2 v2.3.6/go.mod h1:m22FrOAiuxl/tht9wIqAoGHcbnCCaPWyauO8y2LGGtQ=
-github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0 h1:59Kx4K6lzOW5w6nFlA0v5+lk/6sjybR934QNHSJZPTQ=
-github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0/go.mod h1:7SFka0XMvUgj3hfZtydOrQY2mwhPclbT2snogU7SQQc=
+github.com/btcsuite/btcd/btcec/v2 v2.5.0 h1:KioMXOWa76b86sTZZOmbzv/ldaQCmB8KFAyn5PbB8E8=
+github.com/btcsuite/btcd/btcec/v2 v2.5.0/go.mod h1:+K/MYXcLBtHEQjRbjHuJChuybk4LCgjdjgRwil+e+Kk=
+github.com/btcsuite/btcd/chainhash/v2 v2.0.0 h1:PMLlSloHJuEeB80XG9EjpXWNEKAZAMLl6YHZ6YsEuoA=
+github.com/btcsuite/btcd/chainhash/v2 v2.0.0/go.mod h1:mKxcZ7oGTXE7IRV+sS9hP4EVBwc/SzfNR+52IsOP9j8=
 github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f/go.mod h1:TdznJufoqS23FtqVCzL0ZqgP5MqXbb4fg/WgDys70nA=
 github.com/btcsuite/btclog v1.0.0 h1:sEkpKJMmfGiyZjADwEIgB1NSwMyfdD1FB8v6+w1T0Ns=
 github.com/btcsuite/btclog v1.0.0/go.mod h1:w7xnGOhwT3lmrS4H3b/D1XAXxvh+tbhUm8xeHN2y3TQ=

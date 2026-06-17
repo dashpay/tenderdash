@@ -94,7 +94,6 @@ require (
 	github.com/ashanbrown/makezero/v2 v2.2.1 // indirect
 	github.com/bombsimon/wsl/v4 v4.7.0 // indirect
 	github.com/bombsimon/wsl/v5 v5.8.0 // indirect
-	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0 // indirect
 	github.com/btcsuite/btclog v1.0.0 // indirect
 	github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd // indirect
 	github.com/btcsuite/websocket v0.0.0-20150119174127-31079b680792 // indirect
@@ -365,7 +364,7 @@ require (
 )
 
 require (
-	github.com/btcsuite/btcd/btcec/v2 v2.3.6
+	github.com/btcsuite/btcd/btcec/v2 v2.5.0
 	github.com/cometbft/cometbft-db v1.0.4
 	github.com/cosmos/gogoproto v1.7.2
 	github.com/creachadair/tomledit v0.0.29
