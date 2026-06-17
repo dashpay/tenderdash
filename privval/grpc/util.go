@@ -101,7 +101,8 @@ func DialRemoteSigner(
 			cfg.ClientKeyFile(), cfg.RootCAFile(), logger)
 	} else {
 		transportSecurity = grpc.WithTransportCredentials(insecure.NewCredentials())
-		logger.Info("Using an insecure gRPC connection!")
+		logger.Warn("Remote signer connection is not using TLS; traffic is not encrypted or authenticated. " +
+			"Set client certificate, key and root CA in the privval config to enable TLS")
 	}
 
 	dialOptions := DefaultDialOptions()

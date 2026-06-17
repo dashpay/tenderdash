@@ -42,7 +42,8 @@ func NewSignerListener(listenAddr string, logger log.Logger) (*SignerListenerEnd
 	case "unix":
 		listener = NewUnixListener(ln)
 	case "tcp":
-		// TODO: persist this key so external signer can actually authenticate us
+		// TODO: persist this key and pin/verify the remote signer's static key so both
+		// endpoints can verify each other across restarts.
 		listener = NewTCPListener(ln, ed25519.GenPrivKey())
 	default:
 		panic("invalid protocol: " + protocol) // semantically unreachable
