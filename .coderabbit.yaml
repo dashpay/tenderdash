@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# CodeRabbit configuration.
+# Automatic pull-request reviews are disabled: CodeRabbit will only review a
+# pull request when explicitly requested via the "@coderabbitai review"
+# comment command.
+reviews:
+  auto_review:
+    enabled: false
