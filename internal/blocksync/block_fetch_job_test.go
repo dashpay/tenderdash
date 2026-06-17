@@ -89,6 +89,64 @@ func (suite *BlockFetchJobTestSuite) TestExecute() {
 	}
 }
 
+func (suite *BlockFetchJobTestSuite) TestExecuteHeightMismatch() {
+	ctx := context.Background()
+	const requested = int64(5)
+	// The peer answers a request for height 5 with a valid block+commit at height 6.
+	mismatched := suite.responses[6-1]
+	suite.client.
+		On("GetBlock", mock.Anything, requested, suite.peer.peerID).
+		Once().
+		Return(suite.getBlockReturnFunc(suite.promiseResolveResponse(mismatched)), nil)
+	handler := blockFetchJobHandler(suite.client, suite.peer, requested)
+	res := handler(ctx)
+	suite.requireError("peer sent block at height 6, requested height 5", res.Err)
+}
+
+func TestBlockResponseValidate(t *testing.T) {
+	block := func(h int64) *types.Block {
+		return &types.Block{Header: types.Header{Height: h}}
+	}
+	commit := func(h int64) *types.Commit {
+		return &types.Commit{Height: h}
+	}
+	testCases := []struct {
+		name    string
+		resp    BlockResponse
+		wantErr string
+	}{
+		{
+			name:    "nil block, nil commit",
+			resp:    BlockResponse{},
+			wantErr: "block response without a block",
+		},
+		{
+			name:    "nil block, non-nil commit",
+			resp:    BlockResponse{Commit: commit(10)},
+			wantErr: "block response without a block",
+		},
+		{
+			name:    "block, nil commit",
+			resp:    BlockResponse{Block: block(10)},
+			wantErr: "a block without a commit at height 10",
+		},
+		{
+			name:    "height mismatch",
+			resp:    BlockResponse{Block: block(10), Commit: commit(11)},
+			wantErr: "heights don't match",
+		},
+		{
+			name: "valid",
+			resp: BlockResponse{Block: block(10), Commit: commit(10)},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmrequire.Error(t, tc.wantErr, tc.resp.Validate())
+		})
+	}
+}
+
 func (suite *BlockFetchJobTestSuite) requireError(wantErr string, err error) {
 	tmrequire.Error(suite.T(), wantErr, err)
 	bfErr := &errBlockFetch{}
@@ -168,8 +226,12 @@ func (suite *BlockFetchJobTestSuite) promiseReject(err error) *promise.Promise[*
 }
 
 func (suite *BlockFetchJobTestSuite) promiseResolve(height int64) *promise.Promise[*bcproto.BlockResponse] {
+	return suite.promiseResolveResponse(suite.responses[height-1])
+}
+
+func (suite *BlockFetchJobTestSuite) promiseResolveResponse(resp *bcproto.BlockResponse) *promise.Promise[*bcproto.BlockResponse] {
 	return promise.New(func(resolve func(data *bcproto.BlockResponse), _ func(err error)) {
-		resolve(suite.responses[height-1])
+		resolve(resp)
 	})
 }
 
