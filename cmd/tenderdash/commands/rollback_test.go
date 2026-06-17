@@ -2,6 +2,7 @@ package commands_test
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -28,8 +29,31 @@ func TestRollbackIntegration(t *testing.T) {
 	require.NoError(t, err)
 	cfg.BaseConfig.DBBackend = "goleveldb"
 
+	// As the node databases (goleveldb) and other background resources under
+	// cfg.RootDir/data flush and release on shutdown, they may briefly create
+	// files. t.TempDir's automatic cleanup does a single-shot RemoveAll and
+	// fails the test if it races such a transient write ("directory not
+	// empty"). Remove RootDir ourselves first, with a bounded retry, after
+	// every node has been stopped (this cleanup is registered after — so runs
+	// before — the t.TempDir cleanup). A permanent leak still fails the test
+	// once the retry budget is exhausted.
+	t.Cleanup(func() {
+		var rmErr error
+		for i := 0; i < 100; i++ {
+			if rmErr = os.RemoveAll(cfg.RootDir); rmErr == nil {
+				return
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		require.NoError(t, rmErr, "failed to remove node data dir after retries")
+	})
+
 	app, err := e2e.NewApplication(kvstore.DefaultConfig(dir), kvstore.WithDuplicateRequestDetection(false))
 	require.NoError(t, err)
+	// The kvstore application persists state to disk and is shared across the
+	// node restarts below; close it once the test finishes so it stops touching
+	// its directory before TempDir cleanup runs.
+	t.Cleanup(func() { _ = app.Close() })
 
 	t.Run("First run", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(ctx)
