@@ -115,13 +115,13 @@ func TestDuplicateVoteEvidenceValidation(t *testing.T) {
 	stateID := RandStateID()
 	blockID := makeBlockID(
 		crypto.Checksum([]byte("blockhash")),
-		math.MaxInt32,
+		1,
 		crypto.Checksum([]byte("partshash")),
 		stateID.Hash(),
 	)
 	blockID2 := makeBlockID(
 		crypto.Checksum([]byte("blockhash2")),
-		math.MaxInt32,
+		1,
 		crypto.Checksum([]byte("partshash")),
 		stateID.Hash(),
 	)
@@ -229,8 +229,8 @@ func TestEvidenceProto(t *testing.T) {
 	quorumHash := crypto.RandQuorumHash()
 	val := NewMockPVForQuorum(quorumHash)
 	stateID := RandStateID().Hash()
-	blockID := makeBlockID(crypto.Checksum([]byte("blockhash")), math.MaxInt32, crypto.Checksum([]byte("partshash")), stateID)
-	blockID2 := makeBlockID(crypto.Checksum([]byte("blockhash2")), math.MaxInt32, crypto.Checksum([]byte("partshash")), stateID)
+	blockID := makeBlockID(crypto.Checksum([]byte("blockhash")), 1, crypto.Checksum([]byte("partshash")), stateID)
+	blockID2 := makeBlockID(crypto.Checksum([]byte("blockhash2")), 1, crypto.Checksum([]byte("partshash")), stateID)
 	quorumType := btcjson.LLMQType_5_60
 	const chainID = "mychain"
 	var height int64 = math.MaxInt64

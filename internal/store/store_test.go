@@ -25,7 +25,8 @@ import (
 )
 
 // make a Commit with a single vote containing just the height
-func makeTestCommit(state sm.State, height int64) *types.Commit {
+func makeTestCommit(t *testing.T, state sm.State, height int64) *types.Commit {
+	t.Helper()
 	blockID := types.BlockID{
 		Hash: []byte(""),
 		PartSetHeader: types.PartSetHeader{
@@ -49,11 +50,15 @@ func makeTestCommit(state sm.State, height int64) *types.Commit {
 	privVal := types.NewMockPVWithParams(privKey, crypto.RandProTxHash(), state.Validators.QuorumHash,
 		state.Validators.ThresholdPublicKey, false, false)
 
-	_ = privVal.SignVote(context.Background(), "chainID", state.Validators.QuorumType, state.Validators.QuorumHash, g, nil)
+	err := privVal.SignVote(context.Background(), "chainID", state.Validators.QuorumType, state.Validators.QuorumHash, g, nil)
+	require.NoError(t, err)
 
 	goodVote.BlockSignature = g.BlockSignature
 	goodVote.VoteExtensions = types.VoteExtensionsFromProto(g.VoteExtensions...)
-	thresholdSigns, _ := types.NewSignsRecoverer([]*types.Vote{goodVote}).Recover()
+	signsRecoverer, err := types.NewSignsRecoverer([]*types.Vote{goodVote})
+	require.NoError(t, err)
+	thresholdSigns, err := signsRecoverer.Recover()
+	require.NoError(t, err)
 
 	return types.NewCommit(height, 0,
 		types.BlockID{
@@ -105,10 +110,10 @@ func TestBlockStoreSaveLoadBlock(t *testing.T) {
 	require.NoError(t, err)
 	part2 := validPartSet.GetPart(1)
 
-	seenCommit := makeTestCommit(state, block.Header.Height)
+	seenCommit := makeTestCommit(t, state, block.Height)
 	bs.SaveBlock(block, validPartSet, seenCommit)
 	require.EqualValues(t, 1, bs.Base(), "expecting the new height to be changed")
-	require.EqualValues(t, block.Header.Height, bs.Height(), "expecting the new height to be changed")
+	require.EqualValues(t, block.Height, bs.Height(), "expecting the new height to be changed")
 
 	incompletePartSet := types.NewPartSetFromHeader(types.PartSetHeader{Total: 2})
 	uncontiguousPartSet := types.NewPartSetFromHeader(types.PartSetHeader{Total: 0})
@@ -125,7 +130,7 @@ func TestBlockStoreSaveLoadBlock(t *testing.T) {
 	}
 
 	// End of setup, test data
-	commitAtH10 := makeTestCommit(state, 10)
+	commitAtH10 := makeTestCommit(t, state, 10)
 	tuples := []struct {
 		block      *types.Block
 		parts      *types.PartSet
@@ -159,17 +164,17 @@ func TestBlockStoreSaveLoadBlock(t *testing.T) {
 					Time:              tmtime.Now(),
 					ValidatorsHash:    tmrand.Bytes(crypto.DefaultHashSize),
 					ProposerProTxHash: tmrand.Bytes(crypto.DefaultHashSize)},
-				makeTestCommit(state, 5),
+				makeTestCommit(t, state, 5),
 			),
 			parts:      validPartSet,
-			seenCommit: makeTestCommit(state, 5),
+			seenCommit: makeTestCommit(t, state, 5),
 		},
 
 		{
 			block:      newBlock(header1, commitAtH10),
 			parts:      incompletePartSet,
 			wantPanic:  "only save complete block", // incomplete parts
-			seenCommit: makeTestCommit(state, 10),
+			seenCommit: makeTestCommit(t, state, 10),
 		},
 
 		{
@@ -315,7 +320,7 @@ func TestLoadBaseMeta(t *testing.T) {
 		require.NoError(t, err)
 		partSet, err := block.MakePartSet(2)
 		require.NoError(t, err)
-		seenCommit := makeTestCommit(state, h)
+		seenCommit := makeTestCommit(t, state, h)
 		bs.SaveBlock(block, partSet, seenCommit)
 	}
 
@@ -396,7 +401,7 @@ func TestPruneBlocks(t *testing.T) {
 		require.NoError(t, err)
 		partSet, err := block.MakePartSet(2)
 		require.NoError(t, err)
-		seenCommit := makeTestCommit(state, h)
+		seenCommit := makeTestCommit(t, state, h)
 		bs.SaveBlock(block, partSet, seenCommit)
 	}
 
@@ -503,9 +508,9 @@ func TestBlockFetchAtHeight(t *testing.T) {
 
 	partSet, err := block.MakePartSet(2)
 	require.NoError(t, err)
-	seenCommit := makeTestCommit(state, block.Header.Height)
+	seenCommit := makeTestCommit(t, state, block.Height)
 	bs.SaveBlock(block, partSet, seenCommit)
-	require.Equal(t, bs.Height(), block.Header.Height, "expecting the new height to be changed")
+	require.Equal(t, bs.Height(), block.Height, "expecting the new height to be changed")
 
 	blockAtHeight := bs.LoadBlock(bs.Height())
 	b1, err := block.ToProto()
@@ -542,12 +547,12 @@ func TestSeenAndCanonicalCommit(t *testing.T) {
 	// are persisted.
 	for h := int64(3); h <= 5; h++ {
 		state.LastBlockHeight = h - 1
-		blockCommit := makeTestCommit(state, h-1)
+		blockCommit := makeTestCommit(t, state, h-1)
 		block, err := factory.MakeBlock(state, h, blockCommit, 0)
 		require.NoError(t, err)
 		partSet, err := block.MakePartSet(2)
 		require.NoError(t, err)
-		seenCommit := makeTestCommit(state, h)
+		seenCommit := makeTestCommit(t, state, h)
 		store.SaveBlock(block, partSet, seenCommit)
 		c3 := store.LoadSeenCommit()
 		require.NotNil(t, c3)

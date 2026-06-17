@@ -3,6 +3,7 @@ package types
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"math"
 	"sort"
@@ -795,4 +796,45 @@ func withBlockPartSetHeader(vote *Vote, blockPartsHeader PartSetHeader) *Vote {
 	vote = vote.Copy()
 	vote.BlockID.PartSetHeader = blockPartsHeader
 	return vote
+}
+
+func TestSetPeerMaj23Cap(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	height, round := int64(1), int32(0)
+	voteSet, _, _ := randVoteSet(ctx, t, height, round, tmproto.PrecommitType, 4)
+
+	blockIDFor := func(i int) BlockID {
+		hash := make([]byte, crypto.HashSize)
+		binary.BigEndian.PutUint32(hash, uint32(i))
+		partSetHash := make([]byte, crypto.HashSize)
+		binary.BigEndian.PutUint32(partSetHash, uint32(i))
+		stateID := make([]byte, crypto.HashSize)
+		binary.BigEndian.PutUint32(stateID, uint32(i))
+		return makeBlockID(hash, 1, partSetHash, stateID)
+	}
+
+	// Claims from the first maxPeerMaj23s distinct peers are accepted.
+	for i := 0; i < maxPeerMaj23s; i++ {
+		err := voteSet.SetPeerMaj23(strconv.Itoa(i), blockIDFor(i), height, round)
+		require.NoError(t, err)
+	}
+	require.Len(t, voteSet.peerMaj23s, maxPeerMaj23s)
+
+	// A claim from a previously unseen peer beyond the cap is dropped, not errored.
+	err := voteSet.SetPeerMaj23(strconv.Itoa(maxPeerMaj23s), blockIDFor(maxPeerMaj23s), height, round)
+	require.NoError(t, err)
+	require.Len(t, voteSet.peerMaj23s, maxPeerMaj23s, "over-cap claim must not be stored")
+
+	// votesByBlock growth is bounded by the same cap (only peer claims here).
+	require.LessOrEqual(t, len(voteSet.votesByBlock), maxPeerMaj23s)
+
+	// A repeat claim from a known peer is still a no-op (no error).
+	err = voteSet.SetPeerMaj23("0", blockIDFor(0), height, round)
+	require.NoError(t, err)
+
+	// A conflicting claim from a known peer still errors as before.
+	err = voteSet.SetPeerMaj23("0", blockIDFor(1), height, round)
+	require.Error(t, err)
 }

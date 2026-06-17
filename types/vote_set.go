@@ -18,6 +18,15 @@ const (
 	// protection against DOS attacks. Note this implies a corresponding equal limit to
 	// the number of validators.
 	MaxVotesCount = 10000
+
+	// maxPeerMaj23s bounds how many peers' majority claims a VoteSet tracks.
+	// Each new claim from a previously unseen peer may allocate a votesByBlock
+	// entry, so unbounded growth is a memory-exhaustion vector. The cap is set
+	// well above any realistic node peer count and above the largest supported
+	// Dash LLMQ size (LLMQ_400_60 = 400 members). Excess claims are dropped
+	// silently (returning nil, not an error) so honest peers are not
+	// disconnected by the caller's error handling.
+	maxPeerMaj23s = 4096
 )
 
 /*
@@ -326,6 +335,10 @@ func (voteSet *VoteSet) addVerifiedVote(
 			if voteSet.signedMsgType == tmproto.PrecommitType {
 				err := voteSet.recoverThresholdSignsAndVerify(votesByBlock, quorumSigns)
 				if err != nil {
+					// NOTE(intentional): failing hard here is deliberate. Once the quorum
+					// threshold is crossed, a recovery/verification failure cannot be
+					// attributed to a single vote, so there is no safe way to continue
+					// this round's state.
 					panic(fmt.Errorf("failed recovering or verifying threshold signature: %v", err))
 				}
 			}
@@ -372,7 +385,10 @@ func (voteSet *VoteSet) recoverThresholdSigns(blockVotes *blockVotes) error {
 		return fmt.Errorf("attempting to recover a threshold signature with only 1 vote")
 	}
 	// if the vote is voting for nil, then we do not care to Recover the state signature
-	signsRecoverer := NewSignsRecoverer(blockVotes.votes, WithQuorumReached(voteSet.IsQuorumReached()))
+	signsRecoverer, err := NewSignsRecoverer(blockVotes.votes, WithQuorumReached(voteSet.IsQuorumReached()))
+	if err != nil {
+		return err
+	}
 	thresholdSigns, err := signsRecoverer.Recover()
 	if err != nil {
 		return err
@@ -384,8 +400,8 @@ func (voteSet *VoteSet) recoverThresholdSigns(blockVotes *blockVotes) error {
 }
 
 // If a peer claims that it has 2/3 majority for given blockKey, call this.
-// NOTE: if there are too many peers, or too much peer churn,
-// this can cause memory issues.
+// The number of tracked peers is bounded by maxPeerMaj23s; claims from
+// previously unseen peers beyond that cap are ignored.
 // TODO: implement ability to remove peers too
 // NOTE: VoteSet must not be nil
 func (voteSet *VoteSet) SetPeerMaj23(peerID string, blockID BlockID, height int64, round int32) error {
@@ -408,6 +424,14 @@ func (voteSet *VoteSet) SetPeerMaj23(peerID string, blockID BlockID, height int6
 		}
 		return fmt.Errorf("setPeerMaj23: Received conflicting blockID from peer %v. Got %s (h:%d r:%d), expected %s (h:%d r:%d)",
 			peerID, blockID, height, round, existing.BlockID, existing.Height, existing.Round)
+	}
+
+	// Bound peer-driven memory growth. Once the cap is reached, claims from
+	// new peers are silently dropped (not an error) so honest peers are not
+	// disconnected by the caller's error handling. No logger is available on
+	// VoteSet; see maxPeerMaj23s doc for the rationale behind the chosen cap.
+	if len(voteSet.peerMaj23s) >= maxPeerMaj23s {
+		return nil // drop: cap reached
 	}
 	voteSet.peerMaj23s[peerID] = maj23Info{blockID, height, round}
 

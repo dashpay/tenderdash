@@ -156,7 +156,8 @@ func TestValidatorSet_VerifyCommit_CheckThresholdSignatures(t *testing.T) {
 	}
 
 	goodVote := voteSet.GetByIndex(0)
-	recoverer := NewSignsRecoverer(voteSet.votes)
+	recoverer, err := NewSignsRecoverer(voteSet.votes)
+	require.NoError(t, err)
 	thresholdSigns, err := recoverer.Recover()
 	require.NoError(t, err)
 	commit.ThresholdBlockSignature = thresholdSigns.BlockSign

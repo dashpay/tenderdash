@@ -15,6 +15,8 @@ type SignsRecoverer struct {
 	validatorProTxHashes [][]byte
 	// List of all vote extensions. Order matters.
 	voteExtensions VoteExtensions
+	// true once the expected extension set has been established from the first observed vote.
+	voteExtensionsInitialized bool
 
 	// true when the recovery of vote extensions was already executed
 	voteExtensionsRecovered bool
@@ -30,16 +32,22 @@ func WithQuorumReached(quorumReached bool) func(*SignsRecoverer) {
 }
 
 // NewSignsRecoverer creates and returns a new instance of SignsRecoverer
-// the state fills with signatures from the votes
-func NewSignsRecoverer(votes []*Vote, opts ...func(*SignsRecoverer)) *SignsRecoverer {
+// the state fills with signatures from the votes.
+//
+// It returns an error when the provided votes are inconsistent, for example
+// when their vote-extension counts differ or a non-precommit vote carries
+// vote extensions.
+func NewSignsRecoverer(votes []*Vote, opts ...func(*SignsRecoverer)) (*SignsRecoverer, error) {
 	sigs := SignsRecoverer{
 		quorumReached: true,
 	}
 	for _, opt := range opts {
 		opt(&sigs)
 	}
-	sigs.init(votes)
-	return &sigs
+	if err := sigs.init(votes); err != nil {
+		return nil, err
+	}
+	return &sigs, nil
 }
 
 // Recover recovers threshold signatures for block, state and vote-extensions
@@ -79,56 +87,62 @@ func (v *SignsRecoverer) GetVoteExtensions(qs QuorumSigns) VoteExtensions {
 	return exts
 }
 
-func (v *SignsRecoverer) init(votes []*Vote) {
+func (v *SignsRecoverer) init(votes []*Vote) error {
 	v.blockSigs = nil
 	v.stateSigs = nil
 	v.validatorProTxHashes = nil
+	v.voteExtensions = nil
+	v.voteExtensionsInitialized = false
 
 	for _, vote := range votes {
-		v.addVoteSigs(vote)
+		if err := v.addVoteSigs(vote); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func (v *SignsRecoverer) addVoteSigs(vote *Vote) {
+func (v *SignsRecoverer) addVoteSigs(vote *Vote) error {
 	if vote == nil {
-		return
+		return nil
 	}
 
 	v.blockSigs = append(v.blockSigs, vote.BlockSignature)
 	v.validatorProTxHashes = append(v.validatorProTxHashes, vote.ValidatorProTxHash)
-	v.addVoteExtensionSigs(vote)
+	return v.addVoteExtensionSigs(vote)
 }
 
 // Add threshold-recovered vote extensions
-func (v *SignsRecoverer) addVoteExtensionSigs(vote *Vote) {
-	if len(vote.VoteExtensions) == 0 {
-		return
+func (v *SignsRecoverer) addVoteExtensionSigs(vote *Vote) error {
+	// Only non-nil precommits may carry vote extensions.
+	if len(vote.VoteExtensions) > 0 && (vote.Type != types.PrecommitType || vote.BlockID.IsNil()) {
+		return fmt.Errorf("only non-nil precommits can have vote extensions, got: %s", vote.String())
 	}
 
-	// initialize vote extensions
-	if v.voteExtensions.IsEmpty() {
+	// Establish the expected extension set from the first vote observed, regardless of whether
+	// it carries any extensions. This ensures mixed-presence sets are rejected in both
+	// orderings: [N-ext, 0-ext] and [0-ext, N-ext].
+	if !v.voteExtensionsInitialized {
+		v.voteExtensionsInitialized = true
 		v.voteExtensions = vote.VoteExtensions.Copy()
 	}
 
-	// sanity check; this should be detected on higher layers
-	if vote.Type != types.PrecommitType || vote.BlockID.IsNil() {
-		panic(fmt.Sprintf("only non-nil precommits can have vote extensions, got: %s", vote.String()))
-	}
-
+	// Every vote must carry the same number of extensions.
 	if len(vote.VoteExtensions) != len(v.voteExtensions) {
-		panic(fmt.Sprintf("received vote extensions with different length: current %d, received %d",
-			len(v.voteExtensions), len(vote.VoteExtensions)))
+		return fmt.Errorf("received vote extensions with different length: current %d, received %d",
+			len(v.voteExtensions), len(vote.VoteExtensions))
 	}
 
-	// append signatures from this vote to each extension
+	// append signatures from this vote to each extension (no-op when len == 0)
 	for i, ext := range vote.VoteExtensions {
 		if recoverable, ok := (v.voteExtensions[i]).(ThresholdVoteExtensionIf); ok {
 			if err := recoverable.AddThresholdSignature(vote.ValidatorProTxHash, ext.GetSignature()); err != nil {
-				panic(fmt.Errorf("failed to add vote %s to recover vote extension threshold sig: %w", vote.String(), err))
+				return fmt.Errorf("failed to add vote %s to recover vote extension threshold sig: %w", vote.String(), err)
 			}
 			v.voteExtensions[i] = recoverable
 		}
 	}
+	return nil
 }
 
 func (v *SignsRecoverer) recoverBlockSig(thresholdSigns *QuorumSigns) error {
