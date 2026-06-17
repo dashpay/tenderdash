@@ -46,7 +46,11 @@ const (
 	labelSecretConnectionMac     = "SECRET_CONNECTION_MAC"
 )
 
-var secretConnKeyAndChallengeGen = []byte("TENDERMINT_SECRET_CONNECTION_KEY_AND_CHALLENGE_GEN")
+var (
+	ErrSmallOrderRemotePubKey = errors.New("detected low order point from remote peer")
+
+	secretConnKeyAndChallengeGen = []byte("TENDERMINT_SECRET_CONNECTION_KEY_AND_CHALLENGE_GEN")
+)
 
 // SecretConnection implements net.Conn.
 // It is an implementation of the STS protocol.
@@ -374,10 +378,6 @@ func deriveSecrets(
 // computeDHSecret computes a Diffie-Hellman shared secret key
 // from our own local private key and the other's public key.
 func computeDHSecret(remPubKey, locPrivKey *[32]byte) (*[32]byte, error) {
-	// A low-order remote ephemeral key is rejected here: curve25519.X25519
-	// (backed by crypto/ecdh) returns an error rather than producing an
-	// all-zero shared secret for such points, so no separate pre-check is
-	// required. See TestMakeSecretConnectionRejectsLowOrderKey.
 	shrKey, err := curve25519.X25519(locPrivKey[:], remPubKey[:])
 	if err != nil {
 		return nil, err
