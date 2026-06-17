@@ -94,6 +94,13 @@ func TestOriginChecker(t *testing.T) {
 		{name: "wildcard subdomain deny apex", allowedOrigins: []string{"http://*.dash.org"}, origin: "http://dash.org", want: false},
 		{name: "wildcard subdomain deny other", allowedOrigins: []string{"http://*.dash.org"}, origin: "http://app.evil.org", want: false},
 		{name: "wildcard case-insensitive", allowedOrigins: []string{"http://*.Dash.org"}, origin: "http://APP.dash.org", want: true},
+		// rs/cors quirk: the wildcard pattern is matched against the full Origin,
+		// so a port suffix breaks the host-suffix match.
+		{name: "wildcard host denies origin with port", allowedOrigins: []string{"http://*.dash.org"}, origin: "http://app.dash.org:8080", want: false},
+		// An explicit port in the pattern matches the same explicit port.
+		{name: "wildcard with explicit port matches same port", allowedOrigins: []string{"http://*.dash.org:8080"}, origin: "http://app.dash.org:8080", want: true},
+		// Same-host fallback compares host:port, so a port mismatch is denied.
+		{name: "same-host fallback denies on port mismatch", allowedOrigins: nil, origin: "http://node.example.com:9999", want: false},
 		{name: "invalid origin url denied", allowedOrigins: nil, origin: "://not a url", want: false},
 	}
 
