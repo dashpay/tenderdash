@@ -55,8 +55,8 @@ func (env *Environment) GenesisChunked(_ctx context.Context, req *coretypes.Requ
 
 	id := int(req.Chunk)
 
-	if id > len(env.genChunks)-1 {
-		return nil, fmt.Errorf("there are %d chunks, %d is invalid", len(env.genChunks)-1, id)
+	if id < 0 || id > len(env.genChunks)-1 {
+		return nil, fmt.Errorf("there are %d chunks, %d is invalid", len(env.genChunks), id)
 	}
 
 	return &coretypes.ResultGenesisChunk{

@@ -185,6 +185,11 @@ func (env *Environment) UnconfirmedTxs(_ctx context.Context, req *coretypes.Requ
 
 	skipCount := validateSkipCount(page, perPage)
 	txs := env.Mempool.ReapMaxTxs(skipCount + tmmath.MinInt(perPage, totalCount-skipCount))
+	// The mempool may shrink between Size() and ReapMaxTxs, so the reaped slice
+	// can be shorter than skipCount; clamp to keep the slice bound in range.
+	if skipCount > len(txs) {
+		skipCount = len(txs)
+	}
 	result := txs[skipCount:]
 
 	return &coretypes.ResultUnconfirmedTxs{
