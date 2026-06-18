@@ -1,9 +1,9 @@
 package p2p
 
 import (
+	"container/heap"
 	"fmt"
 	"net"
-	"sort"
 	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
@@ -119,18 +119,46 @@ func (rat *connTrackerImpl) sweepExpired() {
 		return
 	}
 
-	type entry struct {
-		address string
-		last    time.Time
-	}
-	entries := make([]entry, 0, len(rat.lastConnect))
+	// Partial selection: find the k oldest entries using a max-heap of size k.
+	// O(N log k) time, O(k) space — the heap root is always the newest among
+	// the k oldest candidates, so replacing it whenever a still-older entry is
+	// found collects the exact k oldest entries without sorting all N.
+	k := len(rat.lastConnect) - evictLowWater
+	h := make(evictHeap, 0, k)
 	for address, last := range rat.lastConnect {
-		entries = append(entries, entry{address: address, last: last})
+		if h.Len() < k {
+			heap.Push(&h, evictEntry{last: last, address: address})
+		} else if last.Before(h[0].last) {
+			h[0] = evictEntry{last: last, address: address}
+			heap.Fix(&h, 0)
+		}
 	}
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].last.Before(entries[j].last)
-	})
-	for _, e := range entries[:len(entries)-evictLowWater] {
-		delete(rat.lastConnect, e.address)
+	for i := range h {
+		delete(rat.lastConnect, h[i].address)
 	}
+}
+
+// evictEntry pairs a connection-tracker key with its most-recent connect time,
+// used by the cap-triggered eviction path in sweepExpired.
+type evictEntry struct {
+	last    time.Time
+	address string
+}
+
+// evictHeap is a max-heap ordered by last time (newest timestamp at root).
+// Maintaining the k oldest entries: when the heap is full, replacing the root
+// (newest-of-oldest) with a still-older entry ensures the heap always holds
+// the k globally oldest entries after a full scan.
+type evictHeap []evictEntry
+
+func (h evictHeap) Len() int            { return len(h) }
+func (h evictHeap) Less(i, j int) bool  { return h[i].last.After(h[j].last) }
+func (h evictHeap) Swap(i, j int)       { h[i], h[j] = h[j], h[i] }
+func (h *evictHeap) Push(x interface{}) { *h = append(*h, x.(evictEntry)) }
+func (h *evictHeap) Pop() interface{} {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[:n-1]
+	return x
 }
