@@ -14,7 +14,11 @@ import (
 // newLimitListener returns a net.Listener that accepts at most n simultaneous
 // connections. Connections beyond n are closed right after they are accepted
 // rather than held open, and the slot is released when the connection is closed.
+// n <= 0 means unlimited: the original listener is returned unchanged.
 func newLimitListener(l net.Listener, n int) net.Listener {
+	if n <= 0 {
+		return l
+	}
 	return &limitListener{
 		Listener: l,
 		sem:      make(chan struct{}, n),
