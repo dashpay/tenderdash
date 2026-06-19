@@ -7,6 +7,8 @@
 - Guard nil/out-of-range validator lookup in vote index validation (#1331)
 - Validate quorum threshold against canonical LLMQ type (#1314) (#1328)
 - Guard nil receiver in ValidatorSet.Size/TotalVotingPower (follow-up to #1331) (#1334)
+- Add input validation and request bounds to the RPC layer (#1343)
+- Restrict websocket upgrades to same-host and Origin-less requests by default; browser WS clients on cross-origin hosts must now be listed in `cors-allowed-origins` (#1343)
 
 ### Documentation
 

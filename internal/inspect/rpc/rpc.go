@@ -52,7 +52,14 @@ func Routes(cfg config.RPCConfig, s state.Store, bs state.BlockStore, es []index
 func Handler(rpcConfig *config.RPCConfig, routes core.RoutesMap, logger log.Logger) http.Handler {
 	mux := http.NewServeMux()
 
+	wmLogger := logger.With("protocol", "websocket")
+
 	wm := server.NewWebsocketManager(logger, routes, server.ReadLimit(rpcConfig.MaxBodyBytes))
+	// Honor the operator's configured CORS allow-list on the websocket upgrade,
+	// mirroring the node RPC (internal/rpc/core/env.go) and the HTTP CORS path
+	// below. Without this the WS default (same-host/Origin-less only) would 403
+	// allow-listed browser origins that the HTTP endpoint accepts.
+	wm.CheckOrigin = server.OriginChecker(wmLogger, rpcConfig.CORSAllowedOrigins)
 	mux.HandleFunc("/websocket", wm.WebsocketHandler)
 
 	server.RegisterRPCFuncs(mux, routes, logger)

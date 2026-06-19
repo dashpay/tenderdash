@@ -15,6 +15,9 @@ import (
 
 // HTTP + JSON handler
 
+// maxBatchRequests bounds how many calls a single JSON-RPC batch may contain.
+const maxBatchRequests = 100
+
 // jsonrpc calls grab the given method's function info and runs reflect.Call
 func makeJSONRPCHandler(funcMap map[string]*RPCFunc, logger log.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, hreq *http.Request) {
@@ -44,6 +47,19 @@ func makeJSONRPCHandler(funcMap map[string]*RPCFunc, logger log.Logger) http.Han
 		if err != nil {
 			writeRPCResponse(w, logger, rpctypes.RPCRequest{}.MakeErrorf(
 				rpctypes.CodeParseError, "decoding request: %v", err))
+			return
+		}
+
+		if len(requests) == 0 {
+			writeRPCResponse(w, logger, rpctypes.RPCRequest{}.MakeErrorf(
+				rpctypes.CodeInvalidRequest, "empty batch request"))
+			return
+		}
+
+		if len(requests) > maxBatchRequests {
+			writeRPCResponse(w, logger, rpctypes.RPCRequest{}.MakeErrorf(
+				rpctypes.CodeInvalidRequest,
+				"batch contains %d requests, but the maximum is %d", len(requests), maxBatchRequests))
 			return
 		}
 

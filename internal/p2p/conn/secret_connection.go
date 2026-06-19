@@ -46,11 +46,7 @@ const (
 	labelSecretConnectionMac     = "SECRET_CONNECTION_MAC"
 )
 
-var (
-	ErrSmallOrderRemotePubKey = errors.New("detected low order point from remote peer")
-
-	secretConnKeyAndChallengeGen = []byte("TENDERMINT_SECRET_CONNECTION_KEY_AND_CHALLENGE_GEN")
-)
+var secretConnKeyAndChallengeGen = []byte("TENDERMINT_SECRET_CONNECTION_KEY_AND_CHALLENGE_GEN")
 
 // SecretConnection implements net.Conn.
 // It is an implementation of the STS protocol.

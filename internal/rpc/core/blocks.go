@@ -212,6 +212,8 @@ func (env *Environment) BlockResults(_ctx context.Context, req *coretypes.Reques
 func (env *Environment) BlockSearch(ctx context.Context, req *coretypes.RequestBlockSearch) (*coretypes.ResultBlockSearch, error) {
 	if !indexer.KVSinkEnabled(env.EventSinks) {
 		return nil, fmt.Errorf("block searching is disabled due to no kvEventSink")
+	} else if len(req.Query) > maxQueryLength {
+		return nil, fmt.Errorf("maximum query length exceeded: %w", coretypes.ErrInvalidRequest)
 	}
 
 	q, err := tmquery.New(req.Query)
