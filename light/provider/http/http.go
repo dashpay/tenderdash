@@ -193,14 +193,14 @@ func (p *http) validatorSet(ctx context.Context, height *int64, proposer types.P
 			case nil: // success!! Now we validate the response
 				if len(res.Validators) == 0 {
 					return nil, provider.ErrBadLightBlock{
-						Reason: fmt.Errorf("validator set is empty (height: %d, page: %d, per_page: %d)",
-							height, page, perPage),
+						Reason: fmt.Errorf("validator set is empty (height: %s, page: %d, per_page: %d)",
+							fmtHeight(height), page, perPage),
 					}
 				}
 				if res.Total <= 0 {
 					return nil, provider.ErrBadLightBlock{
-						Reason: fmt.Errorf("total number of vals is <= 0: %d (height: %d, page: %d, per_page: %d)",
-							res.Total, height, page, perPage),
+						Reason: fmt.Errorf("total number of vals is <= 0: %d (height: %s, page: %d, per_page: %d)",
+							res.Total, fmtHeight(height), page, perPage),
 					}
 				}
 			case *url.Error:
@@ -233,8 +233,8 @@ func (p *http) validatorSet(ctx context.Context, height *int64, proposer types.P
 			if reqThresholdPubKey {
 				if res.ThresholdPublicKey == nil || res.QuorumHash == nil {
 					return nil, provider.ErrBadLightBlock{
-						Reason: fmt.Errorf("validator response missing threshold public key or quorum hash (height: %d, page: %d)",
-							height, page),
+						Reason: fmt.Errorf("validator response missing threshold public key or quorum hash (height: %s, page: %d)",
+							fmtHeight(height), page),
 					}
 				}
 				thresholdPubKey = *res.ThresholdPublicKey
@@ -355,6 +355,15 @@ func (p *http) parseRPCError(e *rpctypes.RPCError) error {
 	default:
 		return provider.ErrBadLightBlock{Reason: e}
 	}
+}
+
+// fmtHeight formats a nullable height pointer for use in error messages.
+// A nil pointer means "latest" (height was not specified by the caller).
+func fmtHeight(h *int64) string {
+	if h == nil {
+		return "latest"
+	}
+	return fmt.Sprintf("%d", *h)
 }
 
 func validateHeight(height int64) (*int64, error) {
