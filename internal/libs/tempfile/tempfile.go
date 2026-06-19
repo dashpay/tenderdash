@@ -121,8 +121,7 @@ func WriteFileAtomic(filename string, data []byte, perm os.FileMode) (err error)
 	} else if n < len(data) {
 		return io.ErrShortWrite
 	}
-	// Close the file before renaming it, otherwise it will cause "The process
-	// cannot access the file because it is being used by another process." on windows.
+	// Close the file explicitly before renaming it to flush all OS buffers.
 	f.Close()
 
 	return os.Rename(f.Name(), filename)
