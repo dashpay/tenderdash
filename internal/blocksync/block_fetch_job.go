@@ -2,6 +2,7 @@ package blocksync
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
@@ -43,6 +44,10 @@ func blockFetchJobHandler(client client.BlockClient, peer PeerData, height int64
 		err = resp.Validate()
 		if err != nil {
 			return errorResult(peer.peerID, height, err)
+		}
+		if resp.Block.Height != height {
+			return errorResult(peer.peerID, height,
+				fmt.Errorf("peer sent block at height %d, requested height %d", resp.Block.Height, height))
 		}
 		return workerpool.Result{Value: resp}
 	}

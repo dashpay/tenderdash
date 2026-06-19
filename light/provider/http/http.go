@@ -357,6 +357,15 @@ func (p *http) parseRPCError(e *rpctypes.RPCError) error {
 	}
 }
 
+// fmtHeight formats a nullable height pointer for use in error messages.
+// A nil pointer means "latest" (height was not specified by the caller).
+func fmtHeight(h *int64) string {
+	if h == nil {
+		return "latest"
+	}
+	return fmt.Sprintf("%d", *h)
+}
+
 func validateHeight(height int64) (*int64, error) {
 	if height < 0 {
 		return nil, fmt.Errorf("expected height >= 0, got height %d", height)

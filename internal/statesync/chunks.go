@@ -152,6 +152,11 @@ func (q *chunkQueue) dequeue() (bytes.HexBytes, error) {
 }
 
 // Add adds a chunk to the queue. It ignores chunks that already exist, returning false.
+//
+// SEC-016 (accept-risk): individual chunk IDs and content are NOT cryptographically
+// verified at this layer. Chunk integrity is delegated to (a) the ABCI application
+// that reassembles and applies the snapshot, and (b) the post-restore app-hash
+// comparison against the trusted light block, which provides the end-to-end guarantee.
 func (q *chunkQueue) Add(chunk *chunk) (bool, error) {
 	if chunk == nil {
 		return false, errChunkNil

@@ -134,27 +134,50 @@ func (suite *BlockP2PMessageHandlerTestSuite) TestHandleStatusResponse() {
 	ctx := context.Background()
 	peerID := types.NodeID("peer")
 	testCases := []struct {
-		mockFn func()
-		msg    *bcproto.StatusResponse
+		name       string
+		msg        *bcproto.StatusResponse
+		wantAdded  bool
+		wantBase   int64
+		wantHeight int64
 	}{
 		{
-			mockFn: func() {
-				suite.fakePeerAdder.
-					On("AddPeer", mock.MatchedBy(func(peerData PeerData) bool {
-						return peerData.height == 1001 && peerData.base == 1000
-					})).
-					Once()
-			},
-			msg: &bcproto.StatusResponse{
-				Height: 1001,
-				Base:   1000,
-			},
+			name:       "valid base below height",
+			msg:        &bcproto.StatusResponse{Height: 1001, Base: 1000},
+			wantAdded:  true,
+			wantBase:   1000,
+			wantHeight: 1001,
+		},
+		{
+			name:       "fresh node reports zero",
+			msg:        &bcproto.StatusResponse{Height: 0, Base: 0},
+			wantAdded:  true,
+			wantBase:   0,
+			wantHeight: 0,
+		},
+		{
+			name:      "negative base",
+			msg:       &bcproto.StatusResponse{Height: 5, Base: -1},
+			wantAdded: false,
+		},
+		{
+			name:      "base above height",
+			msg:       &bcproto.StatusResponse{Height: 4, Base: 5},
+			wantAdded: false,
+		},
+		{
+			name:      "height above plausible bound",
+			msg:       &bcproto.StatusResponse{Height: maxPlausiblePeerHeight + 1, Base: 0},
+			wantAdded: false,
 		},
 	}
-	for i, tc := range testCases {
-		suite.Run(fmt.Sprintf("%d", i), func() {
-			if tc.mockFn != nil {
-				tc.mockFn()
+	for _, tc := range testCases {
+		suite.Run(tc.name, func() {
+			if tc.wantAdded {
+				suite.fakePeerAdder.
+					On("AddPeer", mock.MatchedBy(func(peerData PeerData) bool {
+						return peerData.height == tc.wantHeight && peerData.base == tc.wantBase
+					})).
+					Once()
 			}
 			err := suite.handleMessage(ctx, tc.msg, peerID)
 			suite.Require().NoError(err)
