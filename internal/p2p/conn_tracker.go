@@ -21,6 +21,11 @@ const (
 	// sweepEveryN is how many AddConn calls trigger an amortized sweep of
 	// expired entries, keeping the per-call cost O(1) amortized.
 	sweepEveryN = 1024
+
+	// defaultIPv6PrefixBits buckets IPv6 connection-tracking keys so an attacker
+	// controlling a whole /64 collapses to one entry instead of evading the
+	// per-address rate limit with a fresh /128 per connection. IPv4 keeps /32.
+	defaultIPv6PrefixBits = 64
 )
 
 type connectionTracker interface {
@@ -30,21 +35,42 @@ type connectionTracker interface {
 }
 
 type connTrackerImpl struct {
-	cache       map[string]uint
-	lastConnect map[string]time.Time
-	mutex       sync.RWMutex
-	max         uint
-	window      time.Duration
-	addCount    uint
+	cache          map[string]uint
+	lastConnect    map[string]time.Time
+	mutex          sync.RWMutex
+	max            uint
+	window         time.Duration
+	addCount       uint
+	ipv6PrefixBits int
 }
 
 func newConnTracker(max uint, window time.Duration) connectionTracker {
 	return &connTrackerImpl{
-		cache:       make(map[string]uint),
-		lastConnect: make(map[string]time.Time),
-		max:         max,
-		window:      window,
+		cache:          make(map[string]uint),
+		lastConnect:    make(map[string]time.Time),
+		max:            max,
+		window:         window,
+		ipv6PrefixBits: defaultIPv6PrefixBits,
 	}
+}
+
+// connKey returns the map key used to track addr in cache and lastConnect.
+// IPv4 addresses are keyed by their full /32 so distinct IPv4 peers are always
+// independent. IPv6 addresses are bucketed by the first ipv6PrefixBits bits
+// (default /64) so an attacker holding a whole /64 cannot evade the per-address
+// rate limit by rotating through fresh /128 addresses. The tradeoff: legitimate
+// peers that share a /64 (e.g. behind the same CPE or in the same data-center
+// /64 delegation) will share a connection-count and rate-limit window. This is
+// the accepted cost of closing the IPv6 bypass.
+func connKey(ip net.IP, ipv6PrefixBits int) string {
+	if ip == nil {
+		return "<nil>"
+	}
+	if v4 := ip.To4(); v4 != nil {
+		return v4.String() // IPv4: full /32
+	}
+	masked := ip.Mask(net.CIDRMask(ipv6PrefixBits, 128))
+	return fmt.Sprintf("%s/%d", masked.String(), ipv6PrefixBits)
 }
 
 func (rat *connTrackerImpl) Len() int {
@@ -54,7 +80,7 @@ func (rat *connTrackerImpl) Len() int {
 }
 
 func (rat *connTrackerImpl) AddConn(addr net.IP) error {
-	address := addr.String()
+	address := connKey(addr, rat.ipv6PrefixBits)
 	rat.mutex.Lock()
 	defer rat.mutex.Unlock()
 
@@ -81,7 +107,7 @@ func (rat *connTrackerImpl) AddConn(addr net.IP) error {
 }
 
 func (rat *connTrackerImpl) RemoveConn(addr net.IP) {
-	address := addr.String()
+	address := connKey(addr, rat.ipv6PrefixBits)
 	rat.mutex.Lock()
 	defer rat.mutex.Unlock()
 
