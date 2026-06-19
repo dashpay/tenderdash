@@ -372,11 +372,14 @@ func validateHeight(height int64) (*int64, error) {
 // fmtHeight formats a nullable height pointer for use in error messages.
 // It returns "<nil>" when the pointer is nil (meaning "latest"), and the
 // decimal height value otherwise.
+// fmtHeight formats a nullable height pointer for use in error messages.
+// It returns "<nil>" when the pointer is nil (meaning "latest"), and the
+// decimal height value otherwise.
 func fmtHeight(h *int64) string {
 	if h == nil {
 		return "<nil>"
 	}
-	return fmt.Sprintf("%d", *h)
+	return strconv.FormatInt(*h, 10)
 }
 
 // exponential backoff (with jitter)
