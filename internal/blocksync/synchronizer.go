@@ -469,14 +469,17 @@ type BlockResponse struct {
 }
 
 func (r *BlockResponse) Validate() error {
-	if r.Commit != nil && r.Block.Height != r.Commit.Height {
+	if r.Block == nil {
+		return errors.New("block response without a block")
+	}
+	if r.Commit == nil {
+		// See https://github.com/tendermint/tendermint/pull/8433#discussion_r866790631
+		return fmt.Errorf("a block without a commit at height %d - possible node store corruption", r.Block.Height)
+	}
+	if r.Block.Height != r.Commit.Height {
 		return fmt.Errorf("heights don't match, not adding block (block height: %d, commit height: %d)",
 			r.Block.Height,
 			r.Commit.Height)
-	}
-	if r.Block != nil && r.Commit == nil {
-		// See https://github.com/tendermint/tendermint/pull/8433#discussion_r866790631
-		return fmt.Errorf("a block without a commit at height %d - possible node store corruption", r.Block.Height)
 	}
 	return nil
 }
