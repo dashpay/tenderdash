@@ -419,9 +419,9 @@ func (q *chunkQueue) getItem(chunkID bytes.HexBytes) (*chunkItem, error) {
 }
 
 // validateChunk checks if the chunk is expected and valid for the current snapshot.
-// Note: chunk-ID integrity (verifying that the chunk content matches the declared ID) is
-// intentionally not validated here. That responsibility is delegated to the ABCI application,
-// which verifies it as part of the final app-hash comparison after all chunks have been applied.
+// Note: chunk IDs are treated as opaque identifiers, and this layer does not attempt to
+// validate chunk contents against any cryptographic commitment to the ID. Integrity is
+// enforced after apply by comparing the ABCI app's reported LastBlockAppHash to the trusted app hash.
 // The caller must hold the mutex lock.
 func (q *chunkQueue) validateChunk(chunk *chunk) error {
 	if chunk.Height != q.snapshot.Height {
