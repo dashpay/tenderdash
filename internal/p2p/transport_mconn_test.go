@@ -113,8 +113,8 @@ func TestMConnTransport_AcceptMaxAcceptedConnections(t *testing.T) {
 	defer accept2.Close()
 	require.Equal(t, dial2.LocalEndpoint(), accept2.RemoteEndpoint())
 
-	// The third connection will be dialed successfully, but the accept should
-	// not go through.
+	// The third connection is over the limit: the dial completes at the TCP
+	// level, but the listener closes it immediately, so no accept goes through.
 	dial3, err := transport.Dial(ctx, endpoint)
 	require.NoError(t, err)
 	defer dial3.Close()
@@ -124,12 +124,15 @@ func TestMConnTransport_AcceptMaxAcceptedConnections(t *testing.T) {
 	case <-time.After(time.Second):
 	}
 
-	// However, once either of the other connections are closed, the accept
-	// goes through.
+	// Once a slot is freed by closing an accepted connection, a freshly dialed
+	// connection is accepted, proving the released slot is reusable.
 	require.NoError(t, accept1.Close())
-	accept3 := <-acceptCh
-	defer accept3.Close()
-	require.Equal(t, dial3.LocalEndpoint(), accept3.RemoteEndpoint())
+	dial4, err := transport.Dial(ctx, endpoint)
+	require.NoError(t, err)
+	defer dial4.Close()
+	accept4 := <-acceptCh
+	defer accept4.Close()
+	require.Equal(t, dial4.LocalEndpoint(), accept4.RemoteEndpoint())
 }
 
 func TestMConnTransport_Listen(t *testing.T) {
