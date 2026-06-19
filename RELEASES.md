@@ -89,6 +89,40 @@ Docker, signs them with GPG, creates `.tar.gz` archives with detached `.sig`
 files, and uploads everything to the release. Set `GPG_KEY_ID` to use a
 specific key.
 
+## Agent / CI two-call flow (non-blocking)
+
+The default release script blocks on a polling loop waiting for the PR to be
+merged — fine for a human at a terminal, hostile to agents and CI pipelines
+(the Bash tool times out; backgrounding gets the process reaped).
+
+Use the split flow instead:
+
+```sh
+# Step 1 — prep: generate changelog, bump version, open PR, then exit 0.
+# Works from the correct vX.Y-dev branch exactly like the normal flow.
+git checkout v1.6-dev
+./scripts/release/release.sh --release=1.6.0-dev.3 --no-wait
+
+# Stdout includes a greppable line:
+#   RELEASE_PR=https://github.com/dashpay/tenderdash/pull/NNN
+
+# Step 2 — finalize: after the PR is merged (human or CI), create the draft
+# release. Can be run from any checkout; only GitHub auth is required.
+./scripts/release/release.sh --release=1.6.0-dev.3 --finalize
+
+# Stdout includes:
+#   RELEASE_DRAFT=https://github.com/dashpay/tenderdash/releases/tag/v1.6.0-dev.3
+```
+
+| Flag | Alias | Effect |
+|------|-------|--------|
+| `--no-wait` | `--stop-after-pr` | Run validate → changelog → version bump → branch + commit → push → open PR, print `RELEASE_PR=<url>`, then `exit 0`. Implies `--non-interactive`. |
+| `--finalize` | `--create-release` | Verify the `release_<ver>` PR is **MERGED** (error if not), then create the **draft** GitHub release. Idempotent — re-running when the tag/release already exists reports the URL and exits cleanly. Implies `--non-interactive`. Prints `RELEASE_DRAFT=<url>`. |
+| `--non-interactive` | `--yes` | Auto-accept any confirmation prompt; never block on stdin. |
+
+Running with **no new flags** preserves today's interactive behavior exactly
+(block-until-merged → create draft release in one call).
+
 ## CI and build tooling
 
 `.github/workflows/release.yml` runs `goreleaser` (config: `.goreleaser.yml`)

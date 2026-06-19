@@ -39,6 +39,19 @@ where flags can be one of:
     --cleanup - clean up before releasing; it can remove your local changes
     -C=<path> - path to local Tenderdash repository
     -s, --sign - generate signed binaries
+    --no-wait, --stop-after-pr
+        Run through opening the release PR, print 'RELEASE_PR=<url>' on a
+        machine-parseable line, then exit 0. Skips the blocking merge-wait
+        and the draft-release step. Implies --non-interactive.
+    --finalize, --create-release
+        Skip prep/changelog/version/branch/PR. Instead verify the
+        release_<ver> PR is MERGED (error if not), then create the DRAFT
+        GitHub release. Idempotent: if the draft or tag already exists,
+        reports it without failing. Implies --non-interactive.
+        Emits 'RELEASE_DRAFT=<url>' on stdout.
+    --non-interactive, --yes
+        Assume "yes" to every confirmation prompt; never block on stdin.
+        Automatically implied by --no-wait and --finalize.
     -h, --help - display this help message
 
 ## Examples
@@ -52,6 +65,17 @@ $0  --release=0.7.4
 
 git checkout v0.8-dev
 $0  --release=0.8.0-dev.3
+
+### Agent/CI two-call flow (non-blocking)
+
+# Step 1: prepare changelog, branch, and open PR — then exit immediately.
+git checkout v0.8-dev
+$0 --release=0.8.0-dev.3 --no-wait
+# Output includes: RELEASE_PR=https://github.com/...
+
+# Step 2: after a human (or CI check) merges the PR, finalize the release.
+$0 --release=0.8.0-dev.3 --finalize
+# Output includes: RELEASE_DRAFT=https://github.com/...
 
 EOF
 }
@@ -100,6 +124,18 @@ function parseArgs {
             SIGN=1
             shift 1
             ;;
+        --no-wait | --stop-after-pr)
+            NO_WAIT=yes
+            shift
+            ;;
+        --finalize | --create-release)
+            FINALIZE=yes
+            shift
+            ;;
+        --non-interactive | --yes)
+            NON_INTERACTIVE=yes
+            shift
+            ;;
         *)
             error "Unrecoginzed command line argument '${arg}';  try '$0 --help'"
             ;;
@@ -134,6 +170,7 @@ function configureFinal() {
     debug "New version: ${NEW_PACKAGE_VERSION}"
     debug "Source branch: ${SOURCE_BRANCH}"
     debug "Target branch: ${TARGET_BRANCH}"
+    debug "Flags: NO_WAIT=${NO_WAIT:-no} FINALIZE=${FINALIZE:-no} NON_INTERACTIVE=${NON_INTERACTIVE:-no} SIGN=${SIGN:-no}"
 }
 
 function validate {
@@ -163,6 +200,20 @@ function validate {
     if [[ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/${SOURCE_BRANCH}")" ]]; then
         git merge --ff-only "origin/${SOURCE_BRANCH}" ||
             error "Your ${SOURCE_BRANCH} is out of sync with origin; sync it before releasing"
+    fi
+}
+
+# validateFinalize performs lightweight validation needed for --finalize mode:
+# version is set and GitHub is authenticated. No git branch/clean-tree checks
+# since we only talk to the GitHub API in this mode.
+function validateFinalize {
+    debug Validating configuration for finalize
+    if [[ -z "${NEW_PACKAGE_VERSION}" ]]; then
+        error "You must provide new release version with --release=x.y.z; see '$0 --help' for more details"
+    fi
+
+    if ! gh auth status &>/dev/null; then
+        error "Not authenticated to GitHub; run 'gh auth login' first"
     fi
 }
 
@@ -250,6 +301,23 @@ function createRelease() {
         --target "${TARGET_BRANCH}" \
         ${gh_args} \
         "v${NEW_PACKAGE_VERSION}"
+}
+
+# createReleaseIdempotent creates the draft GitHub release if it does not yet
+# exist. If a release (draft or published) already exists for the tag, it
+# reports the URL and returns successfully without re-creating anything.
+# Always emits the machine-parseable line: RELEASE_DRAFT=<url>
+function createReleaseIdempotent() {
+    if gh release view "v${NEW_PACKAGE_VERSION}" &>/dev/null; then
+        local existing_url
+        existing_url="$(getReleaseUrl)"
+        debug "Release v${NEW_PACKAGE_VERSION} already exists; skipping creation"
+        echo "RELEASE_DRAFT=${existing_url}"
+        return 0
+    fi
+
+    createRelease
+    echo "RELEASE_DRAFT=$(getReleaseUrl)"
 }
 
 function deleteRelease() {
@@ -388,9 +456,40 @@ function cleanup() {
     make clean || true
 }
 
+# ---------------------------------------------------------------------------
+# Main entry point
+# ---------------------------------------------------------------------------
+
 configureDefaults
 parseArgs "$@"
 configureFinal
+
+# --no-wait and --finalize imply non-interactive
+if [[ -n "${NO_WAIT}" || -n "${FINALIZE}" ]]; then
+    NON_INTERACTIVE=yes
+fi
+
+# ---------------------------------------------------------------------------
+# --finalize / --create-release: skip prep, verify PR merged, create release
+# ---------------------------------------------------------------------------
+if [[ -n "${FINALIZE}" ]]; then
+    validateFinalize
+
+    pr_state="$(getPrState)"
+    if [[ "${pr_state}" != "MERGED" ]]; then
+        error "Release PR for ${RELEASE_BRANCH} → ${TARGET_BRANCH} is not merged yet (state: ${pr_state:-unknown}). Merge it first, then re-run with --finalize."
+    fi
+
+    success "Release PR for ${NEW_PACKAGE_VERSION} is merged. Creating draft release."
+    createReleaseIdempotent
+
+    success "Release ${NEW_PACKAGE_VERSION} draft created (or already existed)."
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Standard prep flow (shared by default interactive mode and --no-wait)
+# ---------------------------------------------------------------------------
 
 if [[ -n "${CLEANUP}" ]]; then
     cleanup
@@ -406,6 +505,22 @@ PR_URL="$(getPrURL)"
 
 success "New release branch ${RELEASE_BRANCH} for ${NEW_PACKAGE_VERSION} prepared successfully."
 success "Release PR: ${PR_URL}"
+# Machine-parseable marker — agents/CI grep for this line.
+echo "RELEASE_PR=${PR_URL}"
+
+# ---------------------------------------------------------------------------
+# --no-wait / --stop-after-pr: exit after opening the PR
+# ---------------------------------------------------------------------------
+if [[ -n "${NO_WAIT}" ]]; then
+    cleanup
+    success "Stopping before merge wait (--no-wait)."
+    success "Merge the PR, then run: $0 --release=${NEW_PACKAGE_VERSION} --finalize"
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Interactive / default: block until merged, then create draft release
+# ---------------------------------------------------------------------------
 
 success "Please review it and merge."
 
@@ -420,12 +535,16 @@ waitForMerge
 success "Release branch ${RELEASE_BRANCH} for ${NEW_PACKAGE_VERSION} is merged. Preparing the release."
 createRelease
 
+DRAFT_URL="$(getReleaseUrl)"
+# Machine-parseable marker — agents/CI grep for this line.
+echo "RELEASE_DRAFT=${DRAFT_URL}"
+
 cleanup
 
 sleep 5 # wait for the release to be finalized
 
 success "Release ${NEW_PACKAGE_VERSION} created successfully."
-success "Accept it at: $(getReleaseUrl)"
+success "Accept it at: ${DRAFT_URL}"
 
 if [ -n "${SIGN}"  ];then
     buildAndUploadArtifacts
