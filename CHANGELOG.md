@@ -1,4 +1,4 @@
-## [1.6.0-dev.1] - 2026-06-12
+## [1.6.0-dev.2] - 2026-06-19
 
 ### Bug Fixes
 
@@ -7,12 +7,22 @@
 - Guard nil/out-of-range validator lookup in vote index validation (#1331)
 - Validate quorum threshold against canonical LLMQ type (#1314) (#1328)
 - Guard nil receiver in ValidatorSet.Size/TotalVotingPower (follow-up to #1331) (#1334)
-- Add input validation and request bounds to the RPC layer (#1343)
-- Restrict websocket upgrades to same-host and Origin-less requests by default; browser WS clients on cross-origin hosts must now be listed in `cors-allowed-origins` (#1343)
+- Guard concurrent access to the tx index (#1341)
+- Fix concurrency bugs behind chronic CI flakes (#1340)
+- Input validation and bounds checks (#1342)
+- Correctness and robustness in client verification (#1353)
+- Validate chain ID and reject invalid ephemeral keys (#1344)
+- Add input validation and request bounds (#1343)
+- Propagate tx indexer database errors (#1357)
+- Remove dead websocket-disconnect eventBus cleanup (#1354)
+- Validate peer block and status responses (#1355)
+- Format light-provider height errors and document chunk-ID integrity (#1358)
+- Bound inbound connection tracking (#1356)
 
 ### Documentation
 
 - Adjust CONTRIBUTING and similar documentation with AGENTS (#1252)
+- Replace dead ethereum/wiki Proof-of-Stake-FAQ link (#1338)
 
 ### Features
 
@@ -25,10 +35,17 @@
 - Update Go to 1.25.7 and bump dependencies (#1258)
 - Bump grpc, golangci-lint, atomicfile, build-push-action, bls-signatures (#1263)
 - Fix release.sh bugs and rewrite RELEASES.md (#1336)
+- Update changelog and version to 1.6.0-dev.1 (#1337)
+- Disable CodeRabbit automatic reviews (#1345)
 
 ### Refactor
 
 - Replace creachadair/taskgroup with x/sync/errgroup and ban it (#1333)
+
+### Testing
+
+- Stabilize flaky tests (rate-limit, evidence, privval-tcp) (#1339)
+- Stabilize four flaky CI tests (#1352)
 
 ### Build
 
@@ -67,6 +84,12 @@
 - Bump github.com/golangci/golangci-lint/v2 (#1311)
 - Bump github.com/bufbuild/buf from 1.66.1 to 1.70.0 (#1321)
 - Bump github.com/quic-go/quic-go (#1332)
+- Bump pgregory.net/rapid from 1.2.0 to 1.3.0 (#1349)
+- Bump github.com/prometheus/common from 0.67.5 to 0.68.1 (#1348)
+- Bump github.com/oasisprotocol/oasis-core/go (#1346)
+- Bump github.com/btcsuite/btcd/btcec/v2 from 2.3.6 to 2.5.0 (#1351)
+- Bump github.com/adlio/schema from 1.4.0 to 1.5.0 (#1350)
+- Bump golang.org/x/net from 0.55.0 to 0.56.0 (#1347)
 
 ### Ci
 
