@@ -13,7 +13,12 @@ function debug {
 function error {
     debug Error: "$@"
     [[ -t 1 ]] && echo -e '\e[91mERROR:\e[0m' "$@" || echo "ERROR:" "$@"
-    cleanup
+    # In --finalize and --dry-run the working tree is never modified by this
+    # script, so cleanup() must not run — it would clobber the caller's
+    # checkout (branch switch, branch deletion, make clean).
+    if [[ -z "${FINALIZE}" && -z "${DRY_RUN}" ]]; then
+        cleanup
+    fi
     exit 1
 }
 function displayHelp {
@@ -508,13 +513,6 @@ function uploadBinaries() {
 
 function cleanup() {
     debug Cleaning up
-
-    # In --finalize or --dry-run mode the working tree is never modified by
-    # this script, so there is nothing to restore and we must not clobber
-    # the caller's checkout (branch switch, branch deletion, make clean).
-    if [[ -n "${FINALIZE}" || -n "${DRY_RUN}" ]]; then
-        return 0
-    fi
 
     git checkout --quiet -- "${REPO_DIR}/CHANGELOG.md"
     git checkout --quiet "${SOURCE_BRANCH}" || true
