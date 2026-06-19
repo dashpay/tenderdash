@@ -52,6 +52,11 @@ where flags can be one of:
     --non-interactive, --yes
         Assume "yes" to every confirmation prompt; never block on stdin.
         Automatically implied by --no-wait and --finalize.
+    --dry-run
+        Validate, generate a changelog preview, and compute the version
+        bump; print what would happen without taking any remote, commit,
+        push, PR, tag, or release action. Restores the working tree on
+        exit. Implies --non-interactive. Safe to use as a pre-check.
     -h, --help - display this help message
 
 ## Examples
@@ -136,6 +141,10 @@ function parseArgs {
             NON_INTERACTIVE=yes
             shift
             ;;
+        --dry-run)
+            DRY_RUN=yes
+            shift
+            ;;
         *)
             error "Unrecoginzed command line argument '${arg}';  try '$0 --help'"
             ;;
@@ -170,7 +179,7 @@ function configureFinal() {
     debug "New version: ${NEW_PACKAGE_VERSION}"
     debug "Source branch: ${SOURCE_BRANCH}"
     debug "Target branch: ${TARGET_BRANCH}"
-    debug "Flags: NO_WAIT=${NO_WAIT:-no} FINALIZE=${FINALIZE:-no} NON_INTERACTIVE=${NON_INTERACTIVE:-no} SIGN=${SIGN:-no}"
+    debug "Flags: NO_WAIT=${NO_WAIT:-no} FINALIZE=${FINALIZE:-no} NON_INTERACTIVE=${NON_INTERACTIVE:-no} SIGN=${SIGN:-no} DRY_RUN=${DRY_RUN:-no}"
 }
 
 function validate {
@@ -215,6 +224,48 @@ function validateFinalize {
     if ! gh auth status &>/dev/null; then
         error "Not authenticated to GitHub; run 'gh auth login' first"
     fi
+}
+
+# preflight runs early checks before any mutating or remote step in the
+# prepare path.  In --dry-run the push probe is informational (non-fatal).
+function preflight() {
+    debug "Running preflight checks"
+
+    # Docker must be reachable — git-cliff runs inside a container.
+    if ! docker info &>/dev/null; then
+        error "Docker is not reachable — git-cliff requires Docker to generate the changelog. Start Docker and retry."
+    fi
+    debug "Preflight: Docker OK"
+
+    # GitHub CLI must be authenticated.
+    if ! gh auth status &>/dev/null; then
+        error "Not authenticated to GitHub; run 'gh auth login' first"
+    fi
+    debug "Preflight: gh auth OK"
+
+    # Push-credential probe: dry-run push to the release branch we will create.
+    # Catches missing credentials or token scope before any commit is made.
+    local push_out
+    if ! push_out="$(git push --dry-run origin "HEAD:refs/heads/${RELEASE_BRANCH}" 2>&1)"; then
+        local msg="Push credential probe failed for origin/${RELEASE_BRANCH}. Check your SSH key or token (an elevated token may be required for protected branches). Output: ${push_out}"
+        if [[ -n "${DRY_RUN}" ]]; then
+            debug "DRY-RUN (informational, non-fatal): ${msg}"
+        else
+            error "${msg}"
+        fi
+    else
+        debug "Preflight: push probe to origin/${RELEASE_BRANCH} OK"
+    fi
+}
+
+# preflightFinalize is the lightweight preflight for --finalize mode.
+# Finalize is API-only (no Docker, no git push); only gh auth is checked.
+function preflightFinalize() {
+    debug "Running preflight checks (finalize mode)"
+    if ! gh auth status &>/dev/null; then
+        error "Not authenticated to GitHub; run 'gh auth login' first"
+    fi
+    debug "Preflight: gh auth OK"
 }
 
 function generateChangelog {
@@ -464,8 +515,8 @@ configureDefaults
 parseArgs "$@"
 configureFinal
 
-# --no-wait and --finalize imply non-interactive
-if [[ -n "${NO_WAIT}" || -n "${FINALIZE}" ]]; then
+# --no-wait, --finalize, and --dry-run imply non-interactive
+if [[ -n "${NO_WAIT}" || -n "${FINALIZE}" || -n "${DRY_RUN}" ]]; then
     NON_INTERACTIVE=yes
 fi
 
@@ -473,6 +524,7 @@ fi
 # --finalize / --create-release: skip prep, verify PR merged, create release
 # ---------------------------------------------------------------------------
 if [[ -n "${FINALIZE}" ]]; then
+    preflightFinalize
     validateFinalize
 
     pr_state="$(getPrState)"
@@ -488,6 +540,27 @@ if [[ -n "${FINALIZE}" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# --dry-run: preview validate+changelog without any remote/commit action
+# ---------------------------------------------------------------------------
+if [[ -n "${DRY_RUN}" ]]; then
+    # Restore CHANGELOG.md on any exit (normal or error) so the tree stays clean.
+    trap 'git checkout --quiet -- "${REPO_DIR}/CHANGELOG.md" 2>/dev/null || true' EXIT
+
+    preflight   # push probe is informational/non-fatal in DRY_RUN
+    validate
+    local_version="$(grep 'TMVersionDefault' "${REPO_DIR}/version/version.go" | \
+        sed 's/.*TMVersionDefault = "\([^"]*\)".*/\1/')"
+    generateChangelog
+    echo "DRY-RUN: TMVersionDefault: ${local_version} -> ${NEW_PACKAGE_VERSION}"
+    echo "DRY-RUN: RELEASE_PR=<would open PR: ${RELEASE_BRANCH} -> ${TARGET_BRANCH}>"
+    echo "DRY-RUN: RELEASE_DRAFT=<would create: v${NEW_PACKAGE_VERSION}>"
+    git checkout --quiet -- "${REPO_DIR}/CHANGELOG.md"
+    trap - EXIT
+    success "DRY-RUN complete — no remote or commit actions were performed."
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
 # Standard prep flow (shared by default interactive mode and --no-wait)
 # ---------------------------------------------------------------------------
 
@@ -496,6 +569,7 @@ if [[ -n "${CLEANUP}" ]]; then
     deleteRelease
 fi
 
+preflight
 validate
 generateChangelog
 updateVersionGo
