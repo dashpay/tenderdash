@@ -107,7 +107,8 @@ git checkout v1.6-dev
 #   RELEASE_PR=https://github.com/dashpay/tenderdash/pull/NNN
 
 # Step 2 — finalize: after the PR is merged (human or CI), create the draft
-# release. Can be run from any checkout; only GitHub auth is required.
+# release. Must run from within the Tenderdash git checkout (any branch),
+# or set GH_REPO=dashpay/tenderdash so gh can resolve the repository.
 ./scripts/release/release.sh --release=1.6.0-dev.3 --finalize
 
 # Stdout includes:
@@ -117,7 +118,7 @@ git checkout v1.6-dev
 | Flag | Alias | Effect |
 |------|-------|--------|
 | `--no-wait` | `--stop-after-pr` | Run validate → changelog → version bump → branch + commit → push → open PR, print `RELEASE_PR=<url>`, then `exit 0`. Implies `--non-interactive`. |
-| `--finalize` | `--create-release` | Verify the `release_<ver>` PR is **MERGED** (error if not), then create the **draft** GitHub release. Idempotent — re-running when the tag/release already exists reports the URL and exits cleanly. Implies `--non-interactive`. Prints `RELEASE_DRAFT=<url>`. |
+| `--finalize` | `--create-release` | Verify the `release_<ver>` PR is **MERGED** (error if not), then create the **draft** GitHub release. Idempotent — re-running when the tag/release already exists reports the URL and exits cleanly. Implies `--non-interactive`. Prints `RELEASE_DRAFT=<url>`. Requires a Tenderdash git checkout (any branch) or `GH_REPO=dashpay/tenderdash`. |
 | `--non-interactive` | `--yes` | Auto-accept any confirmation prompt; never block on stdin. |
 | `--dry-run` | _(none)_ | Validate, generate a changelog preview, and compute the version bump; print a preview of the `RELEASE_PR=` / `RELEASE_DRAFT=` lines it **would** emit. No commit, push, PR, tag, or release action is taken; working tree is restored. Implies `--non-interactive`. |
 

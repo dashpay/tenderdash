@@ -49,6 +49,8 @@ where flags can be one of:
         GitHub release. Idempotent: if the draft or tag already exists,
         reports it without failing. Implies --non-interactive.
         Emits 'RELEASE_DRAFT=<url>' on stdout.
+        Requires a Tenderdash git checkout (any branch), or
+        GH_REPO=dashpay/tenderdash so gh can resolve the repository.
     --non-interactive, --yes
         Assume "yes" to every confirmation prompt; never block on stdin.
         Automatically implied by --no-wait and --finalize.
@@ -79,6 +81,7 @@ $0 --release=0.8.0-dev.3 --no-wait
 # Output includes: RELEASE_PR=https://github.com/...
 
 # Step 2: after a human (or CI check) merges the PR, finalize the release.
+# Must run from within the Tenderdash git checkout, or set GH_REPO=dashpay/tenderdash.
 $0 --release=0.8.0-dev.3 --finalize
 # Output includes: RELEASE_DRAFT=https://github.com/...
 
@@ -213,8 +216,9 @@ function validate {
 }
 
 # validateFinalize performs lightweight validation needed for --finalize mode:
-# version is set and GitHub is authenticated. No git branch/clean-tree checks
-# since we only talk to the GitHub API in this mode.
+# version is set, gh is authenticated, and the GitHub repo is resolvable.
+# No working-tree or branch checks (--finalize never modifies the checkout),
+# but gh still resolves the repo via the local git remote or GH_REPO env var.
 function validateFinalize {
     debug Validating configuration for finalize
     if [[ -z "${NEW_PACKAGE_VERSION}" ]]; then
@@ -223,6 +227,14 @@ function validateFinalize {
 
     if ! gh auth status &>/dev/null; then
         error "Not authenticated to GitHub; run 'gh auth login' first"
+    fi
+
+    # Confirm gh can resolve the target repo.  This requires either a git
+    # checkout whose origin remote points to dashpay/tenderdash, or GH_REPO
+    # set to dashpay/tenderdash.  A missing repo context produces opaque
+    # errors from subsequent gh calls — fail fast with an actionable message.
+    if ! gh repo view &>/dev/null; then
+        error "Cannot resolve GitHub repository. Run from within the Tenderdash git checkout (any branch), or set GH_REPO=dashpay/tenderdash."
     fi
 }
 
@@ -497,6 +509,13 @@ function uploadBinaries() {
 function cleanup() {
     debug Cleaning up
 
+    # In --finalize or --dry-run mode the working tree is never modified by
+    # this script, so there is nothing to restore and we must not clobber
+    # the caller's checkout (branch switch, branch deletion, make clean).
+    if [[ -n "${FINALIZE}" || -n "${DRY_RUN}" ]]; then
+        return 0
+    fi
+
     git checkout --quiet -- "${REPO_DIR}/CHANGELOG.md"
     git checkout --quiet "${SOURCE_BRANCH}" || true
     git branch --quiet -D "${RELEASE_BRANCH}" || true
@@ -513,12 +532,26 @@ function cleanup() {
 
 configureDefaults
 parseArgs "$@"
-configureFinal
 
-# --no-wait, --finalize, and --dry-run imply non-interactive
+# --no-wait, --finalize, and --dry-run imply non-interactive.
+# Set this BEFORE configureFinal so the debug output reflects the actual state.
 if [[ -n "${NO_WAIT}" || -n "${FINALIZE}" || -n "${DRY_RUN}" ]]; then
     NON_INTERACTIVE=yes
 fi
+
+# Mutual-exclusivity guard: --no-wait and --finalize express opposite intents.
+if [[ -n "${NO_WAIT}" && -n "${FINALIZE}" ]]; then
+    error "--no-wait and --finalize are mutually exclusive; use --no-wait for step 1, then --finalize for step 2"
+fi
+
+# Normalize REPO_DIR to an absolute path (handles -C relative/path) and cd
+# into it so all subsequent git/gh/make commands operate against the intended
+# checkout regardless of the caller's working directory.  This is especially
+# important for CI/agent invocations via an absolute script path.
+REPO_DIR="$(realpath "${REPO_DIR}")"
+cd "${REPO_DIR}"
+
+configureFinal
 
 # ---------------------------------------------------------------------------
 # --finalize / --create-release: skip prep, verify PR merged, create release
