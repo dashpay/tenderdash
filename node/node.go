@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -777,6 +778,22 @@ func getRouterConfig(conf *config.Config, appClient abciclient.Client) (p2p.Rout
 		}
 
 		filterByID = chainFilterByID(filterByID, abciFilterByID)
+
+		// Restore ABCI IP-based peer filtering (dropped in #1248).
+		// When an app returns a non-OK response for /p2p/filter/addr/<ip:port>
+		// the connecting peer is rejected, giving apps full IP-level access control.
+		opts.FilterPeerByIP = func(ctx context.Context, ip net.IP, port uint16) error {
+			res, err := appClient.Query(ctx, &abci.RequestQuery{
+				Path: fmt.Sprintf("/p2p/filter/addr/%s", net.JoinHostPort(ip.String(), strconv.Itoa(int(port)))),
+			})
+			if err != nil {
+				return err
+			}
+			if res.IsErr() {
+				return fmt.Errorf("error querying abci app: %v", res)
+			}
+			return nil
+		}
 	}
 
 	opts.FilterPeerByID = filterByID
