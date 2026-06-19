@@ -838,3 +838,87 @@ func TestSetPeerMaj23Cap(t *testing.T) {
 	err = voteSet.SetPeerMaj23("0", blockIDFor(1), height, round)
 	require.Error(t, err)
 }
+
+// TestVoteSet_AddVote_MismatchedVoteExtensionCountDoesNotHalt is the SEC-001
+// regression test.
+//
+// A single Byzantine validator can broadcast a precommit for the about-to-commit
+// block carrying a mismatched (here: zero) vote-extension count. The vote's own
+// signatures are valid, so it passes every admission check and enters
+// votesByBlock. Before the fix, once the quorum threshold was crossed the
+// threshold-signature recoverer either returned a length-mismatch error or had
+// too few consistent extension shares, and addVerifiedVote panicked - halting
+// every node (a network-wide liveness DoS).
+//
+// This drives the real VoteSet.AddVote -> addVerifiedVote -> recovery path with
+// the Byzantine vote added FIRST (so it is part of the minimal quorum-crossing
+// set, the worst case) and asserts: (a) no panic, and (b) threshold recovery
+// still succeeds using the consistent votes, producing a commit that verifies
+// against the threshold public key.
+func TestVoteSet_AddVote_MismatchedVoteExtensionCountDoesNotHalt(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const (
+		height        = int64(10)
+		round         = int32(0)
+		numValidators = 10
+		byzantineIdx  = 0 // adds a precommit with zero vote extensions
+	)
+
+	voteSet, valSet, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrecommitType, numValidators)
+	blockID := makeBlockIDRandom()
+
+	// Canonical (honest) vote-extension set produced deterministically by every
+	// honest validator's ABCI ExtendVote for this (height, round).
+	honestExtensions := func() VoteExtensions {
+		return VoteExtensionsFromProto(
+			&tmproto.VoteExtension{
+				Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
+				Extension: crypto.Checksum([]byte("raw")),
+			},
+			&tmproto.VoteExtension{
+				Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+				Extension: []byte("threshold"),
+			},
+		)
+	}
+
+	require.NotPanics(t, func() {
+		for i := 0; i < numValidators; i++ {
+			proTxHash, err := privValidators[i].GetProTxHash(ctx)
+			require.NoError(t, err)
+
+			vote := &Vote{
+				ValidatorProTxHash: proTxHash,
+				ValidatorIndex:     int32(i),
+				Height:             height,
+				Round:              round,
+				Type:               tmproto.PrecommitType,
+				BlockID:            blockID,
+				VoteExtensions:     honestExtensions(),
+			}
+			if i == byzantineIdx {
+				// Byzantine validator: precommit for the same block but with no
+				// vote extensions at all.
+				vote.VoteExtensions = nil
+			}
+
+			added, err := signAddVote(ctx, privValidators[i], vote, voteSet)
+			require.NoError(t, err)
+			require.True(t, added)
+		}
+	}, "a mismatched vote-extension count must not halt the node (SEC-001)")
+
+	// (b) recovery succeeded using the consistent votes: the block has a 2/3
+	// majority and a valid commit can be produced.
+	require.True(t, voteSet.HasTwoThirdsMajority(), "quorum must be reached despite the Byzantine vote")
+
+	commit := voteSet.MakeCommit()
+	require.NotNil(t, commit)
+	require.Len(t, commit.ThresholdVoteExtensions, 2, "both threshold-recoverable extensions must be present")
+
+	// The recovered threshold block and vote-extension signatures must verify
+	// against the quorum's threshold public key.
+	require.NoError(t, valSet.VerifyCommit(voteSet.ChainID(), blockID, height, commit))
+}

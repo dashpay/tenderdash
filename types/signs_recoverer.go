@@ -15,8 +15,6 @@ type SignsRecoverer struct {
 	validatorProTxHashes [][]byte
 	// List of all vote extensions. Order matters.
 	voteExtensions VoteExtensions
-	// true once the expected extension set has been established from the first observed vote.
-	voteExtensionsInitialized bool
 
 	// true when the recovery of vote extensions was already executed
 	voteExtensionsRecovered bool
@@ -34,9 +32,11 @@ func WithQuorumReached(quorumReached bool) func(*SignsRecoverer) {
 // NewSignsRecoverer creates and returns a new instance of SignsRecoverer
 // the state fills with signatures from the votes.
 //
-// It returns an error when the provided votes are inconsistent, for example
-// when their vote-extension counts differ or a non-precommit vote carries
-// vote extensions.
+// Precommits that carry no vote extensions contribute only their block
+// signature and are skipped for vote-extension recovery (see
+// addVoteExtensionSigs). It returns an error only for genuinely malformed
+// input, for example a non-precommit vote that carries vote extensions, or a
+// precommit whose non-zero extension count differs from the others'.
 func NewSignsRecoverer(votes []*Vote, opts ...func(*SignsRecoverer)) (*SignsRecoverer, error) {
 	sigs := SignsRecoverer{
 		quorumReached: true,
@@ -92,7 +92,6 @@ func (v *SignsRecoverer) init(votes []*Vote) error {
 	v.stateSigs = nil
 	v.validatorProTxHashes = nil
 	v.voteExtensions = nil
-	v.voteExtensionsInitialized = false
 
 	for _, vote := range votes {
 		if err := v.addVoteSigs(vote); err != nil {
@@ -112,28 +111,52 @@ func (v *SignsRecoverer) addVoteSigs(vote *Vote) error {
 	return v.addVoteExtensionSigs(vote)
 }
 
-// Add threshold-recovered vote extensions
+// addVoteExtensionSigs feeds a single vote's vote-extension signature shares
+// into the threshold recovery state.
+//
+// A precommit that carries no vote extensions contributes its block signature
+// (already appended by the caller) but nothing to vote-extension recovery, and
+// is otherwise ignored here. This is deliberate and is the SEC-001 liveness
+// fix: honest validators run the same deterministic ABCI ExtendVote for a given
+// (height, round), so they all produce the same, non-zero number of vote
+// extensions. A precommit that arrives with zero extensions for the
+// about-to-commit block is therefore either provably Byzantine (it withheld its
+// extensions) or comes from a chain with vote extensions disabled, in which
+// case *every* vote carries zero and there is nothing to recover. Either way,
+// skipping it - instead of returning an error that the caller turns into a
+// process-wide panic once the quorum threshold is crossed (types/vote_set.go
+// addVerifiedVote) - lets the honest majority's extension signatures still be
+// recovered. This restores the v1.5.x behaviour that PR #1342 inadvertently
+// dropped. Dropping the share is safe because every vote's own extension
+// signatures are verified against its validator's key before admission
+// (Vote.Verify -> QuorumSignData.Verify), so a Byzantine validator can only
+// influence the *count* of extensions it offers, never their content.
 func (v *SignsRecoverer) addVoteExtensionSigs(vote *Vote) error {
+	if len(vote.VoteExtensions) == 0 {
+		return nil
+	}
+
 	// Only non-nil precommits may carry vote extensions.
-	if len(vote.VoteExtensions) > 0 && (vote.Type != types.PrecommitType || vote.BlockID.IsNil()) {
+	if vote.Type != types.PrecommitType || vote.BlockID.IsNil() {
 		return fmt.Errorf("only non-nil precommits can have vote extensions, got: %s", vote.String())
 	}
 
-	// Establish the expected extension set from the first vote observed, regardless of whether
-	// it carries any extensions. This ensures mixed-presence sets are rejected in both
-	// orderings: [N-ext, 0-ext] and [0-ext, N-ext].
-	if !v.voteExtensionsInitialized {
-		v.voteExtensionsInitialized = true
+	// Establish the canonical extension set from the first vote that actually
+	// carries extensions.
+	if v.voteExtensions.IsEmpty() {
 		v.voteExtensions = vote.VoteExtensions.Copy()
 	}
 
-	// Every vote must carry the same number of extensions.
+	// Every contributing (non-empty) vote must carry the same number of
+	// extensions as the canonical set. A differing *non-zero* count has no safe
+	// canonical interpretation (unlike the zero case handled above), so it is
+	// reported as an error rather than silently dropped.
 	if len(vote.VoteExtensions) != len(v.voteExtensions) {
 		return fmt.Errorf("received vote extensions with different length: current %d, received %d",
 			len(v.voteExtensions), len(vote.VoteExtensions))
 	}
 
-	// append signatures from this vote to each extension (no-op when len == 0)
+	// append signatures from this vote to each extension
 	for i, ext := range vote.VoteExtensions {
 		if recoverable, ok := (v.voteExtensions[i]).(ThresholdVoteExtensionIf); ok {
 			if err := recoverable.AddThresholdSignature(vote.ValidatorProTxHash, ext.GetSignature()); err != nil {

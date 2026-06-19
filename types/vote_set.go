@@ -316,37 +316,57 @@ func (voteSet *VoteSet) addVerifiedVote(
 		// We'll add the vote in a bit.
 	}
 
-	// Before adding to votesByBlock, see if we'll exceed quorum
-	origSum := votesByBlock.sum
-
 	quorum := voteSet.valSet.QuorumVotingThresholdPower()
 
 	// Add vote to votesByBlock
 	votesByBlock.addVerifiedVote(vote, votingPower)
 
-	// If we just crossed the quorum threshold and have 2/3 majority...
-	if origSum < quorum && quorum <= votesByBlock.sum {
-		// Only consider the first quorum reached
-		if voteSet.maj23 == nil {
-			maj23BlockID := vote.BlockID
-			// fmt.Printf("vote majority reached at height %d (%d/%d) quorum size %d\n",
-			//  voteSet.height, voteSet.round, voteSet.signedMsgType, quorum)
-			voteSet.maj23 = &maj23BlockID
-			if voteSet.signedMsgType == tmproto.PrecommitType {
-				err := voteSet.recoverThresholdSignsAndVerify(votesByBlock, quorumSigns)
-				if err != nil {
-					// NOTE(intentional): failing hard here is deliberate. Once the quorum
-					// threshold is crossed, a recovery/verification failure cannot be
-					// attributed to a single vote, so there is no safe way to continue
-					// this round's state.
-					panic(fmt.Errorf("failed recovering or verifying threshold signature: %v", err))
+	// Once this block reaches the quorum voting power, try to finalize it.
+	//
+	// We retry on every subsequently added vote (while maj23 is still unset),
+	// rather than acting only on the single vote that crosses the threshold,
+	// because the minimal quorum-crossing set may not yet contain enough
+	// *consistent* votes to recover the threshold signatures - see the SEC-001
+	// note below. maj23 is committed only after recovery actually succeeds.
+	if voteSet.maj23 == nil && quorum <= votesByBlock.sum {
+		// Tentatively record the majority block so that the threshold recovery sees
+		// the correct "quorum reached" state (IsQuorumReached, used via
+		// WithQuorumReached, depends on maj23). It is rolled back below if recovery
+		// does not yet succeed, so externally maj23 is observed only once the block
+		// is actually finalized (the whole method runs under voteSet.mtx).
+		maj23BlockID := vote.BlockID
+		voteSet.maj23 = &maj23BlockID
+		if voteSet.signedMsgType == tmproto.PrecommitType {
+			if err := voteSet.recoverThresholdSignsAndVerify(votesByBlock, quorumSigns); err != nil {
+				// SEC-001: do NOT halt the whole process on a recovery/verification
+				// failure here. In practice such a failure is attributable to vote
+				// composition or timing - e.g. a single Byzantine validator contributes
+				// a precommit with a mismatched (or zero) vote-extension count, so the
+				// just-crossed minimal quorum carries fewer consistent extension shares
+				// than the recovery threshold. Crashing every node on such an input is
+				// precisely the network-wide liveness DoS we are fixing. Instead we roll
+				// back maj23 and retry as more honest votes arrive; once enough
+				// consistent votes are present, recovery succeeds and the block is
+				// finalized. If it never succeeds, the round simply times out and
+				// consensus advances - no fork, no crash.
+				//
+				// The hard fail is retained for the one case that cannot be attributed
+				// to a missing or Byzantine vote: every validator has already voted for
+				// this block, so an honest super-majority of consistent extension shares
+				// is provably present. A failure then is a genuinely unattributable
+				// internal error (e.g. a broken BLS layer) for which there is no safe
+				// way to continue.
+				voteSet.maj23 = nil
+				if votesByBlock.sum >= voteSet.valSet.TotalVotingPower() {
+					panic(fmt.Errorf("failed recovering or verifying threshold signature with all votes present: %w", err))
 				}
+				return true, conflicting
 			}
-			// And also copy votes over to voteSet.votes
-			for i, vote := range votesByBlock.votes {
-				if vote != nil {
-					voteSet.votes[i] = vote
-				}
+		}
+		// And also copy votes over to voteSet.votes
+		for i, v := range votesByBlock.votes {
+			if v != nil {
+				voteSet.votes[i] = v
 			}
 		}
 	}
