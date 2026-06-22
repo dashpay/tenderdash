@@ -238,13 +238,8 @@ func (voteSet *VoteSet) addVote(vote *Vote) (added bool, err error) {
 				voteSet.chainID, val.PubKey, val.ProTxHash, err))
 	}
 
-	quorumSigns, err := MakeQuorumSignsWithVoteSet(voteSet, vote.ToProto())
-	if err != nil {
-		return false, err
-	}
-
 	// Add vote and get conflicting vote if any.
-	added, conflicting := voteSet.addVerifiedVote(vote, blockKey, val.VotingPower, quorumSigns)
+	added, conflicting := voteSet.addVerifiedVote(vote, blockKey, val.VotingPower)
 	if conflicting != nil {
 		return added, NewConflictingVoteError(conflicting, vote)
 	}
@@ -271,7 +266,6 @@ func (voteSet *VoteSet) addVerifiedVote(
 	vote *Vote,
 	blockKey string,
 	votingPower int64,
-	quorumSigns QuorumSignData,
 ) (added bool, conflicting *Vote) {
 	valIndex := vote.ValidatorIndex
 
@@ -328,6 +322,14 @@ func (voteSet *VoteSet) addVerifiedVote(
 	// because the minimal quorum-crossing set may not yet contain enough
 	// *consistent* votes to recover the threshold signatures - see the SEC-001
 	// note below. maj23 is committed only after recovery actually succeeds.
+	//
+	// TODO(perf): re-attempt full BLS recovery only when a new vote makes a
+	// count-group's aggregate power newly cross QuorumTypeThresholdVotingPower.
+	// Currently every post-gate vote re-runs O(threshold) BLS interpolations even
+	// though only the first successful attempt matters; for large quorums (e.g.
+	// LLMQ_400_60) this is O(N·threshold) total work. A per-count running-power
+	// cache would let us skip attempts where no count-group gained new qualifying
+	// power since the previous attempt. Deferred: correctness first.
 	if voteSet.maj23 == nil && quorum <= votesByBlock.sum {
 		// Tentatively record the majority block so that the threshold recovery sees
 		// the correct "quorum reached" state (IsQuorumReached, used via
@@ -337,7 +339,7 @@ func (voteSet *VoteSet) addVerifiedVote(
 		maj23BlockID := vote.BlockID
 		voteSet.maj23 = &maj23BlockID
 		if voteSet.signedMsgType == tmproto.PrecommitType {
-			if err := voteSet.recoverThresholdSignsAndVerify(votesByBlock, quorumSigns); err != nil {
+			if err := voteSet.recoverThresholdSignsAndVerify(votesByBlock); err != nil {
 				// SEC-001: do NOT halt the whole process on a recovery/verification
 				// failure here. A vote-extension count mismatch (zero OR non-zero) can
 				// no longer cause this: recoverThresholdSigns recovers from the
@@ -376,7 +378,7 @@ func (voteSet *VoteSet) addVerifiedVote(
 
 // recoverThresholdSignsAndVerify recovers threshold signatures and verifies them.
 // precondition: quorum reached
-func (voteSet *VoteSet) recoverThresholdSignsAndVerify(blockVotes *blockVotes, quorumDataSigns QuorumSignData) error {
+func (voteSet *VoteSet) recoverThresholdSignsAndVerify(blockVotes *blockVotes) error {
 	if len(blockVotes.votes) == 0 {
 		return nil
 	}
@@ -395,9 +397,40 @@ func (voteSet *VoteSet) recoverThresholdSignsAndVerify(blockVotes *blockVotes, q
 		return err
 	}
 
+	// Build verification sign data from a canonical vote — a vote whose total
+	// extension count matches the canonical count selected by recoverThresholdSigns.
+	// Using the triggering vote's sign data (as was done previously) is incorrect
+	// when the triggering vote carries a Byzantine-crafted extension count that
+	// differs from the canonical count: the recovered QuorumSigns would then
+	// have a different VoteExtensionSignatures length than the triggering vote's
+	// VoteExtensionSignItems, causing VerifyVoteExtensions to return a spurious
+	// length-mismatch error even though recovery succeeded (SEC-001 liveness fix).
+	//
+	// After recoverThresholdSigns returns, voteSet.thresholdVoteExtSigs contains
+	// all extensions from the first canonical vote, so its length equals the
+	// total canonical extension count. Any vote in blockVotes with that count is
+	// guaranteed to be in the honest, count-consistent majority group.
+	canonicalExtCount := len(voteSet.thresholdVoteExtSigs)
+	var canonicalVote *Vote
+	for _, v := range blockVotes.votes {
+		if v != nil && len(v.VoteExtensions) == canonicalExtCount {
+			canonicalVote = v
+			break
+		}
+	}
+	if canonicalVote == nil {
+		// Unreachable: recoverThresholdSigns just succeeded using votes with
+		// canonicalExtCount extensions, so at least one must exist.
+		return fmt.Errorf("internal: no canonical vote (ext count %d) found after successful threshold recovery", canonicalExtCount)
+	}
+	canonicalSignData, err := MakeQuorumSignsWithVoteSet(voteSet, canonicalVote.ToProto())
+	if err != nil {
+		return fmt.Errorf("building canonical verification sign data: %w", err)
+	}
+
 	sigs := voteSet.makeQuorumSigns()
 	// we assume quorum is reached
-	return quorumDataSigns.Verify(voteSet.valSet.ThresholdPublicKey, sigs)
+	return canonicalSignData.Verify(voteSet.valSet.ThresholdPublicKey, sigs)
 }
 
 func (voteSet *VoteSet) recoverThresholdSigns(blockVotes *blockVotes) error {

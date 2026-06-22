@@ -1073,3 +1073,85 @@ func TestVoteSet_AddVote_NoRecoverableExtensionCountPanics(t *testing.T) {
 	require.True(t, sawPanic, "the backstop hard-fail must fire when no count reaches the recovery threshold and all have voted")
 	require.False(t, voteSet.HasTwoThirdsMajority(), "no commit may be produced when recovery is impossible")
 }
+
+// TestVoteSet_AddVote_ByzantineLastWithGateAboveRecovery is the SEC-001 regression
+// test for the thepastaclaw finding: when VotingPowerThreshold (the commit gate)
+// is configured above the fixed BLS recovery threshold, a Byzantine attacker can
+// place its votes last so that every post-gate triggering vote carries a
+// non-canonical extension count. Before the fix, recoverThresholdSignsAndVerify
+// built its QuorumSignData from the triggering vote, causing a length mismatch in
+// VerifyVoteExtensions (triggering-vote ext count != recovered canonical count)
+// even though threshold recovery had already succeeded. The mismatch rolled back
+// maj23 on every subsequent vote until all validators had voted, at which point the
+// backstop panic fired — a deterministic liveness DoS.
+//
+// Setup: 10 validators @ 100 power (total=1000), commit gate=800,
+// BLS recovery threshold=700 (7-of-10).
+//
+//   - Honest votes 0-6 (ext count=2): sum=700, below gate (800) → no trigger.
+//   - Byzantine votes 7-9 (ext count=1): each crosses/maintains gate, triggers
+//     recovery; canonical count is 2 (7 honest votes hold >=700 power). With the
+//     fix the triggering vote is no longer used for verification → no length
+//     mismatch → recovery succeeds on vote 7 → maj23 committed, commit produced.
+func TestVoteSet_AddVote_ByzantineLastWithGateAboveRecovery(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const (
+		height         = int64(10)
+		round          = int32(0)
+		numValidators  = 10
+		honestCount    = 2 // honest ABCI ExtendVote extension count
+		byzantineCount = 1 // Byzantine extension count (wrong, but validly signed)
+		// 7 honest voters × 100 power = 700 >= recovery threshold; added first.
+		// The remaining 3 (indices 7-9) are Byzantine; added LAST so each one
+		// triggers the commit gate (800) with a Byzantine ext-count=1 vote.
+		numHonest = 7
+	)
+
+	voteSet, valSet, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrecommitType, numValidators)
+	blockID := makeBlockIDRandom()
+
+	// Raise the commit gate above the BLS recovery threshold.
+	// QuorumTypeThresholdVotingPower for LLMQType_TEST_V17 with 10 validators
+	// is 7*DefaultDashVotingPower = 700. Setting VotingPowerThreshold to 800
+	// places the commit gate at 800 > 700 (recovery threshold), satisfying the
+	// attack precondition.
+	voteSet.valSet.VotingPowerThreshold = uint64(8 * DefaultDashVotingPower) // 800
+	require.Greater(t, voteSet.valSet.QuorumVotingThresholdPower(),
+		voteSet.valSet.QuorumTypeThresholdVotingPower(),
+		"precondition: commit gate must exceed the BLS recovery threshold")
+
+	require.NotPanics(t, func() {
+		// Step 1: add honest votes first. With 7 honest votes at 700 total power
+		// the commit gate (800) is not yet crossed, so no recovery is attempted.
+		for i := 0; i < numHonest; i++ {
+			added, err := signAddPrecommitWithExtCount(ctx, t, voteSet, privValidators[i], i, honestCount, blockID)
+			require.NoError(t, err)
+			require.True(t, added)
+		}
+		require.False(t, voteSet.HasTwoThirdsMajority(),
+			"quorum must not be reached after honest votes alone (below commit gate)")
+
+		// Step 2: add Byzantine votes LAST. Each one crosses or maintains the
+		// commit gate (800) and acts as the triggering vote with ext count = 1.
+		// Before the fix, quorumDataSigns from the Byzantine vote (1 sign item)
+		// mismatched the recovered sigs (2 sigs for canonical count 2), causing
+		// a spurious verification error → maj23 rollback → eventual panic.
+		for i := numHonest; i < numValidators; i++ {
+			added, err := signAddPrecommitWithExtCount(ctx, t, voteSet, privValidators[i], i, byzantineCount, blockID)
+			require.NoError(t, err)
+			require.True(t, added)
+		}
+	}, "Byzantine-last gate>recovery attack must not panic (SEC-001 liveness)")
+
+	require.True(t, voteSet.HasTwoThirdsMajority(),
+		"quorum must be reached: 7 honest (ext=2) votes have 700 power >= recovery threshold")
+
+	commit := voteSet.MakeCommit()
+	require.NotNil(t, commit)
+	require.Len(t, commit.ThresholdVoteExtensions, honestCount,
+		"canonical (honest) extension count must be recovered")
+	require.NoError(t, valSet.VerifyCommit(voteSet.ChainID(), blockID, height, commit),
+		"recovered threshold signatures must verify against the quorum public key")
+}
