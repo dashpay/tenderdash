@@ -71,10 +71,15 @@ type Group struct {
 	minIndex           int // Includes head
 	maxIndex           int // Includes head, where Head will move to
 
+	// procCancel cancels the context supplied to background goroutines
+	// (processTicks). It is derived from the caller ctx in OnStart so that
+	// goroutines also exit when the caller ctx is cancelled. OnStop calls
+	// procCancel() directly, which makes goroutineWg.Wait() safe to call
+	// immediately after Stop() regardless of whether the caller ctx has fired.
+	procCancel context.CancelFunc
+
 	// goroutineWg tracks the processTicks goroutine so that WaitForGoroutines
-	// can block until it has fully exited. This is separate from the
-	// BaseService srvCtx because processTicks runs with the caller-supplied
-	// context and exits on ctx.Done(), not on the service's internal cancel.
+	// can block until it has fully exited.
 	goroutineWg stdsync.WaitGroup
 
 	// TODO: When we start deleting files, we need to start tracking GroupReaders
@@ -143,18 +148,23 @@ func GroupTotalSizeLimit(limit int64) func(*Group) {
 // and group limits.
 func (g *Group) OnStart(ctx context.Context) error {
 	g.ticker = time.NewTicker(g.groupCheckDuration)
+	// Derive a child context so that OnStop can cancel the goroutine by
+	// calling g.procCancel() independently of whether the caller ctx fires.
+	// The child inherits cancellation from ctx, preserving the existing
+	// "also exit when caller ctx cancels" behaviour.
+	procCtx, procCancel := context.WithCancel(ctx)
+	g.procCancel = procCancel
 	g.goroutineWg.Add(1)
 	go func() {
 		defer g.goroutineWg.Done()
-		g.processTicks(ctx)
+		g.processTicks(procCtx)
 	}()
 	return nil
 }
 
 // WaitForGoroutines blocks until the background goroutines started by this
-// Group (e.g. processTicks) have fully exited.  It must be called after
-// Close() / Stop() so that the context used to start those goroutines has
-// already been cancelled.
+// Group (e.g. processTicks) have fully exited.  It is safe to call after
+// Stop() because OnStop() cancels the goroutine's context via procCancel.
 func (g *Group) WaitForGoroutines() {
 	g.goroutineWg.Wait()
 }
@@ -162,6 +172,9 @@ func (g *Group) WaitForGoroutines() {
 // OnStop implements service.Service by stopping the goroutine described above.
 // NOTE: g.Head must be closed separately using Close.
 func (g *Group) OnStop() {
+	// Cancel the goroutine's context first so that processTicks exits on its
+	// next select iteration without waiting for the caller ctx.
+	g.procCancel()
 	g.ticker.Stop()
 	if err := g.FlushAndSync(); err != nil {
 		g.logger.Error("error flushing to disk", "err", err)
