@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	stdsync "sync"
 	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
@@ -69,6 +70,12 @@ type Group struct {
 	groupCheckDuration time.Duration
 	minIndex           int // Includes head
 	maxIndex           int // Includes head, where Head will move to
+
+	// goroutineWg tracks the processTicks goroutine so that WaitForGoroutines
+	// can block until it has fully exited. This is separate from the
+	// BaseService srvCtx because processTicks runs with the caller-supplied
+	// context and exits on ctx.Done(), not on the service's internal cancel.
+	goroutineWg stdsync.WaitGroup
 
 	// TODO: When we start deleting files, we need to start tracking GroupReaders
 	// and their dependencies.
@@ -136,8 +143,20 @@ func GroupTotalSizeLimit(limit int64) func(*Group) {
 // and group limits.
 func (g *Group) OnStart(ctx context.Context) error {
 	g.ticker = time.NewTicker(g.groupCheckDuration)
-	go g.processTicks(ctx)
+	g.goroutineWg.Add(1)
+	go func() {
+		defer g.goroutineWg.Done()
+		g.processTicks(ctx)
+	}()
 	return nil
+}
+
+// WaitForGoroutines blocks until the background goroutines started by this
+// Group (e.g. processTicks) have fully exited.  It must be called after
+// Close() / Stop() so that the context used to start those goroutines has
+// already been cancelled.
+func (g *Group) WaitForGoroutines() {
+	g.goroutineWg.Wait()
 }
 
 // OnStop implements service.Service by stopping the goroutine described above.
