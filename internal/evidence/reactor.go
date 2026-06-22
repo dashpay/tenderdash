@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"runtime/debug"
+	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
 
@@ -20,6 +21,16 @@ const (
 	EvidenceChannel = p2p.ChannelID(0x38)
 
 	maxMsgSize = 1048576 // 1MB TODO make it configurable
+
+	// evidenceSyncInterval is how often the per-peer sync goroutine re-walks
+	// the pool and re-sends any evidence the peer may have missed. A short
+	// interval recovers from the delivery race that can occur when PeerStatusUp
+	// fires before the p2p channel route to the peer is fully established —
+	// in that window, Send calls succeed at the transport layer but the
+	// envelope is silently dropped by the router. Without a retry the peer
+	// would permanently miss the evidence (syncEvidence is the only push path
+	// for peers that connect after the evidence is already in the pool).
+	evidenceSyncInterval = 1 * time.Second
 )
 
 // GetChannelDescriptor produces an instance of a descriptor for this
@@ -252,11 +263,19 @@ func (r *Reactor) processPeerUpdates(ctx context.Context, peerUpdates *p2p.PeerU
 	}
 }
 
-// syncEvidence starts a blocking process that sends all evidence to a newly
-// connected peer.  This should be invoked in a goroutine per unique peer
-// ID via an appropriate PeerUpdate. The goroutine can be signaled to gracefully
-// exit by either explicitly closing the provided doneCh or by the reactor
-// signaling to stop.
+// syncEvidence periodically sends all pool evidence to a newly connected peer
+// until the peer disconnects (ctx is canceled). It is invoked in a goroutine
+// per unique peer ID when a PeerStatusUp event is received.
+//
+// The goroutine re-syncs on every evidenceSyncInterval tick so that evidence
+// dropped during the initial delivery (when PeerStatusUp fires before the p2p
+// channel route to the peer is fully wired) is recovered automatically.
+// Without the retry loop, evidence created before the peer connected would be
+// permanently missed — syncEvidence is the only push path for such evidence.
+//
+// Note: a peer may receive the same evidence more than once; this is handled
+// gracefully by the receiver (isPending / isCommitted guards in
+// handleEvidenceMessage).
 func (r *Reactor) syncEvidence(ctx context.Context, peerID types.NodeID) {
 	defer func() {
 		r.mtx.Lock()
@@ -272,37 +291,46 @@ func (r *Reactor) syncEvidence(ctx context.Context, peerID types.NodeID) {
 		}
 	}()
 
-	next := r.evpool.EvidenceFront()
+	ticker := time.NewTicker(evidenceSyncInterval)
+	defer ticker.Stop()
 
-	for next != nil {
-		ev := next.Value.(types.Evidence)
-		evProto, err := types.EvidenceToProto(ev)
-		if err != nil {
-			panic(fmt.Errorf("failed to convert evidence: %w", err))
+	for {
+		// Walk the pool and send every pending evidence item to the peer.
+		// The peer may be behind and unable to process some items; it may also
+		// receive duplicates across ticks — both are handled on the remote side.
+		next := r.evpool.EvidenceFront()
+		for next != nil {
+			ev := next.Value.(types.Evidence)
+			evProto, err := types.EvidenceToProto(ev)
+			if err != nil {
+				panic(fmt.Errorf("failed to convert evidence: %w", err))
+			}
+
+			if err := r.evidenceCh.Send(ctx, p2p.Envelope{
+				To:      peerID,
+				Message: evProto,
+			}); err != nil {
+				return
+			}
+			r.logger.Debug("evidence sync: sent evidence to peer", "evidence", ev, "peer", peerID)
+
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			next = next.Next()
 		}
+		r.logger.Trace("evidence sync finished", "peer", peerID)
 
-		// Send the evidence to the corresponding peer. Note, the peer may be behind
-		// and thus would not be able to process the evidence correctly. Also, the
-		// peer may receive this piece of evidence multiple times if it added and
-		// removed frequently from the broadcasting peer.
-
-		if err := r.evidenceCh.Send(ctx, p2p.Envelope{
-			To:      peerID,
-			Message: evProto,
-		}); err != nil {
-			return
-		}
-		r.logger.Debug("evidence sync: sent evidence to peer", "evidence", ev, "peer", peerID)
-
+		// Wait for the next sync cycle or peer disconnect.
 		select {
 		case <-ctx.Done():
 			return
-		default:
+		case <-ticker.C:
 		}
-
-		next = next.Next()
 	}
-	r.logger.Debug("evidence sync finished", "peer", peerID)
 }
 
 // broadcastEvidence sends new evidence to all connected peers.
