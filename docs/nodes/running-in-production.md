@@ -260,15 +260,12 @@ the "VIA Nano 2000 Series", and the architectures in the ARM section rated
 
 ### Operating Systems
 
-Tendermint can be compiled for a wide range of operating systems thanks to Go
-language (the list of \$OS/\$ARCH pairs can be found
-[here](https://golang.org/doc/install/source#environment)).
+Tenderdash supports **Linux and macOS only**. Windows is not a supported
+platform and there are no plans to add support for it.
 
-While we do not favor any operation system, more secure and stable Linux server
-distributions (like Centos) should be preferred over desktop operation systems
-(like Mac OS).
-
-Native Windows support is not provided. If you are using a windows machine, you can try using the [bash shell](https://docs.microsoft.com/en-us/windows/wsl/install-win10).
+While we do not favor any particular operating system, more secure and stable
+Linux server distributions (like CentOS) should be preferred over desktop
+operating systems (like macOS).
 
 ### Miscellaneous
 

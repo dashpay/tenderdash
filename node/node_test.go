@@ -7,6 +7,7 @@ import (
 	"math"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -14,10 +15,13 @@ import (
 	dbm "github.com/cometbft/cometbft-db"
 	"github.com/fortytw2/leaktest"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
+	abcimocks "github.com/dashpay/tenderdash/abci/client/mocks"
 	"github.com/dashpay/tenderdash/abci/example/kvstore"
+	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
@@ -173,6 +177,111 @@ func TestGetRouterConfigAllowlistOnlyAcceptsOnlyNodeIDs(t *testing.T) {
 
 	require.NoError(t, opts.FilterPeerByID(context.Background(), id1))
 	require.Error(t, opts.FilterPeerByID(context.Background(), types.NodeID(strings.Repeat("b", 40))))
+}
+
+// TestGetRouterConfigFilterPeerByIP is a regression test for GO-004 / SEC MEDIUM:
+// PR #1248 silently dropped the ABCI IP-based peer filter (opts.FilterPeerByIP).
+// This test ensures the option is wired when FilterPeers is enabled with an app
+// client, and that the closure queries the correct ABCI path.
+func TestGetRouterConfigFilterPeerByIP(t *testing.T) {
+	t.Run("non-nil when FilterPeers enabled with app client", func(t *testing.T) {
+		cfg := config.TestConfig()
+		cfg.FilterPeers = true
+
+		appClient := abcimocks.NewClient(t)
+		opts, err := getRouterConfig(cfg, appClient)
+		require.NoError(t, err)
+		require.NotNil(t, opts.FilterPeerByIP,
+			"FilterPeerByIP must be non-nil when FilterPeers=true and app client is provided")
+	})
+
+	t.Run("nil when FilterPeers disabled", func(t *testing.T) {
+		cfg := config.TestConfig()
+		cfg.FilterPeers = false
+
+		opts, err := getRouterConfig(cfg, nil)
+		require.NoError(t, err)
+		require.Nil(t, opts.FilterPeerByIP,
+			"FilterPeerByIP must be nil when FilterPeers=false")
+	})
+
+	t.Run("nil when app client is nil even with FilterPeers enabled", func(t *testing.T) {
+		cfg := config.TestConfig()
+		cfg.FilterPeers = true
+
+		opts, err := getRouterConfig(cfg, nil)
+		require.NoError(t, err)
+		require.Nil(t, opts.FilterPeerByIP,
+			"FilterPeerByIP must be nil when app client is nil")
+	})
+
+	t.Run("closure accepts peer on OK ABCI response", func(t *testing.T) {
+		cfg := config.TestConfig()
+		cfg.FilterPeers = true
+
+		ip := net.ParseIP("192.0.2.1")
+		port := uint16(26656)
+		expectedPath := fmt.Sprintf("/p2p/filter/addr/%s",
+			net.JoinHostPort(ip.String(), strconv.Itoa(int(port))))
+
+		appClient := abcimocks.NewClient(t)
+		appClient.EXPECT().
+			Query(mock.Anything, mock.MatchedBy(func(req *abci.RequestQuery) bool {
+				return req.Path == expectedPath
+			})).
+			Return(&abci.ResponseQuery{Code: abci.CodeTypeOK}, nil)
+
+		opts, err := getRouterConfig(cfg, appClient)
+		require.NoError(t, err)
+		require.NotNil(t, opts.FilterPeerByIP)
+
+		require.NoError(t, opts.FilterPeerByIP(context.Background(), ip, port),
+			"peer with OK ABCI response should be accepted")
+	})
+
+	t.Run("closure rejects peer on non-OK ABCI response", func(t *testing.T) {
+		cfg := config.TestConfig()
+		cfg.FilterPeers = true
+
+		ip := net.ParseIP("192.0.2.2")
+		port := uint16(26656)
+		expectedPath := fmt.Sprintf("/p2p/filter/addr/%s",
+			net.JoinHostPort(ip.String(), strconv.Itoa(int(port))))
+
+		appClient := abcimocks.NewClient(t)
+		appClient.EXPECT().
+			Query(mock.Anything, mock.MatchedBy(func(req *abci.RequestQuery) bool {
+				return req.Path == expectedPath
+			})).
+			Return(&abci.ResponseQuery{Code: 1, Log: "banned"}, nil)
+
+		opts, err := getRouterConfig(cfg, appClient)
+		require.NoError(t, err)
+		require.NotNil(t, opts.FilterPeerByIP)
+
+		require.Error(t, opts.FilterPeerByIP(context.Background(), ip, port),
+			"peer with non-OK ABCI response should be rejected")
+	})
+
+	t.Run("closure propagates ABCI query error", func(t *testing.T) {
+		cfg := config.TestConfig()
+		cfg.FilterPeers = true
+
+		ip := net.ParseIP("192.0.2.3")
+		port := uint16(26656)
+
+		appClient := abcimocks.NewClient(t)
+		appClient.EXPECT().
+			Query(mock.Anything, mock.Anything).
+			Return(nil, errors.New("abci transport error"))
+
+		opts, err := getRouterConfig(cfg, appClient)
+		require.NoError(t, err)
+		require.NotNil(t, opts.FilterPeerByIP)
+
+		require.Error(t, opts.FilterPeerByIP(context.Background(), ip, port),
+			"ABCI query error should propagate as rejection")
+	})
 }
 
 func TestNodeSetAppVersion(t *testing.T) {
