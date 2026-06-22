@@ -166,7 +166,7 @@ func (wal *BaseWAL) OnStart(ctx context.Context) error {
 	// Derive a child context so that OnStop can cancel the goroutine via
 	// procCancel() independently of the caller ctx. The child inherits
 	// cancellation from ctx so the existing "exit when caller ctx cancels"
-	// behaviour is preserved.
+	// behavior is preserved.
 	procCtx, procCancel := context.WithCancel(ctx)
 	wal.procCancel = procCancel
 	wal.goroutineWg.Add(1)
@@ -201,7 +201,7 @@ func (wal *BaseWAL) FlushAndSync() error {
 // before cleaning up files.
 func (wal *BaseWAL) OnStop() {
 	// Cancel the goroutine's context first so processFlushTicks exits on its
-	// next select iteration without waiting for the caller ctx to be cancelled.
+	// next select iteration without waiting for the caller ctx to be canceled.
 	wal.procCancel()
 	wal.flushTicker.Stop()
 	if err := wal.FlushAndSync(); err != nil {

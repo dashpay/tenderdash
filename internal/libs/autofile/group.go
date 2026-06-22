@@ -73,7 +73,7 @@ type Group struct {
 
 	// procCancel cancels the context supplied to background goroutines
 	// (processTicks). It is derived from the caller ctx in OnStart so that
-	// goroutines also exit when the caller ctx is cancelled. OnStop calls
+	// goroutines also exit when the caller ctx is canceled. OnStop calls
 	// procCancel() directly, which makes goroutineWg.Wait() safe to call
 	// immediately after Stop() regardless of whether the caller ctx has fired.
 	procCancel context.CancelFunc
@@ -151,7 +151,7 @@ func (g *Group) OnStart(ctx context.Context) error {
 	// Derive a child context so that OnStop can cancel the goroutine by
 	// calling g.procCancel() independently of whether the caller ctx fires.
 	// The child inherits cancellation from ctx, preserving the existing
-	// "also exit when caller ctx cancels" behaviour.
+	// "also exit when caller ctx cancels" behavior.
 	procCtx, procCancel := context.WithCancel(ctx)
 	g.procCancel = procCancel
 	g.goroutineWg.Add(1)
