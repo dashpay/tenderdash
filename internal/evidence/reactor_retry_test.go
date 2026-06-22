@@ -85,9 +85,10 @@ func TestSyncEvidenceRetries(t *testing.T) {
 	const (
 		tickInterval = 20 * time.Millisecond
 		numEv        = 2
-		// Wait for at least 4 full ticks (initial walk + 3 ticker fires).
-		// Use generous headroom so the test is robust on slow CI runners.
-		waitFor = 150 * time.Millisecond
+		// Overall deadline: give the retry loop a very generous budget so the
+		// test is robust on slow/loaded CI runners. The condition is polled
+		// every half-tick, so on a healthy runner it completes in < 100 ms.
+		waitFor = 5 * time.Second
 	)
 
 	// Speed up the ticker so multiple ticks occur within milliseconds.
@@ -153,20 +154,20 @@ func TestSyncEvidenceRetries(t *testing.T) {
 	fakePeerID := types.NodeID("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	peerChan <- p2p.PeerUpdate{Status: p2p.PeerStatusUp, NodeID: fakePeerID}
 
-	// Wait for several ticks.
-	time.Sleep(waitFor)
-
-	// After multiple ticks, the same evidence must have been sent MORE than once.
-	// Each tick sends numEv items, so after ≥ 2 walks we expect count > numEv.
-	// A pre-fix one-shot goroutine would send exactly numEv then exit,
-	// making this assertion FAIL — true regression guard.
-	count := rc.sendCount()
-	require.Greater(t, count, numEv,
+	// Poll until the send count exceeds numEv, proving the ticker fired at
+	// least once after the initial walk. require.Eventually is robust to
+	// scheduler jitter on slow/loaded CI runners — unlike time.Sleep it does
+	// not fail if ticks arrive slightly late.
+	//
+	// A pre-fix one-shot goroutine would send exactly numEv then exit, so the
+	// condition would never become true — true regression guard.
+	require.Eventually(t, func() bool {
+		return rc.sendCount() > numEv
+	}, waitFor, tickInterval/2,
 		"syncEvidence must re-send evidence on every ticker tick; "+
-			"pre-fix one-shot code would send exactly %d (got %d sends after %v at %v interval)",
-		numEv, count, waitFor, tickInterval)
+			"pre-fix one-shot code would send exactly numEv=%d then exit", numEv)
 
-	t.Logf("evidence retry verified: %d sends for %d pooled items "+
-		"over ~%v at %v interval (≥%.0f ticks expected)",
-		count, numEv, waitFor, tickInterval, waitFor.Seconds()/tickInterval.Seconds())
+	count := rc.sendCount()
+	t.Logf("evidence retry verified: %d sends for %d pooled items at %v interval",
+		count, numEv, tickInterval)
 }

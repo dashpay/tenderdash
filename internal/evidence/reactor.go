@@ -43,12 +43,13 @@ const (
 //     sufficient, and a 1 s retry window is still well within the expected
 //     connection stabilization time.
 //
-//   - Amplification: worst case is P peers × M evidence items × evidenceSyncInterval.
-//     Evidence pools in production are tiny (typically ≤ 5 items, each << 1 KB),
-//     so 1 s re-gossip per peer is negligible. A larger interval (e.g. 10 s) was
-//     considered but causes an unacceptable regression in tests where goroutines
-//     start with an empty pool and must wait the full interval before delivering
-//     evidence added after connection.
+//   - Amplification: each tick sends at most P × M messages (P peers, M pending
+//     evidence items). At the default 1 s interval the worst-case send rate is
+//     P × M messages/s. Evidence pools in production are tiny (typically ≤ 5
+//     items, each << 1 KB), so the overhead is negligible. A larger interval
+//     (e.g. 10 s) reduces send frequency but causes an unacceptable regression
+//     in tests where goroutines start with an empty pool and must wait the full
+//     interval before delivering evidence added after connection.
 //
 // Declared as a var (not const) so tests can override it via
 // SetEvidenceSyncIntervalForTesting without affecting production code.
@@ -368,7 +369,7 @@ func (r *Reactor) syncEvidence(ctx context.Context, peerID types.NodeID, myID *s
 			}); err != nil {
 				return
 			}
-			r.logger.Debug("evidence sync: sent evidence to peer", "evidence", ev, "peer", peerID)
+			r.logger.Trace("evidence sync: sent evidence to peer", "evidence", ev, "peer", peerID)
 
 			select {
 			case <-ctx.Done():
