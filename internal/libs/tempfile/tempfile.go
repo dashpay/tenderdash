@@ -122,7 +122,12 @@ func WriteFileAtomic(filename string, data []byte, perm os.FileMode) (err error)
 		return io.ErrShortWrite
 	}
 	// Close the file explicitly before renaming it to flush all OS buffers.
-	f.Close()
+	// Checking the error is important: a failed close (e.g. on a full disk)
+	// means the data may not have been fully written, and proceeding to rename
+	// would silently produce a truncated destination file.
+	if err = f.Close(); err != nil {
+		return fmt.Errorf("closing atomic write file: %w", err)
+	}
 
 	return os.Rename(f.Name(), filename)
 }
