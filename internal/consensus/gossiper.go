@@ -124,7 +124,10 @@ func (g *msgGossiper) GossipProposalBlockParts(
 	logger.Trace("syncing proposal block part to the peer")
 	part := rs.ProposalBlockParts.GetPart(index)
 	// NOTE: A peer might have received a different proposal message, so this Proposal msg will be rejected!
-	err := g.syncProposalBlockPart(ctx, part, rs.Height, rs.Round)
+	// This is regular (same-height) gossip: the peer is at our height and is
+	// actively collecting parts, so we optimistically record the part as
+	// delivered to avoid resending it on every tick.
+	err := g.syncProposalBlockPart(ctx, part, rs.Height, rs.Round, true)
 	if err != nil {
 		logger.Error("failed to sync proposal block part to the peer", "error", err)
 	}
@@ -192,7 +195,18 @@ func (g *msgGossiper) GossipBlockPartsForCatchup(
 		logger.Error("couldn't find a block part", "part_index", index, "error", err)
 		return
 	}
-	err = g.syncProposalBlockPart(ctx, part, prs.Height, meta.Round)
+	// Catch-up gossip: do NOT optimistically record the part as delivered.
+	//
+	// A lagging peer can be at a step where it is not yet expecting block parts
+	// (e.g. RoundStepNewHeight/Propose with a nil ProposalBlockParts) and will
+	// silently drop the part. If we optimistically marked it delivered, our view
+	// of the peer would show the full part set and we would never resend it,
+	// leaving the peer wedged with a stored commit but an incomplete block (it
+	// learns the part-set header only once the catch-up commit arrives). By not
+	// marking it, we keep resending the missing part each gossip tick until the
+	// peer actually applies the block and advances its height, mirroring the
+	// "resend until acked" behavior already used for catch-up commits.
+	err = g.syncProposalBlockPart(ctx, part, prs.Height, meta.Round, false)
 	if err != nil {
 		logger.Error("failed to sync proposal block part to the peer", "error", err)
 	}
@@ -252,7 +266,11 @@ func (g *msgGossiper) GossipVote(ctx context.Context, rs cstypes.RoundState, prs
 	}
 }
 
-func (g *msgGossiper) syncProposalBlockPart(ctx context.Context, part *types.Part, height int64, round int32) error {
+// syncProposalBlockPart sends a single block part to the peer. When
+// markPeerHasPart is true the peer's round state is optimistically updated to
+// record that it now has the part; callers performing catch-up should pass
+// false so the part keeps being resent until the peer actually applies it.
+func (g *msgGossiper) syncProposalBlockPart(ctx context.Context, part *types.Part, height int64, round int32, markPeerHasPart bool) error {
 	protoPart, err := part.ToProto()
 	if err != nil {
 		return fmt.Errorf("failed to convert block part to proto, error: %w", err)
@@ -267,8 +285,12 @@ func (g *msgGossiper) syncProposalBlockPart(ctx context.Context, part *types.Par
 		Round:  round,  // not our height, so it does not matter
 		Part:   *protoPart,
 	}
+	var syncFunc func() error
+	if markPeerHasPart {
+		syncFunc = updatePeerProposalBlockPart(g.ps, height, round, int(part.Index))
+	}
 	logger.Debug("syncing proposal block part")
-	err = g.sync(ctx, protoBlockPart, updatePeerProposalBlockPart(g.ps, height, round, int(part.Index)))
+	err = g.sync(ctx, protoBlockPart, syncFunc)
 	if err != nil {
 		logger.Error("failed to sync proposal block part to the peer", "error", err)
 	}

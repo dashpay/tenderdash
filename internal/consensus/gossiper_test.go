@@ -404,6 +404,50 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchup() {
 	}
 }
 
+// TestGossipBlockPartsForCatchupResends verifies that catch-up block-part
+// gossip does NOT optimistically record the part as delivered. A lagging peer
+// may be at a step where it is not yet expecting block parts and silently drops
+// them; if we marked the part delivered we would never resend it, wedging the
+// peer with an incomplete block. The part must therefore keep being sent on
+// every tick until the peer applies the block and advances its height.
+func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupResends() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	partSet := types.NewPartSetFromData(tmrand.Bytes(100), 100)
+	suite.Require().Equal(uint32(1), partSet.Total())
+	part0 := partSet.GetPart(0)
+	protoPart0, err := part0.ToProto()
+	suite.Require().NoError(err)
+	blockMeta := types.BlockMeta{BlockID: types.BlockID{PartSetHeader: partSet.Header()}}
+
+	// Peer is behind us at height 999 and has none of the parts yet.
+	suite.ps.PRS = cstypes.PeerRoundState{
+		Height:                     999,
+		Round:                      0,
+		ProposalBlockParts:         partSet.BitArray().Not(),
+		ProposalBlockPartSetHeader: partSet.Header(),
+	}
+
+	suite.blockStore.On("LoadBlockMeta", int64(999)).Twice().Return(&blockMeta)
+	suite.blockStore.On("LoadBlockPart", int64(999), 0).Twice().Return(part0)
+	suite.dataCh.
+		On("Send", ctx, p2p.Envelope{
+			To:      suite.ps.peerID,
+			Message: &tmcons.BlockPart{Height: 999, Round: 0, Part: *protoPart0},
+		}).
+		Twice().
+		Return(nil)
+
+	// First tick: send the missing part.
+	suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+	suite.Require().False(suite.ps.PRS.ProposalBlockParts.GetIndex(0),
+		"catch-up must not optimistically mark the peer as having the part")
+
+	// Second tick: the part is still considered missing, so it is resent.
+	suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+}
+
 func (suite *GossiperSuiteTest) TestGossipCommit() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
