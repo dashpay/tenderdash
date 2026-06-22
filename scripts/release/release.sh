@@ -215,6 +215,9 @@ function validate {
     # so commits on origin are not silently missed.
     git fetch origin "${SOURCE_BRANCH}"
     if [[ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/${SOURCE_BRANCH}")" ]]; then
+        if [[ -n "${DRY_RUN}" ]]; then
+            error "Your ${SOURCE_BRANCH} is out of sync with origin; sync it before running --dry-run (dry-run must not mutate the checkout)"
+        fi
         git merge --ff-only "origin/${SOURCE_BRANCH}" ||
             error "Your ${SOURCE_BRANCH} is out of sync with origin; sync it before releasing"
     fi
@@ -260,11 +263,16 @@ function preflight() {
     fi
     debug "Preflight: gh auth OK"
 
-    # Push-credential probe: dry-run push to the release branch we will create.
-    # Catches missing credentials or token scope before any commit is made.
-    local push_out
-    if ! push_out="$(git push --dry-run origin "HEAD:refs/heads/${RELEASE_BRANCH}" 2>&1)"; then
-        local msg="Push credential probe failed for origin/${RELEASE_BRANCH}. Check your SSH key or token (an elevated token may be required for protected branches). Output: ${push_out}"
+    # Push-credential probe: dry-run force-push to the release branch we will
+    # create.  Mirrors the real force-push at createReleasePR so an existing
+    # divergent remote branch (from a prior partial run) does not produce a
+    # false-negative that blocks legitimate retries.
+    # Raw output is sanitized before logging to avoid credential leakage when
+    # origin uses an embedded https://token@host URL.
+    local push_out sanitized_out
+    if ! push_out="$(git push --dry-run --force origin "HEAD:refs/heads/${RELEASE_BRANCH}" 2>&1)"; then
+        sanitized_out="$(printf '%s' "${push_out}" | sed -E 's#(https?://)[^/@]+@#\1***@#g')"
+        local msg="Push credential probe failed for origin/${RELEASE_BRANCH}. Check your SSH key or token (an elevated token may be required for protected branches). Output: ${sanitized_out}"
         if [[ -n "${DRY_RUN}" ]]; then
             debug "DRY-RUN (informational, non-fatal): ${msg}"
         else
@@ -390,7 +398,11 @@ function createReleaseIdempotent() {
 
 function deleteRelease() {
     if [[ "$(gh release view --json isDraft --jq .isDraft "v${NEW_PACKAGE_VERSION}")" == "true" ]]; then
-        gh release delete "v${NEW_PACKAGE_VERSION}"
+        # Pass --yes in non-interactive mode so gh does not block on a
+        # confirmation prompt — which would hang an agent/CI invocation.
+        local gh_delete_args=()
+        [[ -n "${NON_INTERACTIVE}" ]] && gh_delete_args+=(--yes)
+        gh release delete "${gh_delete_args[@]}" "v${NEW_PACKAGE_VERSION}"
     fi
 
     git tag --delete "v${NEW_PACKAGE_VERSION}" || true
@@ -537,9 +549,15 @@ if [[ -n "${NO_WAIT}" || -n "${FINALIZE}" || -n "${DRY_RUN}" ]]; then
     NON_INTERACTIVE=yes
 fi
 
-# Mutual-exclusivity guard: --no-wait and --finalize express opposite intents.
-if [[ -n "${NO_WAIT}" && -n "${FINALIZE}" ]]; then
-    error "--no-wait and --finalize are mutually exclusive; use --no-wait for step 1, then --finalize for step 2"
+# Mode flags are mutually exclusive — each expresses a distinct intent and any
+# combination would silently override another's contract (e.g. --dry-run
+# --finalize would bypass the dry-run guarantee and create a real draft release).
+mode_count=0
+[[ -n "${NO_WAIT}" ]] && ((mode_count += 1))
+[[ -n "${FINALIZE}" ]] && ((mode_count += 1))
+[[ -n "${DRY_RUN}" ]] && ((mode_count += 1))
+if (( mode_count > 1 )); then
+    error "--no-wait, --finalize, and --dry-run are mutually exclusive; run only one mode at a time"
 fi
 
 # Normalize REPO_DIR to an absolute path (handles -C relative/path) and cd

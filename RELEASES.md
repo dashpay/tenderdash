@@ -146,7 +146,7 @@ CI/agent runner. Always use the `--no-wait` / `--finalize` two-call flow.
 
 **Pre-check with `--dry-run`** before the real run to validate your
 configuration, preview the changelog, and confirm the version bump — without
-touching any remote or making any commit:
+remote mutations or creating any commit, push, PR, tag, or release:
 
 ```sh
 ./scripts/release/release.sh --release=1.6.0-dev.3 --dry-run
