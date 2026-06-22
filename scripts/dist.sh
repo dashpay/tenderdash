@@ -25,8 +25,8 @@ GIT_IMPORT="github.com/dashevo/tenderdash/version"
 
 # Determine the arch/os combos we're building for
 XC_ARCH=${XC_ARCH:-"386 amd64 arm arm64"}
-XC_OS=${XC_OS:-"solaris darwin freebsd linux windows"}
-XC_EXCLUDE=${XC_EXCLUDE:-" darwin/arm solaris/amd64 solaris/386 solaris/arm freebsd/amd64 windows/arm windows/arm64 darwin/arm64 solaris/arm64"}
+XC_OS=${XC_OS:-"solaris darwin freebsd linux"}
+XC_EXCLUDE=${XC_EXCLUDE:-" darwin/arm solaris/amd64 solaris/386 solaris/arm freebsd/amd64 darwin/arm64 solaris/arm64"}
 
 # Make sure build tools are available.
 make tools
