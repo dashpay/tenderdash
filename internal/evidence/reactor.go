@@ -21,17 +21,52 @@ const (
 	EvidenceChannel = p2p.ChannelID(0x38)
 
 	maxMsgSize = 1048576 // 1MB TODO make it configurable
-
-	// evidenceSyncInterval is how often the per-peer sync goroutine re-walks
-	// the pool and re-sends any evidence the peer may have missed. A short
-	// interval recovers from the delivery race that can occur when PeerStatusUp
-	// fires before the p2p channel route to the peer is fully established —
-	// in that window, Send calls succeed at the transport layer but the
-	// envelope is silently dropped by the router. Without a retry the peer
-	// would permanently miss the evidence (syncEvidence is the only push path
-	// for peers that connect after the evidence is already in the pool).
-	evidenceSyncInterval = 1 * time.Second
 )
+
+// evidenceSyncInterval controls how often the per-peer sync goroutine re-walks
+// the pool and re-sends all pending evidence to the peer.
+//
+// Resend profile: each tick sends at most MaxEvidence items (bounded by pool
+// size, typically single-digits) to every connected peer. The receiver deduplicates
+// silently via isPending/isCommitted guards — no ACK is required. Re-sending
+// continues until evidence leaves the pending set (committed or expired) or the
+// peer disconnects.
+//
+// Rationale for re-sending: syncEvidence is the only push path for evidence
+// that already exists in the pool when a peer connects. The first batch can be
+// silently dropped if PeerStatusUp fires before the p2p channel route is fully
+// wired. Without a retry the peer would permanently miss those items.
+//
+// Interval choice — 1 s:
+//
+//   - Recovery speed: the routing race resolves in milliseconds; one retry is
+//     sufficient, and a 1 s retry window is still well within the expected
+//     connection stabilization time.
+//
+//   - Amplification: worst case is P peers × M evidence items × evidenceSyncInterval.
+//     Evidence pools in production are tiny (typically ≤ 5 items, each << 1 KB),
+//     so 1 s re-gossip per peer is negligible. A larger interval (e.g. 10 s) was
+//     considered but causes an unacceptable regression in tests where goroutines
+//     start with an empty pool and must wait the full interval before delivering
+//     evidence added after connection.
+//
+// Declared as a var (not const) so tests can override it via
+// SetEvidenceSyncIntervalForTesting without affecting production code.
+var evidenceSyncInterval = 1 * time.Second
+
+// peerSyncState holds the cancel function and a unique identity token for the
+// per-peer syncEvidence goroutine.
+//
+// The identity token solves the Down→Up flap race: when PeerStatusDown fires,
+// the handler deletes the map entry synchronously and calls cancel(). The
+// goroutine is still running until it notices the cancellation, and its
+// deferred cleanup compares its own token against whatever is in the map at
+// that point — if a fast Up event already installed a new goroutine, the
+// tokens differ and the old goroutine does not delete the new entry.
+type peerSyncState struct {
+	cancel context.CancelFunc
+	id     *struct{} // unique pointer per goroutine; comparable as a pointer
+}
 
 // GetChannelDescriptor produces an instance of a descriptor for this
 // package's required channels.
@@ -58,7 +93,7 @@ type Reactor struct {
 
 	mtx sync.Mutex
 
-	peerRoutines map[types.NodeID]context.CancelFunc
+	peerRoutines map[types.NodeID]peerSyncState
 }
 
 // NewReactor returns a reference to a new evidence reactor, which implements the
@@ -75,7 +110,7 @@ func NewReactor(
 		evpool:       evpool,
 		chCreator:    chCreator,
 		peerEvents:   peerEvents,
-		peerRoutines: make(map[types.NodeID]context.CancelFunc),
+		peerRoutines: make(map[types.NodeID]peerSyncState),
 	}
 
 	r.BaseService = *service.NewBaseService(logger, "Evidence", r)
@@ -205,6 +240,16 @@ func (r *Reactor) processEvidenceCh(ctx context.Context) {
 // removed peers, it will check if an evidence broadcasting goroutine
 // exists and signal that it should exit.
 //
+// Concurrency note: processPeerUpdates drives this function from a single
+// goroutine, so Up and Down events are always sequential. However, the
+// syncEvidence goroutine runs concurrently and its deferred map-cleanup can
+// race with a fast Down→Up reconnect (the goroutine may not have run its defer
+// by the time Up fires). This is handled by:
+//   - PeerStatusDown: cancel the goroutine AND delete the map entry
+//     synchronously, so the subsequent Up always starts fresh.
+//   - syncEvidence defer: compares its own identity token before deleting, so
+//     it cannot accidentally remove a new goroutine's entry.
+//
 // FIXME: The peer may be behind in which case it would simply ignore the
 // evidence and treat it as invalid. This would cause the peer to disconnect.
 // The peer may also receive the same piece of evidence multiple times if it
@@ -230,21 +275,22 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 		// a new done channel so we can explicitly close the goroutine if the peer
 		// is later removed, we increment the waitgroup so the reactor can stop
 		// safely, and finally start the goroutine to broadcast evidence to that peer.
-		_, ok := r.peerRoutines[peerUpdate.NodeID]
-		if !ok {
+		if _, ok := r.peerRoutines[peerUpdate.NodeID]; !ok {
 			pctx, pcancel := context.WithCancel(ctx)
-			r.peerRoutines[peerUpdate.NodeID] = pcancel
-			go r.syncEvidence(pctx, peerUpdate.NodeID)
+			entry := peerSyncState{cancel: pcancel, id: new(struct{})}
+			r.peerRoutines[peerUpdate.NodeID] = entry
+			go r.syncEvidence(pctx, peerUpdate.NodeID, entry.id)
 		}
 
 	case p2p.PeerStatusDown:
-		// Check if we've started an evidence broadcasting goroutine for this peer.
-		// If we have, we signal to terminate the goroutine via the channel's closure.
-		// This will internally decrement the peer waitgroup and remove the peer
-		// from the map of peer evidence broadcasting goroutines.
-		closer, ok := r.peerRoutines[peerUpdate.NodeID]
-		if ok {
-			closer()
+		// Cancel the goroutine and delete the map entry synchronously.
+		// Deleting here (rather than leaving it for the goroutine's deferred
+		// cleanup) ensures that a fast Down→Up reconnect — arriving before the
+		// goroutine's defer fires — always starts a new sync goroutine instead
+		// of seeing the stale entry and skipping.
+		if entry, ok := r.peerRoutines[peerUpdate.NodeID]; ok {
+			entry.cancel()
+			delete(r.peerRoutines, peerUpdate.NodeID)
 		}
 	}
 }
@@ -276,10 +322,20 @@ func (r *Reactor) processPeerUpdates(ctx context.Context, peerUpdates *p2p.PeerU
 // Note: a peer may receive the same evidence more than once; this is handled
 // gracefully by the receiver (isPending / isCommitted guards in
 // handleEvidenceMessage).
-func (r *Reactor) syncEvidence(ctx context.Context, peerID types.NodeID) {
+//
+// myID is a unique pointer that identifies this goroutine's map entry. The
+// deferred cleanup uses it to avoid accidentally removing a newer entry
+// installed by a fast Down→Up peer reconnect.
+func (r *Reactor) syncEvidence(ctx context.Context, peerID types.NodeID, myID *struct{}) {
 	defer func() {
 		r.mtx.Lock()
-		delete(r.peerRoutines, peerID)
+		// Only remove OUR map entry. PeerStatusDown already deletes it
+		// synchronously, and a fast Down→Up may have installed a new goroutine's
+		// entry by the time this defer runs — in both cases the IDs differ and
+		// we must leave the map untouched.
+		if current, ok := r.peerRoutines[peerID]; ok && current.id == myID {
+			delete(r.peerRoutines, peerID)
+		}
 		r.mtx.Unlock()
 
 		if e := recover(); e != nil {
