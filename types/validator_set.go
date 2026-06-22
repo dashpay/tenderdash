@@ -543,8 +543,11 @@ func (vals *ValidatorSet) QuorumVotingThresholdPower() int64 {
 // Unlike QuorumVotingThresholdPower it deliberately ignores the configurable
 // VotingPowerThreshold override: the number of consistent signature shares
 // needed to recover is a property of the DKG that produced the quorum keys and
-// cannot be lowered by configuration. It is therefore always >= ~2/3 (and hence
-// > 1/2) of the quorum voting power.
+// cannot be lowered by configuration. The value is quorum-type-dependent (see
+// dash/llmq/llmq.go): production Platform types are >= 60% (e.g.
+// LLMQType_100_67 at 67%, LLMQType_DEVNET_PLATFORM at 67%), while some
+// devnet/test types may be as low as 50% (e.g. LLMQType_DEVNET,
+// LLMQType_TEST_DIP0024, LLMQType_DEVNET_DIP0024).
 func (vals *ValidatorSet) QuorumTypeThresholdVotingPower() int64 {
 	return int64(vals.QuorumTypeThresholdCount()) * DefaultDashVotingPower
 }

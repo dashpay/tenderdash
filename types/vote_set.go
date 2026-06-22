@@ -409,9 +409,10 @@ func (voteSet *VoteSet) recoverThresholdSigns(blockVotes *blockVotes) error {
 	// recovering: the count shared by a set of votes whose aggregate voting power
 	// reaches the recovery threshold. Honest validators run the same deterministic
 	// ABCI ExtendVote and so all produce the same count; under < 1/3 Byzantine
-	// voting power at most one count can reach the threshold (two disjoint groups
-	// each >= ~2/3 of the power are impossible), so the canonical count is
-	// unambiguous and is the honest one. Votes carrying any other count (a
+	// voting power at most one count can reach the threshold (Byzantine validators
+	// hold < 1/3 of power, strictly below the recovery threshold for all supported
+	// quorum types, so they cannot form a qualifying group on their own), so the
+	// canonical count is unambiguous and is the honest one. Votes carrying any other count (a
 	// Byzantine minority, with either fewer or more extensions) are excluded from
 	// vote-extension recovery but still contribute their block signature. If no
 	// count reaches the threshold yet, recovery is not possible; the caller
@@ -455,14 +456,21 @@ func (voteSet *VoteSet) recoverThresholdSigns(blockVotes *blockVotes) error {
 // selection correct - the configurable VotingPowerThreshold override can be set
 // below 1/2 of the power (see ValidatorSet.BelowStrictThreshold), under which two
 // count-groups could both clear it and the tie-break could wrongly pick a
-// Byzantine count. The recovery threshold is always >= ~2/3 (> 1/2) of the
-// quorum power, so at most one group can ever reach it; the result is therefore
-// deterministic across nodes regardless of map iteration order, and the
-// smallest-count tie-break below is defensive only and cannot be exercised.
-// Under < 1/3 Byzantine voting power the honest validators - which share one
-// count - always form that single group, so the canonical count is the honest
-// one and a differing-count Byzantine minority is excluded from vote-extension
-// recovery.
+// Byzantine count. The recovery threshold is quorum-type-dependent (see
+// QuorumTypeThresholdVotingPower and dash/llmq/llmq.go): production Platform
+// types are >= 60% (e.g. LLMQType_100_67 at 67%), while some devnet/test types
+// are exactly 50% (e.g. LLMQType_DEVNET, LLMQType_TEST_DIP0024). For types with
+// threshold > 1/2, at most one group can reach it by the pigeonhole principle.
+// For types at exactly 50%, two equal-power groups could theoretically both reach
+// it, but only under BFT-violating (>= 50%) Byzantine stake — under the standard
+// < 1/3 Byzantine assumption the Byzantine group holds < 1/3 < 50% <= threshold
+// and therefore cannot form a qualifying group on its own. The result is therefore
+// deterministic across nodes regardless of map iteration order. Under < 1/3
+// Byzantine voting power the honest validators - which share one count - always
+// form the sole qualifying group, so the canonical count is the honest one and a
+// differing-count Byzantine minority is excluded from vote-extension recovery.
+// The smallest-count tie-break below is not exercisable under correct BFT
+// operation.
 func (voteSet *VoteSet) canonicalVoteExtensionCount(blockVotes *blockVotes) (int, bool) {
 	threshold := voteSet.valSet.QuorumTypeThresholdVotingPower()
 	powerByCount := make(map[int]int64)
