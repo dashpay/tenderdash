@@ -10,6 +10,7 @@ import (
 	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/dashpay/tenderdash/libs/bits"
+	"github.com/dashpay/tenderdash/libs/log"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
@@ -69,6 +70,7 @@ type VoteSet struct {
 	round         int32
 	signedMsgType tmproto.SignedMsgType
 	valSet        *ValidatorSet
+	logger        log.Logger
 
 	mtx           sync.Mutex
 	votesBitArray *bits.BitArray
@@ -89,10 +91,23 @@ type maj23Info struct {
 	Round  int32
 }
 
+// VoteSetOption configures optional VoteSet behaviour passed to NewVoteSet.
+type VoteSetOption func(*VoteSet)
+
+// WithLogger sets the logger used by the VoteSet. When unset (or passed nil) the
+// VoteSet uses a no-op logger, so existing callers stay silent by default.
+func WithLogger(logger log.Logger) VoteSetOption {
+	return func(voteSet *VoteSet) {
+		if logger != nil {
+			voteSet.logger = logger
+		}
+	}
+}
+
 // NewVoteSet instantiates all fields of a new vote set. This constructor requires
 // that no vote extension data be present on the votes that are added to the set.
 func NewVoteSet(chainID string, height int64, round int32,
-	signedMsgType tmproto.SignedMsgType, valSet *ValidatorSet) *VoteSet {
+	signedMsgType tmproto.SignedMsgType, valSet *ValidatorSet, opts ...VoteSetOption) *VoteSet {
 	if height == 0 {
 		panic("Cannot make VoteSet for height == 0, doesn't make sense.")
 	}
@@ -100,12 +115,13 @@ func NewVoteSet(chainID string, height int64, round int32,
 		panic("Cannot make VoteSet when the validator set doesn't have public keys.")
 	}
 
-	return &VoteSet{
+	voteSet := &VoteSet{
 		chainID:       chainID,
 		height:        height,
 		round:         round,
 		signedMsgType: signedMsgType,
 		valSet:        valSet,
+		logger:        log.NewNopLogger(),
 		votesBitArray: bits.NewBitArray(valSet.Size()),
 		votes:         make([]*Vote, valSet.Size()),
 		sum:           0,
@@ -113,6 +129,10 @@ func NewVoteSet(chainID string, height int64, round int32,
 		votesByBlock:  make(map[string]*blockVotes, valSet.Size()),
 		peerMaj23s:    make(map[string]maj23Info),
 	}
+	for _, opt := range opts {
+		opt(voteSet)
+	}
+	return voteSet
 }
 
 func (voteSet *VoteSet) ChainID() string {
@@ -359,9 +379,34 @@ func (voteSet *VoteSet) addVerifiedVote(
 				// violation) or the BLS layer itself is broken. There is then no safe way
 				// to continue.
 				voteSet.maj23 = nil
+				// Roll back the threshold signatures derived from this attempt too:
+				// recoverThresholdSigns may have populated thresholdBlockSig/
+				// thresholdVoteExtSigs before the later verification failed, and
+				// leaving them set would expose stale, unverified signatures keyed
+				// off a now-nil maj23. They are recomputed on the next successful
+				// recovery (and all external readers gate on maj23 anyway).
+				voteSet.thresholdBlockSig = nil
+				voteSet.thresholdVoteExtSigs = nil
 				if votesByBlock.sum >= voteSet.valSet.TotalVotingPower() {
 					panic(fmt.Errorf("failed recovering or verifying threshold signature with all votes present: %w", err))
 				}
+				// Debug, not Warn/Error: this is an expected, benign retry that fires
+				// on every post-gate vote while maj23 is unset (see the SEC-001 note
+				// above). It is the only place err is observable on the soft-retry
+				// path; the panic path above already wraps it.
+				voteSet.logger.Debug("threshold signature recovery not yet possible; rolling back maj23 and retrying as more votes arrive",
+					"height", voteSet.height,
+					"round", voteSet.round,
+					"block_key", blockKey,
+					"votes_by_block_sum", votesByBlock.sum,
+					"quorum", quorum,
+					"err", err,
+				)
+				// Note: the just-added vote is not lost here. It was recorded in the
+				// persistent votesByBlock bucket above (votesByBlock.addVerifiedVote),
+				// which is what the next recovery attempt reads. We intentionally skip
+				// the voteSet.votes publish step (the copy below) because that happens
+				// only on finalization, and maj23 was just rolled back.
 				return true, conflicting
 			}
 		}
