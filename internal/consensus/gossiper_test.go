@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cosmos/gogoproto/proto"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/dashpay/tenderdash/crypto"
@@ -446,6 +447,72 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupResends() {
 
 	// Second tick: the part is still considered missing, so it is resent.
 	suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+}
+
+// TestGossipBlockPartsForCatchupResendsMultiPart verifies that catch-up
+// block-part gossip iterates across ALL missing indices in a multi-part block,
+// not just a single index. With three parts all initially missing, every part
+// index must be sent to the lagging peer across repeated gossip ticks, and the
+// peer's ProposalBlockParts bit-array must never be optimistically marked.
+func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupResendsMultiPart() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const partSize = uint32(100)
+	// Build a block that serialises into exactly 3 parts.
+	partSet := types.NewPartSetFromData(tmrand.Bytes(int(partSize)*3), partSize)
+	suite.Require().Equal(uint32(3), partSet.Total(), "need a 3-part block for this test")
+	blockMeta := types.BlockMeta{BlockID: types.BlockID{PartSetHeader: partSet.Header()}}
+
+	// Peer is behind at height 999 and has received none of the three parts.
+	suite.ps.PRS = cstypes.PeerRoundState{
+		Height:                     999,
+		Round:                      0,
+		ProposalBlockParts:         partSet.BitArray().Not(), // peer has none
+		ProposalBlockPartSetHeader: partSet.Header(),
+	}
+
+	// Each gossip tick picks ONE random missing index via PickRandom.
+	// By the coupon-collector model, covering all 3 indices takes ~5.5 ticks on
+	// average; 90 ticks makes the probability of any single index going unseen
+	// below (2/3)^90 ≈ 10^-16 per index — negligible in practice.
+	const ticks = 90
+
+	suite.blockStore.On("LoadBlockMeta", int64(999)).Return(&blockMeta)
+	for i := uint32(0); i < partSet.Total(); i++ {
+		suite.blockStore.On("LoadBlockPart", int64(999), int(i)).Return(partSet.GetPart(int(i)))
+	}
+
+	// Capture which part indices the gossiper actually sends.
+	sentIndices := make(map[uint32]bool)
+	suite.dataCh.On("Send", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			env, ok := args.Get(1).(p2p.Envelope)
+			if !ok {
+				return
+			}
+			if bp, ok := env.Message.(*tmcons.BlockPart); ok {
+				sentIndices[bp.Part.Index] = true
+			}
+		}).
+		Return(nil)
+
+	for range ticks {
+		suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+	}
+
+	// Every part index must have been sent to the peer at least once.
+	for i := uint32(0); i < partSet.Total(); i++ {
+		suite.Assert().True(sentIndices[i],
+			"part index %d was never sent across %d gossip ticks", i, ticks)
+	}
+
+	// The peer's bit-array must remain un-marked (no optimistic delivery).
+	prs := suite.ps.GetRoundState()
+	for i := uint32(0); i < partSet.Total(); i++ {
+		suite.Assert().False(prs.ProposalBlockParts.GetIndex(int(i)),
+			"catch-up must not optimistically mark part %d as delivered", i)
+	}
 }
 
 func (suite *GossiperSuiteTest) TestGossipCommit() {

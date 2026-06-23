@@ -204,8 +204,7 @@ func (g *msgGossiper) GossipBlockPartsForCatchup(
 	// leaving the peer wedged with a stored commit but an incomplete block (it
 	// learns the part-set header only once the catch-up commit arrives). By not
 	// marking it, we keep resending the missing part each gossip tick until the
-	// peer actually applies the block and advances its height, mirroring the
-	// "resend until acked" behavior already used for catch-up commits.
+	// peer actually applies the block and advances its height.
 	err = g.syncProposalBlockPart(ctx, part, prs.Height, meta.Round, false)
 	if err != nil {
 		logger.Error("failed to sync proposal block part to the peer", "error", err)
