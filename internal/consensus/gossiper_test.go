@@ -459,7 +459,7 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupResendsMultiPart()
 	defer cancel()
 
 	const partSize = uint32(100)
-	// Build a block that serialises into exactly 3 parts.
+	// Build a block that serializes into exactly 3 parts.
 	partSet := types.NewPartSetFromData(tmrand.Bytes(int(partSize)*3), partSize)
 	suite.Require().Equal(uint32(3), partSet.Total(), "need a 3-part block for this test")
 	blockMeta := types.BlockMeta{BlockID: types.BlockID{PartSetHeader: partSet.Header()}}
