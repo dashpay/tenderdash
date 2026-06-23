@@ -860,9 +860,20 @@ func buildAppStateFromChain(
 	blockStore *mockBlockStore,
 ) {
 	t.Helper()
+	// Derive a child context so this helper owns the lifecycle of the service
+	// it starts, regardless of the caller's t.Cleanup ordering. abciclient.Client
+	// only exposes Start/Wait via service.Service — there is no Stop() on the
+	// interface — so a service is stopped by canceling the context passed to
+	// Start(). Canceling here before Wait() makes Wait() return promptly; a bare
+	// t.Cleanup(appClient.Wait) would block until the test timed out if it ran
+	// (LIFO) before the caller's cancel().
+	ctx, cancel := context.WithCancel(ctx)
 	// start a new app without handshake, play nBlocks blocks
 	require.NoError(t, appClient.Start(ctx))
-	t.Cleanup(appClient.Wait)
+	t.Cleanup(func() {
+		cancel()
+		appClient.Wait()
+	})
 
 	state.Version.Consensus.App = kvstore.ProtocolVersion // simulate handshake, receive app version
 	validators := types.TM2PB.ValidatorUpdates(state.Validators)
@@ -923,9 +934,20 @@ func buildTMStateFromChain(
 	// run the whole chain against this client to build up the tendermint state
 	client := abciclient.NewLocalClient(logger, app)
 
+	// Derive a child context so this helper owns the lifecycle of the proxy app
+	// it starts, regardless of the caller's t.Cleanup ordering. proxy.New returns
+	// an abciclient.Client whose only stop mechanism (via service.Service) is
+	// canceling the context passed to Start() — there is no Stop() on the
+	// interface. Canceling here before Wait() makes Wait() return promptly; a
+	// bare t.Cleanup(proxyApp.Wait) would block until the test timed out if it
+	// ran (LIFO) before the caller's cancel().
+	ctx, cancel := context.WithCancel(ctx)
 	proxyApp := proxy.New(client, logger, proxy.NopMetrics())
 	require.NoError(t, proxyApp.Start(ctx))
-	t.Cleanup(proxyApp.Wait)
+	t.Cleanup(func() {
+		cancel()
+		proxyApp.Wait()
+	})
 
 	state.Version.Consensus.App = kvstore.ProtocolVersion // simulate handshake, receive app version
 	validators := types.TM2PB.ValidatorUpdates(state.Validators)
