@@ -60,13 +60,21 @@ var evidenceSyncInterval = 1 * time.Second
 //
 // The identity token solves the Down→Up flap race: when PeerStatusDown fires,
 // the handler deletes the map entry synchronously and calls cancel(). The
-// goroutine is still running until it notices the cancellation, and its
-// deferred cleanup compares its own token against whatever is in the map at
-// that point — if a fast Up event already installed a new goroutine, the
-// tokens differ and the old goroutine does not delete the new entry.
+// goroutine keeps running until it observes the cancellation, and its deferred
+// cleanup compares its own token against whatever is in the map at that point —
+// if a fast Up event already installed a new goroutine, the tokens differ and
+// the stale goroutine leaves the new entry untouched.
+//
+// The token MUST point to a non-zero-size value. The Go runtime places every
+// zero-size allocation (e.g. new(struct{})) at the single shared
+// runtime.zerobase address, so distinct zero-size pointers compare EQUAL. That
+// would make every token identical and silently defeat the flap guard, letting
+// a stale goroutine evict a newer goroutine's map entry (goroutine leak / two
+// ticker loops per peer). A *int is non-zero-size, so each allocation is
+// guaranteed a unique address — exactly the identity this guard relies on.
 type peerSyncState struct {
 	cancel context.CancelFunc
-	id     *struct{} // unique pointer per goroutine; comparable as a pointer
+	id     *int // unique per goroutine; MUST be non-zero-size so addresses differ
 }
 
 // GetChannelDescriptor produces an instance of a descriptor for this
@@ -178,7 +186,16 @@ func (r *Reactor) handleEvidenceMessage(ctx context.Context, envelope *p2p.Envel
 				if _, ok := err.(*types.ErrInvalidEvidence); ok {
 					return err
 				}
+				// Any other error means we could not add the evidence to the pool —
+				// most commonly because we are behind and lack the block needed to
+				// verify it (verify() returns a plain error, NOT ErrInvalidEvidence,
+				// for a missing block so the peer is not disconnected). The evidence
+				// never entered the pending set, so isPending stays false. Falling
+				// through to broadcastEvidence here would re-gossip on every receipt
+				// without ever converging — sustained amplification across the
+				// network. Log and stop; only successfully-added evidence is broadcast.
 				logger.Error("failed to add evidence", "error", err)
+				return nil
 			}
 
 			return r.broadcastEvidence(ctx, *msg, r.evidenceCh)
@@ -248,8 +265,8 @@ func (r *Reactor) processEvidenceCh(ctx context.Context) {
 // by the time Up fires). This is handled by:
 //   - PeerStatusDown: cancel the goroutine AND delete the map entry
 //     synchronously, so the subsequent Up always starts fresh.
-//   - syncEvidence defer: compares its own identity token before deleting, so
-//     it cannot accidentally remove a new goroutine's entry.
+//   - syncEvidence defer: compares its own non-zero-size identity token before
+//     deleting, so it cannot accidentally remove a new goroutine's entry.
 //
 // FIXME: The peer may be behind in which case it would simply ignore the
 // evidence and treat it as invalid. This would cause the peer to disconnect.
@@ -278,7 +295,7 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 		// safely, and finally start the goroutine to broadcast evidence to that peer.
 		if _, ok := r.peerRoutines[peerUpdate.NodeID]; !ok {
 			pctx, pcancel := context.WithCancel(ctx)
-			entry := peerSyncState{cancel: pcancel, id: new(struct{})}
+			entry := peerSyncState{cancel: pcancel, id: new(int)}
 			r.peerRoutines[peerUpdate.NodeID] = entry
 			go r.syncEvidence(pctx, peerUpdate.NodeID, entry.id)
 		}
@@ -324,10 +341,11 @@ func (r *Reactor) processPeerUpdates(ctx context.Context, peerUpdates *p2p.PeerU
 // gracefully by the receiver (isPending / isCommitted guards in
 // handleEvidenceMessage).
 //
-// myID is a unique pointer that identifies this goroutine's map entry. The
-// deferred cleanup uses it to avoid accidentally removing a newer entry
-// installed by a fast Down→Up peer reconnect.
-func (r *Reactor) syncEvidence(ctx context.Context, peerID types.NodeID, myID *struct{}) {
+// myID is this goroutine's unique identity token — a pointer to a non-zero-size
+// value, so it differs from every other goroutine's token (see peerSyncState).
+// The deferred cleanup compares it against the current map entry to avoid
+// removing a newer entry installed by a fast Down→Up peer reconnect.
+func (r *Reactor) syncEvidence(ctx context.Context, peerID types.NodeID, myID *int) {
 	defer func() {
 		r.mtx.Lock()
 		// Only remove OUR map entry. PeerStatusDown already deletes it
