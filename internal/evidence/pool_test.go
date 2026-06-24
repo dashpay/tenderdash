@@ -511,7 +511,10 @@ func initializeStateFromValidatorSet(t *testing.T, valSet *types.ValidatorSet, h
 			Evidence: types.EvidenceParams{
 				MaxAgeNumBlocks: 20,
 				MaxAgeDuration:  20 * time.Minute,
-				MaxBytes:        1000,
+				// Match the production default (1 MiB). The reactor now bounds
+				// per-peer evidence sync by this budget (PendingEvidence), so an
+				// unrealistically small cap would throttle the broadcast tests.
+				MaxBytes: 1048576,
 			},
 		},
 	}
