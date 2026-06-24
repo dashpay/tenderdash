@@ -1,4 +1,4 @@
-## [1.6.0-dev.2] - 2026-06-19
+## [1.6.0-dev.3] - 2026-06-24
 
 ### Bug Fixes
 
@@ -18,6 +18,11 @@
 - Validate peer block and status responses (#1355)
 - Format light-provider height errors and document chunk-ID integrity (#1358)
 - Bound inbound connection tracking (#1356)
+- Restore ABCI IP-based peer filter dropped in #1248 (GO-004) (#1364)
+- Resend catch-up block parts to prevent lagging-peer wedge (#1365)
+- Prevent TempDir cleanup race in TestHandshakeReplayNone (#1367)
+- Prevent vote-extension count mismatch from halting consensus (SEC-001) (#1362)
+- Make evidence sync resilient to peer-routing race (#1366)
 
 ### Documentation
 
@@ -28,6 +33,7 @@
 
 - Allowlist-only limits connection only to allowed nodes (#1248)
 - Better error handling for access denied errors (#1249)
+- Add --no-wait/--finalize/--non-interactive flags for agent-driven releases (#1360)
 
 ### Miscellaneous Tasks
 
@@ -37,6 +43,7 @@
 - Fix release.sh bugs and rewrite RELEASES.md (#1336)
 - Update changelog and version to 1.6.0-dev.1 (#1337)
 - Disable CodeRabbit automatic reviews (#1345)
+- Update changelog and version to 1.6.0-dev.2 (#1361)
 
 ### Refactor
 
@@ -90,6 +97,11 @@
 - Bump github.com/btcsuite/btcd/btcec/v2 from 2.3.6 to 2.5.0 (#1351)
 - Bump github.com/adlio/schema from 1.4.0 to 1.5.0 (#1350)
 - Bump golang.org/x/net from 0.55.0 to 0.56.0 (#1347)
+- Remove Windows support (unsupported platform) (#1363)
+- Bump github.com/prometheus/common from 0.68.1 to 0.69.0 (#1370)
+- Bump actions/checkout from 6 to 7 (#1368)
+- Bump github.com/bufbuild/buf from 1.70.0 to 1.71.0 (#1369)
+- Bump github.com/opencontainers/runc (#1371)
 
 ### Ci
 
