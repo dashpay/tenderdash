@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	stdsync "sync"
 	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
@@ -69,6 +70,17 @@ type Group struct {
 	groupCheckDuration time.Duration
 	minIndex           int // Includes head
 	maxIndex           int // Includes head, where Head will move to
+
+	// procCancel cancels the context supplied to background goroutines
+	// (processTicks). It is derived from the caller ctx in OnStart so that
+	// goroutines also exit when the caller ctx is canceled. OnStop calls
+	// procCancel() directly, which makes goroutineWg.Wait() safe to call
+	// immediately after Stop() regardless of whether the caller ctx has fired.
+	procCancel context.CancelFunc
+
+	// goroutineWg tracks the processTicks goroutine so that WaitForGoroutines
+	// can block until it has fully exited.
+	goroutineWg stdsync.WaitGroup
 
 	// TODO: When we start deleting files, we need to start tracking GroupReaders
 	// and their dependencies.
@@ -136,13 +148,48 @@ func GroupTotalSizeLimit(limit int64) func(*Group) {
 // and group limits.
 func (g *Group) OnStart(ctx context.Context) error {
 	g.ticker = time.NewTicker(g.groupCheckDuration)
-	go g.processTicks(ctx)
+	// Derive a child context so that OnStop can cancel the goroutine by
+	// calling g.procCancel() independently of whether the caller ctx fires.
+	// The child inherits cancellation from ctx, preserving the existing
+	// "also exit when caller ctx cancels" behavior.
+	procCtx, procCancel := context.WithCancel(ctx)
+	g.procCancel = procCancel
+	g.goroutineWg.Add(1)
+	go func() {
+		defer g.goroutineWg.Done()
+		g.processTicks(procCtx)
+	}()
 	return nil
+}
+
+// WaitForGoroutines blocks until the background goroutines started by this
+// Group (e.g. processTicks) have fully exited.  It is safe to call after
+// Stop() because OnStop() cancels the goroutine's context via procCancel.
+func (g *Group) WaitForGoroutines() {
+	g.goroutineWg.Wait()
+}
+
+// Wait blocks until the Group service has stopped and its background goroutines
+// have fully exited. It overrides BaseService.Wait — which returns as soon as
+// OnStop() closes the quit channel, before the procCancel-driven processTicks
+// goroutine is joined — so that every direct Group consumer gets the same
+// shutdown guarantee BaseWAL.Wait relies on, not just callers that remember to
+// chain WaitForGoroutines explicitly.
+//
+// It calls g.BaseService.Wait() (the embedded method), not g.Wait(), so there
+// is no recursion. WaitForGoroutines is idempotent, so chaining it here on top
+// of an explicit caller call is harmless.
+func (g *Group) Wait() {
+	g.BaseService.Wait()
+	g.WaitForGoroutines()
 }
 
 // OnStop implements service.Service by stopping the goroutine described above.
 // NOTE: g.Head must be closed separately using Close.
 func (g *Group) OnStop() {
+	// Cancel the goroutine's context first so that processTicks exits on its
+	// next select iteration without waiting for the caller ctx.
+	g.procCancel()
 	g.ticker.Stop()
 	if err := g.FlushAndSync(); err != nil {
 		g.logger.Error("error flushing to disk", "err", err)

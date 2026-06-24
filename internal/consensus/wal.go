@@ -8,6 +8,7 @@ import (
 	"hash/crc32"
 	"io"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/cosmos/gogoproto/proto"
@@ -102,6 +103,17 @@ type BaseWAL struct {
 
 	flushTicker   *time.Ticker
 	flushInterval time.Duration
+
+	// procCancel cancels the context supplied to processFlushTicks. It is
+	// derived from the caller ctx in OnStart (context.WithCancel) so the
+	// goroutine exits on either procCancel() or the parent ctx. OnStop calls
+	// procCancel() directly, which makes goroutineWg.Wait() in Wait() safe to
+	// call immediately after Stop() regardless of whether the caller ctx fired.
+	procCancel context.CancelFunc
+
+	// goroutineWg tracks the processFlushTicks goroutine so that Wait() can
+	// block until it has truly exited.
+	goroutineWg sync.WaitGroup
 }
 
 var _ WAL = &BaseWAL{}
@@ -151,7 +163,17 @@ func (wal *BaseWAL) OnStart(ctx context.Context) error {
 		return err
 	}
 	wal.flushTicker = time.NewTicker(wal.flushInterval)
-	go wal.processFlushTicks(ctx)
+	// Derive a child context so that OnStop can cancel the goroutine via
+	// procCancel() independently of the caller ctx. The child inherits
+	// cancellation from ctx so the existing "exit when caller ctx cancels"
+	// behavior is preserved.
+	procCtx, procCancel := context.WithCancel(ctx)
+	wal.procCancel = procCancel
+	wal.goroutineWg.Add(1)
+	go func() {
+		defer wal.goroutineWg.Done()
+		wal.processFlushTicks(procCtx)
+	}()
 	return nil
 }
 
@@ -178,6 +200,9 @@ func (wal *BaseWAL) FlushAndSync() error {
 // Use Wait() to ensure it's finished shutting down
 // before cleaning up files.
 func (wal *BaseWAL) OnStop() {
+	// Cancel the goroutine's context first so processFlushTicks exits on its
+	// next select iteration without waiting for the caller ctx to be canceled.
+	wal.procCancel()
 	wal.flushTicker.Stop()
 	if err := wal.FlushAndSync(); err != nil {
 		wal.logger.Error("error on flush data to disk", "error", err)
@@ -188,6 +213,21 @@ func (wal *BaseWAL) OnStop() {
 
 // Wait for the underlying autofile group to finish shutting down
 // so it's safe to cleanup files.
+//
+// This blocks until:
+//  1. The WAL BaseService has stopped (OnStop has returned).
+//  2. The Group BaseService has stopped.
+//  3. The processFlushTicks goroutine has fully exited.
+//  4. The Group's processTicks goroutine has fully exited.
+//
+// Points 3 and 4 are important: those goroutines run with a child context
+// derived from the caller ctx. OnStop() cancels that child context via
+// procCancel() so goroutineWg.Wait() / WaitForGoroutines() always unblock
+// promptly after Stop() — regardless of whether the original caller ctx has
+// fired. Without waiting for them, a goroutine still executing a flush tick
+// could re-open the WAL file (via AutoFile) after the caller believes the
+// WAL is fully stopped, causing a race with t.TempDir() cleanup
+// ("directory not empty").
 func (wal *BaseWAL) Wait() {
 	if wal.IsRunning() {
 		wal.BaseService.Wait()
@@ -195,6 +235,9 @@ func (wal *BaseWAL) Wait() {
 	if wal.group.IsRunning() {
 		wal.group.Wait()
 	}
+	// Wait for context-driven goroutines that are not tracked by BaseService.
+	wal.group.WaitForGoroutines()
+	wal.goroutineWg.Wait()
 }
 
 // Write is called in newStep and for each receive on the

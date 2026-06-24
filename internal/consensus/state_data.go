@@ -316,7 +316,7 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockSto
 	s.ValidBlock = nil
 	s.ValidBlockParts = nil
 	s.Commit = nil
-	s.Votes = cstypes.NewHeightVoteSet(state.ChainID, height, validators)
+	s.Votes = cstypes.NewHeightVoteSet(state.ChainID, height, validators, cstypes.WithLogger(s.logger))
 	s.CommitRound = -1
 	s.LastValidators = state.LastValidators
 	s.TriggeredTimeoutPrecommit = false

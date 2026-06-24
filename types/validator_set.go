@@ -520,6 +520,11 @@ func (vals *ValidatorSet) QuorumVotingPower() int64 {
 
 // QuorumVotingThresholdPower returns the threshold power of the voting power of the quorum if all the members existed.
 // Voting is considered successful when voting power is at or above this threshold.
+//
+// NOTE: this honors the configurable VotingPowerThreshold override, which can be
+// set below the strict 2/3+1 BFT floor (see BelowStrictThreshold). For the fixed
+// power required to recover a threshold signature, use
+// QuorumTypeThresholdVotingPower instead.
 func (vals *ValidatorSet) QuorumVotingThresholdPower() int64 {
 	if thresholdPower := vals.VotingPowerThreshold; thresholdPower > 0 {
 		if thresholdPower > math.MaxInt64 {
@@ -529,6 +534,21 @@ func (vals *ValidatorSet) QuorumVotingThresholdPower() int64 {
 		return int64(thresholdPower)
 	}
 
+	return vals.QuorumTypeThresholdVotingPower()
+}
+
+// QuorumTypeThresholdVotingPower returns the fixed, LLMQ-type-derived threshold
+// voting power required to recover a valid threshold (BLS/DKG) signature.
+//
+// Unlike QuorumVotingThresholdPower it deliberately ignores the configurable
+// VotingPowerThreshold override: the number of consistent signature shares
+// needed to recover is a property of the DKG that produced the quorum keys and
+// cannot be lowered by configuration. The value is quorum-type-dependent (see
+// dash/llmq/llmq.go): production Platform types are >= 60% (e.g.
+// LLMQType_100_67 at 67%, LLMQType_DEVNET_PLATFORM at 67%), while some
+// devnet/test types may be as low as 50% (e.g. LLMQType_DEVNET,
+// LLMQType_TEST_DIP0024, LLMQType_DEVNET_DIP0024).
+func (vals *ValidatorSet) QuorumTypeThresholdVotingPower() int64 {
 	return int64(vals.QuorumTypeThresholdCount()) * DefaultDashVotingPower
 }
 

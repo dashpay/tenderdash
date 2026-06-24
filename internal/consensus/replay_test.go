@@ -708,7 +708,18 @@ func testHandshakeReplay(
 		require.NoError(t, err)
 		err = wal.Start(ctx)
 		require.NoError(t, err)
-		t.Cleanup(func() { cancel(); wal.Wait() })
+		// Explicitly Stop the WAL before Wait so that OnStop (which marks the
+		// AutoFile closed and drains the group) runs synchronously from this
+		// cleanup, rather than relying on the background goroutine to have
+		// called it first.  Without this, BaseWAL.Wait() can return while
+		// processFlushTicks / processTicks goroutines are still mid-execution
+		// and able to re-open the WAL file — causing a race with t.TempDir()
+		// cleanup that manifests as "directory not empty".
+		t.Cleanup(func() {
+			cancel()
+			wal.Stop()
+			wal.Wait()
+		})
 		chain, commits = makeBlockchainFromWAL(t, wal)
 		stateDB, genesisState, store = stateAndStore(t, cfg, kvstore.ProtocolVersion)
 	}
@@ -739,6 +750,7 @@ func testHandshakeReplay(
 
 	eventBus := eventbus.NewDefault(logger)
 	require.NoError(t, eventBus.Start(ctx))
+	t.Cleanup(func() { eventBus.Stop(); eventBus.Wait() })
 
 	client := abciclient.NewLocalClient(logger, newKVStoreFunc(t, opts...)(logger, ""))
 	if nBlocks > 0 {
@@ -848,8 +860,20 @@ func buildAppStateFromChain(
 	blockStore *mockBlockStore,
 ) {
 	t.Helper()
+	// Derive a child context so this helper owns the lifecycle of the service
+	// it starts, regardless of the caller's t.Cleanup ordering. abciclient.Client
+	// only exposes Start/Wait via service.Service — there is no Stop() on the
+	// interface — so a service is stopped by canceling the context passed to
+	// Start(). Canceling here before Wait() makes Wait() return promptly; a bare
+	// t.Cleanup(appClient.Wait) would block until the test timed out if it ran
+	// (LIFO) before the caller's cancel().
+	ctx, cancel := context.WithCancel(ctx)
 	// start a new app without handshake, play nBlocks blocks
 	require.NoError(t, appClient.Start(ctx))
+	t.Cleanup(func() {
+		cancel()
+		appClient.Wait()
+	})
 
 	state.Version.Consensus.App = kvstore.ProtocolVersion // simulate handshake, receive app version
 	validators := types.TM2PB.ValidatorUpdates(state.Validators)
@@ -910,8 +934,20 @@ func buildTMStateFromChain(
 	// run the whole chain against this client to build up the tendermint state
 	client := abciclient.NewLocalClient(logger, app)
 
+	// Derive a child context so this helper owns the lifecycle of the proxy app
+	// it starts, regardless of the caller's t.Cleanup ordering. proxy.New returns
+	// an abciclient.Client whose only stop mechanism (via service.Service) is
+	// canceling the context passed to Start() — there is no Stop() on the
+	// interface. Canceling here before Wait() makes Wait() return promptly; a
+	// bare t.Cleanup(proxyApp.Wait) would block until the test timed out if it
+	// ran (LIFO) before the caller's cancel().
+	ctx, cancel := context.WithCancel(ctx)
 	proxyApp := proxy.New(client, logger, proxy.NopMetrics())
 	require.NoError(t, proxyApp.Start(ctx))
+	t.Cleanup(func() {
+		cancel()
+		proxyApp.Wait()
+	})
 
 	state.Version.Consensus.App = kvstore.ProtocolVersion // simulate handshake, receive app version
 	validators := types.TM2PB.ValidatorUpdates(state.Validators)
@@ -924,6 +960,7 @@ func buildTMStateFromChain(
 
 	eventBus := eventbus.NewDefault(logger)
 	require.NoError(t, eventBus.Start(ctx))
+	t.Cleanup(func() { eventBus.Stop(); eventBus.Wait() })
 
 	blockExec := sm.NewBlockExecutor(
 		stateStore,

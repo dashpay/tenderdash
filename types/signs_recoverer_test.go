@@ -242,24 +242,27 @@ func TestSignsRecovererErrors(t *testing.T) {
 			expectErr: true,
 		},
 		{
-			// A vote with 0 extensions must not silently pass once an earlier vote
-			// established a non-zero extension count.
-			name: "zero extensions after non-zero established count",
+			// SEC-001: a precommit with 0 extensions arriving after a non-zero
+			// extension count was established is tolerated - its (absent) extension
+			// share is skipped, not treated as an error. Erroring here is what let a
+			// single Byzantine zero-extension precommit halt the whole network.
+			name: "zero extensions after non-zero established count are skipped",
 			votes: []*Vote{
 				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: twoExts()},
 				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: nil},
 			},
-			expectErr: true,
+			expectErr: false,
 		},
 		{
-			// Reverse order: 0-ext vote arrives first, then an N-ext vote.
-			// The baseline is seeded from the first (0-ext) vote, so the second must also have 0.
-			name: "non-zero extensions after zero established count",
+			// SEC-001, reverse order: a 0-ext precommit arrives first and is skipped,
+			// so the canonical extension set is seeded from the first vote that
+			// actually carries extensions; the later N-ext vote is consistent with it.
+			name: "zero extensions first are skipped, non-zero seeds the canonical set",
 			votes: []*Vote{
 				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: nil},
 				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: twoExts()},
 			},
-			expectErr: true,
+			expectErr: false,
 		},
 	}
 
