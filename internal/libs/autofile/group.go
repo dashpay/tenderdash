@@ -169,6 +169,21 @@ func (g *Group) WaitForGoroutines() {
 	g.goroutineWg.Wait()
 }
 
+// Wait blocks until the Group service has stopped and its background goroutines
+// have fully exited. It overrides BaseService.Wait — which returns as soon as
+// OnStop() closes the quit channel, before the procCancel-driven processTicks
+// goroutine is joined — so that every direct Group consumer gets the same
+// shutdown guarantee BaseWAL.Wait relies on, not just callers that remember to
+// chain WaitForGoroutines explicitly.
+//
+// It calls g.BaseService.Wait() (the embedded method), not g.Wait(), so there
+// is no recursion. WaitForGoroutines is idempotent, so chaining it here on top
+// of an explicit caller call is harmless.
+func (g *Group) Wait() {
+	g.BaseService.Wait()
+	g.WaitForGoroutines()
+}
+
 // OnStop implements service.Service by stopping the goroutine described above.
 // NOTE: g.Head must be closed separately using Close.
 func (g *Group) OnStop() {
