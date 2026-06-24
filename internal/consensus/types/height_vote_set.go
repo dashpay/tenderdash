@@ -8,6 +8,7 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
+	"github.com/dashpay/tenderdash/libs/log"
 	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
@@ -43,6 +44,7 @@ type HeightVoteSet struct {
 	chainID string
 	height  int64
 	valSet  *types.ValidatorSet
+	logger  log.Logger
 
 	mtx               sync.Mutex
 	round             int32                  // max tracked round
@@ -50,11 +52,32 @@ type HeightVoteSet struct {
 	peerCatchupRounds map[string][]int32     // keys: proTxHash; values: at most 2 rounds
 }
 
+// HeightVoteSetOption configures optional HeightVoteSet behavior.
+type HeightVoteSetOption func(*HeightVoteSet)
+
+// WithLogger sets the logger propagated into every VoteSet this HeightVoteSet
+// constructs. When unset (or passed nil) a no-op logger is used.
+func WithLogger(logger log.Logger) HeightVoteSetOption {
+	return func(hvs *HeightVoteSet) {
+		if logger != nil {
+			hvs.logger = logger
+		}
+	}
+}
+
 func NewHeightVoteSet(
 	chainID string,
 	height int64,
-	valSet *types.ValidatorSet) *HeightVoteSet {
-	hvs := &HeightVoteSet{chainID: chainID}
+	valSet *types.ValidatorSet,
+	opts ...HeightVoteSetOption,
+) *HeightVoteSet {
+	hvs := &HeightVoteSet{
+		chainID: chainID,
+		logger:  log.NewNopLogger(),
+	}
+	for _, opt := range opts {
+		opt(hvs)
+	}
 	hvs.Reset(height, valSet)
 	return hvs
 }
@@ -111,8 +134,8 @@ func (hvs *HeightVoteSet) addRound(round int32) {
 	}
 	rvs := RoundVoteSet{}
 	if hvs.valSet.HasPublicKeys {
-		rvs.Prevotes = types.NewVoteSet(hvs.chainID, hvs.height, round, tmproto.PrevoteType, hvs.valSet)
-		rvs.Precommits = types.NewVoteSet(hvs.chainID, hvs.height, round, tmproto.PrecommitType, hvs.valSet)
+		rvs.Prevotes = types.NewVoteSet(hvs.chainID, hvs.height, round, tmproto.PrevoteType, hvs.valSet, types.WithLogger(hvs.logger))
+		rvs.Precommits = types.NewVoteSet(hvs.chainID, hvs.height, round, tmproto.PrecommitType, hvs.valSet, types.WithLogger(hvs.logger))
 	}
 	hvs.roundVoteSets[round] = rvs
 }
