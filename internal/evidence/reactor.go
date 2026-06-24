@@ -23,14 +23,16 @@ const (
 	maxMsgSize = 1048576 // 1MB TODO make it configurable
 )
 
-// evidenceSyncInterval controls how often the per-peer sync goroutine re-walks
-// the pool and re-sends all pending evidence to the peer.
+// evidenceSyncInterval controls how often the per-peer sync goroutine re-reads
+// the pending pool and re-sends pending evidence to the peer.
 //
-// Resend profile: each tick sends at most MaxEvidence items (bounded by pool
-// size, typically single-digits) to every connected peer. The receiver deduplicates
-// silently via isPending/isCommitted guards — no ACK is required. Re-sending
-// continues until evidence leaves the pending set (committed or expired) or the
-// peer disconnects.
+// Resend profile: each tick sends the pending evidence that fits within
+// ConsensusParams.Evidence.MaxBytes — the same budget a proposer applies when
+// selecting evidence for a block — to every connected peer, typically
+// single-digit items in production. The receiver deduplicates silently via
+// isPending/isCommitted guards — no ACK is required. Re-sending continues until
+// evidence leaves the pending set (committed or expired) or the peer
+// disconnects.
 //
 // Rationale for re-sending: syncEvidence is the only push path for evidence
 // that already exists in the pool when a peer connects. The first batch can be
@@ -55,26 +57,27 @@ const (
 // SetEvidenceSyncIntervalForTesting without affecting production code.
 var evidenceSyncInterval = 1 * time.Second
 
-// peerSyncState holds the cancel function and a unique identity token for the
+// peerSyncState holds the cancel function and a unique identity for the
 // per-peer syncEvidence goroutine.
 //
-// The identity token solves the Down→Up flap race: when PeerStatusDown fires,
-// the handler deletes the map entry synchronously and calls cancel(). The
-// goroutine keeps running until it observes the cancellation, and its deferred
-// cleanup compares its own token against whatever is in the map at that point —
-// if a fast Up event already installed a new goroutine, the tokens differ and
-// the stale goroutine leaves the new entry untouched.
+// The identity solves the Down→Up flap race: when PeerStatusDown fires, the
+// handler deletes the map entry synchronously and calls cancel(). The goroutine
+// keeps running until it observes the cancellation, and its deferred cleanup
+// compares its own id against whatever is in the map at that point — if a fast
+// Up event already installed a new goroutine, the ids differ and the stale
+// goroutine leaves the new entry untouched.
 //
-// The token MUST point to a non-zero-size value. The Go runtime places every
-// zero-size allocation (e.g. new(struct{})) at the single shared
-// runtime.zerobase address, so distinct zero-size pointers compare EQUAL. That
-// would make every token identical and silently defeat the flap guard, letting
-// a stale goroutine evict a newer goroutine's map entry (goroutine leak / two
-// ticker loops per peer). A *int is non-zero-size, so each allocation is
-// guaranteed a unique address — exactly the identity this guard relies on.
+// id is drawn from Reactor.nextSyncID, a monotonic counter incremented under
+// the reactor mutex on every install (see processPeerUpdate). Each goroutine
+// therefore receives a strictly increasing, never-reused value, so two
+// goroutines installed across a flap are guaranteed distinct. A plain counter
+// is spoof-proof and self-documenting: unlike a heap-pointer token its
+// distinctness does not hinge on the allocator handing back unequal addresses,
+// so it cannot be silently defeated by a future refactor (e.g. switching the
+// token to *struct{}, whose allocations all share runtime.zerobase).
 type peerSyncState struct {
 	cancel context.CancelFunc
-	id     *int // unique per goroutine; MUST be non-zero-size so addresses differ
+	id     uint64 // unique per goroutine; sourced from Reactor.nextSyncID
 }
 
 // GetChannelDescriptor produces an instance of a descriptor for this
@@ -101,6 +104,10 @@ type Reactor struct {
 	peerEvents p2p.PeerEventSubscriber
 
 	mtx sync.Mutex
+
+	// nextSyncID assigns each per-peer syncEvidence goroutine a unique,
+	// monotonically increasing identity. Mutated only while holding mtx.
+	nextSyncID uint64
 
 	peerRoutines map[types.NodeID]peerSyncState
 }
@@ -265,7 +272,7 @@ func (r *Reactor) processEvidenceCh(ctx context.Context) {
 // by the time Up fires). This is handled by:
 //   - PeerStatusDown: cancel the goroutine AND delete the map entry
 //     synchronously, so the subsequent Up always starts fresh.
-//   - syncEvidence defer: compares its own non-zero-size identity token before
+//   - syncEvidence defer: compares its own monotonic identity (id) before
 //     deleting, so it cannot accidentally remove a new goroutine's entry.
 //
 // FIXME: The peer may be behind in which case it would simply ignore the
@@ -295,7 +302,10 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 		// safely, and finally start the goroutine to broadcast evidence to that peer.
 		if _, ok := r.peerRoutines[peerUpdate.NodeID]; !ok {
 			pctx, pcancel := context.WithCancel(ctx)
-			entry := peerSyncState{cancel: pcancel, id: new(int)}
+			// Assign a fresh identity under the mutex so installs racing across a
+			// Down→Up flap can never collide.
+			r.nextSyncID++
+			entry := peerSyncState{cancel: pcancel, id: r.nextSyncID}
 			r.peerRoutines[peerUpdate.NodeID] = entry
 			go r.syncEvidence(pctx, peerUpdate.NodeID, entry.id)
 		}
@@ -327,9 +337,9 @@ func (r *Reactor) processPeerUpdates(ctx context.Context, peerUpdates *p2p.PeerU
 	}
 }
 
-// syncEvidence periodically sends all pool evidence to a newly connected peer
-// until the peer disconnects (ctx is canceled). It is invoked in a goroutine
-// per unique peer ID when a PeerStatusUp event is received.
+// syncEvidence periodically sends pending pool evidence to a newly connected
+// peer until the peer disconnects (ctx is canceled). It is invoked in a
+// goroutine per unique peer ID when a PeerStatusUp event is received.
 //
 // The goroutine re-syncs on every evidenceSyncInterval tick so that evidence
 // dropped during the initial delivery (when PeerStatusUp fires before the p2p
@@ -341,11 +351,11 @@ func (r *Reactor) processPeerUpdates(ctx context.Context, peerUpdates *p2p.PeerU
 // gracefully by the receiver (isPending / isCommitted guards in
 // handleEvidenceMessage).
 //
-// myID is this goroutine's unique identity token — a pointer to a non-zero-size
-// value, so it differs from every other goroutine's token (see peerSyncState).
-// The deferred cleanup compares it against the current map entry to avoid
-// removing a newer entry installed by a fast Down→Up peer reconnect.
-func (r *Reactor) syncEvidence(ctx context.Context, peerID types.NodeID, myID *int) {
+// myID is this goroutine's unique identity, drawn from Reactor.nextSyncID, so it
+// differs from every other goroutine's id (see peerSyncState). The deferred
+// cleanup compares it against the current map entry to avoid removing a newer
+// entry installed by a fast Down→Up peer reconnect.
+func (r *Reactor) syncEvidence(ctx context.Context, peerID types.NodeID, myID uint64) {
 	defer func() {
 		r.mtx.Lock()
 		// Only remove OUR map entry. PeerStatusDown already deletes it
@@ -370,12 +380,16 @@ func (r *Reactor) syncEvidence(ctx context.Context, peerID types.NodeID, myID *i
 	defer ticker.Stop()
 
 	for {
-		// Walk the pool and send every pending evidence item to the peer.
-		// The peer may be behind and unable to process some items; it may also
-		// receive duplicates across ticks — both are handled on the remote side.
-		next := r.evpool.EvidenceFront()
-		for next != nil {
-			ev := next.Value.(types.Evidence)
+		// Send pending evidence to the peer, bounded by the same byte budget a
+		// proposer applies when selecting evidence for a block
+		// (ConsensusParams.Evidence.MaxBytes). Reusing PendingEvidence keeps this
+		// push symmetric with proposal selection and avoids re-walking the whole
+		// pool every tick (O(N²·M) gossip on a full mesh). The peer may be behind
+		// and unable to process some items, and may receive duplicates across
+		// ticks — both are handled idempotently on the remote side.
+		maxBytes := r.evpool.State().ConsensusParams.Evidence.MaxBytes
+		evList, _ := r.evpool.PendingEvidence(maxBytes)
+		for _, ev := range evList {
 			evProto, err := types.EvidenceToProto(ev)
 			if err != nil {
 				panic(fmt.Errorf("failed to convert evidence: %w", err))
@@ -394,8 +408,6 @@ func (r *Reactor) syncEvidence(ctx context.Context, peerID types.NodeID, myID *i
 				return
 			default:
 			}
-
-			next = next.Next()
 		}
 		r.logger.Trace("evidence sync finished", "peer", peerID)
 

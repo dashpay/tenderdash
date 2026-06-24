@@ -18,12 +18,13 @@ The `Receive` function takes a list of evidence and does the following:
 
 Evidence propagation uses two complementary paths:
 
-  - Per-peer sync loop: when a peer connects (PeerStatusUp), a dedicated goroutine walks the pool
-    and sends all pending evidence to that peer. The loop repeats every evidenceSyncInterval (default 1 s)
-    until the peer disconnects. This ensures evidence that pre-dates the connection is eventually
-    delivered even if the first attempt is dropped because the p2p channel route was not yet ready
-    when PeerStatusUp fired. The receiver deduplicates silently via isPending / isCommitted guards —
-    no ACK is required.
+  - Per-peer sync loop: when a peer connects (PeerStatusUp), a dedicated goroutine sends the peer the
+    pending evidence that fits within ConsensusParams.Evidence.MaxBytes — the same budget a proposer
+    applies via PendingEvidence — so gossip is symmetric with proposal selection. The loop repeats
+    every evidenceSyncInterval (default 1 s) until the peer disconnects. This ensures evidence that
+    pre-dates the connection is eventually delivered even if the first attempt is dropped because the
+    p2p channel route was not yet ready when PeerStatusUp fired. The receiver deduplicates silently
+    via isPending / isCommitted guards — no ACK is required.
 
   - Broadcast on new evidence: when a node adds new evidence received from another peer, it
     re-broadcasts it to all currently connected peers via broadcastEvidence.

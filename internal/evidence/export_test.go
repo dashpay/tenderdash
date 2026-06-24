@@ -1,9 +1,10 @@
 package evidence
 
 import (
-	"reflect"
+	"context"
 	"time"
 
+	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -36,19 +37,24 @@ func (r *Reactor) PeerRoutineActive(peerID types.NodeID) bool {
 	return ok
 }
 
-// PeerRoutineToken returns the address of the identity token for peerID's
-// current sync routine, or 0 if none. It exposes the token's IDENTITY (its
-// address), not its value, so callers can assert that two sequentially-created
-// goroutines for the same peer received distinct tokens. With the pre-fix
-// zero-size (*struct{}) token every allocation shared runtime.zerobase, so this
-// returned the same address for every goroutine — this accessor makes that
-// regression observable. Test-only accessor for the unexported peerRoutines map.
-func (r *Reactor) PeerRoutineToken(peerID types.NodeID) uintptr {
+// PeerRoutineID returns the monotonic identity assigned to peerID's current sync
+// routine, or 0 if none (ids start at 1, so 0 unambiguously means "absent").
+// Callers assert that two sequentially-created goroutines for the same peer
+// received distinct ids — the property the Down→Up flap guard relies on.
+// Test-only accessor for the unexported peerRoutines map.
+func (r *Reactor) PeerRoutineID(peerID types.NodeID) uint64 {
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
 	entry, ok := r.peerRoutines[peerID]
 	if !ok {
 		return 0
 	}
-	return reflect.ValueOf(entry.id).Pointer()
+	return entry.id
+}
+
+// HandleEvidenceMessageForTest exposes the unexported handleEvidenceMessage so
+// external (evidence_test) tests can drive a single inbound envelope directly.
+// Test-only.
+func (r *Reactor) HandleEvidenceMessageForTest(ctx context.Context, envelope *p2p.Envelope) error {
+	return r.handleEvidenceMessage(ctx, envelope)
 }

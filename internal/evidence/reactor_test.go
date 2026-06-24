@@ -660,9 +660,9 @@ func (g *gateChannel) Receive(_ context.Context) p2p.ChannelIterator      { retu
 func (g *gateChannel) String() string                                     { return "gateChannel" }
 
 // TestReactorPeerFlapNoGoroutineEviction is the deterministic regression guard
-// for the per-peer sync-token fix (PR #1366).
+// for the per-peer sync-identity fix (PR #1366).
 //
-// It reproduces the exact Down→Up flap race the identity token guards against:
+// It reproduces the exact Down→Up flap race the identity guards against:
 //
 //  1. PeerStatusUp(P) starts sync goroutine G1; G1 is frozen mid-walk inside Send.
 //  2. PeerStatusDown(P) cancels G1 and deletes P's map entry — but G1 is still
@@ -670,22 +670,23 @@ func (g *gateChannel) String() string                                     { retu
 //  3. PeerStatusUp(P) starts a fresh goroutine G2 and installs its map entry.
 //  4. G1 is released; its deferred cleanup runs while G2's entry is in the map.
 //
-// The deferred cleanup deletes P's entry only when the map's current token ==
-// G1's own token. The fix makes every goroutine's token a distinct address;
-// G1's token therefore differs from G2's and G1 leaves G2's entry untouched.
+// The deferred cleanup deletes P's entry only when the map's current id ==
+// G1's own id. Each install assigns the next value of the reactor's monotonic
+// nextSyncID counter, so G1's id differs from G2's and G1 leaves G2's entry
+// untouched.
 //
-// # Why it fails pre-fix and passes post-fix (deterministic)
+// # Why it fails on a broken guard and passes when correct (deterministic)
 //
-// Pre-fix the token was *struct{}. Go places every zero-size allocation at the
-// shared runtime.zerobase address, so G1 and G2 received the SAME token:
-//   - The PeerRoutineToken(P) distinctness assertion fails directly.
-//   - G1's deferred cleanup sees current.token == its own token and evicts G2,
-//     so PeerRoutineActive(P) flips to false and the require.Never trips.
+// If the install path ever handed two goroutines the same id (e.g. a refactor
+// that stopped incrementing the counter, or derived the id from a non-unique
+// source), G1 and G2 would share an id:
+//   - The PeerRoutineID(P) distinctness assertion (id1 != id2) fails directly.
+//   - G1's deferred cleanup sees current.id == its own id and evicts G2, so
+//     PeerRoutineActive(P) flips to false and the require.Never trips.
 //
-// Both effects are deterministic: zerobase collision is guaranteed by the
-// runtime (not timing), and the gate channel forces step 4 to occur strictly
-// after step 3, so G1's cleanup always observes G2's installed entry. Post-fix
-// (*int) the tokens are distinct addresses and both assertions hold.
+// Both effects are deterministic: the gate channel forces step 4 to occur
+// strictly after step 3, so G1's cleanup always observes G2's installed entry.
+// With the monotonic counter the ids are distinct and both assertions hold.
 func TestReactorPeerFlapNoGoroutineEviction(t *testing.T) {
 	const (
 		// Ticker effectively never fires, so each goroutine walks the pool exactly
@@ -760,8 +761,8 @@ func TestReactorPeerFlapNoGoroutineEviction(t *testing.T) {
 	peerChan <- p2p.PeerUpdate{Status: p2p.PeerStatusUp, NodeID: peerID}
 	g1Release := <-gate.entered
 
-	tok1 := reactor.PeerRoutineToken(peerID)
-	require.NotZero(t, tok1, "G1 must have an installed map entry while frozen in Send")
+	id1 := reactor.PeerRoutineID(peerID)
+	require.NotZero(t, id1, "G1 must have an installed map entry while frozen in Send")
 	require.True(t, reactor.PeerRoutineActive(peerID))
 	require.Equal(t, 1, reactor.PeerRoutineCount())
 
@@ -778,24 +779,24 @@ func TestReactorPeerFlapNoGoroutineEviction(t *testing.T) {
 	peerChan <- p2p.PeerUpdate{Status: p2p.PeerStatusUp, NodeID: peerID}
 	g2Release := <-gate.entered
 
-	tok2 := reactor.PeerRoutineToken(peerID)
-	require.NotZero(t, tok2, "G2 must have an installed map entry while frozen in Send")
+	id2 := reactor.PeerRoutineID(peerID)
+	require.NotZero(t, id2, "G2 must have an installed map entry while frozen in Send")
 	require.True(t, reactor.PeerRoutineActive(peerID))
 	require.Equal(t, 1, reactor.PeerRoutineCount())
 
-	// Core invariant: a freshly created goroutine must receive a token distinct
-	// from the prior goroutine's. Pre-fix (*struct{}) both share runtime.zerobase
-	// and this fails; post-fix (*int) they are distinct addresses.
-	require.NotEqual(t, tok1, tok2,
-		"each sync goroutine must get a unique identity token; equal tokens defeat the flap guard")
+	// Core invariant: a freshly created goroutine must receive an id distinct
+	// from the prior goroutine's. The monotonic nextSyncID counter guarantees
+	// this; a non-incrementing regression would yield equal ids here.
+	require.NotEqual(t, id1, id2,
+		"each sync goroutine must get a unique identity; equal ids defeat the flap guard")
 
 	// Step 4: release G1. Its pctx is canceled, so once Send returns it exits and
 	// runs its deferred cleanup while G2's entry is in the map.
 	close(g1Release)
 
 	// G1's stale cleanup must NOT evict G2: P's entry must survive and exactly one
-	// routine must remain. Pre-fix, G1's defer sees a matching token and deletes
-	// G2's entry within microseconds, tripping this assertion.
+	// routine must remain. On a broken guard, G1's defer sees a matching id and
+	// deletes G2's entry within microseconds, tripping this assertion.
 	require.Never(t, func() bool {
 		return !reactor.PeerRoutineActive(peerID) || reactor.PeerRoutineCount() != 1
 	}, neverWin, neverTick,
@@ -804,4 +805,84 @@ func TestReactorPeerFlapNoGoroutineEviction(t *testing.T) {
 	// Release G2 so it can finish its walk and park on the ticker select, where
 	// ctx cancellation at cleanup can stop it cleanly (verified by leaktest).
 	close(g2Release)
+}
+
+// TestReactorNoRebroadcastOnNonInvalidEvidenceError locks the bundled behavior
+// change in handleEvidenceMessage (PR #1366): when AddEvidence fails with a
+// plain (non-ErrInvalidEvidence) error — e.g. we lack the block needed to
+// verify the evidence because we are behind — the reactor must NOT re-gossip
+// the evidence. Re-broadcasting unverifiable evidence on every receipt would
+// amplify across the mesh without ever converging; eventual delivery of any
+// evidence that does enter the pending set is handled by the syncEvidence
+// ticker instead.
+func TestReactorNoRebroadcastOnNonInvalidEvidenceError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Leak check first so it runs last (t.Cleanup is LIFO).
+	t.Cleanup(leaktest.Check(t))
+
+	quorumHash := crypto.RandQuorumHash()
+	val := types.NewMockPVForQuorum(quorumHash)
+	height := int64(20)
+	stateDB := initializeValidatorState(ctx, t, val, height, btcjson.LLMQType_5_60, quorumHash)
+
+	// blockStore returns nil for every height, so verify() fails at the
+	// missing-block check with a plain error (NOT ErrInvalidEvidence) — the "we
+	// are behind" path that must be swallowed without disconnecting the peer.
+	evidenceDB := dbm.NewMemDB()
+	blockStore := &mocks.BlockStore{}
+	blockStore.On("Base").Return(int64(1))
+	blockStore.On("LoadBlockMeta", mock.AnythingOfType("int64")).Return(
+		func(int64) *types.BlockMeta { return nil },
+	)
+
+	eventBus := eventbus.NewDefault(log.NewNopLogger())
+	require.NoError(t, eventBus.Start(ctx))
+
+	pool := evidence.NewPool(log.NewNopLogger(), evidenceDB, stateDB, blockStore, evidence.NopMetrics(), eventBus)
+	startPool(t, pool, stateDB)
+
+	// recordingChannel captures any broadcast; nopIterator makes the receive
+	// loop a clean no-op so Start has nothing to process.
+	rc := &recordingChannel{}
+	peerChan := make(chan p2p.PeerUpdate)
+	pu := p2p.NewPeerUpdates(peerChan, 1, "evidence")
+	reactor := evidence.NewReactor(
+		log.NewNopLogger(),
+		func(_ context.Context, _ *p2p.ChannelDescriptor) (p2p.Channel, error) { return rc, nil },
+		func(_ context.Context, _ string) *p2p.PeerUpdates { return pu },
+		pool,
+	)
+	require.NoError(t, reactor.Start(ctx))
+	t.Cleanup(func() {
+		reactor.Stop()
+		reactor.Wait()
+	})
+
+	// Build valid DuplicateVoteEvidence for a height we have no block for, so
+	// verify() fails before adding anything to the pending set.
+	vals := pool.State().Validators
+	ev, err := types.NewMockDuplicateVoteEvidenceWithValidator(
+		ctx, height-1, time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC),
+		val, evidenceChainID, vals.QuorumType, vals.QuorumHash)
+	require.NoError(t, err)
+	evProto, err := types.EvidenceToProto(ev)
+	require.NoError(t, err)
+
+	peerID := types.NodeID("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	err = reactor.HandleEvidenceMessageForTest(ctx, &p2p.Envelope{
+		ChannelID: evidence.EvidenceChannel,
+		From:      peerID,
+		Message:   evProto,
+	})
+
+	// The non-ErrInvalidEvidence error is swallowed (nil return) so the router
+	// does not disconnect the peer...
+	require.NoError(t, err)
+	// ...the evidence never entered the pending set...
+	require.Zero(t, pool.Size(), "unverifiable evidence must not be added to the pool")
+	// ...and crucially it was NOT re-broadcast. Any recorded send is the old
+	// fall-through-to-broadcastEvidence regression.
+	require.Zero(t, rc.sendCount(), "unverifiable evidence must not be re-broadcast")
 }
