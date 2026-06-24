@@ -52,7 +52,7 @@ type HeightVoteSet struct {
 	peerCatchupRounds map[string][]int32     // keys: proTxHash; values: at most 2 rounds
 }
 
-// HeightVoteSetOption configures optional HeightVoteSet behaviour.
+// HeightVoteSetOption configures optional HeightVoteSet behavior.
 type HeightVoteSetOption func(*HeightVoteSet)
 
 // WithLogger sets the logger propagated into every VoteSet this HeightVoteSet

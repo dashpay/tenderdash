@@ -91,7 +91,7 @@ type maj23Info struct {
 	Round  int32
 }
 
-// VoteSetOption configures optional VoteSet behaviour passed to NewVoteSet.
+// VoteSetOption configures optional VoteSet behavior passed to NewVoteSet.
 type VoteSetOption func(*VoteSet)
 
 // WithLogger sets the logger used by the VoteSet. When unset (or passed nil) the
