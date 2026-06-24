@@ -343,7 +343,7 @@ func (voteSet *VoteSet) addVerifiedVote(
 	// *consistent* votes to recover the threshold signatures - see the SEC-001
 	// note below. maj23 is committed only after recovery actually succeeds.
 	//
-	// TODO(perf): re-attempt full BLS recovery only when a new vote makes a
+	// NOTE(perf): re-attempt full BLS recovery only when a new vote makes a
 	// count-group's aggregate power newly cross QuorumTypeThresholdVotingPower.
 	// Currently every post-gate vote re-runs O(threshold) BLS interpolations even
 	// though only the first successful attempt matters; for large quorums (e.g.
