@@ -15,10 +15,11 @@ import (
 	"math/rand"
 	"runtime"
 	"strconv"
+	"sync"
 
 	dbm "github.com/cometbft/cometbft-db"
-	"github.com/creachadair/taskgroup"
 	"github.com/google/orderedcode"
+	"golang.org/x/sync/errgroup"
 )
 
 type (
@@ -452,7 +453,7 @@ func checkKeyType(key keyID, storeName string) (keyType, error) {
 			// didn't pass the check. This probably means
 			// the evidence data is currupt (based on the
 			// defined migrations) best to error here.
-			return -1, fmt.Errorf("in store %q, key %q exists but is not a valid key of type %q", storeName, key, m.ktype)
+			return -1, fmt.Errorf("in store %q, key %q exists but is not a valid key of type %v", storeName, key, m.ktype)
 		}
 		// if we get here, the key in question is either
 		// migrated or of a different type. We can't break
@@ -632,19 +633,29 @@ func Migrate(ctx context.Context, storeName string, db dbm.DB) error {
 		return err
 	}
 
-	var errs []string
-	g, start := taskgroup.New(func(err error) error {
-		errs = append(errs, err.Error())
-		return err
-	}).Limit(runtime.NumCPU())
+	var (
+		g    errgroup.Group
+		mu   sync.Mutex
+		errs []string
+	)
+	g.SetLimit(runtime.NumCPU())
 
 	for _, key := range keys {
 		key := key
-		start(func() error {
+		g.Go(func() error {
 			if err := ctx.Err(); err != nil {
+				mu.Lock()
+				errs = append(errs, err.Error())
+				mu.Unlock()
 				return err
 			}
-			return replaceKey(db, storeName, key)
+			if err := replaceKey(db, storeName, key); err != nil {
+				mu.Lock()
+				errs = append(errs, err.Error())
+				mu.Unlock()
+				return err
+			}
+			return nil
 		})
 	}
 	if g.Wait() != nil {

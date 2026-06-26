@@ -119,10 +119,8 @@ func TestSigsRecoverer(t *testing.T) {
 	}
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("test-case #%d", i), func(t *testing.T) {
-			var (
-				pubKeys []crypto.PubKey
-				IDs     [][]byte
-			)
+			pubKeys := make([]crypto.PubKey, 0, len(tc.votes))
+			IDs := make([][]byte, 0, len(tc.votes))
 			pvs := make([]*MockPV, len(tc.votes))
 			for i, vote := range tc.votes {
 				protoVote := vote.ToProto()
@@ -143,7 +141,8 @@ func TestSigsRecoverer(t *testing.T) {
 			thresholdPubKey, err := bls12381.RecoverThresholdPublicKeyFromPublicKeys(pubKeys, IDs)
 			require.NoError(t, err)
 
-			sr := NewSignsRecoverer(tc.votes)
+			sr, err := NewSignsRecoverer(tc.votes)
+			require.NoError(t, err)
 			thresholdVoteSigns, err := sr.Recover()
 			require.NoError(t, err)
 			err = quorumSigns.Verify(thresholdPubKey, *thresholdVoteSigns)
@@ -196,6 +195,90 @@ func TestSigsRecoverer_UsingVoteSet(t *testing.T) {
 		added, err := voteSet.AddVote(vote)
 		require.NoError(t, err)
 		require.True(t, added)
+	}
+}
+
+func TestSignsRecovererErrors(t *testing.T) {
+	blockID := makeBlockID([]byte("blockhash"), 1000, []byte("partshash"), nil)
+
+	// DEFAULT (non-threshold) extensions exercise the count/type guards without
+	// requiring recoverable threshold signatures.
+	twoExts := func() VoteExtensions {
+		return mockVoteExtensions(t,
+			tmproto.VoteExtensionType_DEFAULT, "a",
+			tmproto.VoteExtensionType_DEFAULT, "b",
+		)
+	}
+	oneExt := func() VoteExtensions {
+		return mockVoteExtensions(t, tmproto.VoteExtensionType_DEFAULT, "a")
+	}
+
+	testCases := []struct {
+		name      string
+		votes     []*Vote
+		expectErr bool
+	}{
+		{
+			name: "consistent extension counts",
+			votes: []*Vote{
+				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: twoExts()},
+				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: twoExts()},
+			},
+			expectErr: false,
+		},
+		{
+			name: "mismatched extension counts",
+			votes: []*Vote{
+				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: twoExts()},
+				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: oneExt()},
+			},
+			expectErr: true,
+		},
+		{
+			name: "non-precommit vote carrying extensions",
+			votes: []*Vote{
+				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrevoteType, BlockID: blockID, VoteExtensions: twoExts()},
+			},
+			expectErr: true,
+		},
+		{
+			// SEC-001: a precommit with 0 extensions arriving after a non-zero
+			// extension count was established is tolerated - its (absent) extension
+			// share is skipped, not treated as an error. Erroring here is what let a
+			// single Byzantine zero-extension precommit halt the whole network.
+			name: "zero extensions after non-zero established count are skipped",
+			votes: []*Vote{
+				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: twoExts()},
+				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: nil},
+			},
+			expectErr: false,
+		},
+		{
+			// SEC-001, reverse order: a 0-ext precommit arrives first and is skipped,
+			// so the canonical extension set is seeded from the first vote that
+			// actually carries extensions; the later N-ext vote is consistent with it.
+			name: "zero extensions first are skipped, non-zero seeds the canonical set",
+			votes: []*Vote{
+				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: nil},
+				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: twoExts()},
+			},
+			expectErr: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			// The constructor must surface inconsistent input as an error, never a panic.
+			require.NotPanics(t, func() {
+				_, err := NewSignsRecoverer(tc.votes)
+				if tc.expectErr {
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+				}
+			})
+		})
 	}
 }
 

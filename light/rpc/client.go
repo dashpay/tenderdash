@@ -185,9 +185,10 @@ func (c *Client) ABCIQueryWithOptions(ctx context.Context, path string, data tmb
 	}
 
 	// Update the light client if we're behind.
-	// NOTE: AppHash for height H is in header H+1.
-	nextHeight := resp.Height + 1
-	l, err := c.updateLightClientIfNeededTo(ctx, &nextHeight)
+	// AppHash for height H is committed in the header at height H (same-block
+	// execution), so the value proof is verified against the header at resp.Height.
+	queryHeight := resp.Height
+	l, err := c.updateLightClientIfNeededTo(ctx, &queryHeight)
 	if err != nil {
 		return nil, err
 	}
@@ -449,8 +450,9 @@ func (c *Client) BlockResults(ctx context.Context, height *int64) (*coretypes.Re
 	}
 
 	// Update the light client if we're behind.
-	nextHeight := h + 1
-	trustedBlock, err := c.updateLightClientIfNeededTo(ctx, &nextHeight)
+	// ResultsHash for height h is committed in the header at height h (same-block
+	// execution), so the results are verified against the header at h.
+	trustedBlock, err := c.updateLightClientIfNeededTo(ctx, &h)
 	if err != nil {
 		return nil, err
 	}

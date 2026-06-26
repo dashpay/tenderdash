@@ -117,12 +117,22 @@ func WithJobCh(jobCh chan *Job) OptionFunc {
 }
 
 // WorkerPool is an implementation of a component that allows creating a set of workers
-// to process arbitrary jobs in background
+// to process arbitrary jobs in background.
+//
+// Concurrency invariant: Send and Receive read the jobCh/resultCh/doneCh fields
+// locklessly and must NOT run concurrently with Reset, Run, or Stop, which
+// reassign or close those channels under lifecycleMtx. Callers serialize the
+// lifecycle against in-flight Send/Receive (e.g. service OnStart/OnStop).
 type WorkerPool struct {
 	initPoolSize int
 	jobCh        chan *Job
 	wg           sync.WaitGroup
 	wgMtx        sync.Mutex
+	// lifecycleMtx serializes the Reset/Start/Stop/Run state transitions so the
+	// Reset→Start pair in Run is atomic with respect to Stop. Without it, a Stop
+	// interleaving between Reset and Start could leave the pool with open channels
+	// but zero workers, deadlocking every Send/Receive.
+	lifecycleMtx sync.Mutex
 	stopped      atomic.Bool
 	doneCh       chan struct{}
 	resultCh     chan Result
@@ -189,27 +199,33 @@ func (p *WorkerPool) Receive(ctx context.Context) (Result, error) {
 	}
 }
 
-// Start starts a pool of workers to process jobs
+// Start starts a pool of workers to process jobs.
+//
+// Precondition: Start (and Run) must not be called again without an intervening
+// Stop, and must not be called concurrently. Starting an already-started pool is
+// not guarded — it spawns a second set of workers over the same channels, which
+// can panic on send-to-closed-channel during Stop. The sole production caller
+// (Synchronizer.OnStart) honors this by running the pool exactly once per service
+// lifecycle.
 func (p *WorkerPool) Start(ctx context.Context) {
-	if p.stopped.Swap(false) {
-		return
-	}
-	if len(p.workers) == 0 {
-		p.initWorkers()
-	}
-	for i := 0; i < p.initPoolSize; i++ {
-		go p.workers[i].start(ctx)
-	}
+	p.lifecycleMtx.Lock()
+	defer p.lifecycleMtx.Unlock()
+	p.startLocked(ctx)
 }
 
-// Run resets and starts a pool of workers to process jobs
+// Run resets and starts a pool of workers to process jobs. The Reset and Start
+// transitions happen atomically with respect to Stop.
 func (p *WorkerPool) Run(ctx context.Context) {
-	p.Reset()
-	p.Start(ctx)
+	p.lifecycleMtx.Lock()
+	defer p.lifecycleMtx.Unlock()
+	p.resetLocked()
+	p.startLocked(ctx)
 }
 
 // Stop stops the worker-pool and all dependent workers
 func (p *WorkerPool) Stop(ctx context.Context) {
+	p.lifecycleMtx.Lock()
+	defer p.lifecycleMtx.Unlock()
 	if p.stopped.Swap(true) {
 		return
 	}
@@ -230,7 +246,9 @@ func (p *WorkerPool) Stop(ctx context.Context) {
 		}
 		close(done)
 	}()
+	p.wgMtx.Lock()
 	p.wg.Wait()
+	p.wgMtx.Unlock()
 	close(p.jobCh)
 	close(p.resultCh)
 	<-done
@@ -238,6 +256,26 @@ func (p *WorkerPool) Stop(ctx context.Context) {
 
 // Reset resets some data to initial values, among with these are
 func (p *WorkerPool) Reset() {
+	p.lifecycleMtx.Lock()
+	defer p.lifecycleMtx.Unlock()
+	p.resetLocked()
+}
+
+// startLocked spawns the workers. The caller must hold lifecycleMtx.
+func (p *WorkerPool) startLocked(ctx context.Context) {
+	if p.stopped.Load() {
+		return
+	}
+	if len(p.workers) == 0 {
+		p.initWorkers()
+	}
+	for i := 0; i < p.initPoolSize; i++ {
+		go p.workers[i].start(ctx)
+	}
+}
+
+// resetLocked re-initializes channels and workers. The caller must hold lifecycleMtx.
+func (p *WorkerPool) resetLocked() {
 	if !p.stopped.Swap(false) {
 		return
 	}

@@ -402,6 +402,13 @@ func (e ThresholdVoteExtension) IsThresholdRecoverable() bool {
 }
 
 func (e *ThresholdVoteExtension) AddThresholdSignature(validator ProTxHash, sig []byte) error {
+	if len(validator) != crypto.ProTxHashSize {
+		return fmt.Errorf("invalid validator proTxHash length: got %d, want %d", len(validator), crypto.ProTxHashSize)
+	}
+	if len(sig) != bls12381.SignatureSize {
+		return fmt.Errorf("invalid threshold signature length: got %d, want %d", len(sig), bls12381.SignatureSize)
+	}
+
 	if e.thresholdSignatures == nil {
 		e.thresholdSignatures = make(map[[crypto.ProTxHashSize]byte]ThresholdSignature)
 	}

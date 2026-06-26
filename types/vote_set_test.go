@@ -3,6 +3,7 @@ package types
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"math"
 	"sort"
@@ -795,4 +796,362 @@ func withBlockPartSetHeader(vote *Vote, blockPartsHeader PartSetHeader) *Vote {
 	vote = vote.Copy()
 	vote.BlockID.PartSetHeader = blockPartsHeader
 	return vote
+}
+
+func TestSetPeerMaj23Cap(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	height, round := int64(1), int32(0)
+	voteSet, _, _ := randVoteSet(ctx, t, height, round, tmproto.PrecommitType, 4)
+
+	blockIDFor := func(i int) BlockID {
+		hash := make([]byte, crypto.HashSize)
+		binary.BigEndian.PutUint32(hash, uint32(i))
+		partSetHash := make([]byte, crypto.HashSize)
+		binary.BigEndian.PutUint32(partSetHash, uint32(i))
+		stateID := make([]byte, crypto.HashSize)
+		binary.BigEndian.PutUint32(stateID, uint32(i))
+		return makeBlockID(hash, 1, partSetHash, stateID)
+	}
+
+	// Claims from the first maxPeerMaj23s distinct peers are accepted.
+	for i := 0; i < maxPeerMaj23s; i++ {
+		err := voteSet.SetPeerMaj23(strconv.Itoa(i), blockIDFor(i), height, round)
+		require.NoError(t, err)
+	}
+	require.Len(t, voteSet.peerMaj23s, maxPeerMaj23s)
+
+	// A claim from a previously unseen peer beyond the cap is dropped, not errored.
+	err := voteSet.SetPeerMaj23(strconv.Itoa(maxPeerMaj23s), blockIDFor(maxPeerMaj23s), height, round)
+	require.NoError(t, err)
+	require.Len(t, voteSet.peerMaj23s, maxPeerMaj23s, "over-cap claim must not be stored")
+
+	// votesByBlock growth is bounded by the same cap (only peer claims here).
+	require.LessOrEqual(t, len(voteSet.votesByBlock), maxPeerMaj23s)
+
+	// A repeat claim from a known peer is still a no-op (no error).
+	err = voteSet.SetPeerMaj23("0", blockIDFor(0), height, round)
+	require.NoError(t, err)
+
+	// A conflicting claim from a known peer still errors as before.
+	err = voteSet.SetPeerMaj23("0", blockIDFor(1), height, round)
+	require.Error(t, err)
+}
+
+// thresholdVoteExtensionsOfLen returns n (0..2) threshold-recoverable vote
+// extensions. It is used by the SEC-001 tests to simulate the honest extension
+// count (2) versus a Byzantine validator offering a different count (0 or 1).
+func thresholdVoteExtensionsOfLen(n int) VoteExtensions {
+	if n <= 0 {
+		return nil
+	}
+	all := VoteExtensionsFromProto(
+		&tmproto.VoteExtension{
+			Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
+			Extension: crypto.Checksum([]byte("raw")),
+		},
+		&tmproto.VoteExtension{
+			Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+			Extension: []byte("threshold"),
+		},
+	)
+	return all[:n]
+}
+
+// signAddPrecommitWithExtCount builds, signs and adds to voteSet a precommit for
+// blockID from the validator at idx, carrying extCount threshold vote extensions.
+// It returns the result of VoteSet.AddVote (and may therefore panic if AddVote
+// does - which the backstop test relies on).
+func signAddPrecommitWithExtCount(
+	ctx context.Context,
+	t testing.TB,
+	voteSet *VoteSet,
+	privVal PrivValidator,
+	idx, extCount int,
+	blockID BlockID,
+) (bool, error) {
+	t.Helper()
+	proTxHash, err := privVal.GetProTxHash(ctx)
+	require.NoError(t, err)
+	vote := &Vote{
+		ValidatorProTxHash: proTxHash,
+		ValidatorIndex:     int32(idx),
+		Height:             voteSet.GetHeight(),
+		Round:              voteSet.GetRound(),
+		Type:               tmproto.PrecommitType,
+		BlockID:            blockID,
+		VoteExtensions:     thresholdVoteExtensionsOfLen(extCount),
+	}
+	return signAddVote(ctx, privVal, vote, voteSet)
+}
+
+// TestVoteSet_AddVote_InconsistentVoteExtensionCountDoesNotHalt is the SEC-001
+// regression test.
+//
+// A single Byzantine validator can broadcast a precommit for the about-to-commit
+// block carrying an extension count that differs from the honest count - either
+// zero, or non-zero-but-wrong. The vote's own signatures are valid, so it passes
+// every admission check and enters votesByBlock. Before the fix, once the quorum
+// threshold was crossed the threshold-signature recoverer either returned a
+// length-mismatch error or had too few consistent extension shares, and
+// addVerifiedVote panicked - halting every node (a network-wide liveness DoS).
+//
+// Each case drives the real VoteSet.AddVote -> addVerifiedVote -> recovery path
+// with the Byzantine vote added FIRST (so it is part of the minimal
+// quorum-crossing set, the worst case) and asserts: (a) no panic, and (b)
+// threshold recovery still succeeds using the count-consistent honest majority,
+// producing a commit that verifies against the threshold public key.
+func TestVoteSet_AddVote_InconsistentVoteExtensionCountDoesNotHalt(t *testing.T) {
+	const (
+		height        = int64(10)
+		round         = int32(0)
+		numValidators = 10
+		byzantineIdx  = 0 // always added first
+		honestCount   = 2 // deterministic honest ABCI ExtendVote count
+	)
+
+	testCases := []struct {
+		name string
+		// byzantineExtCount is the (inconsistent) extension count the Byzantine
+		// validator at byzantineIdx casts; 0 means it withholds extensions.
+		byzantineExtCount int
+		// numVoters is how many validators cast a precommit (indices 0..numVoters-1,
+		// index 0 being the Byzantine one). The honest count-consistent group must
+		// still reach the recovery threshold (n*2/3+1 = 7 for n=10).
+		numVoters int
+	}{
+		{
+			name:              "zero-count Byzantine vote, all validators voted",
+			byzantineExtCount: 0,
+			numVoters:         numValidators,
+		},
+		{
+			name:              "non-zero count mismatch, all validators voted",
+			byzantineExtCount: 1,
+			numVoters:         numValidators,
+		},
+		{
+			// 1 Byzantine + 7 honest = 8 voters: the honest count-consistent group
+			// reaches the threshold without every validator having voted, so this
+			// does not rely on the all-present backstop.
+			name:              "non-zero count mismatch, not all validators voted",
+			byzantineExtCount: 1,
+			numVoters:         8,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			voteSet, valSet, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrecommitType, numValidators)
+			blockID := makeBlockIDRandom()
+
+			require.NotPanics(t, func() {
+				for i := 0; i < tc.numVoters; i++ {
+					extCount := honestCount
+					if i == byzantineIdx {
+						extCount = tc.byzantineExtCount
+					}
+					added, err := signAddPrecommitWithExtCount(ctx, t, voteSet, privValidators[i], i, extCount, blockID)
+					require.NoError(t, err)
+					require.True(t, added)
+				}
+			}, "an inconsistent vote-extension count must not halt the node (SEC-001)")
+
+			// (b) recovery succeeded using the count-consistent honest votes: the
+			// block has a 2/3 majority and a valid commit can be produced.
+			require.True(t, voteSet.HasTwoThirdsMajority(), "quorum must be reached despite the Byzantine vote")
+
+			commit := voteSet.MakeCommit()
+			require.NotNil(t, commit)
+			require.Len(t, commit.ThresholdVoteExtensions, 2, "both honest threshold-recoverable extensions must be recovered")
+
+			// The recovered threshold block and vote-extension signatures must verify
+			// against the quorum's threshold public key.
+			require.NoError(t, valSet.VerifyCommit(voteSet.ChainID(), blockID, height, commit))
+		})
+	}
+}
+
+// TestVoteSet_AddVote_SubThirdCommitGateUsesRecoveryThreshold guards against
+// keying the canonical vote-extension count off the configurable commit gate.
+//
+// The VotingPowerThreshold override (GO-003) may set the commit gate below 1/3 of
+// the total voting power. If the canonical count were chosen as the count backed
+// by that gate, a Byzantine minority's count could clear the low bar and be
+// selected (the smallest-count tie-break would even prefer it), starving recovery
+// below the BLS/DKG threshold and halting the chain. The canonical count must
+// instead be keyed off the fixed recovery threshold (QuorumTypeThresholdVotingPower),
+// which a Byzantine minority can never reach.
+func TestVoteSet_AddVote_SubThirdCommitGateUsesRecoveryThreshold(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const (
+		height        = int64(10)
+		round         = int32(0)
+		numValidators = 10
+		honestCount   = 2
+	)
+
+	voteSet, valSet, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrecommitType, numValidators)
+
+	// Sub-1/3 commit gate: one validator's power (100) == 10% of the total (1000),
+	// far below the recovery threshold (7 validators == 700).
+	valSet.VotingPowerThreshold = uint64(DefaultDashVotingPower)
+	require.Less(t, valSet.QuorumVotingThresholdPower(), valSet.QuorumTypeThresholdVotingPower(),
+		"test must exercise a commit gate below the recovery threshold")
+
+	blockID := makeBlockIDRandom()
+
+	require.NotPanics(t, func() {
+		for i := 0; i < numValidators; i++ {
+			extCount := honestCount
+			if i == 0 {
+				extCount = 1 // Byzantine: a single, validly-signed extension
+			}
+			added, err := signAddPrecommitWithExtCount(ctx, t, voteSet, privValidators[i], i, extCount, blockID)
+			require.NoError(t, err)
+			require.True(t, added)
+		}
+	}, "a sub-1/3 commit gate must not let a Byzantine count starve recovery (SEC-001)")
+
+	require.True(t, voteSet.HasTwoThirdsMajority())
+
+	commit := voteSet.MakeCommit()
+	require.NotNil(t, commit)
+	require.Len(t, commit.ThresholdVoteExtensions, 2, "the honest count must be canonical, not the Byzantine one")
+	require.NoError(t, valSet.VerifyCommit(voteSet.ChainID(), blockID, height, commit))
+}
+
+// TestVoteSet_AddVote_NoRecoverableExtensionCountPanics verifies that the
+// retained hard-fail backstop still fires for the genuinely unattributable case:
+// every validator has voted yet no extension count is backed by the recovery
+// threshold voting power (here a > 1/3 split, 4 vs 6 of 10, with the recovery
+// threshold at 7). This is a BFT-safety violation, so there is no safe way to
+// continue and the node must fail hard rather than silently stall forever.
+func TestVoteSet_AddVote_NoRecoverableExtensionCountPanics(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const (
+		height        = int64(10)
+		round         = int32(0)
+		numValidators = 10
+	)
+
+	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrecommitType, numValidators)
+	blockID := makeBlockIDRandom()
+
+	// 4 validators send 1 extension, 6 send 2; neither group reaches the recovery
+	// threshold of 7, so no count is recoverable.
+	extCountFor := func(i int) int {
+		if i < 4 {
+			return 1
+		}
+		return 2
+	}
+
+	sawPanic := false
+	for i := 0; i < numValidators && !sawPanic; i++ {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					sawPanic = true
+				}
+			}()
+			added, err := signAddPrecommitWithExtCount(ctx, t, voteSet, privValidators[i], i, extCountFor(i), blockID)
+			require.NoError(t, err)
+			require.True(t, added)
+		}()
+	}
+
+	require.True(t, sawPanic, "the backstop hard-fail must fire when no count reaches the recovery threshold and all have voted")
+	require.False(t, voteSet.HasTwoThirdsMajority(), "no commit may be produced when recovery is impossible")
+}
+
+// TestVoteSet_AddVote_ByzantineLastWithGateAboveRecovery is the SEC-001 regression
+// test for the thepastaclaw finding: when VotingPowerThreshold (the commit gate)
+// is configured above the fixed BLS recovery threshold, a Byzantine attacker can
+// place its votes last so that every post-gate triggering vote carries a
+// non-canonical extension count. Before the fix, recoverThresholdSignsAndVerify
+// built its QuorumSignData from the triggering vote, causing a length mismatch in
+// VerifyVoteExtensions (triggering-vote ext count != recovered canonical count)
+// even though threshold recovery had already succeeded. The mismatch rolled back
+// maj23 on every subsequent vote until all validators had voted, at which point the
+// backstop panic fired — a deterministic liveness DoS.
+//
+// Setup: 10 validators @ 100 power (total=1000), commit gate=800,
+// BLS recovery threshold=700 (7-of-10).
+//
+//   - Honest votes 0-6 (ext count=2): sum=700, below gate (800) → no trigger.
+//   - Byzantine votes 7-9 (ext count=1): each crosses/maintains gate, triggers
+//     recovery; canonical count is 2 (7 honest votes hold >=700 power). With the
+//     fix the triggering vote is no longer used for verification → no length
+//     mismatch → recovery succeeds on vote 7 → maj23 committed, commit produced.
+func TestVoteSet_AddVote_ByzantineLastWithGateAboveRecovery(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const (
+		height         = int64(10)
+		round          = int32(0)
+		numValidators  = 10
+		honestCount    = 2 // honest ABCI ExtendVote extension count
+		byzantineCount = 1 // Byzantine extension count (wrong, but validly signed)
+		// 7 honest voters × 100 power = 700 >= recovery threshold; added first.
+		// The remaining 3 (indices 7-9) are Byzantine; added LAST so each one
+		// triggers the commit gate (800) with a Byzantine ext-count=1 vote.
+		numHonest = 7
+	)
+
+	voteSet, valSet, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrecommitType, numValidators)
+	blockID := makeBlockIDRandom()
+
+	// Raise the commit gate above the BLS recovery threshold.
+	// QuorumTypeThresholdVotingPower for LLMQType_TEST_V17 with 10 validators
+	// is 7*DefaultDashVotingPower = 700. Setting VotingPowerThreshold to 800
+	// places the commit gate at 800 > 700 (recovery threshold), satisfying the
+	// attack precondition.
+	voteSet.valSet.VotingPowerThreshold = uint64(8 * DefaultDashVotingPower) // 800
+	require.Greater(t, voteSet.valSet.QuorumVotingThresholdPower(),
+		voteSet.valSet.QuorumTypeThresholdVotingPower(),
+		"precondition: commit gate must exceed the BLS recovery threshold")
+
+	require.NotPanics(t, func() {
+		// Step 1: add honest votes first. With 7 honest votes at 700 total power
+		// the commit gate (800) is not yet crossed, so no recovery is attempted.
+		for i := 0; i < numHonest; i++ {
+			added, err := signAddPrecommitWithExtCount(ctx, t, voteSet, privValidators[i], i, honestCount, blockID)
+			require.NoError(t, err)
+			require.True(t, added)
+		}
+		require.False(t, voteSet.HasTwoThirdsMajority(),
+			"quorum must not be reached after honest votes alone (below commit gate)")
+
+		// Step 2: add Byzantine votes LAST. Each one crosses or maintains the
+		// commit gate (800) and acts as the triggering vote with ext count = 1.
+		// Before the fix, quorumDataSigns from the Byzantine vote (1 sign item)
+		// mismatched the recovered sigs (2 sigs for canonical count 2), causing
+		// a spurious verification error → maj23 rollback → eventual panic.
+		for i := numHonest; i < numValidators; i++ {
+			added, err := signAddPrecommitWithExtCount(ctx, t, voteSet, privValidators[i], i, byzantineCount, blockID)
+			require.NoError(t, err)
+			require.True(t, added)
+		}
+	}, "Byzantine-last gate>recovery attack must not panic (SEC-001 liveness)")
+
+	require.True(t, voteSet.HasTwoThirdsMajority(),
+		"quorum must be reached: 7 honest (ext=2) votes have 700 power >= recovery threshold")
+
+	commit := voteSet.MakeCommit()
+	require.NotNil(t, commit)
+	require.Len(t, commit.ThresholdVoteExtensions, honestCount,
+		"canonical (honest) extension count must be recovered")
+	require.NoError(t, valSet.VerifyCommit(voteSet.ChainID(), blockID, height, commit),
+		"recovered threshold signatures must verify against the quorum public key")
 }

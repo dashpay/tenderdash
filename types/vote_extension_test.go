@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/libs/log"
@@ -198,4 +199,22 @@ func TestVoteExtensionsRaw_SignDataRawVector_Withdrawals(t *testing.T) {
 		})
 	}
 
+}
+
+func TestAddThresholdSignature_LengthValidation(t *testing.T) {
+	goodValidator := make([]byte, crypto.ProTxHashSize)
+	goodSig := make([]byte, bls12381.SignatureSize)
+
+	ext := &ThresholdVoteExtension{}
+
+	require.Error(t, ext.AddThresholdSignature(make([]byte, crypto.ProTxHashSize-1), goodSig),
+		"short validator should be rejected")
+	require.Error(t, ext.AddThresholdSignature(make([]byte, crypto.ProTxHashSize+1), goodSig),
+		"long validator should be rejected")
+	require.Error(t, ext.AddThresholdSignature(goodValidator, make([]byte, bls12381.SignatureSize-1)),
+		"short sig should be rejected")
+	require.Error(t, ext.AddThresholdSignature(goodValidator, make([]byte, bls12381.SignatureSize+1)),
+		"long sig should be rejected")
+	require.NoError(t, ext.AddThresholdSignature(goodValidator, goodSig),
+		"correct lengths must succeed")
 }

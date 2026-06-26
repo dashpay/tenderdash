@@ -135,16 +135,6 @@ func TestParseNodeAddress(t *testing.T) {
 			true,
 		},
 		{
-			user + "@%F0%9F%91%8B",
-			p2p.NodeAddress{Protocol: "mconn", NodeID: id, Hostname: "👋"},
-			true,
-		},
-		{
-			user + "@%F0%9F%91%8B:80/path",
-			p2p.NodeAddress{Protocol: "mconn", NodeID: id, Hostname: "👋", Port: 80, Path: "/path"},
-			true,
-		},
-		{
 			user + "@127.0.0.1:26657",
 			p2p.NodeAddress{Protocol: "mconn", NodeID: id, Hostname: "127.0.0.1", Port: 26657},
 			true,
@@ -182,6 +172,8 @@ func TestParseNodeAddress(t *testing.T) {
 		{"scheme:", p2p.NodeAddress{}, false},
 		{"memory:foo", p2p.NodeAddress{}, false},
 		{user + "@%F%F0", p2p.NodeAddress{}, false},
+		{user + "@%F0%9F%91%8B", p2p.NodeAddress{}, false},
+		{user + "@%F0%9F%91%8B:80/path", p2p.NodeAddress{}, false},
 		{"//" + user + "@127.0.0.1", p2p.NodeAddress{}, false},
 		{"://" + user + "@127.0.0.1", p2p.NodeAddress{}, false},
 		{"mconn://foo@127.0.0.1", p2p.NodeAddress{}, false},
@@ -220,13 +212,11 @@ func TestNodeAddress_Resolve(t *testing.T) {
 			true,
 		},
 		{
-			p2p.NodeAddress{Protocol: "tcp", Hostname: "localhost", Port: 80, Path: "/path"},
-			&p2p.Endpoint{Protocol: "tcp", IP: net.IPv4(127, 0, 0, 1), Port: 80, Path: "/path"},
-			true,
-		},
-		{
-			p2p.NodeAddress{Protocol: "tcp", Hostname: "localhost", Port: 80, Path: "/path"},
-			&p2p.Endpoint{Protocol: "tcp", IP: net.IPv6loopback, Port: 80, Path: "/path"},
+			// We intentionally use an external DNS name (one.one.one.one) rather than
+			// localhost, because localhost may resolve to either IPv4 or IPv6 depending
+			// on the system, making the expected IP unpredictable.
+			p2p.NodeAddress{Protocol: "tcp", Hostname: "one.one.one.one", Port: 80, Path: "/path"},
+			&p2p.Endpoint{Protocol: "tcp", IP: net.IPv4(1, 1, 1, 1), Port: 80, Path: "/path"},
 			true,
 		},
 		{
@@ -287,7 +277,15 @@ func TestNodeAddress_Resolve(t *testing.T) {
 				require.Error(t, err)
 				return
 			}
-			require.Contains(t, endpoints, tc.expect)
+
+			for _, ep := range endpoints {
+				// in some cases, ip address match fails in Contains due to different representations
+				// e.g. IPv4-mapped IPv6 address vs IPv4 address
+				if ep.Equal(tc.expect) {
+					return
+				}
+			}
+			require.Contains(t, endpoints, tc.expect, "expected endpoint not found in resolved endpoints %+v", endpoints)
 		})
 	}
 }
@@ -365,14 +363,18 @@ func TestNodeAddress_Validate(t *testing.T) {
 		{p2p.NodeAddress{Protocol: "mconn", NodeID: id, Hostname: "host", Port: 80, Path: "/path"}, true},
 		{p2p.NodeAddress{Protocol: "mconn", NodeID: id, Hostname: "host"}, true},
 		{p2p.NodeAddress{Protocol: "mconn", NodeID: id, Path: "path"}, true},
-		{p2p.NodeAddress{Protocol: "mconn", NodeID: id, Hostname: "👋", Path: "👋"}, true},
+		{p2p.NodeAddress{Protocol: "mconn", NodeID: id, Hostname: "google.com", Path: "👋"}, true},
 
 		// Invalid addresses.
+		{p2p.NodeAddress{Protocol: "mconn", NodeID: id, Hostname: "127.0.0.1:26656", Port: 26656}, false},
+		{p2p.NodeAddress{Protocol: "mconn", NodeID: id, Hostname: "[127.0.0.1:26656]", Port: 26656}, false},
+		{p2p.NodeAddress{Protocol: "mconn", NodeID: id, Hostname: "[127.0.0.1:26656]:26656", Port: 26656}, false},
 		{p2p.NodeAddress{}, false},
 		{p2p.NodeAddress{NodeID: "foo", Hostname: "host"}, false},
 		{p2p.NodeAddress{Protocol: "mconn", NodeID: id}, true},
 		{p2p.NodeAddress{Protocol: "mconn", NodeID: "foo", Hostname: "host"}, false},
 		{p2p.NodeAddress{Protocol: "mconn", NodeID: id, Port: 80, Path: "path"}, false},
+		{p2p.NodeAddress{Protocol: "mconn", NodeID: id, Hostname: "👋", Path: "👋"}, false},
 	}
 	for _, tc := range testcases {
 		tc := tc

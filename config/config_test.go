@@ -223,6 +223,14 @@ func TestP2PConfigValidateBasic(t *testing.T) {
 		assert.Error(t, cfg.ValidateBasic())
 		reflect.ValueOf(cfg).Elem().FieldByName(fieldName).SetInt(0)
 	}
+
+	cfg.AllowlistOnly = true
+	cfg.PersistentPeers = ""
+	cfg.BootstrapPeers = ""
+	assert.Error(t, cfg.ValidateBasic())
+
+	cfg.PersistentPeers = "id@127.0.0.1:26656"
+	assert.NoError(t, cfg.ValidateBasic())
 }
 
 // Given some invalid node key file, when I try to load it, I get an error

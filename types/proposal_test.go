@@ -191,7 +191,7 @@ func TestProposalValidateBasic(t *testing.T) {
 	}
 	blockID := makeBlockID(
 		crypto.Checksum([]byte("blockhash")),
-		math.MaxInt32,
+		1,
 		crypto.Checksum([]byte("partshash")),
 		nil,
 	)

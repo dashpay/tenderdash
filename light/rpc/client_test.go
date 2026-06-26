@@ -1,130 +1,155 @@
 package rpc
 
-//
-// // TestABCIQuery tests ABCIQuery requests and verifies proofs. HAPPY PATH 😀
-// func TestABCIQuery(t *testing.T) {
-//	tree, err := iavl.NewMutableTree(dbm.NewMemDB(), 100)
-//	require.NoError(t, err)
-//
-//	var (
-//		key   = []byte("foo")
-//		value = []byte("bar")
-//	)
-//	tree.Set(key, value)
-//
-//	commitmentProof, err := tree.GetMembershipProof(key)
-//	require.NoError(t, err)
-//
-//	op := &testOp{
-//		Spec:  ics23.IavlSpec,
-//		Key:   key,
-//		Proof: commitmentProof,
-//	}
-//
-//	next := &rpcmock.Client{}
-//	next.On(
-//		"ABCIQueryWithOptions",
-//		context.Background(),
-//		mock.AnythingOfType("string"),
-//		bytes.HexBytes(key),
-//		mock.AnythingOfType("client.ABCIQueryOptions"),
-//	).Return(&ctypes.ResultABCIQuery{
-//		Response: abci.ResponseQuery{
-//			Code:   0,
-//			Key:    key,
-//			Value:  value,
-//			Height: 1,
-//			ProofOps: &tmcrypto.ProofOps{
-//				Ops: []tmcrypto.ProofOp{op.ProofOp()},
-//			},
-//		},
-//	}, nil)
-//
-//	lc := &lcmock.LightClient{}
-//	appHash, _ := hex.DecodeString("5EFD44055350B5CC34DBD26085347A9DBBE44EA192B9286A9FC107F40EA1FAC5")
-//	lc.On("VerifyLightBlockAtHeight", context.Background(), int64(2), mock.AnythingOfType("time.Time")).Return(
-//		&types.LightBlock{
-//			SignedHeader: &types.SignedHeader{
-//				Header: &types.Header{AppHash: appHash},
-//			},
-//		},
-//		nil,
-//	)
-//
-//	c := NewClient(next, lc,
-//		KeyPathFn(func(_ string, key []byte) (merkle.KeyPath, error) {
-//			kp := merkle.KeyPath{}
-//			kp = kp.AppendKey(key, merkle.KeyEncodingURL)
-//			return kp, nil
-//		}))
-//	c.RegisterOpDecoder("ics23:iavl", testOpDecoder)
-//	res, err := c.ABCIQuery(context.Background(), "/store/accounts/key", key)
-//	require.NoError(t, err)
-//
-//	assert.NotNil(t, res)
-// }
-//
-// type testOp struct {
-//	Spec  *ics23.ProofSpec
-//	Key   []byte
-//	Proof *ics23.CommitmentProof
-// }
-//
-// var _ merkle.ProofOperator = testOp{}
-//
-// func (op testOp) GetKey() []byte {
-//	return op.Key
-// }
-//
-// func (op testOp) ProofOp() tmcrypto.ProofOp {
-//	bz, err := op.Proof.Marshal()
-//	if err != nil {
-//		panic(err.Error())
-//	}
-//	return tmcrypto.ProofOp{
-//		Type: "ics23:iavl",
-//		Key:  op.Key,
-//		Data: bz,
-//	}
-// }
-//
-// func (op testOp) Run(args [][]byte) ([][]byte, error) {
-//	// calculate root from proof
-//	root, err := op.Proof.Calculate()
-//	if err != nil {
-//		return nil, fmt.Errorf("could not calculate root for proof: %v", err)
-//	}
-//	// Only support an existence proof or nonexistence proof (batch proofs currently unsupported)
-//	switch len(args) {
-//	case 0:
-//		// Args are nil, so we verify the absence of the key.
-//		absent := ics23.VerifyNonMembership(op.Spec, root, op.Proof, op.Key)
-//		if !absent {
-//			return nil, fmt.Errorf("proof did not verify absence of key: %s", string(op.Key))
-//		}
-//	case 1:
-//		// Args is length 1, verify existence of key with value args[0]
-//		if !ics23.VerifyMembership(op.Spec, root, op.Proof, op.Key, args[0]) {
-//			return nil, fmt.Errorf("proof did not verify existence of key %s with given value %x", op.Key, args[0])
-//		}
-//	default:
-//		return nil, fmt.Errorf("args must be length 0 or 1, got: %d", len(args))
-//	}
-//
-//	return [][]byte{root}, nil
-// }
-//
-// func testOpDecoder(pop tmcrypto.ProofOp) (merkle.ProofOperator, error) {
-//	proof := &ics23.CommitmentProof{}
-//	err := proof.Unmarshal(pop.Data)
-//	if err != nil {
-//		return nil, err
-//	}
-//
-//	op := testOp{
-//		Key:   pop.Key,
-//		Spec:  ics23.IavlSpec,
-//		Proof: proof,
-//	}
-//	return op, nil
-// }
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+
+	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/crypto/merkle"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/libs/log"
+	lcmock "github.com/dashpay/tenderdash/light/rpc/mocks"
+	tmcrypto "github.com/dashpay/tenderdash/proto/tendermint/crypto"
+	rpcclient "github.com/dashpay/tenderdash/rpc/client"
+	rpcmock "github.com/dashpay/tenderdash/rpc/client/mocks"
+	"github.com/dashpay/tenderdash/rpc/coretypes"
+	"github.com/dashpay/tenderdash/types"
+)
+
+var errUnexpectedHeight = errors.New("light block not verified at this height")
+
+// txResults builds a deterministic set of transaction results and its hash.
+func txResults(t *testing.T) ([]*abci.ExecTxResult, tmbytes.HexBytes) {
+	t.Helper()
+	results := []*abci.ExecTxResult{
+		{Code: 0, Data: []byte("first")},
+		{Code: 1, Data: []byte("second")},
+	}
+	h, err := abci.TxResultsHash(results)
+	require.NoError(t, err)
+	return results, h
+}
+
+func headerLightBlock(height int64, appHash, resultsHash tmbytes.HexBytes) *types.LightBlock {
+	return &types.LightBlock{
+		SignedHeader: &types.SignedHeader{
+			Header: &types.Header{Height: height, AppHash: appHash, ResultsHash: resultsHash},
+		},
+	}
+}
+
+// TestBlockResultsVerificationHeight verifies that BlockResults anchors the
+// results hash to the trusted header at the same height (same-block execution),
+// not the header at height+1.
+func TestBlockResultsVerificationHeight(t *testing.T) {
+	const height = int64(10)
+	results, resultsHash := txResults(t)
+	differentHash := tmbytes.HexBytes("a-different-results-hash")
+
+	testCases := []struct {
+		name string
+		// answerHeight is the height the light client is configured to answer
+		// for; if BlockResults queries any other height the mock returns an
+		// error, so a successful run proves it anchored to answerHeight.
+		answerHeight int64
+		headerHash   tmbytes.HexBytes
+		wantErr      bool
+	}{
+		{
+			name:         "results verified against same-height header",
+			answerHeight: height,
+			headerHash:   resultsHash,
+			wantErr:      false,
+		},
+		{
+			name:         "results hash mismatch fails verification",
+			answerHeight: height,
+			headerHash:   differentHash,
+			wantErr:      true,
+		},
+		{
+			name:         "anchoring to height+1 header is not used",
+			answerHeight: height + 1,
+			headerHash:   resultsHash,
+			wantErr:      true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			next := &rpcmock.Client{}
+			next.On("BlockResults", mock.Anything, mock.Anything).
+				Return(&coretypes.ResultBlockResults{Height: height, TxsResults: results}, nil)
+
+			lc := &lcmock.LightClient{}
+			lc.On("VerifyLightBlockAtHeight", mock.Anything, tc.answerHeight, mock.Anything).
+				Return(headerLightBlock(tc.answerHeight, nil, tc.headerHash), nil)
+			// Any other height is treated as "block not verified".
+			lc.On("VerifyLightBlockAtHeight", mock.Anything, mock.Anything, mock.Anything).
+				Return(nil, errUnexpectedHeight)
+
+			c := NewClient(log.NewNopLogger(), next, lc)
+			h := height
+			_, err := c.BlockResults(ctx, &h)
+
+			if tc.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				lc.AssertCalled(t, "VerifyLightBlockAtHeight", mock.Anything, height, mock.Anything)
+			}
+		})
+	}
+}
+
+// TestABCIQueryVerificationHeight verifies that ABCIQueryWithOptions anchors the
+// value proof to the trusted header at the response height (same-block
+// execution), not the header at height+1.
+func TestABCIQueryVerificationHeight(t *testing.T) {
+	const respHeight = int64(7)
+	appHash := tmbytes.HexBytes("app-hash-for-height-7")
+
+	ctx := context.Background()
+
+	next := &rpcmock.Client{}
+	next.On("ABCIQueryWithOptions", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(&coretypes.ResultABCIQuery{
+			Response: abci.ResponseQuery{
+				Code:   0,
+				Key:    []byte("key"),
+				Value:  []byte("value"),
+				Height: respHeight,
+				ProofOps: &tmcrypto.ProofOps{
+					Ops: []tmcrypto.ProofOp{{Type: "noop", Key: []byte("key")}},
+				},
+			},
+		}, nil)
+
+	var queriedHeight int64
+	lc := &lcmock.LightClient{}
+	lc.On("VerifyLightBlockAtHeight", mock.Anything, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			queriedHeight = args.Get(1).(int64)
+		}).
+		Return(headerLightBlock(respHeight, appHash, nil), nil)
+
+	c := NewClient(log.NewNopLogger(), next, lc,
+		KeyPathFn(func(_ string, key []byte) (merkle.KeyPath, error) {
+			return merkle.KeyPath{}.AppendKey(key, merkle.KeyEncodingURL), nil
+		}))
+
+	// The stub proof will not verify, but by then the light client has already
+	// been asked for the trusted header at a specific height, which is the
+	// behavior under test.
+	_, _ = c.ABCIQueryWithOptions(ctx, "/store/x/key", []byte("key"),
+		rpcclient.ABCIQueryOptions{Height: respHeight, Prove: true})
+
+	require.Equal(t, respHeight, queriedHeight,
+		"value proof must be anchored to the header at the response height, not height+1")
+}

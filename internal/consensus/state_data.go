@@ -266,9 +266,18 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockSto
 	// state.Validators contain validator set at (state.LastBlockHeight+1, 0)
 	validators := state.Validators
 
-	if s.Validators == nil || !bytes.Equal(s.Validators.QuorumHash, validators.QuorumHash) {
+	if s.Validators == nil ||
+		!bytes.Equal(s.Validators.QuorumHash, validators.QuorumHash) ||
+		s.Validators.VotingPowerThreshold != validators.VotingPowerThreshold {
 		s.logger.Info("Updating validators", "from", s.Validators.BasicInfoString(),
 			"to", validators.BasicInfoString())
+		if validators.BelowStrictThreshold() {
+			s.logger.Warn("validator set voting threshold is below the 2/3+1 BFT safety bound; fault tolerance is reduced",
+				"quorum_type", validators.QuorumType.Name(),
+				"threshold", validators.QuorumVotingThresholdPower(),
+				"total_power", validators.TotalVotingPower(),
+				"strict_floor", validators.StrictVotingPowerFloor())
+		}
 	}
 
 	s.Validators = validators
@@ -307,7 +316,7 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockSto
 	s.ValidBlock = nil
 	s.ValidBlockParts = nil
 	s.Commit = nil
-	s.Votes = cstypes.NewHeightVoteSet(state.ChainID, height, validators)
+	s.Votes = cstypes.NewHeightVoteSet(state.ChainID, height, validators, cstypes.WithLogger(s.logger))
 	s.CommitRound = -1
 	s.LastValidators = state.LastValidators
 	s.TriggeredTimeoutPrecommit = false

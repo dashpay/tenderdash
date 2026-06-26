@@ -856,6 +856,9 @@ func (commit *Commit) ValidateBasic() error {
 		if commit.BlockID.IsNil() {
 			return errors.New("commit cannot be for nil block")
 		}
+		if err := commit.BlockID.ValidateBasic(); err != nil {
+			return fmt.Errorf("wrong BlockID: %w", err)
+		}
 		if len(commit.ThresholdBlockSignature) != SignatureSize {
 			return fmt.Errorf(
 				"block threshold signature is wrong size (wanted: %d, received: %d)",

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fortytw2/leaktest"
 	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -367,6 +368,97 @@ func (suite *SynchronizerTestSuite) TestUpdateMonitor() {
 					suite.Require().InDelta(tc.expected, sync.lastSyncRate, 1e-9)
 				}
 			}
+		})
+	}
+}
+
+// TestStopReleasesHandlers locks down the switch-to-consensus path: after Stop()
+// the producer/consumer goroutines must exit even when the parent context passed
+// to Start is still live and the job generator is caught up (so produceJob keeps
+// idling without ever calling Send). A leaked producer goroutine + idle timer
+// would otherwise survive for the whole consensus phase.
+func (suite *SynchronizerTestSuite) TestStopReleasesHandlers() {
+	// Parent context stays live for the whole test — Stop must not depend on it.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+	// startHeight 1 with no peers => MaxHeight 0 => shouldJobBeGenerated() is false,
+	// so produceJob idles (sleep + return nil) and never observes ErrWorkerPoolStopped.
+	sync := NewSynchronizer(1, suite.client, applier)
+
+	// Snapshot the goroutine baseline now and defer the leak check so it still runs
+	// (and fails the test) if an assertion below trips mid-way.
+	defer leaktest.CheckTimeout(suite.T(), 5*time.Second)()
+
+	suite.Require().NoError(sync.Start(ctx))
+	suite.Require().Eventually(sync.IsRunning, time.Second, 5*time.Millisecond)
+	// Give the idling producer a few iterations before stopping.
+	time.Sleep(50 * time.Millisecond)
+
+	sync.Stop()
+
+	// With the parent ctx still live, both handler goroutines must have exited.
+	suite.Require().NoError(ctx.Err())
+}
+
+// TestProduceJobFailureKeepsCounterBalanced locks down the in-progress counter
+// accounting in produceJob: the increment happens before Send, so every path that
+// fails to hand the job to a worker must undo it. Otherwise GetStatus's in-progress
+// count leaks upward permanently. We force each failure path and assert the count
+// reported by GetStatus returns to its baseline.
+func (suite *SynchronizerTestSuite) TestProduceJobFailureKeepsCounterBalanced() {
+	const startAt = int64(10)
+
+	testCases := []struct {
+		name    string
+		wantErr error
+		// prepare returns a context for produceJob; the synchronizer already has a
+		// peer so shouldJobBeGenerated() is true and nextJob can find a peer.
+		prepare func(sync *Synchronizer) context.Context
+	}{
+		{
+			// nextJob -> getPeer aborts on the canceled context, hitting the
+			// nextJob error path in produceJob.
+			name:    "nextJob error",
+			wantErr: context.Canceled,
+			prepare: func(_ *Synchronizer) context.Context {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				return ctx
+			},
+		},
+		{
+			// A stopped pool makes Send return ErrWorkerPoolStopped after the
+			// increment, hitting the Send error path in produceJob.
+			name:    "send to stopped pool",
+			wantErr: workerpool.ErrWorkerPoolStopped,
+			prepare: func(sync *Synchronizer) context.Context {
+				sync.workerPool.Stop(context.Background())
+				return context.Background()
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		suite.Run(tc.name, func() {
+			pool := workerpool.New(1)
+			applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+			sync := NewSynchronizer(startAt, suite.client, applier, WithWorkerPool(pool))
+
+			peerID := types.NodeID(tmrand.Str(12))
+			sync.AddPeer(newPeerData(peerID, startAt, startAt+100))
+
+			suite.Require().True(sync.jobGen.shouldJobBeGenerated())
+			_, baseline := sync.GetStatus()
+
+			ctx := tc.prepare(sync)
+
+			err := sync.produceJob(ctx)
+			suite.Require().ErrorIs(err, tc.wantErr)
+
+			_, after := sync.GetStatus()
+			suite.Require().Equal(baseline, after, "in-progress counter must return to baseline after a failed produceJob")
 		})
 	}
 }

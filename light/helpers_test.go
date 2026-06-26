@@ -82,7 +82,9 @@ func (pkz privKeys) signHeader(t testing.TB, header *types.Header, valSet *types
 		}
 		votes[i] = makeVote(t, header, valSet, val.ProTxHash, pkz[i], blockID)
 	}
-	thresholdSigns, err := types.NewSignsRecoverer(votes).Recover()
+	signsRecoverer, err := types.NewSignsRecoverer(votes)
+	require.NoError(t, err)
+	thresholdSigns, err := signsRecoverer.Recover()
 	require.NoError(t, err)
 	quorumSigns := &types.CommitSigns{
 		QuorumSigns: *thresholdSigns,

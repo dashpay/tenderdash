@@ -13,6 +13,10 @@ import (
 	bcproto "github.com/dashpay/tenderdash/proto/tendermint/blocksync"
 )
 
+// maxPlausiblePeerHeight bounds a peer-reported height so that downstream
+// height arithmetic (MaxHeight()+1, target counts) cannot overflow.
+const maxPlausiblePeerHeight = int64(1) << 60
+
 type (
 	response               func(ctx context.Context, msg proto.Message) error
 	blockP2PMessageHandler struct {
@@ -50,6 +54,13 @@ func (h *blockP2PMessageHandler) Handle(ctx context.Context, p2pClient *client.C
 			Base:   h.store.Base(),
 		})
 	case *bcproto.StatusResponse:
+		if msg.Base < 0 || msg.Height < msg.Base || msg.Height > maxPlausiblePeerHeight {
+			h.logger.Error("ignoring implausible peer status",
+				"peer", envelope.From,
+				"base", msg.Base,
+				"height", msg.Height)
+			return nil
+		}
 		h.peerAdder.AddPeer(newPeerData(envelope.From, msg.Base, msg.Height))
 	case *bcproto.NoBlockResponse:
 		h.logger.Debug("peer does not have the requested block",

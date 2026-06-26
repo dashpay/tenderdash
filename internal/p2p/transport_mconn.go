@@ -11,7 +11,6 @@ import (
 	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
-	"golang.org/x/net/netutil"
 
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/internal/libs/protoio"
@@ -29,8 +28,8 @@ const (
 // MConnTransportOptions sets options for MConnTransport.
 type MConnTransportOptions struct {
 	// MaxAcceptedConnections is the maximum number of simultaneous accepted
-	// (incoming) connections. Beyond this, new connections will block until
-	// a slot is free. 0 means unlimited.
+	// (incoming) connections. Connections beyond this limit are closed
+	// immediately rather than held open. 0 means unlimited.
 	//
 	// FIXME: We may want to replace this with connection accounting in the
 	// Router, since it will need to do e.g. rate limiting and such as well.
@@ -122,12 +121,7 @@ func (m *MConnTransport) Listen(endpoint *Endpoint) error {
 		return err
 	}
 	if m.options.MaxAcceptedConnections > 0 {
-		// FIXME: This will establish the inbound connection but simply hang it
-		// until another connection is released. It would probably be better to
-		// return an error to the remote peer or close the connection. This is
-		// also a DoS vector since the connection will take up kernel resources.
-		// This was just carried over from the legacy P2P stack.
-		listener = netutil.LimitListener(listener, int(m.options.MaxAcceptedConnections))
+		listener = newLimitListener(listener, int(m.options.MaxAcceptedConnections))
 	}
 	m.listener = listener
 

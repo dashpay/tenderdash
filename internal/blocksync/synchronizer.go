@@ -92,6 +92,13 @@ type (
 		workerPool     *workerpool.WorkerPool
 		jobGen         *jobGenerator
 		pendingToApply map[int64]BlockResponse
+
+		// ctx/cancel scope the handler goroutines' lifetime. Created in OnStart
+		// (live before the goroutines spawn, so it never observes a start-race)
+		// and canceled in OnStop so Stop releases the handlers even when the
+		// caller's context is still live.
+		ctx    context.Context
+		cancel context.CancelFunc
 	}
 	OptionFunc func(v *Synchronizer)
 )
@@ -154,53 +161,79 @@ func (s *Synchronizer) OnStart(ctx context.Context) error {
 	}
 	s.lastAdvance = s.clock.Now()
 	s.lastMonitorUpdate = s.lastAdvance
-	s.workerPool.Run(ctx)
-	go s.runHandler(ctx, s.produceJob)
-	go s.runHandler(ctx, s.consumeJobResult)
+	s.ctx, s.cancel = context.WithCancel(ctx)
+	s.workerPool.Run(s.ctx)
+	go s.runHandler(s.ctx, s.produceJob)
+	go s.runHandler(s.ctx, s.consumeJobResult)
 	return nil
 }
 
 func (s *Synchronizer) OnStop() {
+	s.cancel()
 	s.workerPool.Stop(context.Background())
 }
 
-func (s *Synchronizer) produceJob(ctx context.Context) {
+func (s *Synchronizer) produceJob(ctx context.Context) error {
 	if !s.jobGen.shouldJobBeGenerated() {
-		// TODO should we stop producer loop ?
 		// TODO need to come up with a smarter way how to produce jobs without sleeping
-		s.clock.Sleep(50 * time.Millisecond)
-		return
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-s.clock.After(50 * time.Millisecond):
+		}
+		return nil
 	}
 	// remove timed out peers and redo its heights again
 	s.removeTimedoutPeers(ctx)
+	// Count the job as in-progress before Send: a worker may run it and
+	// consumeJobResult may decrement before Send even returns, so incrementing
+	// afterwards could drive the counter transiently negative. Every path that
+	// fails to hand the job to a worker must undo this increment, otherwise the
+	// in-progress count reported by GetStatus leaks upward permanently.
 	s.jobProgressCounter.Add(1)
 	job, err := s.jobGen.nextJob(ctx)
 	if err != nil {
+		s.jobProgressCounter.Add(-1)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
 		s.logger.Error("cannot create a next job", "error", err)
-		return
+		return nil
 	}
 	err = s.workerPool.Send(ctx, job)
 	if err != nil {
+		s.jobProgressCounter.Add(-1)
+		if errors.Is(err, workerpool.ErrWorkerPoolStopped) ||
+			errors.Is(err, context.Canceled) ||
+			errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
 		s.logger.Error("cannot add a job to worker-pool", "error", err)
 	}
+	return nil
 }
 
-func (s *Synchronizer) consumeJobResult(ctx context.Context) {
+func (s *Synchronizer) consumeJobResult(ctx context.Context) error {
 	res, err := s.workerPool.Receive(ctx)
 	if err != nil {
+		if errors.Is(err, workerpool.ErrWorkerPoolStopped) ||
+			errors.Is(err, context.Canceled) ||
+			errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
 		s.logger.Error("cannot receive a job result from worker pool", "error", err)
-		return
+		return nil
 	}
 	s.jobProgressCounter.Add(-1)
 	if res.Err != nil {
 		var bfErr *errBlockFetch
 		if !errors.As(res.Err, &bfErr) {
-			return
+			return nil
 		}
 		s.jobGen.pushBack(bfErr.height)
 		s.RemovePeer(bfErr.peerID)
 		_ = s.client.Send(ctx, p2p.PeerError{NodeID: bfErr.peerID, Err: bfErr})
-		return
+		return nil
 	}
 	resp := res.Value.(*BlockResponse)
 	s.peerStore.Update(resp.PeerID, AddNumPending(-1), UpdateMonitor(resp.Block.Size()))
@@ -210,7 +243,7 @@ func (s *Synchronizer) consumeJobResult(ctx context.Context) {
 			"height", resp.Block.Height,
 			"error", err.Error())
 		_ = s.client.Send(ctx, p2p.PeerError{NodeID: resp.PeerID, Err: err})
-		return
+		return nil
 	}
 	err = s.applyBlock(ctx)
 	if err != nil {
@@ -218,6 +251,7 @@ func (s *Synchronizer) consumeJobResult(ctx context.Context) {
 		s.RemovePeer(resp.PeerID)
 		_ = s.client.Send(ctx, p2p.PeerError{NodeID: resp.PeerID, Err: err})
 	}
+	return nil
 }
 
 // GetStatus returns synchronizer's height, count of in progress requests
@@ -415,13 +449,14 @@ func (s *Synchronizer) getLastSyncRate() float64 {
 	return s.lastSyncRate
 }
 
-func (s *Synchronizer) runHandler(ctx context.Context, handler func(ctx context.Context)) {
-	for s.IsRunning() {
-		select {
-		case <-ctx.Done():
+func (s *Synchronizer) runHandler(ctx context.Context, handler func(ctx context.Context) error) {
+	// Drive the loop off the context, not IsRunning(): OnStart spawns this
+	// goroutine before BaseService marks the service running, so reading
+	// IsRunning() here could observe false and exit at birth, wedging sync.
+	for ctx.Err() == nil {
+		if err := handler(ctx); errors.Is(err, workerpool.ErrWorkerPoolStopped) {
+			// The pool is stopping; exit instead of busy-spinning and flooding logs.
 			return
-		default:
-			handler(ctx)
 		}
 	}
 }
@@ -434,14 +469,17 @@ type BlockResponse struct {
 }
 
 func (r *BlockResponse) Validate() error {
-	if r.Commit != nil && r.Block.Height != r.Commit.Height {
+	if r.Block == nil {
+		return errors.New("block response without a block")
+	}
+	if r.Commit == nil {
+		// See https://github.com/tendermint/tendermint/pull/8433#discussion_r866790631
+		return fmt.Errorf("a block without a commit at height %d - possible node store corruption", r.Block.Height)
+	}
+	if r.Block.Height != r.Commit.Height {
 		return fmt.Errorf("heights don't match, not adding block (block height: %d, commit height: %d)",
 			r.Block.Height,
 			r.Commit.Height)
-	}
-	if r.Block != nil && r.Commit == nil {
-		// See https://github.com/tendermint/tendermint/pull/8433#discussion_r866790631
-		return fmt.Errorf("a block without a commit at height %d - possible node store corruption", r.Block.Height)
 	}
 	return nil
 }

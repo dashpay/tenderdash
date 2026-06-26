@@ -20,15 +20,14 @@ set -ue
 # Build for each os-architecture pair
 for platform in ${TARGET_PLATFORMS} ; do
     # This function sets GOOS, GOARCH, and OS_FILE_EXT environment variables
-    # according to the build target platform. OS_FILE_EXT is empty in all
-    # cases except when the target platform is 'windows'.
+    # according to the build target platform.
     setup_build_env_for_platform "${platform}"
 
     make clean
     echo Building for $(go env GOOS)/$(go env GOARCH) >&2
     GOROOT_FINAL="$(go env GOROOT)" \
     make build LDFLAGS=-buildid=${VERSION} COMMIT=${COMMIT}
-    mv ./build/${APP}${OS_FILE_EXT} ${OUTDIR}/${APP}-${VERSION}-$(go env GOOS)-$(go env GOARCH)${OS_FILE_EXT}
+    mv ./build/${APP} ${OUTDIR}/${APP}-${VERSION}-$(go env GOOS)-$(go env GOARCH)
 
     # This function restore the build environment variables to their
     # original state.

@@ -7,16 +7,21 @@ import (
 	"math"
 	"net"
 	"os"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	dbm "github.com/cometbft/cometbft-db"
 	"github.com/fortytw2/leaktest"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
+	abcimocks "github.com/dashpay/tenderdash/abci/client/mocks"
 	"github.com/dashpay/tenderdash/abci/example/kvstore"
+	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
@@ -139,6 +144,146 @@ func TestNodeDelayedStart(t *testing.T) {
 	assert.Equal(t, true, startTime.After(n.GenesisDoc().GenesisTime))
 }
 
+func TestGetRouterConfigAllowlistOnlyFilters(t *testing.T) {
+	cfg := config.TestConfig()
+	cfg.P2P.AllowlistOnly = true
+
+	id1 := types.NodeID(strings.Repeat("a", 40))
+	id2 := types.NodeID(strings.Repeat("b", 40))
+	id3 := types.NodeID(strings.Repeat("c", 40))
+
+	cfg.P2P.PersistentPeers = fmt.Sprintf("tcp://%s@127.0.0.1:26656", id1)
+	cfg.P2P.BootstrapPeers = fmt.Sprintf("tcp://%s@127.0.0.2:26656", id2)
+
+	opts, err := getRouterConfig(cfg, nil)
+	require.NoError(t, err)
+	require.NotNil(t, opts.FilterPeerByID)
+
+	require.NoError(t, opts.FilterPeerByID(context.Background(), id1))
+	require.NoError(t, opts.FilterPeerByID(context.Background(), id2))
+	require.Error(t, opts.FilterPeerByID(context.Background(), id3))
+}
+
+func TestGetRouterConfigAllowlistOnlyAcceptsOnlyNodeIDs(t *testing.T) {
+	cfg := config.TestConfig()
+	cfg.P2P.AllowlistOnly = true
+
+	id1 := types.NodeID(strings.Repeat("a", 40))
+	cfg.P2P.PersistentPeers = fmt.Sprintf("tcp:%s", id1)
+
+	opts, err := getRouterConfig(cfg, nil)
+	require.NoError(t, err)
+	require.NotNil(t, opts.FilterPeerByID)
+
+	require.NoError(t, opts.FilterPeerByID(context.Background(), id1))
+	require.Error(t, opts.FilterPeerByID(context.Background(), types.NodeID(strings.Repeat("b", 40))))
+}
+
+// TestGetRouterConfigFilterPeerByIP is a regression test for GO-004 / SEC MEDIUM:
+// PR #1248 silently dropped the ABCI IP-based peer filter (opts.FilterPeerByIP).
+// This test ensures the option is wired when FilterPeers is enabled with an app
+// client, and that the closure queries the correct ABCI path.
+func TestGetRouterConfigFilterPeerByIP(t *testing.T) {
+	t.Run("non-nil when FilterPeers enabled with app client", func(t *testing.T) {
+		cfg := config.TestConfig()
+		cfg.FilterPeers = true
+
+		appClient := abcimocks.NewClient(t)
+		opts, err := getRouterConfig(cfg, appClient)
+		require.NoError(t, err)
+		require.NotNil(t, opts.FilterPeerByIP,
+			"FilterPeerByIP must be non-nil when FilterPeers=true and app client is provided")
+	})
+
+	t.Run("nil when FilterPeers disabled", func(t *testing.T) {
+		cfg := config.TestConfig()
+		cfg.FilterPeers = false
+
+		opts, err := getRouterConfig(cfg, nil)
+		require.NoError(t, err)
+		require.Nil(t, opts.FilterPeerByIP,
+			"FilterPeerByIP must be nil when FilterPeers=false")
+	})
+
+	t.Run("nil when app client is nil even with FilterPeers enabled", func(t *testing.T) {
+		cfg := config.TestConfig()
+		cfg.FilterPeers = true
+
+		opts, err := getRouterConfig(cfg, nil)
+		require.NoError(t, err)
+		require.Nil(t, opts.FilterPeerByIP,
+			"FilterPeerByIP must be nil when app client is nil")
+	})
+
+	t.Run("closure accepts peer on OK ABCI response", func(t *testing.T) {
+		cfg := config.TestConfig()
+		cfg.FilterPeers = true
+
+		ip := net.ParseIP("192.0.2.1")
+		port := uint16(26656)
+		expectedPath := fmt.Sprintf("/p2p/filter/addr/%s",
+			net.JoinHostPort(ip.String(), strconv.Itoa(int(port))))
+
+		appClient := abcimocks.NewClient(t)
+		appClient.EXPECT().
+			Query(mock.Anything, mock.MatchedBy(func(req *abci.RequestQuery) bool {
+				return req.Path == expectedPath
+			})).
+			Return(&abci.ResponseQuery{Code: abci.CodeTypeOK}, nil)
+
+		opts, err := getRouterConfig(cfg, appClient)
+		require.NoError(t, err)
+		require.NotNil(t, opts.FilterPeerByIP)
+
+		require.NoError(t, opts.FilterPeerByIP(context.Background(), ip, port),
+			"peer with OK ABCI response should be accepted")
+	})
+
+	t.Run("closure rejects peer on non-OK ABCI response", func(t *testing.T) {
+		cfg := config.TestConfig()
+		cfg.FilterPeers = true
+
+		ip := net.ParseIP("192.0.2.2")
+		port := uint16(26656)
+		expectedPath := fmt.Sprintf("/p2p/filter/addr/%s",
+			net.JoinHostPort(ip.String(), strconv.Itoa(int(port))))
+
+		appClient := abcimocks.NewClient(t)
+		appClient.EXPECT().
+			Query(mock.Anything, mock.MatchedBy(func(req *abci.RequestQuery) bool {
+				return req.Path == expectedPath
+			})).
+			Return(&abci.ResponseQuery{Code: 1, Log: "banned"}, nil)
+
+		opts, err := getRouterConfig(cfg, appClient)
+		require.NoError(t, err)
+		require.NotNil(t, opts.FilterPeerByIP)
+
+		require.Error(t, opts.FilterPeerByIP(context.Background(), ip, port),
+			"peer with non-OK ABCI response should be rejected")
+	})
+
+	t.Run("closure propagates ABCI query error", func(t *testing.T) {
+		cfg := config.TestConfig()
+		cfg.FilterPeers = true
+
+		ip := net.ParseIP("192.0.2.3")
+		port := uint16(26656)
+
+		appClient := abcimocks.NewClient(t)
+		appClient.EXPECT().
+			Query(mock.Anything, mock.Anything).
+			Return(nil, errors.New("abci transport error"))
+
+		opts, err := getRouterConfig(cfg, appClient)
+		require.NoError(t, err)
+		require.NotNil(t, opts.FilterPeerByIP)
+
+		require.Error(t, opts.FilterPeerByIP(context.Background(), ip, port),
+			"ABCI query error should propagate as rejection")
+	})
+}
+
 func TestNodeSetAppVersion(t *testing.T) {
 	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
 	require.NoError(t, err)
@@ -180,9 +325,9 @@ func TestNodeSetPrivValTCP(t *testing.T) {
 	defer os.RemoveAll(cfg.RootDir)
 	cfg.PrivValidator.ListenAddr = addr
 
-	dialer := privval.DialTCPFn(addr, 100*time.Millisecond, ed25519.GenPrivKey())
+	dialer := privval.DialTCPFn(addr, 2*time.Second, ed25519.GenPrivKey())
 	dialerEndpoint := privval.NewSignerDialerEndpoint(logger, dialer)
-	privval.SignerDialerEndpointTimeoutReadWrite(100 * time.Millisecond)(dialerEndpoint)
+	privval.SignerDialerEndpointTimeoutReadWrite(2 * time.Second)(dialerEndpoint)
 
 	// We need to get the quorum hash used in config to set up the node
 	pv, err := privval.LoadOrGenFilePV(cfg.PrivValidator.KeyFile(), cfg.PrivValidator.StateFile())
@@ -196,11 +341,27 @@ func TestNodeSetPrivValTCP(t *testing.T) {
 		types.NewMockPVForQuorum(quorumHash),
 	)
 
+	// Use a buffered channel so the goroutine never blocks; assert on the test goroutine.
+	startErrCh := make(chan error, 1)
 	go func() {
-		err := signerServer.Start(ctx)
-		require.NoError(t, err)
+		startErrCh <- signerServer.Start(ctx)
 	}()
 	defer signerServer.Stop()
+
+	// Poll until the server is running, surfacing a Start() failure immediately
+	// with its actual error rather than a generic timeout message.
+	timeout := time.After(5 * time.Second)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for !signerServer.IsRunning() {
+		select {
+		case err := <-startErrCh:
+			require.NoError(t, err, "signer server Start returned unexpected error")
+		case <-timeout:
+			t.Fatal("signer server did not start in time")
+		case <-ticker.C:
+		}
+	}
 
 	genDoc, err := defaultGenesisDocProviderFunc(cfg)()
 	require.NoError(t, err)

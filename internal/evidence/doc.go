@@ -5,8 +5,8 @@ or https://github.com/tendermint/tendermint/blob/master/spec/consensus/light-cli
 
 # Gossiping
 
-The core functionality begins with the evidence reactor (see reactor.
-go) which operates both the sending and receiving of evidence.
+The core functionality begins with the evidence reactor (see reactor.go) which operates both the
+sending and receiving of evidence.
 
 The `Receive` function takes a list of evidence and does the following:
 
@@ -16,8 +16,19 @@ The `Receive` function takes a list of evidence and does the following:
 
 3. Stores the evidence to a db and a concurrent list
 
-The gossiping of evidence is initiated when a peer is added which starts a go routine to broadcast currently
-uncommitted evidence at intervals of 60 seconds (set by the by broadcastEvidenceIntervalS).
+Evidence propagation uses two complementary paths:
+
+  - Per-peer sync loop: when a peer connects (PeerStatusUp), a dedicated goroutine sends the peer the
+    pending evidence that fits within ConsensusParams.Evidence.MaxBytes — the same budget a proposer
+    applies via PendingEvidence — so gossip is symmetric with proposal selection. The loop repeats
+    every evidenceSyncInterval (default 1 s) until the peer disconnects. This ensures evidence that
+    pre-dates the connection is eventually delivered even if the first attempt is dropped because the
+    p2p channel route was not yet ready when PeerStatusUp fired. The receiver deduplicates silently
+    via isPending / isCommitted guards — no ACK is required.
+
+  - Broadcast on new evidence: when a node adds new evidence received from another peer, it
+    re-broadcasts it to all currently connected peers via broadcastEvidence.
+
 It uses a concurrent list to store the evidence and before sending verifies that each evidence is still valid in the
 sense that it has not exceeded the max evidence age and height (see types/params.go#EvidenceParams).
 

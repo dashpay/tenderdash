@@ -1,0 +1,34 @@
+---
+name: Vulnerability Scan
+# Runs govulncheck to detect known vulnerabilities in Go dependencies.
+# The scan is GATING: the job fails if any vulnerability is found.
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - v[0-9]+.[0-9]+-dev
+
+permissions:
+  contents: read
+
+jobs:
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/setup-go@v6.3.0
+        with:
+          go-version: "1.26.4"
+
+      - uses: actions/checkout@v7
+
+      - name: Install BLS library
+        uses: ./.github/actions/bls
+
+      - name: Install libpcap
+        run: sudo apt-get update && sudo apt-get install --yes libpcap-dev
+
+      - name: Run govulncheck
+        run: make vulncheck

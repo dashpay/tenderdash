@@ -78,6 +78,17 @@ var ErrNoDashCoreClient = errors.New("no dash core client. please reset light cl
 // continue running the light client.
 var ErrNoWitnesses = errors.New("no witnesses connected. please reset light client")
 
+// ErrConflictingWitnessHeader is returned when a witness reports a header that
+// differs from the primary's. The primary's header is not trusted while the
+// conflict is unresolved.
+//
+// By design this favors safety over availability: a single conflicting
+// witness fails verification, and there is intentionally no automatic
+// primary swap or recovery. Witness selection is therefore availability-
+// critical — a misbehaving witness can stall verification until an operator
+// reconfigures the providers.
+var ErrConflictingWitnessHeader = errors.New("witness reported a conflicting header")
+
 // ----------------------------- INTERNAL ERRORS ---------------------------------
 
 // ErrConflictingHeaders is thrown when two conflicting headers are discovered.

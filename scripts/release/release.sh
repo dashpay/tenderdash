@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -eo pipefail
 
 function success {
     [[ -t 1 ]] && echo -e "\e[32mSUCCESS:\e[0m" "$@" || echo "SUCCESS:" "$@"
@@ -12,8 +12,13 @@ function debug {
 
 function error {
     debug Error: "$@"
-    cleanup
     [[ -t 1 ]] && echo -e '\e[91mERROR:\e[0m' "$@" || echo "ERROR:" "$@"
+    # In --finalize and --dry-run the working tree is never modified by this
+    # script, so cleanup() must not run — it would clobber the caller's
+    # checkout (branch switch, branch deletion, make clean).
+    if [[ -z "${FINALIZE}" && -z "${DRY_RUN}" ]]; then
+        cleanup
+    fi
     exit 1
 }
 function displayHelp {
@@ -39,6 +44,26 @@ where flags can be one of:
     --cleanup - clean up before releasing; it can remove your local changes
     -C=<path> - path to local Tenderdash repository
     -s, --sign - generate signed binaries
+    --no-wait, --stop-after-pr
+        Run through opening the release PR, print 'RELEASE_PR=<url>' on a
+        machine-parseable line, then exit 0. Skips the blocking merge-wait
+        and the draft-release step. Implies --non-interactive.
+    --finalize, --create-release
+        Skip prep/changelog/version/branch/PR. Instead verify the
+        release_<ver> PR is MERGED (error if not), then create the DRAFT
+        GitHub release. Idempotent: if the draft or tag already exists,
+        reports it without failing. Implies --non-interactive.
+        Emits 'RELEASE_DRAFT=<url>' on stdout.
+        Requires a Tenderdash git checkout (any branch), or
+        GH_REPO=dashpay/tenderdash so gh can resolve the repository.
+    --non-interactive, --yes
+        Assume "yes" to every confirmation prompt; never block on stdin.
+        Automatically implied by --no-wait and --finalize.
+    --dry-run
+        Validate, generate a changelog preview, and compute the version
+        bump; print what would happen without taking any remote, commit,
+        push, PR, tag, or release action. Restores the working tree on
+        exit. Implies --non-interactive. Safe to use as a pre-check.
     -h, --help - display this help message
 
 ## Examples
@@ -52,6 +77,18 @@ $0  --release=0.7.4
 
 git checkout v0.8-dev
 $0  --release=0.8.0-dev.3
+
+### Agent/CI two-call flow (non-blocking)
+
+# Step 1: prepare changelog, branch, and open PR — then exit immediately.
+git checkout v0.8-dev
+$0 --release=0.8.0-dev.3 --no-wait
+# Output includes: RELEASE_PR=https://github.com/...
+
+# Step 2: after a human (or CI check) merges the PR, finalize the release.
+# Must run from within the Tenderdash git checkout, or set GH_REPO=dashpay/tenderdash.
+$0 --release=0.8.0-dev.3 --finalize
+# Output includes: RELEASE_DRAFT=https://github.com/...
 
 EOF
 }
@@ -100,6 +137,22 @@ function parseArgs {
             SIGN=1
             shift 1
             ;;
+        --no-wait | --stop-after-pr)
+            NO_WAIT=yes
+            shift
+            ;;
+        --finalize | --create-release)
+            FINALIZE=yes
+            shift
+            ;;
+        --non-interactive | --yes)
+            NON_INTERACTIVE=yes
+            shift
+            ;;
+        --dry-run)
+            DRY_RUN=yes
+            shift
+            ;;
         *)
             error "Unrecoginzed command line argument '${arg}';  try '$0 --help'"
             ;;
@@ -134,6 +187,7 @@ function configureFinal() {
     debug "New version: ${NEW_PACKAGE_VERSION}"
     debug "Source branch: ${SOURCE_BRANCH}"
     debug "Target branch: ${TARGET_BRANCH}"
+    debug "Flags: NO_WAIT=${NO_WAIT:-no} FINALIZE=${FINALIZE:-no} NON_INTERACTIVE=${NON_INTERACTIVE:-no} SIGN=${SIGN:-no} DRY_RUN=${DRY_RUN:-no}"
 }
 
 function validate {
@@ -154,22 +208,101 @@ function validate {
 
     # ensure github authentication
     if ! gh auth status &>/dev/null; then
-        gh auth login
+        error "Not authenticated to GitHub; run 'gh auth login' first"
     fi
+
+    # Ensure local branch is in sync with origin before generating the changelog,
+    # so commits on origin are not silently missed.
+    git fetch origin "${SOURCE_BRANCH}"
+    if [[ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/${SOURCE_BRANCH}")" ]]; then
+        if [[ -n "${DRY_RUN}" ]]; then
+            error "Your ${SOURCE_BRANCH} is out of sync with origin; sync it before running --dry-run (dry-run must not mutate the checkout)"
+        fi
+        git merge --ff-only "origin/${SOURCE_BRANCH}" ||
+            error "Your ${SOURCE_BRANCH} is out of sync with origin; sync it before releasing"
+    fi
+}
+
+# validateFinalize performs lightweight validation needed for --finalize mode:
+# version is set, gh is authenticated, and the GitHub repo is resolvable.
+# No working-tree or branch checks (--finalize never modifies the checkout),
+# but gh still resolves the repo via the local git remote or GH_REPO env var.
+function validateFinalize {
+    debug Validating configuration for finalize
+    if [[ -z "${NEW_PACKAGE_VERSION}" ]]; then
+        error "You must provide new release version with --release=x.y.z; see '$0 --help' for more details"
+    fi
+
+    if ! gh auth status &>/dev/null; then
+        error "Not authenticated to GitHub; run 'gh auth login' first"
+    fi
+
+    # Confirm gh can resolve the target repo.  This requires either a git
+    # checkout whose origin remote points to dashpay/tenderdash, or GH_REPO
+    # set to dashpay/tenderdash.  A missing repo context produces opaque
+    # errors from subsequent gh calls — fail fast with an actionable message.
+    if ! gh repo view &>/dev/null; then
+        error "Cannot resolve GitHub repository. Run from within the Tenderdash git checkout (any branch), or set GH_REPO=dashpay/tenderdash."
+    fi
+}
+
+# preflight runs early checks before any mutating or remote step in the
+# prepare path.  In --dry-run the push probe is informational (non-fatal).
+function preflight() {
+    debug "Running preflight checks"
+
+    # Docker must be reachable — git-cliff runs inside a container.
+    if ! docker info &>/dev/null; then
+        error "Docker is not reachable — git-cliff requires Docker to generate the changelog. Start Docker and retry."
+    fi
+    debug "Preflight: Docker OK"
+
+    # GitHub CLI must be authenticated.
+    if ! gh auth status &>/dev/null; then
+        error "Not authenticated to GitHub; run 'gh auth login' first"
+    fi
+    debug "Preflight: gh auth OK"
+
+    # Push-credential probe: dry-run force-push to the release branch we will
+    # create.  Mirrors the real force-push at createReleasePR so an existing
+    # divergent remote branch (from a prior partial run) does not produce a
+    # false-negative that blocks legitimate retries.
+    # Raw output is sanitized before logging to avoid credential leakage when
+    # origin uses an embedded https://token@host URL.
+    local push_out sanitized_out
+    if ! push_out="$(git push --dry-run --force origin "HEAD:refs/heads/${RELEASE_BRANCH}" 2>&1)"; then
+        sanitized_out="$(printf '%s' "${push_out}" | sed -E 's#(https?://)[^/@]+@#\1***@#g')"
+        local msg="Push credential probe failed for origin/${RELEASE_BRANCH}. Check your SSH key or token (an elevated token may be required for protected branches). Output: ${sanitized_out}"
+        if [[ -n "${DRY_RUN}" ]]; then
+            debug "DRY-RUN (informational, non-fatal): ${msg}"
+        else
+            error "${msg}"
+        fi
+    else
+        debug "Preflight: push probe to origin/${RELEASE_BRANCH} OK"
+    fi
+}
+
+# preflightFinalize is the lightweight preflight for --finalize mode.
+# Finalize is API-only (no Docker, no git push); only gh auth is checked.
+function preflightFinalize() {
+    debug "Running preflight checks (finalize mode)"
+    if ! gh auth status &>/dev/null; then
+        error "Not authenticated to GitHub; run 'gh auth login' first"
+    fi
+    debug "Preflight: gh auth OK"
 }
 
 function generateChangelog {
     debug Generating CHANGELOG
 
     CLIFF_CONFIG="${REPO_DIR}/scripts/release/cliff.toml"
-    CLIFF_ARGS=
+    CLIFF_ARGS=()
     if [[ "${RELEASE_TYPE}" = "prerelease" ]]; then
-        CLIFF_ARGS="--ignore-tags='v[0-9]\.[0-9]+\.[0-9]+-[a-z]+\.[0-9]+'"
+        CLIFF_ARGS+=(--ignore-tags 'v[0-9]\.[0-9]+\.[0-9]+-[a-z]+\.[0-9]+')
     fi
 
-    echo 2>"${REPO_DIR}/CHANGELOG.md"
-
-    docker run --rm -ti \
+    docker run --rm \
         -v "${REPO_DIR}/.git":/app/.git:ro \
         -v "${CLIFF_CONFIG}":/cliff.toml:ro \
         -v "${REPO_DIR}/CHANGELOG.md":/CHANGELOG.md \
@@ -177,7 +310,7 @@ function generateChangelog {
         --config /cliff.toml \
         --output /CHANGELOG.md \
         --tag "v${NEW_PACKAGE_VERSION}" \
-        ${CLIFF_ARGS} \
+        "${CLIFF_ARGS[@]}" \
         --strip all \
         --verbose \
         'v1.0.0-dev.1..HEAD'
@@ -189,7 +322,6 @@ function updateVersionGo {
 
 function createReleasePR {
     debug "Creating release branch ${RELEASE_BRANCH}"
-    git pull -q
     git checkout -q -b "${RELEASE_BRANCH}"
 
     # commit changes
@@ -201,7 +333,8 @@ function createReleasePR {
     git push --force -u origin "${RELEASE_BRANCH}"
 
     debug "Creating milestone ${MILESTONE} if it doesn't exist yet"
-    gh api --silent --method POST 'repos/dashevo/tenderdash/milestones' --field "title=${MILESTONE}" || true
+    # {owner}/{repo} are substituted by gh from the current repo; HTTP 422 means it already exists.
+    gh api --silent --method POST 'repos/{owner}/{repo}/milestones' --field "title=${MILESTONE}" || true
 
     if [[ -n "$(getPrURL)" ]]; then
         debug "PR for branch ${TARGET_BRANCH} already exists, skipping creation"
@@ -246,9 +379,30 @@ function createRelease() {
         "v${NEW_PACKAGE_VERSION}"
 }
 
+# createReleaseIdempotent creates the draft GitHub release if it does not yet
+# exist. If a release (draft or published) already exists for the tag, it
+# reports the URL and returns successfully without re-creating anything.
+# Always emits the machine-parseable line: RELEASE_DRAFT=<url>
+function createReleaseIdempotent() {
+    if gh release view "v${NEW_PACKAGE_VERSION}" &>/dev/null; then
+        local existing_url
+        existing_url="$(getReleaseUrl)"
+        debug "Release v${NEW_PACKAGE_VERSION} already exists; skipping creation"
+        echo "RELEASE_DRAFT=${existing_url}"
+        return 0
+    fi
+
+    createRelease
+    echo "RELEASE_DRAFT=$(getReleaseUrl)"
+}
+
 function deleteRelease() {
     if [[ "$(gh release view --json isDraft --jq .isDraft "v${NEW_PACKAGE_VERSION}")" == "true" ]]; then
-        gh release delete "v${NEW_PACKAGE_VERSION}"
+        # Pass --yes in non-interactive mode so gh does not block on a
+        # confirmation prompt — which would hang an agent/CI invocation.
+        local gh_delete_args=()
+        [[ -n "${NON_INTERACTIVE}" ]] && gh_delete_args+=(--yes)
+        gh release delete "${gh_delete_args[@]}" "v${NEW_PACKAGE_VERSION}"
     fi
 
     git tag --delete "v${NEW_PACKAGE_VERSION}" || true
@@ -272,10 +426,15 @@ function buildAndUploadArtifacts() {
     bindir="$(mktemp -d)"
     local platforms=("linux/amd64" "linux/arm64")
 
+    # The build checks out the release tag (detached HEAD); restore the branch on
+    # any exit so the developer is never left stranded.
+    trap 'git checkout -q "${SOURCE_BRANCH}" 2>/dev/null || true' EXIT
+
     waitForRelease
-    # checkout and build binaries from release tag
-    # TODO: uncomment
-    # git fetch --tags && git checkout "v${NEW_PACKAGE_VERSION}"
+
+    # Build signed binaries from the released tag, not the working checkout.
+    git fetch --tags
+    git checkout "v${NEW_PACKAGE_VERSION}"
 
     buildBinaries "${bindir}" "${platforms[@]}"
 
@@ -374,18 +533,92 @@ function cleanup() {
     # We need to re-detect current branch again
     CURRENT_BRANCH="$(git branch --show-current)"
 
-    make clean
+    make clean || true
 }
+
+# ---------------------------------------------------------------------------
+# Main entry point
+# ---------------------------------------------------------------------------
 
 configureDefaults
 parseArgs "$@"
+
+# --no-wait, --finalize, and --dry-run imply non-interactive.
+# Set this BEFORE configureFinal so the debug output reflects the actual state.
+if [[ -n "${NO_WAIT}" || -n "${FINALIZE}" || -n "${DRY_RUN}" ]]; then
+    NON_INTERACTIVE=yes
+fi
+
+# Mode flags are mutually exclusive — each expresses a distinct intent and any
+# combination would silently override another's contract (e.g. --dry-run
+# --finalize would bypass the dry-run guarantee and create a real draft release).
+mode_count=0
+[[ -n "${NO_WAIT}" ]] && ((mode_count += 1))
+[[ -n "${FINALIZE}" ]] && ((mode_count += 1))
+[[ -n "${DRY_RUN}" ]] && ((mode_count += 1))
+if (( mode_count > 1 )); then
+    error "--no-wait, --finalize, and --dry-run are mutually exclusive; run only one mode at a time"
+fi
+
+# Normalize REPO_DIR to an absolute path (handles -C relative/path) and cd
+# into it so all subsequent git/gh/make commands operate against the intended
+# checkout regardless of the caller's working directory.  This is especially
+# important for CI/agent invocations via an absolute script path.
+REPO_DIR="$(realpath "${REPO_DIR}")"
+cd "${REPO_DIR}"
+
 configureFinal
+
+# ---------------------------------------------------------------------------
+# --finalize / --create-release: skip prep, verify PR merged, create release
+# ---------------------------------------------------------------------------
+if [[ -n "${FINALIZE}" ]]; then
+    preflightFinalize
+    validateFinalize
+
+    pr_state="$(getPrState)"
+    if [[ "${pr_state}" != "MERGED" ]]; then
+        error "Release PR for ${RELEASE_BRANCH} → ${TARGET_BRANCH} is not merged yet (state: ${pr_state:-unknown}). Merge it first, then re-run with --finalize."
+    fi
+
+    success "Release PR for ${NEW_PACKAGE_VERSION} is merged. Creating draft release."
+    createReleaseIdempotent
+
+    success "Release ${NEW_PACKAGE_VERSION} draft created (or already existed)."
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# --dry-run: preview validate+changelog without any remote/commit action
+# ---------------------------------------------------------------------------
+if [[ -n "${DRY_RUN}" ]]; then
+    # Restore CHANGELOG.md on any exit (normal or error) so the tree stays clean.
+    trap 'git checkout --quiet -- "${REPO_DIR}/CHANGELOG.md" 2>/dev/null || true' EXIT
+
+    preflight   # push probe is informational/non-fatal in DRY_RUN
+    validate
+    local_version="$(grep 'TMVersionDefault' "${REPO_DIR}/version/version.go" | \
+        sed 's/.*TMVersionDefault = "\([^"]*\)".*/\1/')"
+    generateChangelog
+    echo "DRY-RUN: TMVersionDefault: ${local_version} -> ${NEW_PACKAGE_VERSION}"
+    echo "DRY-RUN: RELEASE_PR=<would open PR: ${RELEASE_BRANCH} -> ${TARGET_BRANCH}>"
+    echo "DRY-RUN: RELEASE_DRAFT=<would create: v${NEW_PACKAGE_VERSION}>"
+    git checkout --quiet -- "${REPO_DIR}/CHANGELOG.md"
+    trap - EXIT
+    success "DRY-RUN complete — no remote or commit actions were performed."
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Standard prep flow (shared by default interactive mode and --no-wait)
+# ---------------------------------------------------------------------------
 
 if [[ -n "${CLEANUP}" ]]; then
     cleanup
     deleteRelease
 fi
 
+preflight
 validate
 generateChangelog
 updateVersionGo
@@ -395,6 +628,22 @@ PR_URL="$(getPrURL)"
 
 success "New release branch ${RELEASE_BRANCH} for ${NEW_PACKAGE_VERSION} prepared successfully."
 success "Release PR: ${PR_URL}"
+# Machine-parseable marker — agents/CI grep for this line.
+echo "RELEASE_PR=${PR_URL}"
+
+# ---------------------------------------------------------------------------
+# --no-wait / --stop-after-pr: exit after opening the PR
+# ---------------------------------------------------------------------------
+if [[ -n "${NO_WAIT}" ]]; then
+    cleanup
+    success "Stopping before merge wait (--no-wait)."
+    success "Merge the PR, then run: $0 --release=${NEW_PACKAGE_VERSION} --finalize"
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Interactive / default: block until merged, then create draft release
+# ---------------------------------------------------------------------------
 
 success "Please review it and merge."
 
@@ -409,12 +658,16 @@ waitForMerge
 success "Release branch ${RELEASE_BRANCH} for ${NEW_PACKAGE_VERSION} is merged. Preparing the release."
 createRelease
 
+DRAFT_URL="$(getReleaseUrl)"
+# Machine-parseable marker — agents/CI grep for this line.
+echo "RELEASE_DRAFT=${DRAFT_URL}"
+
 cleanup
 
 sleep 5 # wait for the release to be finalized
 
 success "Release ${NEW_PACKAGE_VERSION} created successfully."
-success "Accept it at: $(getReleaseUrl)"
+success "Accept it at: ${DRAFT_URL}"
 
 if [ -n "${SIGN}"  ];then
     buildAndUploadArtifacts

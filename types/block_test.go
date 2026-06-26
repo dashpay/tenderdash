@@ -1000,7 +1000,10 @@ func TestStateID_Copy(t *testing.T) {
 	state2 := state1.Copy()
 	assert.Equal(t, state1, state2)
 
-	state2.AppHash[5] = 0x12
+	// Flip the bits of a byte so the mutated value is guaranteed to differ
+	// from the original. Assigning a fixed constant would be a no-op whenever
+	// RandStateID happened to produce that same byte, making the test flaky.
+	state2.AppHash[5] = ^state2.AppHash[5]
 	assert.NotEqual(t, state1, state2)
 }
 
@@ -1350,7 +1353,8 @@ func TestCommit_ValidateBasic(t *testing.T) {
 				Height: 1,
 				Round:  1,
 				BlockID: BlockID{
-					Hash: make([]byte, crypto.HashSize),
+					Hash:    make([]byte, crypto.HashSize),
+					StateID: make([]byte, crypto.HashSize),
 					PartSetHeader: PartSetHeader{
 						Hash: make([]byte, crypto.HashSize),
 					},
@@ -1360,14 +1364,35 @@ func TestCommit_ValidateBasic(t *testing.T) {
 			true, "block threshold signature is wrong size",
 		},
 		{
+			// BlockID.ValidateBasic enforces PartSetHeader.Total <= MaxBlockPartsCount;
+			// an oversized value must be rejected on the commit path too.
+			"oversized PartSetHeader.Total in BlockID",
+			&Commit{
+				Height: 1,
+				Round:  1,
+				BlockID: BlockID{
+					Hash:    make([]byte, crypto.HashSize),
+					StateID: make([]byte, crypto.HashSize),
+					PartSetHeader: PartSetHeader{
+						Total: MaxBlockPartsCount + 1,
+						Hash:  make([]byte, crypto.HashSize),
+					},
+				},
+				ThresholdBlockSignature: make([]byte, bls12381.SignatureSize),
+			},
+			true, "wrong BlockID",
+		},
+		{
 			"valid commit",
 			&Commit{
 				Height: 1,
 				Round:  1,
 				BlockID: BlockID{
-					Hash: make([]byte, crypto.HashSize),
+					Hash:    make([]byte, crypto.HashSize),
+					StateID: make([]byte, crypto.HashSize),
 					PartSetHeader: PartSetHeader{
-						Hash: make([]byte, crypto.HashSize),
+						Total: MaxBlockPartsCount,
+						Hash:  make([]byte, crypto.HashSize),
 					},
 				},
 				ThresholdBlockSignature: make([]byte, bls12381.SignatureSize),

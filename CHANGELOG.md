@@ -1,8 +1,122 @@
+## [1.6.0] - 2026-06-26
+
+### Bug Fixes
+
+- Improve address validation rules (#1245)
+- Validate vote validator index against the active validator set (#1329)
+- Guard nil/out-of-range validator lookup in vote index validation (#1331)
+- Validate quorum threshold against canonical LLMQ type (#1314) (#1328)
+- Guard nil receiver in ValidatorSet.Size/TotalVotingPower (follow-up to #1331) (#1334)
+- Guard concurrent access to the tx index (#1341)
+- Fix concurrency bugs behind chronic CI flakes (#1340)
+- Input validation and bounds checks (#1342)
+- Correctness and robustness in client verification (#1353)
+- Validate chain ID and reject invalid ephemeral keys (#1344)
+- Add input validation and request bounds (#1343)
+- Propagate tx indexer database errors (#1357)
+- Remove dead websocket-disconnect eventBus cleanup (#1354)
+- Validate peer block and status responses (#1355)
+- Format light-provider height errors and document chunk-ID integrity (#1358)
+- Bound inbound connection tracking (#1356)
+- Restore ABCI IP-based peer filter dropped in #1248 (GO-004) (#1364)
+- Resend catch-up block parts to prevent lagging-peer wedge (#1365)
+- Prevent TempDir cleanup race in TestHandshakeReplayNone (#1367)
+- Prevent vote-extension count mismatch from halting consensus (SEC-001) (#1362)
+- Make evidence sync resilient to peer-routing race (#1366)
+
+### Documentation
+
+- Adjust CONTRIBUTING and similar documentation with AGENTS (#1252)
+- Replace dead ethereum/wiki Proof-of-Stake-FAQ link (#1338)
+
+### Features
+
+- Allowlist-only limits connection only to allowed nodes (#1248)
+- Better error handling for access denied errors (#1249)
+- Add --no-wait/--finalize/--non-interactive flags for agent-driven releases (#1360)
+
+### Miscellaneous Tasks
+
+- Add AI agent instructions and streamline style guide (#1250)
+- Update Go to 1.25.7 and bump dependencies (#1258)
+- Bump grpc, golangci-lint, atomicfile, build-push-action, bls-signatures (#1263)
+- Fix release.sh bugs and rewrite RELEASES.md (#1336)
+- Update changelog and version to 1.6.0-dev.1 (#1337)
+- Disable CodeRabbit automatic reviews (#1345)
+- Update changelog and version to 1.6.0-dev.2 (#1361)
+- Update changelog and version to 1.6.0-dev.3 (#1372)
+
+### Refactor
+
+- Replace creachadair/taskgroup with x/sync/errgroup and ban it (#1333)
+
+### Testing
+
+- Stabilize flaky tests (rate-limit, evidence, privval-tcp) (#1339)
+- Stabilize four flaky CI tests (#1352)
+
+### Build
+
+- Bump github.com/lib/pq from 1.10.9 to 1.11.1
+- Bump docker/login-action from 3.6.0 to 3.7.0
+- Bump github.com/lib/pq from 1.11.1 to 1.11.2 (#1253)
+- Bump github.com/bufbuild/buf from 1.65.0 to 1.66.0 (#1265)
+- Bump goreleaser/goreleaser-action from 6 to 7 (#1264)
+- Bump github.com/adlio/schema from 1.3.9 to 1.4.0 (#1266)
+- Bump actions/download-artifact from 7 to 8 (#1268)
+- Bump actions/upload-artifact from 6 to 7 (#1270)
+- Bump actions/setup-go from 6.2.0 to 6.3.0 (#1269)
+- Bump docker/metadata-action from 5 to 6 (#1275)
+- Bump github.com/golangci/golangci-lint/v2 (#1276)
+- Bump golang.org/x/sys from 0.41.0 to 0.42.0 (#1277)
+- Bump github.com/sasha-s/go-deadlock from 0.3.6 to 0.3.7 (#1280)
+- Bump docker/setup-buildx-action from 3.12.0 to 4.0.0 (#1273)
+- Bump docker/build-push-action from 6.19.2 to 7.0.0 (#1271)
+- Bump docker/login-action from 3.7.0 to 4.0.0 (#1272)
+- Bump golang.org/x/time from 0.14.0 to 0.15.0 (#1281)
+- Bump github.com/bufbuild/buf from 1.66.0 to 1.66.1 (#1278)
+- Bump google.golang.org/grpc from 1.79.1 to 1.79.2 (#1279)
+- Bump styfle/cancel-workflow-action from 0.13.0 to 0.13.1 (#1282)
+- Bump golang.org/x/term from 0.40.0 to 0.41.0 (#1285)
+- Bump golang.org/x/net from 0.51.0 to 0.52.0 (#1284)
+- Upgrade Go toolchain from 1.25.7 to 1.26.4 (#1287)
+- Bump google.golang.org/grpc from 1.79.2 to 1.81.1 (#1326)
+- Bump golang.org/x/net from 0.52.0 to 0.55.0 (#1323)
+- Bump docker/login-action from 4.0.0 to 4.2.0 (#1317)
+- Bump github.com/fxamacker/cbor/v2 from 2.9.0 to 2.9.2 (#1305)
+- Bump golangci/golangci-lint-action from 9.2.0 to 9.2.1 (#1319)
+- Bump golang.org/x/crypto from 0.51.0 to 0.53.0 (#1325)
+- Bump docker/build-push-action from 7.0.0 to 7.2.0 (#1318)
+- Bump github.com/rs/zerolog from 1.34.0 to 1.35.1 (#1306)
+- Bump docker/setup-buildx-action from 4.0.0 to 4.1.0 (#1320)
+- Bump github.com/golangci/golangci-lint/v2 (#1311)
+- Bump github.com/bufbuild/buf from 1.66.1 to 1.70.0 (#1321)
+- Bump github.com/quic-go/quic-go (#1332)
+- Bump pgregory.net/rapid from 1.2.0 to 1.3.0 (#1349)
+- Bump github.com/prometheus/common from 0.67.5 to 0.68.1 (#1348)
+- Bump github.com/oasisprotocol/oasis-core/go (#1346)
+- Bump github.com/btcsuite/btcd/btcec/v2 from 2.3.6 to 2.5.0 (#1351)
+- Bump github.com/adlio/schema from 1.4.0 to 1.5.0 (#1350)
+- Bump golang.org/x/net from 0.55.0 to 0.56.0 (#1347)
+- Remove Windows support (unsupported platform) (#1363)
+- Bump github.com/prometheus/common from 0.68.1 to 0.69.0 (#1370)
+- Bump actions/checkout from 6 to 7 (#1368)
+- Bump github.com/bufbuild/buf from 1.70.0 to 1.71.0 (#1369)
+- Bump github.com/opencontainers/runc (#1371)
+
+### Ci
+
+- Add govulncheck vulnerability scanning (#1335)
+
 ## [1.5.4] - 2026-01-28
 
 ### Bug Fixes
 
 - Ignore invalid peer db records (#1243)
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 1.5.4
 
 ### Build
 

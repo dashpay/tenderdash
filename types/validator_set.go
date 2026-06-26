@@ -162,29 +162,94 @@ func (vals *ValidatorSet) ValidateBasic() error {
 		return fmt.Errorf("voting power threshold %d is too large", vals.VotingPowerThreshold)
 	}
 
+	return vals.validateThreshold()
+}
+
+// validateThreshold sanity-checks the quorum voting threshold against the total
+// voting power.
+//
+// The threshold validated here is the live commit gate: QuorumVotingThresholdPower()
+// feeds vote_set.go, where crossing it finalizes a block via the recovered BLS
+// threshold signature. This method is a LOCAL validation gate (it does not affect
+// consensus hashes), so it only constrains what a node accepts at startup/replay;
+// it never forks a running chain.
+//
+// Decision logic:
+//  1. Reject impossible thresholds (non-positive, or above total power).
+//  2. If the operator explicitly set VotingPowerThreshold, trust it (the #1052
+//     dev/single-node escape hatch); bounds are already checked.
+//  3. Otherwise the threshold derives from the quorum type:
+//     - recognized type: the set may not exceed the canonical member maximum, and
+//     the threshold MUST match the canonical type definition.
+//     - unknown/custom type: enforce the strict size-based 2/3 production floor,
+//     since we have no canonical definition to trust.
+func (vals *ValidatorSet) validateThreshold() error {
 	threshold := vals.QuorumVotingThresholdPower()
 	totalPower := vals.TotalVotingPower()
+	strictFloor := vals.StrictVotingPowerFloor() // classic SBFT >2/3 bound, in power units
+
+	switch {
+	case totalPower <= 0 || threshold <= 0:
+		return fmt.Errorf("invalid quorum: total voting power %d and threshold %d must both be > 0",
+			totalPower, threshold)
+
+	case threshold > totalPower:
+		return fmt.Errorf("threshold %d exceeds total voting power %d", threshold, totalPower)
+
+	case vals.VotingPowerThreshold > 0:
+		// Explicit operator override (#1052), recorded on-chain. Bounds already
+		// checked above; the operator owns any reduced safety margin.
+		return nil
+
+	default:
+		typeMembers, typeThreshold, err := llmq.QuorumParams(vals.QuorumType)
+		if err != nil {
+			// Unknown/custom type: no canonical definition, enforce the strict production floor.
+			return vals.validateStrictFloor(threshold, totalPower, strictFloor)
+		}
+		// A quorum may be under-subscribed (fewer members than the type's max) — that
+		// only raises the threshold ratio, so it stays safe. Reject only sets LARGER
+		// than the canonical max, which would lower the live commit gate below 2/3.
+		if vals.Size() > typeMembers {
+			return fmt.Errorf("validator set has %d members, exceeding quorum type %q maximum of %d",
+				vals.Size(), vals.QuorumType.Name(), typeMembers)
+		}
+		// Recognized type: trust its canonical threshold definition; dev/test types
+		// (e.g. DEVNET_PLATFORM 8/12) may legitimately sit at or below 2/3.
+		//
+		// With the threshold derived from the type (param unset), threshold always
+		// equals want, so this guard is defense-in-depth: it protects future callers
+		// that set QuorumVotingThresholdPower() independently of the type definition.
+		if want := int64(typeThreshold) * DefaultDashVotingPower; threshold != want {
+			return fmt.Errorf("threshold %d does not match quorum type %q canonical threshold %d",
+				threshold, vals.QuorumType.Name(), want)
+		}
+		return nil
+	}
+}
+
+// validateStrictFloor enforces the size-based 2/3 production floor for quorum
+// types whose canonical definition is unknown.
+func (vals *ValidatorSet) validateStrictFloor(threshold, totalPower, strictFloor int64) error {
 	switch len(vals.Validators) {
 	case 1, 2:
-		// For validator sets containing 1 or 2 validators, the threshold MUST be equal to the total voting power.
+		// For 1 or 2 validators, the threshold MUST equal the total voting power.
 		if totalPower != threshold {
 			return fmt.Errorf("with 1 or 2 validators, quorum voting power %d must be equal to threshold %d", totalPower, threshold)
 		}
 	case 3:
-		// For validator set with 3 validators, the threshold MUST be equal or greater than 2/3 of the total voting power.
+		// For 3 validators, the threshold MUST be at least 2/3 of the total voting power.
 		if threshold < totalPower*2/3 {
-			return fmt.Errorf("%d-members quorum voting power %d is less than threshold %d",
-				len(vals.Validators), totalPower, vals.VotingPowerThreshold)
+			return fmt.Errorf("voting threshold %d is less than 2/3 of quorum voting power %d for %d-member quorum",
+				threshold, totalPower, len(vals.Validators))
 		}
 	default:
-		// For validator sets containing more than 3 validators, the threshold MUST be at least 2/3 + 1 of the total voting power.
-		if threshold < (totalPower*2/3)+1 {
+		// For more than 3 validators, the threshold MUST be at least 2/3 + 1 of the total voting power.
+		if threshold < strictFloor {
 			return fmt.Errorf("voting threshold %d of quorum with power %d MUST be at least 2/3*%d+1 = %d",
-				threshold, totalPower, totalPower, (totalPower*2/3)+1)
-
+				threshold, totalPower, totalPower, strictFloor)
 		}
 	}
-
 	return nil
 }
 
@@ -202,6 +267,9 @@ func (vals *ValidatorSet) Equals(other *ValidatorSet) bool {
 		return false
 	}
 	if vals.QuorumType != other.QuorumType {
+		return false
+	}
+	if vals.VotingPowerThreshold != other.VotingPowerThreshold {
 		return false
 	}
 	if len(vals.Validators) != len(other.Validators) {
@@ -323,12 +391,13 @@ func (vals *ValidatorSet) Copy() *ValidatorSet {
 		return nil
 	}
 	valset := &ValidatorSet{
-		Validators:         validatorListCopy(vals.Validators),
-		ThresholdPublicKey: vals.ThresholdPublicKey,
-		QuorumHash:         vals.QuorumHash,
-		QuorumType:         vals.QuorumType,
-		HasPublicKeys:      vals.HasPublicKeys,
-		proposerIndex:      vals.proposerIndex,
+		Validators:           validatorListCopy(vals.Validators),
+		ThresholdPublicKey:   vals.ThresholdPublicKey,
+		QuorumHash:           vals.QuorumHash,
+		QuorumType:           vals.QuorumType,
+		HasPublicKeys:        vals.HasPublicKeys,
+		VotingPowerThreshold: vals.VotingPowerThreshold,
+		proposerIndex:        vals.proposerIndex,
 	}
 
 	return valset
@@ -337,6 +406,9 @@ func (vals *ValidatorSet) Copy() *ValidatorSet {
 // HasProTxHash returns true if proTxHash given is in the validator set, false -
 // otherwise.
 func (vals *ValidatorSet) HasProTxHash(proTxHash crypto.ProTxHash) bool {
+	if vals == nil {
+		return false
+	}
 	if len(proTxHash) == 0 {
 		return false
 	}
@@ -351,6 +423,9 @@ func (vals *ValidatorSet) HasProTxHash(proTxHash crypto.ProTxHash) bool {
 // GetByProTxHash returns an index of the validator with protxhash and validator
 // itself (copy) if found. Otherwise, -1 and nil are returned.
 func (vals *ValidatorSet) GetByProTxHash(proTxHash []byte) (index int32, val *Validator) {
+	if vals == nil {
+		return -1, nil
+	}
 	for idx, val := range vals.Validators {
 		if bytes.Equal(val.ProTxHash, proTxHash) {
 			index, err := tmmath.SafeConvertInt32(int64(idx))
@@ -365,10 +440,10 @@ func (vals *ValidatorSet) GetByProTxHash(proTxHash []byte) (index int32, val *Va
 
 // GetByIndex returns the validator's address and validator itself (copy) by
 // index.
-// It returns nil values if index is less than 0 or greater or equal to
-// len(ValidatorSet.Validators).
+// It returns nil if the receiver is nil, or if index is less than 0 or greater
+// or equal to len(ValidatorSet.Validators).
 func (vals *ValidatorSet) GetByIndex(index int32) *Validator {
-	if index < 0 || int(index) >= len(vals.Validators) {
+	if vals == nil || index < 0 || int(index) >= len(vals.Validators) {
 		return nil
 	}
 	return vals.Validators[index].Copy()
@@ -376,6 +451,9 @@ func (vals *ValidatorSet) GetByIndex(index int32) *Validator {
 
 // GetProTxHashes returns the all validator proTxHashes
 func (vals *ValidatorSet) GetProTxHashes() []crypto.ProTxHash {
+	if vals == nil {
+		return nil
+	}
 	proTxHashes := make([]crypto.ProTxHash, len(vals.Validators))
 	for i, val := range vals.Validators {
 		proTxHashes[i] = val.ProTxHash
@@ -385,6 +463,9 @@ func (vals *ValidatorSet) GetProTxHashes() []crypto.ProTxHash {
 
 // GetProTxHashesAsByteArrays returns the all validator proTxHashes as byte arrays for convenience
 func (vals *ValidatorSet) GetProTxHashesAsByteArrays() [][]byte {
+	if vals == nil {
+		return nil
+	}
 	proTxHashes := make([][]byte, len(vals.Validators))
 	for i, val := range vals.Validators {
 		proTxHashes[i] = val.ProTxHash
@@ -394,6 +475,9 @@ func (vals *ValidatorSet) GetProTxHashesAsByteArrays() [][]byte {
 
 // GetPublicKeys returns the all validator publicKeys
 func (vals *ValidatorSet) GetPublicKeys() []crypto.PubKey {
+	if vals == nil {
+		return nil
+	}
 	publicKeys := make([]crypto.PubKey, len(vals.Validators))
 	for i, val := range vals.Validators {
 		publicKeys[i] = val.PubKey
@@ -403,6 +487,9 @@ func (vals *ValidatorSet) GetPublicKeys() []crypto.PubKey {
 
 // GetProTxHashesOrdered returns the all validator proTxHashes in order
 func (vals *ValidatorSet) GetProTxHashesOrdered() []crypto.ProTxHash {
+	if vals == nil {
+		return nil
+	}
 	proTxHashes := make([]crypto.ProTxHash, len(vals.Validators))
 	for i, val := range vals.Validators {
 		proTxHashes[i] = val.ProTxHash
@@ -412,7 +499,11 @@ func (vals *ValidatorSet) GetProTxHashesOrdered() []crypto.ProTxHash {
 }
 
 // Size returns the length of the validator set.
+// Returns 0 if vals is nil.
 func (vals *ValidatorSet) Size() int {
+	if vals == nil {
+		return 0
+	}
 	return len(vals.Validators)
 }
 
@@ -429,6 +520,11 @@ func (vals *ValidatorSet) QuorumVotingPower() int64 {
 
 // QuorumVotingThresholdPower returns the threshold power of the voting power of the quorum if all the members existed.
 // Voting is considered successful when voting power is at or above this threshold.
+//
+// NOTE: this honors the configurable VotingPowerThreshold override, which can be
+// set below the strict 2/3+1 BFT floor (see BelowStrictThreshold). For the fixed
+// power required to recover a threshold signature, use
+// QuorumTypeThresholdVotingPower instead.
 func (vals *ValidatorSet) QuorumVotingThresholdPower() int64 {
 	if thresholdPower := vals.VotingPowerThreshold; thresholdPower > 0 {
 		if thresholdPower > math.MaxInt64 {
@@ -438,7 +534,32 @@ func (vals *ValidatorSet) QuorumVotingThresholdPower() int64 {
 		return int64(thresholdPower)
 	}
 
+	return vals.QuorumTypeThresholdVotingPower()
+}
+
+// QuorumTypeThresholdVotingPower returns the fixed, LLMQ-type-derived threshold
+// voting power required to recover a valid threshold (BLS/DKG) signature.
+//
+// Unlike QuorumVotingThresholdPower it deliberately ignores the configurable
+// VotingPowerThreshold override: the number of consistent signature shares
+// needed to recover is a property of the DKG that produced the quorum keys and
+// cannot be lowered by configuration. The value is quorum-type-dependent (see
+// dash/llmq/llmq.go): production Platform types are >= 60% (e.g.
+// LLMQType_100_67 at 67%, LLMQType_DEVNET_PLATFORM at 67%), while some
+// devnet/test types may be as low as 50% (e.g. LLMQType_DEVNET,
+// LLMQType_TEST_DIP0024, LLMQType_DEVNET_DIP0024).
+func (vals *ValidatorSet) QuorumTypeThresholdVotingPower() int64 {
 	return int64(vals.QuorumTypeThresholdCount()) * DefaultDashVotingPower
+}
+
+// StrictVotingPowerFloor returns the strict 2/3+1 BFT safety bound, in voting-power units.
+func (vals *ValidatorSet) StrictVotingPowerFloor() int64 {
+	return (vals.TotalVotingPower()*2)/3 + 1
+}
+
+// BelowStrictThreshold reports whether the quorum voting threshold is below the strict 2/3+1 BFT safety bound.
+func (vals *ValidatorSet) BelowStrictThreshold() bool {
+	return vals.QuorumVotingThresholdPower() < vals.StrictVotingPowerFloor()
 }
 
 // QuorumTypeMemberCount returns a number of validators for a quorum by a type
@@ -472,6 +593,9 @@ func (vals *ValidatorSet) Hash() tmbytes.HexBytes {
 
 // Iterate will run the given function over the set.
 func (vals *ValidatorSet) Iterate(fn func(index int, val *Validator) bool) {
+	if vals == nil {
+		return
+	}
 	for i, val := range vals.Validators {
 		stop := fn(i, val.Copy())
 		if stop {

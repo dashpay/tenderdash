@@ -58,24 +58,26 @@ message EvidenceParams {
 // NOTE: uses ABCI pubkey naming, not Amino names.
 message ValidatorParams {
   repeated string pub_key_types = 1;
-  // Threshold defines the minimum voting power of validators that must vote for a proposal
-  // to be considered signed and added to the block.
+  // Threshold defines the minimum voting power required to commit a block
+  // (the live BLS threshold-signature gate).
   //
-  // For Dash Platform, the voting power can be calculated by multiply of the number of validators
-  // and const `DefaultDashVotingPower == 100`.
+  // Each validator contributes DefaultDashVotingPower (100) units, so for an
+  // N-member quorum the total power is N*100.
   //
-  // The following validation rules MUST be enforced:
+  // Validation is type-aware:
+  //  - If set (> 0): the value is accepted as-is, provided 0 < threshold <= totalPower.
+  //    Use this as an operator override for single-node dev/testing environments
+  //    (see #1052). The value is recorded on-chain for accountability. No 2/3
+  //    floor is enforced in the override path — the operator owns any reduced
+  //    safety margin.
+  //  - If unset (0) AND the quorum type is a recognized LLMQ type: the threshold
+  //    MUST equal the canonical threshold for that type (e.g. 8 validators for
+  //    DEVNET_PLATFORM). This is the normal production path.
+  //  - If unset (0) AND the quorum type is unknown/custom: the strict size-based
+  //    floor applies — threshold must equal totalPower for 1–2 validators,
+  //    >= 2/3*totalPower for 3 validators, or > 2/3*totalPower for 4+.
   //
-  // 1. For validator sets containing 1 or 2 validators, the threshold MUST be equal to the total voting power
-  // of these validators.
-  // 2. For validator set with 3 validators, the threshold MUST be equal or greater than 2/3 of the total voting power.
-  // 3. For validator sets containing more than 3 validators, the threshold MUST be greater than 2/3 of the
-  // total voting power.
-  //
-  // If set to 0, default value is  determined based on LLMQ quorum type defined for the network,
-  // with a fall back to 2/3 + 1 of the total voting power.
-  //
-  // If absent, previous value is used.
+  // If absent, the previous value is used.
   optional uint64 voting_power_threshold = 2;  //[(gogoproto.nullable) = true]
 }
 

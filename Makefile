@@ -274,6 +274,11 @@ lint:
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.8 run
 .PHONY: lint
 
+vulncheck:
+	@echo "--> Running vulnerability scanner"
+	go run golang.org/x/vuln/cmd/govulncheck@v1.3.0 ./...
+.PHONY: vulncheck
+
 DESTINATION = ./index.html.md
 
 ###############################################################################
@@ -367,11 +372,7 @@ localnet-stop:
 
 # Build hooks for dredd, to skip or add information on some steps
 build-contract-tests-hooks:
-ifeq ($(OS),Windows_NT)
-	go build -mod=readonly $(BUILD_FLAGS) -o build/contract_tests.exe ./cmd/contract_tests
-else
 	go build -mod=readonly $(BUILD_FLAGS) -o build/contract_tests ./cmd/contract_tests
-endif
 .PHONY: build-contract-tests-hooks
 
 # Run a nodejs tool to test endpoints against a localnet
@@ -389,7 +390,7 @@ clean:
 build-reproducible:
 	docker rm latest-build || true
 	docker run --volume=$(CURDIR):/sources:ro \
-		--env TARGET_PLATFORMS='linux/amd64 linux/arm64 darwin/amd64 windows/amd64' \
+		--env TARGET_PLATFORMS='linux/amd64 linux/arm64 darwin/amd64' \
 		--env APP=tendermint \
 		--env COMMIT=$(shell git rev-parse --short=8 HEAD) \
 		--env VERSION=$(shell git describe --tags) \
