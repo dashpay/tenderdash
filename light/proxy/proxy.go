@@ -22,6 +22,14 @@ type Proxy struct {
 	Client   *lrpc.Client
 	Logger   log.Logger
 	Listener net.Listener
+
+	// AllowedOrigins restricts which web origins may open a WebSocket to the
+	// proxy. It mirrors rpc.Config.CORSAllowedOrigins semantics. An empty/nil
+	// slice enforces the zero-trust default: only same-host origins and
+	// Origin-less (non-browser) clients are accepted. Operators that must permit
+	// specific browser origins set this explicitly; a "*" entry allows any
+	// origin (discouraged).
+	AllowedOrigins []string
 }
 
 // NewProxy creates the struct used to run an HTTP server for serving light
@@ -39,10 +47,11 @@ func NewProxy(
 	}
 
 	return &Proxy{
-		Addr:   listenAddr,
-		Config: config,
-		Client: lrpc.NewClient(logger, rpcClient, lightClient, opts...),
-		Logger: logger,
+		Addr:           listenAddr,
+		Config:         config,
+		Client:         lrpc.NewClient(logger, rpcClient, lightClient, opts...),
+		Logger:         logger,
+		AllowedOrigins: nil,
 	}, nil
 }
 
@@ -105,13 +114,13 @@ func (p *Proxy) listen(ctx context.Context) (net.Listener, *http.ServeMux, error
 		}),
 		rpcserver.ReadLimit(p.Config.MaxBodyBytes),
 	)
-	// Preserve the light proxy's historic permissive websocket origin policy:
-	// allow every origin. The proxy is configured via rpcserver.Config, which
-	// exposes no CORS allow-list knob, so the WebsocketManager default
-	// (same-host/Origin-less only) would silently reject browser clients that
-	// worked before. Operators that need origin restrictions are expected to
-	// enforce AuthN/AuthZ in front of the proxy.
-	wm.CheckOrigin = func(*http.Request) bool { return true }
+	// WebSocket origin policy is zero-trust by default: OriginChecker with no
+	// allow-list accepts only same-host origins and Origin-less (non-browser)
+	// clients, rejecting cross-origin browser requests. Operators that need to
+	// permit specific browser origins set Proxy.AllowedOrigins (mirrors
+	// rpc.Config.CORSAllowedOrigins); a "*" entry allows any origin but is
+	// discouraged. This replaces the previous blanket allow-all policy.
+	wm.CheckOrigin = rpcserver.OriginChecker(p.Logger, p.AllowedOrigins)
 
 	mux.HandleFunc("/websocket", wm.WebsocketHandler)
 

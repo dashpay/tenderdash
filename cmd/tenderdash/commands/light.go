@@ -180,6 +180,9 @@ for applications built w/ Cosmos SDK).
 			if err != nil {
 				return err
 			}
+			// Zero-trust WebSocket origin policy by default; operators opt in to
+			// specific browser origins via rpc.cors-allowed-origins.
+			p.AllowedOrigins = conf.RPC.CORSAllowedOrigins
 
 			ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer cancel()
