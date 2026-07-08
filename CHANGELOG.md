@@ -35,6 +35,28 @@
 - Better error handling for access denied errors (#1249)
 - Add --no-wait/--finalize/--non-interactive flags for agent-driven releases (#1360)
 
+### Behavior Changes
+
+- **Light proxy WebSocket origin policy is now zero-trust by default.** The
+  `light` RPC proxy previously accepted WebSocket connections from any web
+  origin. It now accepts only same-host origins and Origin-less (non-browser)
+  clients, matching the main RPC server behavior. To permit specific browser
+  origins, set `rpc.cors-allowed-origins` (same semantics as the main RPC
+  `cors-allowed-origins`); a `*` entry restores the old allow-all behavior but
+  is discouraged. (#1368)
+- **Light client no longer fails on a single dissenting witness.** A single
+  witness reporting a header that conflicts with the (corroborated) primary is
+  now treated as a faulty witness and removed, instead of failing verification
+  — preventing one bad witness from denying service to the light client.
+  Verification still fails (fork evidence) when two or more witnesses conflict,
+  or when a conflicting witness has no corroborating peer. (#1369)
+- **`voting_power_threshold` override below the 2/3+1 BFT floor now logs an
+  explicit `OVERRIDE ENABLED - NOT SAFE FOR PRODUCTION` error at startup.** The
+  on-chain `voting_power_threshold` validator param can lower the commit gate
+  below the strict BFT floor (a dev/single-node escape hatch, #1052). Operators
+  must never set this on production quorums: doing so reduces fault tolerance
+  below BFT assumptions and can enable safety violations or halting. (#1370)
+
 ### Miscellaneous Tasks
 
 - Add AI agent instructions and streamline style guide (#1250)
