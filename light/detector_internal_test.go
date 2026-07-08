@@ -91,8 +91,9 @@ func TestCompareNewHeaderWithWitness_Match(t *testing.T) {
 }
 
 // TestCompareFirstHeaderWithWitnesses covers the witness cross-check flow: a
-// conflicting witness fails verification while being kept, a bad witness is
-// removed, and full agreement succeeds.
+// single conflicting witness is removed when corroborated, multiple conflicting
+// witnesses fail as fork evidence, a bad witness is removed, and full agreement
+// succeeds.
 func TestCompareFirstHeaderWithWitnesses(t *testing.T) {
 	primary := testLightBlock(5, []byte("primary-validators-hash"))
 	matching := func() *types.LightBlock { return testLightBlock(5, []byte("primary-validators-hash")) }
@@ -117,16 +118,39 @@ func TestCompareFirstHeaderWithWitnesses(t *testing.T) {
 			wantWitnessCount: 2,
 		},
 		{
-			name: "one conflicting witness fails verification but is kept",
+			name: "one conflicting witness with a corroborating witness is removed, not fatal",
 			witnesses: func() []provider.Provider {
 				return []provider.Provider{
 					mockWitness(matching(), "w0"),
 					mockWitness(conflicting(), "w1"),
 				}
 			},
+			wantErr:          false,
+			wantWitnessCount: 1,
+		},
+		{
+			name: "two conflicting witnesses fail verification (fork evidence)",
+			witnesses: func() []provider.Provider {
+				return []provider.Provider{
+					mockWitness(matching(), "w0"),
+					mockWitness(conflicting(), "w1"),
+					mockWitness(conflicting(), "w2"),
+				}
+			},
 			wantErr:          true,
 			wantConflict:     true,
-			wantWitnessCount: 2,
+			wantWitnessCount: 3,
+		},
+		{
+			name: "single conflicting witness with no corroborating witness fails",
+			witnesses: func() []provider.Provider {
+				return []provider.Provider{
+					mockWitness(conflicting(), "w1"),
+				}
+			},
+			wantErr:          true,
+			wantConflict:     true,
+			wantWitnessCount: 1,
 		},
 		{
 			name: "an erroring witness is removed when others agree",

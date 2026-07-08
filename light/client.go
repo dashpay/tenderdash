@@ -833,8 +833,13 @@ func (c *Client) compareFirstHeaderWithWitnesses(ctx context.Context, h *types.S
 		go c.compareNewHeaderWithWitness(compareCtx, errc, h, witness, i)
 	}
 
+	// Separate counters for the two outcomes we care about:
+	//   - conflictingWitnesses: witnesses whose header disagrees with the primary's.
+	//   - corroborating: witnesses whose header matches the primary's (a healthy
+	//     primary is expected to be corroborated by at least one other party).
 	witnessesToRemove := make([]int, 0, len(c.witnesses))
 	conflictingWitnesses := make([]int, 0, len(c.witnesses))
+	corroborating := 0
 
 	// handle errors from the header comparisons as they come in
 	for i := 0; i < cap(errc); i++ {
@@ -842,13 +847,12 @@ func (c *Client) compareFirstHeaderWithWitnesses(ctx context.Context, h *types.S
 
 		switch e := err.(type) {
 		case nil:
+			corroborating++
 			continue
 		case errConflictingHeaders:
 			c.logger.Error(fmt.Sprintf("witness #%d has a different header. Please check primary is correct and"+
 				" remove witness. Otherwise, use the different primary", e.WitnessIndex), "witness",
 				c.witnesses[e.WitnessIndex])
-			// The primary and a witness disagree; keep the dissenting witness, as
-			// the primary may be the faulty party, and fail the comparison below.
 			conflictingWitnesses = append(conflictingWitnesses, e.WitnessIndex)
 		case errBadWitness:
 			// If witness sent us an invalid header, then remove it
@@ -881,10 +885,30 @@ func (c *Client) compareFirstHeaderWithWitnesses(ctx context.Context, h *types.S
 		return err
 	}
 
-	// A witness presenting a header that conflicts with the primary's means the
-	// primary's header cannot be trusted: fail the comparison.
-	if len(conflictingWitnesses) > 0 {
+	// A single conflicting witness must not be allowed to break verification: a
+	// lone dissenter is far more likely to be a faulty/compromised witness than a
+	// sign that the primary is malicious, and failing here would let one bad
+	// witness denial-of-service an otherwise-healthy light client. We therefore
+	// treat a single conflicting witness as faulty and remove it, exactly like
+	// errBadWitness. We still FAIL (preserving the safety-over-availability
+	// guarantee) only when the conflict is corroborated:
+	//   - two or more witnesses disagree with the primary (genuine fork / primary
+	//     likely faulty), OR
+	//   - at least one witness conflicts and NO witness corroborates the primary
+	//     (we cannot establish trust in either party, so we refuse to proceed).
+	if len(conflictingWitnesses) > 1 || (len(conflictingWitnesses) == 1 && corroborating == 0) {
 		return fmt.Errorf("%w: witnesses %v", ErrConflictingWitnessHeader, conflictingWitnesses)
+	}
+
+	// Exactly one conflicting witness with at least one corroborating witness:
+	// drop the dissenter and continue.
+	if len(conflictingWitnesses) == 1 {
+		c.logger.Warn("single witness conflicts with the primary but others corroborate it; "+
+			"removing the dissenting witness rather than failing verification",
+			"witness", c.witnesses[conflictingWitnesses[0]])
+		if err := c.removeWitnesses(conflictingWitnesses); err != nil {
+			return err
+		}
 	}
 
 	return nil
