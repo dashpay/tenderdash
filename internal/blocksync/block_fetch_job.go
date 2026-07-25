@@ -3,6 +3,7 @@ package blocksync
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
@@ -105,9 +106,15 @@ func (p *jobGenerator) nextJob(ctx context.Context) (*workerpool.Job, error) {
 	return workerpool.NewJob(blockFetchJobHandler(p.client, peer, height)), nil
 }
 
+// pushBack schedules a height to be fetched again. Heights already scheduled are
+// ignored: fetching one twice makes the second response arrive as a duplicate,
+// which costs a round trip and risks punishing the peer that served it.
 func (p *jobGenerator) pushBack(height int64) {
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
+	if slices.Contains(p.pushedBack, height) {
+		return
+	}
 	p.pushedBack = append(p.pushedBack, height)
 }
 

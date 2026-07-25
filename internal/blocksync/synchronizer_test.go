@@ -276,6 +276,7 @@ func (suite *SynchronizerTestSuite) TestRemovePeer() {
 		responses     []*BlockResponse
 		peerID        types.NodeID
 		wantPushBack  []int64
+		wantPending   []int64
 		wantPeers     []PeerData
 		wantMaxHeight int64
 	}{
@@ -284,6 +285,7 @@ func (suite *SynchronizerTestSuite) TestRemovePeer() {
 			responses:     responses,
 			peerID:        peerID1,
 			wantPushBack:  []int64{1, 4, 5},
+			wantPending:   []int64{2, 3, 6, 7},
 			wantPeers:     []PeerData{peers[1], peers[2]},
 			wantMaxHeight: maxHeight,
 		},
@@ -292,6 +294,7 @@ func (suite *SynchronizerTestSuite) TestRemovePeer() {
 			responses:     responses,
 			peerID:        peerID2,
 			wantPushBack:  []int64{2, 7},
+			wantPending:   []int64{1, 3, 4, 5, 6},
 			wantPeers:     []PeerData{peers[0], peers[2]},
 			wantMaxHeight: maxHeight,
 		},
@@ -300,6 +303,7 @@ func (suite *SynchronizerTestSuite) TestRemovePeer() {
 			responses:     responses,
 			peerID:        peerID3,
 			wantPushBack:  []int64{3, 6},
+			wantPending:   []int64{1, 2, 4, 5, 7},
 			wantPeers:     []PeerData{peers[0], peers[1]},
 			wantMaxHeight: 200,
 		},
@@ -319,11 +323,47 @@ func (suite *SynchronizerTestSuite) TestRemovePeer() {
 				return pool.jobGen.pushedBack[i] < pool.jobGen.pushedBack[j]
 			})
 			suite.Require().Equal(tc.wantPushBack, pool.jobGen.pushedBack)
+			// re-requested heights must not stay pending, otherwise the re-fetched
+			// block is rejected as a duplicate
+			pending := make([]int64, 0, len(pool.pendingToApply))
+			for height := range pool.pendingToApply {
+				pending = append(pending, height)
+			}
+			sort.Slice(pending, func(i, j int) bool { return pending[i] < pending[j] })
+			suite.Require().Equal(tc.wantPending, pending)
 			actualPeers := pool.peerStore.All()
 			suite.Require().Equal(tc.wantPeers, actualPeers)
 			suite.Require().Equal(tc.wantMaxHeight, pool.MaxPeerHeight())
 		})
 	}
+}
+
+// TestConsumeDuplicateBlock checks that a block response for a height that is
+// already pending is dropped without reporting the peer that served it. The peer
+// answered a request we sent, so blaming it for the duplicate evicts good peers.
+func (suite *SynchronizerTestSuite) TestConsumeDuplicateBlock() {
+	ctx := context.Background()
+
+	peerID1 := types.NodeID("peer 1")
+	peerID2 := types.NodeID("peer 2")
+	respH1, _ := BlockResponseFromProto(suite.responses[0], peerID1)
+	duplicateH1, _ := BlockResponseFromProto(suite.responses[0], peerID2)
+
+	resultCh := make(chan workerpool.Result, 1)
+	wp := workerpool.New(1, workerpool.WithResultCh(resultCh))
+	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+	// start at height 2 so that nothing is applied and the duplicate is all that
+	// is under test
+	pool := NewSynchronizer(2, suite.client, applier, WithWorkerPool(wp))
+	pool.pendingToApply[respH1.Block.Height] = *respH1
+
+	resultCh <- workerpool.Result{Value: duplicateH1}
+	suite.Require().NoError(pool.consumeJobResult(ctx))
+
+	// the response we already had is kept, and no peer error was sent. The client
+	// mock has no Send expectation, so a report would fail this test.
+	suite.Require().Equal(peerID1, pool.pendingToApply[respH1.Block.Height].PeerID)
+	suite.client.AssertNotCalled(suite.T(), "Send", mock.Anything, mock.Anything)
 }
 
 func (suite *SynchronizerTestSuite) TestUpdateMonitor() {

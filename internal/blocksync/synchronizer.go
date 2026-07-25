@@ -46,6 +46,11 @@ const (
 	minRecvRate = 7680
 )
 
+// errDuplicateBlock is returned when a block response arrives for a height that
+// is already pending. It means we requested the height more than once, so it
+// must not be reported back to the peer that answered.
+var errDuplicateBlock = errors.New("block response already exists")
+
 /*
 	Peers self report their heights when we join the block synchronizer.
 	Starting from our latest synchronizer.height, we request blocks
@@ -239,11 +244,18 @@ func (s *Synchronizer) consumeJobResult(ctx context.Context) error {
 	s.peerStore.Update(resp.PeerID, AddNumPending(-1), UpdateMonitor(resp.Block.Size()))
 	err = s.addBlock(*resp)
 	if err != nil {
-		s.logger.Error("cannot add a block to the pending list",
+		if !errors.Is(err, errDuplicateBlock) {
+			s.logger.Error("cannot add a block to the pending list",
+				"height", resp.Block.Height,
+				"error", err.Error())
+			_ = s.client.Send(ctx, p2p.PeerError{NodeID: resp.PeerID, Err: err})
+			return nil
+		}
+		// A duplicate is not the sending peer's fault, we asked more than one peer
+		// for this height. Drop the block, but carry on applying what we can.
+		s.logger.Debug("dropping duplicate block response",
 			"height", resp.Block.Height,
-			"error", err.Error())
-		_ = s.client.Send(ctx, p2p.PeerError{NodeID: resp.PeerID, Err: err})
-		return nil
+			"peer", resp.PeerID)
 	}
 	err = s.applyBlock(ctx)
 	if err != nil {
@@ -327,9 +339,15 @@ func (s *Synchronizer) RemovePeer(peerID types.NodeID) {
 }
 
 func (s *Synchronizer) removePeer(peerID types.NodeID) {
-	for _, resp := range s.pendingToApply {
+	// Blocks already received from this peer are dropped and re-requested, since
+	// the peer is being removed precisely because we stopped trusting it to serve
+	// us good data in good time. The pending entry has to be deleted along with
+	// the re-request: leaving it behind makes addBlock reject the re-fetched block
+	// as a duplicate, which in turn punishes the peer that served it correctly.
+	for height, resp := range s.pendingToApply {
 		if resp.PeerID == peerID {
-			s.jobGen.pushBack(resp.Block.Height)
+			delete(s.pendingToApply, height)
+			s.jobGen.pushBack(height)
 		}
 	}
 	s.peerStore.Delete(peerID)
@@ -415,7 +433,7 @@ func (s *Synchronizer) addBlock(resp BlockResponse) error {
 	block := resp.Block
 	_, ok := s.pendingToApply[block.Height]
 	if ok {
-		return fmt.Errorf("block response already exists (peer: %s, block height: %d)", resp.PeerID, block.Height)
+		return fmt.Errorf("%w (peer: %s, block height: %d)", errDuplicateBlock, resp.PeerID, block.Height)
 	}
 	s.pendingToApply[block.Height] = resp
 	return nil
