@@ -241,7 +241,7 @@ func (s *Synchronizer) consumeJobResult(ctx context.Context) error {
 		return nil
 	}
 	resp := res.Value.(*BlockResponse)
-	s.peerStore.Update(resp.PeerID, AddNumPending(-1), UpdateMonitor(resp.Block.Size()))
+	s.peerStore.Update(resp.PeerID, AddNumPending(-1), UpdateMonitor(resp.Size))
 	err = s.addBlock(*resp)
 	if err != nil {
 		if !errors.Is(err, errDuplicateBlock) {
@@ -386,19 +386,46 @@ func (s *Synchronizer) advance() {
 func (s *Synchronizer) updateMonitor() {
 	// get the current max peer height before locking to avoid deadlock
 	maxPeerHeight := s.peerStore.MaxHeight()
+	height, syncRate, ok := s.recordSyncRate()
+	if !ok {
+		return
+	}
+	keyvals := []interface{}{
+		"height", height,
+		"max_peer_height", maxPeerHeight,
+		"blocks/s", syncRate,
+	}
+	// blocks are applied one at a time, so the per-stage averages say whether the
+	// rate above is limited by serialization, signature verification, disk or the
+	// ABCI application
+	if timings, measured := s.applier.Timings(); measured {
+		keyvals = append(keyvals,
+			"partset_ms", timings.PartSet.Milliseconds(),
+			"verify_ms", timings.Verify.Milliseconds(),
+			"save_ms", timings.Save.Milliseconds(),
+			"abci_ms", timings.Exec.Milliseconds(),
+		)
+	}
+	s.logger.Info("block sync rate", keyvals...)
+}
+
+// recordSyncRate updates the smoothed block sync rate, once every
+// monitorInterval blocks. It reports false when the current height is not a
+// reporting point, in which case nothing was updated.
+func (s *Synchronizer) recordSyncRate() (height int64, rate float64, ok bool) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
 	if s.monitorInterval <= 0 {
-		return
+		return 0, 0, false
 	}
 	progress := s.height - s.startHeight
 	if progress <= 0 || progress%s.monitorInterval != 0 {
-		return
+		return 0, 0, false
 	}
 	elapsed := s.clock.Since(s.lastMonitorUpdate).Seconds()
 	if elapsed <= 0 {
-		return
+		return 0, 0, false
 	}
 	// lastSyncRate is updated every monitorInterval blocks using an adaptive filter
 	// to smooth the block sync rate. The value represents blocks per second.
@@ -408,13 +435,8 @@ func (s *Synchronizer) updateMonitor() {
 	} else {
 		s.lastSyncRate = 0.9*s.lastSyncRate + 0.1*newSyncRate
 	}
-	s.logger.Info(
-		"block sync rate",
-		"height", s.height,
-		"max_peer_height", maxPeerHeight,
-		"blocks/s", s.lastSyncRate,
-	)
 	s.lastMonitorUpdate = s.clock.Now()
+	return s.height, s.lastSyncRate, true
 }
 
 // addBlock validates that the block comes from the peer it was expected from
@@ -484,6 +506,10 @@ type BlockResponse struct {
 	PeerID types.NodeID
 	Block  *types.Block
 	Commit *types.Commit
+	// Size is the serialized size of Block in bytes, measured while decoding the
+	// response. Deriving it from Block again means re-serializing the whole
+	// block, which is too expensive to do on the block apply path.
+	Size int
 }
 
 func (r *BlockResponse) Validate() error {
@@ -521,5 +547,8 @@ func BlockResponseFromProto(resp *bcproto.BlockResponse, peerID types.NodeID) (*
 		PeerID: peerID,
 		Block:  block,
 		Commit: commit,
+		// measured here, on a worker goroutine, rather than on the single
+		// goroutine that applies blocks
+		Size: resp.Block.Size(),
 	}, nil
 }
