@@ -196,19 +196,22 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResult() {
 			},
 		},
 		{
+			// a lone failure re-requests the height but leaves the peer alone, so
+			// the client mock deliberately has no Send expectation here
 			result:       workerpool.Result{Err: mockErr},
 			wantPushBack: []int64{1},
-			mockFn: func(pool *Synchronizer) {
-				suite.client.
-					On("Send", mock.Anything, p2p.PeerError{NodeID: "peer 1", Err: mockErr}).
-					Once().
-					Return(nil)
-			},
+			mockFn:       func(_ *Synchronizer) {},
 		},
 		{
+			// the peer starts one failure short of the threshold, so this result
+			// crosses it: the peer is reported and its pending blocks re-requested
 			result:       workerpool.Result{Err: mockErr},
 			wantPushBack: []int64{1, 2},
 			mockFn: func(pool *Synchronizer) {
+				pool.AddPeer(newPeerData(peerID1, 1, 100))
+				for i := int32(1); i < maxConsecutiveFailures; i++ {
+					pool.peerStore.AddFailure(peerID1, maxConsecutiveFailures)
+				}
 				pool.pendingToApply[2] = *respH2
 				pool.pendingToApply[3] = *respH3
 				suite.client.
@@ -542,4 +545,99 @@ func makePeers(numPeers int, minHeight, maxHeight int64) map[types.NodeID]PeerDa
 		peers[peerID] = newPeerData(peerID, base, height)
 	}
 	return peers
+}
+
+// TestStallVerdictFor checks when a lack of progress ends block sync. Handing
+// over to consensus is effectively irreversible, so a stall must not end block
+// sync while peers still have blocks we need.
+func TestStallVerdictFor(t *testing.T) {
+	testCases := []struct {
+		name       string
+		behind     int64
+		stalledFor time.Duration
+		want       stallVerdict
+	}{
+		{
+			name:       "progressing while behind",
+			behind:     500,
+			stalledFor: syncTimeout / 2,
+			want:       keepSyncing,
+		},
+		{
+			name:       "progressing and level with peers",
+			behind:     0,
+			stalledFor: syncTimeout / 2,
+			want:       keepSyncing,
+		},
+		{
+			name:       "stalled with nothing left to fetch",
+			behind:     0,
+			stalledFor: syncTimeout + time.Second,
+			want:       stopNothingToFetch,
+		},
+		{
+			name:       "stalled while ahead of every peer",
+			behind:     -5,
+			stalledFor: syncTimeout + time.Second,
+			want:       stopNothingToFetch,
+		},
+		{
+			name:       "stalled but peers still have blocks",
+			behind:     500,
+			stalledFor: syncTimeout + time.Second,
+			want:       keepSyncing,
+		},
+		{
+			name:       "stalled just short of the wedge limit",
+			behind:     500,
+			stalledFor: maxSyncStall,
+			want:       keepSyncing,
+		},
+		{
+			name:       "stalled past the wedge limit",
+			behind:     500,
+			stalledFor: maxSyncStall + time.Second,
+			want:       stopStalledTooLong,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, stallVerdictFor(tc.behind, tc.stalledFor))
+		})
+	}
+}
+
+// TestConsumeJobResultKeepsPeerOnTransientFailure checks that a single failed
+// block request does not drop the peer. Dropping it would also fail its other
+// in-flight requests, each of which drops another peer in turn.
+func (suite *SynchronizerTestSuite) TestConsumeJobResultKeepsPeerOnTransientFailure() {
+	ctx := context.Background()
+
+	peerID := types.NodeID("peer 1")
+	resultCh := make(chan workerpool.Result, 1)
+	wp := workerpool.New(1, workerpool.WithResultCh(resultCh))
+	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+	pool := NewSynchronizer(1, suite.client, applier, WithWorkerPool(wp))
+	pool.AddPeer(newPeerData(peerID, 1, 100))
+
+	// stop one short of the threshold: the peer is kept, and the client mock has
+	// no Send expectation, so reporting it would fail this test
+	for i := int32(1); i < maxConsecutiveFailures; i++ {
+		resultCh <- workerpool.Result{
+			Err: &errBlockFetch{peerID: peerID, height: int64(i), err: errors.New("timeout")},
+		}
+		suite.Require().NoError(pool.consumeJobResult(ctx))
+		suite.Require().Len(pool.peerStore.All(), 1, "peer dropped after %d failures", i)
+	}
+
+	// the next failure crosses the threshold and does report the peer
+	suite.client.
+		On("Send", mock.Anything, mock.Anything).
+		Once().
+		Return(nil)
+	resultCh <- workerpool.Result{
+		Err: &errBlockFetch{peerID: peerID, height: 99, err: errors.New("timeout")},
+	}
+	suite.Require().NoError(pool.consumeJobResult(ctx))
+	suite.Require().Empty(pool.peerStore.All(), "peer must be dropped once it exceeds the threshold")
 }

@@ -119,3 +119,45 @@ func TestInMemPeerStoreFindPeer(t *testing.T) {
 	require.Len(t, timedoutPeers, 1)
 	require.Equal(t, peers[3].peerID, timedoutPeers[0].peerID)
 }
+
+// TestAddFailure checks that a peer is only reported once it has failed
+// maxFailures requests in a row, and that a success in between clears the run.
+func TestAddFailure(t *testing.T) {
+	const maxFailures int32 = 3
+	peerID := types.NodeID("peer1")
+	inmem := NewInMemPeerStore(newPeerData(peerID, 1, 100))
+
+	// requests below the threshold keep the peer
+	for i := int32(1); i < maxFailures; i++ {
+		require.False(t, inmem.AddFailure(peerID, maxFailures),
+			"peer must survive failure %d of %d", i, maxFailures)
+	}
+	require.True(t, inmem.AddFailure(peerID, maxFailures),
+		"peer must be reported on the last failure")
+
+	// a success clears the run, so the next failure starts over
+	inmem.Update(peerID, ResetFailures())
+	require.False(t, inmem.AddFailure(peerID, maxFailures),
+		"a success must clear the failure count")
+
+	// an unknown peer is never reported, so failures arriving after a peer was
+	// already removed do not report it a second time
+	require.False(t, inmem.AddFailure(types.NodeID("nope"), maxFailures))
+}
+
+// TestAddFailureClearsPending checks that a failed request stops being counted
+// as pending; otherwise the peer's pending count only grows and it stops being
+// selected once it reaches maxPendingRequestsPerPeer.
+func TestAddFailureClearsPending(t *testing.T) {
+	peerID := types.NodeID("peer1")
+	inmem := NewInMemPeerStore(newPeerData(peerID, 1, 100))
+
+	inmem.Update(peerID, AddNumPending(2))
+	inmem.AddFailure(peerID, 10)
+	inmem.AddFailure(peerID, 10)
+
+	peer, found := inmem.Get(peerID)
+	require.True(t, found)
+	require.EqualValues(t, 0, peer.numPending)
+	require.EqualValues(t, 2, peer.numFailures)
+}

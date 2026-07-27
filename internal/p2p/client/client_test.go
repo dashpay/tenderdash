@@ -120,16 +120,15 @@ func (suite *ChannelTestSuite) TestGetBlockTimeout() {
 		On("Send", mock.Anything, mock.MatchedBy(envelopeArg)).
 		Once().
 		Return(nil)
-	suite.p2pChannel.
-		On("SendError", mock.Anything, mock.Anything).
-		Once().
-		Return(nil)
 	p, err := suite.client.GetBlock(ctx, suite.height, suite.peerID)
 	// need to wait for the goroutine is started
 	time.Sleep(time.Millisecond)
 	suite.fakeClock.Advance(peerTimeout)
 	suite.Require().NoError(err)
 	_, err = p.Await()
+	// A timeout rejects the promise and leaves the peer alone; deciding whether
+	// the peer is at fault belongs to the caller. The channel mock has no
+	// SendError expectation, so reporting the peer here would fail this test.
 	tmrequire.Error(suite.T(), ErrPeerNotResponded.Error(), err)
 	err = suite.client.resolve(ctx, newEnvelope(reqID, suite.peerID, suite.response))
 	tmrequire.Error(suite.T(), "cannot resolve a result", err)

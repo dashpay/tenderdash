@@ -37,6 +37,12 @@ const (
 	maxPendingRequestsPerPeer           = 20
 	defaultSyncRateIntervalBlocks int64 = 100
 
+	// maxConsecutiveFailures is how many block requests in a row a peer may fail
+	// before we drop it. Requests time out under load, and a peer serves its
+	// requests one at a time, so a single failure says very little about the
+	// peer. Dropping one costs the rest of its in-flight requests too.
+	maxConsecutiveFailures int32 = 5
+
 	// Minimum recv rate to ensure we're receiving blocks from a peer fast
 	// enough. If a peer is not sending us data at at least that rate, we
 	// consider them to have timed out and we disconnect.
@@ -236,12 +242,28 @@ func (s *Synchronizer) consumeJobResult(ctx context.Context) error {
 			return nil
 		}
 		s.jobGen.pushBack(bfErr.height)
+		// One failed request is usually a timeout under load, not a bad peer.
+		// Dropping the peer also fails its other in-flight requests, each of
+		// which drops another peer in turn, so react only to a sustained run of
+		// failures.
+		if !s.peerStore.AddFailure(bfErr.peerID, maxConsecutiveFailures) {
+			s.logger.Debug("block request failed, keeping peer",
+				"peer", bfErr.peerID,
+				"height", bfErr.height,
+				"error", bfErr.err)
+			return nil
+		}
+		s.logger.Error("removing peer after too many consecutive failed block requests",
+			"peer", bfErr.peerID,
+			"height", bfErr.height,
+			"failures", maxConsecutiveFailures,
+			"error", bfErr.err)
 		s.RemovePeer(bfErr.peerID)
 		_ = s.client.Send(ctx, p2p.PeerError{NodeID: bfErr.peerID, Err: bfErr})
 		return nil
 	}
 	resp := res.Value.(*BlockResponse)
-	s.peerStore.Update(resp.PeerID, AddNumPending(-1), UpdateMonitor(resp.Size))
+	s.peerStore.Update(resp.PeerID, AddNumPending(-1), ResetFailures(), UpdateMonitor(resp.Size))
 	err = s.addBlock(*resp)
 	if err != nil {
 		if !errors.Is(err, errDuplicateBlock) {
@@ -286,29 +308,98 @@ func (s *Synchronizer) IsCaughtUp() bool {
 	return s.height >= maxHeight
 }
 
-func (s *Synchronizer) WaitForSync(ctx context.Context) {
+// WaitForSync blocks until block sync is finished, and reports whether the node
+// actually caught up.
+//
+// A stall on its own is not a reason to stop. Handing over to consensus is a
+// one-way door - only the state sync path ever switches back to block sync - and
+// consensus catch-up is far slower than block sync, so a node that gives up
+// while it is still thousands of blocks behind stays behind. As long as peers
+// report heights above ours there are blocks left to fetch and something to
+// retry, so keep going and say so loudly. Give up on the stall only once no peer
+// can help us, or once the stall has outlasted maxSyncStall, so that a wedged
+// synchronizer can still hand over rather than blocking forever.
+func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool) {
 	ticker := time.NewTicker(switchToConsensusIntervalSeconds * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return s.IsCaughtUp()
 		case <-ticker.C:
+			if s.IsCaughtUp() {
+				return true
+			}
 			var (
-				height, _   = s.GetStatus()
-				lastAdvance = s.LastAdvance()
-				isCaughtUp  = s.IsCaughtUp()
+				height, _     = s.GetStatus()
+				maxPeerHeight = s.MaxPeerHeight()
+				stalledFor    = time.Since(s.LastAdvance())
+				behind        = maxPeerHeight - height
 			)
-			if isCaughtUp || time.Since(lastAdvance) > syncTimeout {
-				return
+			switch stallVerdictFor(behind, stalledFor) {
+			case stopNothingToFetch:
+				return false
+			case stopStalledTooLong:
+				s.logger.Error(
+					"block sync stalled for too long, handing over to consensus while still behind",
+					"height", height,
+					"max_peer_height", maxPeerHeight,
+					"behind", behind,
+					"stalled_for", stalledFor,
+				)
+				return false
+			}
+			if stalledFor > syncTimeout {
+				s.logger.Error(
+					"block sync has stalled but peers report higher blocks, still trying",
+					"height", height,
+					"max_peer_height", maxPeerHeight,
+					"behind", behind,
+					"stalled_for", stalledFor,
+					"giving_up_in", maxSyncStall-stalledFor,
+				)
+				continue
 			}
 			s.logger.Info(
 				"not caught up yet",
 				"height", height,
-				"max_peer_height", s.MaxPeerHeight(),
-				"timeout_in", syncTimeout-time.Since(lastAdvance),
+				"max_peer_height", maxPeerHeight,
+				"timeout_in", syncTimeout-stalledFor,
 			)
 		}
+	}
+}
+
+// stallVerdict says what a lack of progress in block sync means.
+type stallVerdict int
+
+const (
+	// keepSyncing means the stall is not a reason to stop yet
+	keepSyncing stallVerdict = iota
+	// stopNothingToFetch means no peer has a block we are missing
+	stopNothingToFetch
+	// stopStalledTooLong means we are still behind but have to hand over anyway
+	stopStalledTooLong
+)
+
+// stallVerdictFor decides what to do when block sync has made no progress for
+// stalledFor, given how many blocks the best peer is ahead of us.
+//
+// Being behind with peers that can serve us is a reason to keep retrying, not to
+// stop: handing over to consensus is effectively irreversible, so stopping while
+// behind leaves the node grinding through consensus catch-up instead. Only a
+// stall with nothing left to fetch, or one long enough to look like a wedge,
+// ends block sync.
+func stallVerdictFor(behind int64, stalledFor time.Duration) stallVerdict {
+	switch {
+	case stalledFor <= syncTimeout:
+		return keepSyncing
+	case behind <= 0:
+		return stopNothingToFetch
+	case stalledFor > maxSyncStall:
+		return stopStalledTooLong
+	default:
+		return keepSyncing
 	}
 }
 
