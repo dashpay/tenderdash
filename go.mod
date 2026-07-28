@@ -35,7 +35,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.54.0
-	golang.org/x/net v0.56.0
+	golang.org/x/net v0.57.0
 	golang.org/x/sync v0.22.0
 	google.golang.org/grpc v1.82.1
 	pgregory.net/rapid v1.3.0
@@ -314,8 +314,8 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_model v0.6.2
-	github.com/prometheus/common v0.69.0
-	github.com/prometheus/procfs v0.19.2 // indirect
+	github.com/prometheus/common v0.70.1
+	github.com/prometheus/procfs v0.21.0 // indirect
 	github.com/quasilyte/go-ruleguard v0.4.5 // indirect
 	github.com/quasilyte/gogrep v0.5.0 // indirect
 	github.com/quasilyte/regex/syntax v0.0.0-20210819130434-b3f0c404a727 // indirect
