@@ -585,7 +585,14 @@ func (blockExec *BlockExecutor) ExtendVote(ctx context.Context, vote *types.Vote
 	if err != nil {
 		panic(fmt.Errorf("ExtendVote call failed: %w", err))
 	}
-	vote.VoteExtensions = types.NewVoteExtensionsFromABCIExtended(resp.VoteExtensions)
+	// INTENTIONAL(abci-panic-on-unknown-extension-type): ABCI app/tenderdash type-set mismatch
+	// is treated as a local bug, not a network fault — panic gives the strongest signal so the
+	// app/tenderdash mismatch is caught immediately rather than silently degrading consensus.
+	extensions, err := types.NewVoteExtensionsFromABCIExtended(resp.VoteExtensions)
+	if err != nil {
+		panic(fmt.Errorf("ExtendVote returned an invalid vote extension: %w", err))
+	}
+	vote.VoteExtensions = extensions
 }
 
 func (blockExec *BlockExecutor) VerifyVoteExtension(ctx context.Context, vote *types.Vote) error {

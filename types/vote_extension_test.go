@@ -49,7 +49,7 @@ func TestMakeVoteExtensionsSignItems(t *testing.T) {
 				Type:               tmproto.PrecommitType,
 				Height:             1001,
 				ValidatorProTxHash: tmbytes.MustHexDecode("9CC13F685BC3EA0FCA99B87F42ABCC934C6305AA47F62A32266A2B9D55306B7B"),
-				VoteExtensions: VoteExtensionsFromProto(&tmproto.VoteExtension{
+				VoteExtensions: MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
 					Type:      tmproto.VoteExtensionType_DEFAULT,
 					Extension: []byte("default")},
 					&tmproto.VoteExtension{
@@ -169,7 +169,8 @@ func TestVoteExtensionsRaw_SignDataRawVector_Withdrawals(t *testing.T) {
 					SignRequestId: bytes.Clone(tc.requestID),
 				},
 			}
-			voteExtension := VoteExtensionFromProto(ve)
+			voteExtension, err := VoteExtensionFromProto(ve)
+			require.NoError(t, err)
 			signItem, err := voteExtension.SignItem(chainID, 1, 0, llmqType, tc.quorumHash)
 			require.NoError(t, err)
 

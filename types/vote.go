@@ -95,6 +95,10 @@ func VoteFromProto(pv *tmproto.Vote) (*Vote, error) {
 	if err != nil {
 		return nil, err
 	}
+	extensions, err := VoteExtensionsFromProto(pv.VoteExtensions...)
+	if err != nil {
+		return nil, err
+	}
 	return &Vote{
 		Type:               pv.Type,
 		Height:             pv.Height,
@@ -103,7 +107,7 @@ func VoteFromProto(pv *tmproto.Vote) (*Vote, error) {
 		ValidatorProTxHash: pv.ValidatorProTxHash,
 		ValidatorIndex:     pv.ValidatorIndex,
 		BlockSignature:     pv.BlockSignature,
-		VoteExtensions:     VoteExtensionsFromProto(pv.VoteExtensions...),
+		VoteExtensions:     extensions,
 	}, nil
 }
 

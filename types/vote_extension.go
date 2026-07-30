@@ -21,25 +21,43 @@ import (
 
 var (
 	errUnableCopySigns = errors.New("unable to copy signatures: the sizes of extensions are not equal")
+
+	// ErrUnknownVoteExtensionType is returned for a vote-extension type outside the
+	// defined enum values. proto3 enums are open, so this indicates peer misbehavior
+	// on the network paths.
+	ErrUnknownVoteExtensionType = errors.New("unknown vote extension type")
 )
 
 // VoteExtensions is a container where the key is vote-extension type and value is a list of VoteExtension
 type VoteExtensions []VoteExtensionIf
 
-// NewVoteExtensionsFromABCIExtended returns vote-extensions container for given ExtendVoteExtension
-func NewVoteExtensionsFromABCIExtended(exts []*abci.ExtendVoteExtension) VoteExtensions {
+// NewVoteExtensionsFromABCIExtended returns vote-extensions container for given ExtendVoteExtension.
+//
+// The input is application-supplied. Returns an error if an extension type is not a
+// defined enum value.
+func NewVoteExtensionsFromABCIExtended(exts []*abci.ExtendVoteExtension) (VoteExtensions, error) {
 	voteExtensions := make(VoteExtensions, 0, len(exts))
 
 	for _, ext := range exts {
 		ve := ext.ToVoteExtension()
-		voteExtensions.Add(ve)
+		if err := voteExtensions.Add(ve); err != nil {
+			return nil, err
+		}
 	}
-	return voteExtensions
+	return voteExtensions, nil
 }
 
-// Add creates and adds protobuf VoteExtension into a container by vote-extension type
-func (e *VoteExtensions) Add(ext tmproto.VoteExtension) {
-	*e = append(*e, VoteExtensionFromProto(ext))
+// Add creates and adds protobuf VoteExtension into a container by vote-extension type.
+//
+// Returns an error if the extension type is not a defined enum value; the container is
+// left unmodified.
+func (e *VoteExtensions) Add(ext tmproto.VoteExtension) error {
+	added, err := VoteExtensionFromProto(ext)
+	if err != nil {
+		return err
+	}
+	*e = append(*e, added)
+	return nil
 }
 
 // MakeVoteExtensionSignItems  creates a list SignItem structs for a vote extensions
@@ -179,17 +197,27 @@ func (e VoteExtensions) Len() int {
 	return len(e)
 }
 
-// VoteExtensionsFromProto creates VoteExtensions container from VoteExtensions's protobuf
-func VoteExtensionsFromProto(pve ...*tmproto.VoteExtension) VoteExtensions {
+// VoteExtensionsFromProto creates VoteExtensions container from VoteExtensions's protobuf.
+//
+// Returns an error if an element is nil or its extension type is not a defined enum
+// value; returns (nil, nil) for an empty input.
+func VoteExtensionsFromProto(pve ...*tmproto.VoteExtension) (VoteExtensions, error) {
 	if len(pve) == 0 {
-		return nil
+		return nil, nil
 	}
 	voteExtensions := make(VoteExtensions, 0, len(pve))
-	for _, ext := range pve {
-		voteExtensions = append(voteExtensions, VoteExtensionFromProto(*ext))
+	for i, ext := range pve {
+		if ext == nil {
+			return nil, fmt.Errorf("nil vote extension at index %d", i)
+		}
+		converted, err := VoteExtensionFromProto(*ext)
+		if err != nil {
+			return nil, err
+		}
+		voteExtensions = append(voteExtensions, converted)
 	}
 
-	return voteExtensions
+	return voteExtensions, nil
 }
 
 // Copy creates a deep copy of VoteExtensions
@@ -298,18 +326,25 @@ type ThresholdVoteExtensionIf interface {
 	ThresholdRecover() ([]byte, error)
 }
 
-func VoteExtensionFromProto(ve tmproto.VoteExtension) VoteExtensionIf {
+// VoteExtensionFromProto creates a vote-extension from its protobuf representation.
+//
+// It returns an error for a type outside the defined enum values. proto3 enums are
+// open, so this is reachable from untrusted network input (a Commit's
+// ThresholdVoteExtensions or a precommit's VoteExtensions); it must neither panic,
+// which would terminate the consensus goroutine, nor substitute a default type,
+// which would silently change the sign-hash derived from the extension.
+func VoteExtensionFromProto(ve tmproto.VoteExtension) (VoteExtensionIf, error) {
 	switch ve.Type {
 	case tmproto.VoteExtensionType_DEFAULT:
-		return &GenericVoteExtension{VoteExtension: ve}
+		return &GenericVoteExtension{VoteExtension: ve}, nil
 	case tmproto.VoteExtensionType_THRESHOLD_RECOVER:
 		ext := newThresholdVoteExtension(ve)
-		return &ext
+		return &ext, nil
 	case tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW:
 		ext := newThresholdVoteExtension(ve)
-		return &ThresholdRawVoteExtension{ThresholdVoteExtension: ext}
+		return &ThresholdRawVoteExtension{ThresholdVoteExtension: ext}, nil
 	default:
-		panic(fmt.Errorf("unknown vote extension type: %s", ve.Type.String()))
+		return nil, fmt.Errorf("%w: %d", ErrUnknownVoteExtensionType, ve.Type)
 	}
 }
 

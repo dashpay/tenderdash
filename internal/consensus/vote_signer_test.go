@@ -67,6 +67,7 @@ func TestVoteSigner_signAddVote(t *testing.T) {
 	blockID := types.BlockID{
 		Hash: tmbytes.MustHexDecode("1D03D1D81E94A099042736D40BD9681B867321443FF58A4568E274DBD83BFFEB"),
 	}
+	extensions := types.MustVoteExtensionsFromProto(t, voteExtensions...)
 	mockFn := func(voteExtensions types.VoteExtensions) {
 		mockBlockExecutor.
 			On("ExtendVote", ctx, mock.MatchedBy(func(vote *types.Vote) bool {
@@ -103,7 +104,7 @@ func TestVoteSigner_signAddVote(t *testing.T) {
 		{
 			msgType:        tmproto.PrecommitType,
 			blockID:        blockID,
-			voteExtensions: types.VoteExtensionsFromProto(voteExtensions...),
+			voteExtensions: extensions,
 			mockFn:         mockFn,
 			wantBlockSign:  "9755FA9803D98C344CB16A43B782D2A93ED9A7E7E1C8437482F42781D5EF802EC82442C14C44429737A7355B1F9D87CB139EB2CF193A1CF7C812E38B99221ADF4DAA60CE16550ED6509A9C467A3D4492D77038505235796968465337A1E14B3E",
 		},

@@ -377,6 +377,10 @@ func TestConsMsgsVectors(t *testing.T) {
 	}
 	pbProposal := proposal.ToProto()
 
+	extensions := types.MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
+		Type:      tmproto.VoteExtensionType_DEFAULT,
+		Extension: []byte("extension"),
+	})
 	v := &types.Vote{
 		ValidatorProTxHash: []byte("add_more_exclamation"),
 		ValidatorIndex:     1,
@@ -384,10 +388,7 @@ func TestConsMsgsVectors(t *testing.T) {
 		Round:              0,
 		Type:               tmproto.PrecommitType,
 		BlockID:            bi,
-		VoteExtensions: types.VoteExtensionsFromProto(&tmproto.VoteExtension{
-			Type:      tmproto.VoteExtensionType_DEFAULT,
-			Extension: []byte("extension"),
-		}),
+		VoteExtensions:     extensions,
 	}
 
 	vpb := v.ToProto()
