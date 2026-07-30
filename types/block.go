@@ -787,14 +787,19 @@ func (commit *Commit) ToCommitInfo() types.CommitInfo {
 }
 
 // GetCanonicalVote returns the message that is being voted on in the form of a vote without signatures.
-func (commit *Commit) GetCanonicalVote() *Vote {
+// It returns an error if the commit carries a vote extension of an unknown type.
+func (commit *Commit) GetCanonicalVote() (*Vote, error) {
+	extensions, err := VoteExtensionsFromProto(commit.ThresholdVoteExtensions...)
+	if err != nil {
+		return nil, err
+	}
 	return &Vote{
 		Type:           tmproto.PrecommitType,
 		Height:         commit.Height,
 		Round:          commit.Round,
 		BlockID:        commit.BlockID,
-		VoteExtensions: VoteExtensionsFromProto(commit.ThresholdVoteExtensions...),
-	}
+		VoteExtensions: extensions,
+	}, nil
 }
 
 // VoteBlockRequestID returns the requestId Hash of the Vote corresponding to valIdx for

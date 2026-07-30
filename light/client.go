@@ -519,7 +519,11 @@ func (c *Client) verifyBlockSignatureWithDashCore(_ctx context.Context, newLight
 	quorumHash := newLightBlock.ValidatorSet.QuorumHash
 	quorumType := newLightBlock.ValidatorSet.QuorumType
 
-	protoVote := newLightBlock.Commit.GetCanonicalVote().ToProto()
+	canonVote, err := newLightBlock.Commit.GetCanonicalVote()
+	if err != nil {
+		return err
+	}
+	protoVote := canonVote.ToProto()
 	blockSignBytes, err := protoVote.SignBytes(c.chainID)
 	if err != nil {
 		return err

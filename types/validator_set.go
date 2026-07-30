@@ -897,7 +897,10 @@ func (vals *ValidatorSet) VerifyCommit(chainID string, blockID BlockID,
 			blockID, commit.BlockID)
 	}
 
-	canonVote := commit.GetCanonicalVote()
+	canonVote, err := commit.GetCanonicalVote()
+	if err != nil {
+		return err
+	}
 	quorumSigns, err := MakeQuorumSigns(chainID, vals.QuorumType, vals.QuorumHash, canonVote.ToProto())
 	if err != nil {
 		return err

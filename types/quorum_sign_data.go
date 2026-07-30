@@ -109,12 +109,17 @@ func MakeQuorumSigns(
 	quorumHash crypto.QuorumHash,
 	protoVote *types.Vote,
 ) (QuorumSignData, error) {
+	// Convert before MakeBlockSignItem: that helper panics rather than returning an
+	// error, so all fallible work belongs ahead of it.
+	extensions, err := VoteExtensionsFromProto(protoVote.VoteExtensions...)
+	if err != nil {
+		return QuorumSignData{}, err
+	}
 	quorumSign := QuorumSignData{
 		Block: MakeBlockSignItem(chainID, protoVote, quorumType, quorumHash),
 	}
-	var err error
 	quorumSign.VoteExtensionSignItems, err =
-		VoteExtensionsFromProto(protoVote.VoteExtensions...).
+		extensions.
 			Filter(func(ext VoteExtensionIf) bool {
 				return ext.IsThresholdRecoverable()
 			}).

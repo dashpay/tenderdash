@@ -281,7 +281,10 @@ func (pv *MockPV) SignVote(
 		return nil
 	}
 
-	extensions := VoteExtensionsFromProto(vote.VoteExtensions...)
+	extensions, err := VoteExtensionsFromProto(vote.VoteExtensions...)
+	if err != nil {
+		return err
+	}
 	signItems, err := extensions.SignItems(useChainID, quorumType, quorumHash, vote.Height, vote.Round)
 	if err != nil {
 		return err

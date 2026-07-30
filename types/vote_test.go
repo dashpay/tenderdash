@@ -39,7 +39,7 @@ func examplePrevote(t *testing.T) *Vote {
 func examplePrecommit(t testing.TB) *Vote {
 	t.Helper()
 	vote := exampleVote(t, byte(tmproto.PrecommitType))
-	vote.VoteExtensions = VoteExtensionsFromProto(&tmproto.VoteExtension{
+	vote.VoteExtensions = MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
 		Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
 		Extension: []byte("extension"),
 		Signature: make([]byte, SignatureSize),
@@ -183,7 +183,7 @@ func TestVoteSignBytesTestVectors(t *testing.T) {
 			"test_chain_id", &Vote{
 				Height:         1,
 				Round:          1,
-				VoteExtensions: VoteExtensionsFromProto(&tmproto.VoteExtension{Extension: []byte("extension")}),
+				VoteExtensions: MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{Extension: []byte("extension")}),
 			},
 			[]byte{
 				0x0, 0x0, 0x0, 0x0, //type
@@ -332,7 +332,7 @@ func TestVoteExtension(t *testing.T) {
 	}{
 		{
 			name: "valid THRESHOLD_RECOVER",
-			extensions: VoteExtensionsFromProto(&tmproto.VoteExtension{
+			extensions: MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
 				Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
 				Extension: []byte("extension")}),
 			includeSignature: true,
@@ -340,7 +340,7 @@ func TestVoteExtension(t *testing.T) {
 		},
 		{
 			name: "valid THRESHOLD_RECOVER_RAW plwdtx",
-			extensions: VoteExtensionsFromProto(&tmproto.VoteExtension{
+			extensions: MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
 				Type: tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
 				XSignRequestId: &tmproto.VoteExtension_SignRequestId{
 					SignRequestId: []byte("\x06plwdtx"),
@@ -351,7 +351,7 @@ func TestVoteExtension(t *testing.T) {
 		},
 		{
 			name: "valid THRESHOLD_RECOVER_RAW dpevote",
-			extensions: VoteExtensionsFromProto(&tmproto.VoteExtension{
+			extensions: MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
 				Type: tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
 				XSignRequestId: &tmproto.VoteExtension_SignRequestId{
 					SignRequestId: []byte("dpevote"),
@@ -362,7 +362,7 @@ func TestVoteExtension(t *testing.T) {
 		},
 		{
 			name: "no extension signature",
-			extensions: VoteExtensionsFromProto(&tmproto.VoteExtension{
+			extensions: MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
 				Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
 				Extension: []byte("extension")}),
 			includeSignature: false,
@@ -534,11 +534,11 @@ func TestValidVotes(t *testing.T) {
 		{
 			"good precommit with vote extension",
 			examplePrecommit(t), func(v *Vote) {
-				v.VoteExtensions[0] = VoteExtensionFromProto(tmproto.VoteExtension{
+				v.VoteExtensions[0] = MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
 					Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
 					Extension: []byte("extension"),
 					Signature: make([]byte, SignatureSize),
-				})
+				})[0]
 			},
 		},
 	}
@@ -602,13 +602,13 @@ func TestInvalidPrevotes(t *testing.T) {
 		{
 			"vote extension present",
 			func(v *Vote) {
-				v.VoteExtensions = VoteExtensionsFromProto(&tmproto.VoteExtension{Extension: []byte("extension")})
+				v.VoteExtensions = MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{Extension: []byte("extension")})
 			},
 		},
 		{
 			"vote extension signature present",
 			func(v *Vote) {
-				v.VoteExtensions = VoteExtensionsFromProto(&tmproto.VoteExtension{Signature: []byte("signature")})
+				v.VoteExtensions = MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{Signature: []byte("signature")})
 			},
 		},
 	}
@@ -633,7 +633,7 @@ func TestInvalidPrecommitExtensions(t *testing.T) {
 	}{
 		{
 			"vote extension present without signature", func(v *Vote) {
-				v.VoteExtensions = VoteExtensionsFromProto(&tmproto.VoteExtension{Extension: []byte("extension")})
+				v.VoteExtensions = MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{Extension: []byte("extension")})
 			},
 		},
 		// TODO(thane): Re-enable once https://github.com/tendermint/tendermint/issues/8272 is resolved
@@ -641,7 +641,7 @@ func TestInvalidPrecommitExtensions(t *testing.T) {
 		{
 			"oversized vote extension signature",
 			func(v *Vote) {
-				v.VoteExtensions = VoteExtensionsFromProto(&tmproto.VoteExtension{
+				v.VoteExtensions = MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
 					Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
 					Signature: make([]byte, SignatureSize+1)})
 			},
@@ -669,7 +669,9 @@ func TestVoteExtensionsSignBytes(t *testing.T) {
 		Signature: []byte{},
 		Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
 	}
-	signItem, err := VoteExtensionFromProto(ve).SignItem("some-chain", 1, 2, btcjson.LLMQType_TEST_PLATFORM, crypto.RandQuorumHash())
+	ext, err := VoteExtensionFromProto(ve)
+	require.NoError(t, err)
+	signItem, err := ext.SignItem("some-chain", 1, 2, btcjson.LLMQType_TEST_PLATFORM, crypto.RandQuorumHash())
 	assert.NoError(t, err)
 
 	actual := signItem.Msg
@@ -698,7 +700,9 @@ func TestVoteExtensionsSignBytesRaw(t *testing.T) {
 		},
 	}
 
-	signItem, err := VoteExtensionFromProto(ve).SignItem("some-chain", 1, 2, btcjson.LLMQType_TEST_PLATFORM, quorumHash)
+	ext, err := VoteExtensionFromProto(ve)
+	require.NoError(t, err)
+	signItem, err := ext.SignItem("some-chain", 1, 2, btcjson.LLMQType_TEST_PLATFORM, quorumHash)
 	assert.NoError(t, err)
 
 	actual := signItem.SignHash
