@@ -1,4 +1,4 @@
-## [1.6.0-dev.3] - 2026-06-24
+## [1.6.0] - 2026-06-26
 
 ### Bug Fixes
 
@@ -66,6 +66,7 @@
 - Update changelog and version to 1.6.0-dev.1 (#1337)
 - Disable CodeRabbit automatic reviews (#1345)
 - Update changelog and version to 1.6.0-dev.2 (#1361)
+- Update changelog and version to 1.6.0-dev.3 (#1372)
 
 ### Refactor
 
