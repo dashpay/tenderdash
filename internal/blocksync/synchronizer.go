@@ -251,11 +251,13 @@ func (s *Synchronizer) consumeJobResult(ctx context.Context) error {
 			_ = s.client.Send(ctx, p2p.PeerError{NodeID: resp.PeerID, Err: err})
 			return nil
 		}
-		// A duplicate is not the sending peer's fault, we asked more than one peer
-		// for this height. Drop the block, but carry on applying what we can.
-		s.logger.Debug("dropping duplicate block response",
+		// A duplicate is not the sending peer's fault, we asked more than one peer for
+		// this height. Info level: a healthy sync produces none, so this is the only
+		// signal an operator gets that heights are being re-requested.
+		s.logger.Info("dropping duplicate block response",
 			"height", resp.Block.Height,
-			"peer", resp.PeerID)
+			"peer", resp.PeerID,
+			"reason", err.Error())
 	}
 	failed, err := s.applyBlock(ctx)
 	if err != nil {

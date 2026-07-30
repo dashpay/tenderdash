@@ -219,6 +219,24 @@ func (suite *BlockFetchJobTestSuite) TestGeneratorNextJobWaitForPeerAndPushBackH
 	}, 10*time.Millisecond, 5*time.Millisecond)
 }
 
+// TestJobGeneratorPushBack pins the scope of the pushBack dedupe guard: a height
+// still waiting in the queue is not queued twice, while a height already handed to
+// a worker is queued again, because pushedBack stops tracking it once dispatched.
+func (suite *BlockFetchJobTestSuite) TestJobGeneratorPushBack() {
+	const height = int64(9)
+	jobGen := newJobGenerator(5, log.NewNopLogger(), suite.client, NewInMemPeerStore())
+
+	jobGen.pushBack(height)
+	jobGen.pushBack(height)
+	suite.Require().Equal([]int64{height}, jobGen.pushedBack)
+
+	// Dispatching the height empties the queue, so the guard no longer sees it.
+	suite.Require().Equal(height, jobGen.nextHeight())
+	suite.Require().Empty(jobGen.pushedBack)
+	jobGen.pushBack(height)
+	suite.Require().Equal([]int64{height}, jobGen.pushedBack)
+}
+
 func (suite *BlockFetchJobTestSuite) promiseReject(err error) *promise.Promise[*bcproto.BlockResponse] {
 	return promise.New(func(_ func(data *bcproto.BlockResponse), reject func(err error)) {
 		reject(err)

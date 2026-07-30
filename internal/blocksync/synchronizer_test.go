@@ -1,6 +1,7 @@
 package blocksync
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -15,12 +16,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/internal/p2p"
 	clientmocks "github.com/dashpay/tenderdash/internal/p2p/client/mocks"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/state/mocks"
 	statefactory "github.com/dashpay/tenderdash/internal/state/test/factory"
 	"github.com/dashpay/tenderdash/internal/test/factory"
+	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/libs/promise"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
 	"github.com/dashpay/tenderdash/libs/workerpool"
@@ -379,6 +382,37 @@ func (suite *SynchronizerTestSuite) TestConsumeDuplicateBlock() {
 	// mock has no Send expectation, so a report would fail this test.
 	suite.Require().Equal(peerID1, pool.pendingToApply[respH1.Block.Height].PeerID)
 	suite.client.AssertNotCalled(suite.T(), "Send", mock.Anything, mock.Anything)
+}
+
+// TestDuplicateBlockIsVisibleAtDefaultLogLevel checks that dropping a duplicate
+// response is reported at the default log level. A duplicate means we requested a
+// height twice, and that re-request cascade is what an operator has to be able to
+// see; the package exposes no metric to see it by.
+func (suite *SynchronizerTestSuite) TestDuplicateBlockIsVisibleAtDefaultLogLevel() {
+	ctx := context.Background()
+
+	var logs bytes.Buffer
+	logger, err := log.NewLogger(config.DefaultLogLevel, &logs)
+	suite.Require().NoError(err)
+
+	peerID1 := types.NodeID("peer 1")
+	peerID2 := types.NodeID("peer 2")
+	respH1, _ := BlockResponseFromProto(suite.responses[0], peerID1)
+	duplicateH1, _ := BlockResponseFromProto(suite.responses[0], peerID2)
+
+	resultCh := make(chan workerpool.Result, 1)
+	wp := workerpool.New(1, workerpool.WithResultCh(resultCh))
+	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+	// Start above the duplicated height so nothing is applied and the duplicate is
+	// all that is under test.
+	pool := NewSynchronizer(2, suite.client, applier, WithWorkerPool(wp), WithLogger(logger))
+	pool.pendingToApply[respH1.Block.Height] = *respH1
+
+	resultCh <- workerpool.Result{Value: duplicateH1}
+	suite.Require().NoError(pool.consumeJobResult(ctx))
+
+	suite.Require().Contains(logs.String(), "dropping duplicate block response")
+	suite.Require().Contains(logs.String(), string(peerID2))
 }
 
 // TestApplyFailurePunishesSupplyingPeer checks that an apply failure is charged to
