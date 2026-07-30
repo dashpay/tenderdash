@@ -106,16 +106,21 @@ func (p *jobGenerator) nextJob(ctx context.Context) (*workerpool.Job, error) {
 	return workerpool.NewJob(blockFetchJobHandler(p.client, peer, height)), nil
 }
 
-// pushBack schedules a height to be fetched again. Heights already scheduled are
-// ignored: fetching one twice makes the second response arrive as a duplicate,
-// which costs a round trip and risks punishing the peer that served it.
-func (p *jobGenerator) pushBack(height int64) {
-	p.mtx.Lock()
-	defer p.mtx.Unlock()
-	if slices.Contains(p.pushedBack, height) {
+// pushBack schedules heights to be fetched again, skipping those already queued so
+// a queued height is not fetched twice. Heights already handed to a worker are not
+// tracked here, so an in-flight height can still be queued and fetched again.
+func (p *jobGenerator) pushBack(heights ...int64) {
+	if len(heights) == 0 {
 		return
 	}
-	p.pushedBack = append(p.pushedBack, height)
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+	for _, height := range heights {
+		if slices.Contains(p.pushedBack, height) {
+			continue
+		}
+		p.pushedBack = append(p.pushedBack, height)
+	}
 }
 
 func (p *jobGenerator) getPeer(ctx context.Context, height int64) (PeerData, error) {
