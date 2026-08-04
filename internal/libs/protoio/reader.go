@@ -33,11 +33,18 @@ package protoio
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 
 	"github.com/cosmos/gogoproto/proto"
 )
+
+// ErrMsgExceedsMaxSize is returned by ReadMsg when the declared message length
+// exceeds the reader's maxSize. Callers that pass a maxSize to bound what an
+// unauthenticated peer can make them allocate can classify the rejection with
+// errors.Is instead of matching on the message text.
+var ErrMsgExceedsMaxSize = errors.New("message exceeds max size")
 
 // NewDelimitedReader reads varint-delimited Protobuf messages from a reader.
 // Unlike the gogoproto NewDelimitedReader, this does not buffer the reader,
@@ -78,7 +85,7 @@ func (r *varintReader) ReadMsg(msg proto.Message) (int, error) {
 		return n, fmt.Errorf("invalid out-of-range message length %v", l)
 	}
 	if length > r.maxSize {
-		return n, fmt.Errorf("message exceeds max size (%v > %v)", length, r.maxSize)
+		return n, fmt.Errorf("%w (%v > %v)", ErrMsgExceedsMaxSize, length, r.maxSize)
 	}
 
 	if len(r.buf) < length {

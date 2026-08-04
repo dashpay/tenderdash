@@ -326,7 +326,7 @@ func createRouter(
 
 	ep, err := p2p.NewEndpoint(nodeKey.ID.AddressString(cfg.P2P.ListenAddress))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("p2p.listen-address %q is not a usable endpoint: %w", cfg.P2P.ListenAddress, err)
 	}
 
 	opts, err := getRouterConfig(cfg, appClient)

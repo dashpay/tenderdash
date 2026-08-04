@@ -829,7 +829,9 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 		}
 		envelope, err := EnvelopeFromProto(protoEnvelope)
 		if err != nil {
-			r.logger.Error("message decoding failed, dropping message", "peer", peerID, "err", err)
+			// A policy rejection of a peer-supplied value, not an unexpected decode
+			// failure: any peer can trigger it on demand, so it must not be Error.
+			r.logger.Debug("envelope rejected, dropping message", "peer", peerID, "err", err)
 			continue
 		}
 		envelope.From = peerID

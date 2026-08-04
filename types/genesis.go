@@ -198,9 +198,8 @@ func (genDoc *GenesisDoc) ValidateAndComplete() error {
 		genDoc.InitialHeight = 1
 	}
 
-	//  TODO: user LLMQType.Validate()
-	if genDoc.QuorumType == 0 {
-		return fmt.Errorf("validator_quorum_type must be provided")
+	if err := genDoc.QuorumType.Validate(); err != nil {
+		return fmt.Errorf("validator_quorum_type: %w", err)
 	}
 
 	if genDoc.InitialProposalCoreChainLock != nil &&
@@ -242,10 +241,6 @@ func (genDoc *GenesisDoc) ValidateAndComplete() error {
 			crypto.QuorumHashSize,
 			len(genDoc.QuorumHash.Bytes()),
 			len(genDoc.Validators))
-	}
-
-	if genDoc.QuorumType == 0 {
-		return fmt.Errorf("the quorum type must not be 0 (%d Validator(s))", len(genDoc.Validators))
 	}
 
 	if genDoc.GenesisTime.IsZero() {

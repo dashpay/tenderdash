@@ -505,6 +505,9 @@ func TestVoteSetBitsMessageValidateBasic(t *testing.T) {
 	}{
 		{func(_msg *VoteSetBitsMessage) {}, ""},
 		{func(msg *VoteSetBitsMessage) { msg.Height = -1 }, "negative Height"},
+		// A negative Round matches the freshly-initialized sentinel rounds in
+		// PeerState, letting a peer overwrite our view of its bit arrays.
+		{func(msg *VoteSetBitsMessage) { msg.Round = -1 }, "negative Round"},
 		{func(msg *VoteSetBitsMessage) { msg.Type = 0x03 }, "invalid Type"},
 		{func(msg *VoteSetBitsMessage) {
 			msg.BlockID = types.BlockID{

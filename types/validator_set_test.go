@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"sort"
 	"strconv"
@@ -209,6 +210,7 @@ func TestValidatorSetValidateBasic(t *testing.T) {
 			vals: ValidatorSet{
 				Validators:         []*Validator{val},
 				ThresholdPublicKey: val.PubKey,
+				QuorumType:         btcjson.LLMQType_SINGLE_NODE,
 				QuorumHash:         crypto.RandQuorumHash(),
 				HasPublicKeys:      true,
 			},
@@ -262,6 +264,7 @@ func TestValidatorSetValidateBasic(t *testing.T) {
 			vals: ValidatorSet{
 				Validators:         []*Validator{val},
 				ThresholdPublicKey: val.PubKey,
+				QuorumType:         btcjson.LLMQType_SINGLE_NODE,
 				QuorumHash:         crypto.RandQuorumHash(),
 				HasPublicKeys:      true,
 			},
@@ -1186,4 +1189,62 @@ func BenchmarkValidatorSet_VerifyCommit_Ed25519(b *testing.B) {
 			}
 		})
 	}
+}
+
+// A peer supplies QuorumType on the statesync LightBlock path. It is not covered
+// by ValidatorSet.Hash(), which hashes only ThresholdPublicKey and QuorumHash, so
+// tampering with it survives every integrity check and reaches
+// tmmath.MustConvertUint8 in sign-hash construction, which panics. Only the quorum
+// types the rest of the codebase already validates against are accepted.
+func TestValidatorSetFromProto_QuorumTypeUnsupported(t *testing.T) {
+	testCases := []struct {
+		name       string
+		quorumType int32
+		wantErr    bool
+	}{
+		{"max int32", math.MaxInt32, true},
+		{"one above uint8", math.MaxUint8 + 1, true},
+		{"negative", -1, true},
+		{"min int32", math.MinInt32, true},
+		{"unset", 0, true},
+		{"in uint8 range but not a known type", math.MaxUint8, true},
+		{"llmq test platform", int32(btcjson.LLMQType_TEST_PLATFORM), false},
+		{"llmq single node", int32(btcjson.LLMQType_SINGLE_NODE), false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			vs, _ := RandValidatorSet(3)
+			pb, err := vs.ToProto()
+			require.NoError(t, err)
+			pb.QuorumType = tc.quorumType
+
+			var got *ValidatorSet
+			require.NotPanics(t, func() {
+				got, err = ValidatorSetFromProto(pb)
+			}, "converting a peer-supplied validator set must never panic")
+
+			if tc.wantErr {
+				require.Error(t, err, "quorum type %d is not a supported LLMQ type and must be rejected", tc.quorumType)
+				assert.ErrorContains(t, err, "quorumType")
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, got)
+			assert.Equal(t, btcjson.LLMQType(tc.quorumType), got.QuorumType)
+		})
+	}
+}
+
+// The light client's HTTP provider builds a validator set with NewValidatorSet and
+// validates it with ValidateBasic, never touching the proto path, so the quorum
+// type bound has to live in ValidateBasic to cover that entry point too.
+func TestValidatorSet_ValidateBasic_QuorumTypeUnsupported(t *testing.T) {
+	vs, _ := RandValidatorSet(3)
+	require.NoError(t, vs.ValidateBasic())
+
+	unsupported := NewValidatorSet(vs.Validators, vs.ThresholdPublicKey, btcjson.LLMQType(math.MaxUint8),
+		vs.QuorumHash, vs.HasPublicKeys, nil)
+	require.Error(t, unsupported.ValidateBasic(),
+		"a validator set built outside the proto path must still have its quorum type checked")
 }

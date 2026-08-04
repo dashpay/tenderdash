@@ -84,6 +84,29 @@ func TestMakeGenesisStateNilValidators(t *testing.T) {
 	require.Equal(t, 0, len(state.Validators.Validators))
 }
 
+// An empty validator set serializes to an empty proto message, whose QuorumType is
+// 0 and therefore not a supported LLMQ type. Reloading a zero-validator genesis
+// state must still succeed: the empty set is reported as ErrValidatorSetNilOrEmpty,
+// which FromProto tolerates at the initial height.
+func TestStateProtoNilValidators(t *testing.T) {
+	doc := types.GenesisDoc{
+		ChainID:    "dummy",
+		Validators: nil,
+		QuorumType: btcjson.LLMQType_5_60,
+	}
+	require.NoError(t, doc.ValidateAndComplete())
+	state, err := sm.MakeGenesisState(&doc)
+	require.NoError(t, err)
+
+	pb, err := state.ToProto()
+	require.NoError(t, err)
+
+	loaded, err := sm.FromProto(pb)
+	require.NoError(t, err)
+	assert.Equal(t, doc.ChainID, loaded.ChainID)
+	assert.True(t, loaded.Validators.IsNilOrEmpty())
+}
+
 // TestStateSaveLoad tests saving and loading State from a db.
 func TestStateSaveLoad(t *testing.T) {
 	tearDown, stateDB, state := setupTestCase(t)

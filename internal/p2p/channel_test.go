@@ -3,11 +3,16 @@ package p2p
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/fortytw2/leaktest"
 	"github.com/stretchr/testify/require"
+
+	"github.com/dashpay/tenderdash/proto/tendermint/blocksync"
+	p2pproto "github.com/dashpay/tenderdash/proto/tendermint/p2p"
 )
 
 type channelInternal struct {
@@ -216,6 +221,72 @@ func TestChannel(t *testing.T) {
 			defer cancel()
 
 			tc.Case(ctx, t)
+		})
+	}
+}
+
+// Attributes arrive from a peer and are retained for the envelope's whole queue
+// lifetime. Honest senders set at most two (a request ID, plus the echoed request
+// ID on a response), so a peer flooding the map is unbounded memory we never read.
+// Every payload below is valid, so the attribute bounds are the only thing under test.
+func TestEnvelopeFromProto_AttributeBounds(t *testing.T) {
+	attributes := func(n int, valueLen int) map[string]string {
+		attrs := make(map[string]string, n)
+		for i := 0; i < n; i++ {
+			attrs[fmt.Sprintf("key-%d", i)] = strings.Repeat("v", valueLen)
+		}
+		return attrs
+	}
+	// Budget spent by attributes(n, valueLen), whose keys are all 5 bytes long.
+	spend := func(n int, valueLen int) int { return n * (len("key-0") + valueLen) }
+
+	testCases := []struct {
+		name       string
+		attributes map[string]string
+		wantErr    error
+	}{
+		{
+			// What p2p/client actually sends: a request ID and the echoed response
+			// ID, both UUID strings. Spelled out here because importing p2p/client
+			// for its attribute key constants would be an import cycle.
+			name: "honest sender",
+			attributes: map[string]string{
+				"RequestID":  strings.Repeat("u", 36),
+				"ResponseID": strings.Repeat("u", 36),
+			},
+		},
+		{
+			name:       "count at the bound",
+			attributes: attributes(maxEnvelopeAttributes, 1),
+		},
+		{
+			name:       "count above the bound",
+			attributes: attributes(maxEnvelopeAttributes+1, 1),
+			wantErr:    ErrTooManyEnvelopeAttributes,
+		},
+		{
+			name:       "bytes at the bound",
+			attributes: attributes(2, (maxEnvelopeAttributeBytes-spend(2, 0))/2),
+		},
+		{
+			name:       "bytes above the bound",
+			attributes: attributes(2, maxEnvelopeAttributeBytes),
+			wantErr:    ErrEnvelopeAttributesTooLarge,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			proto := p2pproto.Envelope{Attributes: tc.attributes}
+			require.NoError(t, proto.Wrap(&blocksync.StatusRequest{}))
+
+			envelope, err := EnvelopeFromProto(proto)
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, envelope.Attributes, len(tc.attributes))
 		})
 	}
 }

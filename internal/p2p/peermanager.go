@@ -524,7 +524,6 @@ func (m *PeerManager) Add(address NodeAddress) (bool, error) {
 	if peer.Inactive {
 		return false, nil
 	}
-
 	// else add the new address
 	peer.AddressInfo[address] = &peerAddressInfo{Address: address}
 	if err := m.store.Set(peer); err != nil {
