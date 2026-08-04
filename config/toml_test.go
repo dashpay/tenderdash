@@ -80,4 +80,15 @@ func checkConfig(t *testing.T, configFile string) {
 			t.Errorf("config file was expected to contain %s but did not", e)
 		}
 	}
+
+	// Overrides for consensus parameters that no longer exist must not be
+	// offered to operators: the values would be silently ignored.
+	for _, e := range []string{
+		"unsafe-commit-timeout-override",
+		"unsafe-bypass-commit-timeout-override",
+	} {
+		if strings.Contains(configFile, e) {
+			t.Errorf("config file must not offer %s, it overrides a removed consensus parameter", e)
+		}
+	}
 }

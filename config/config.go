@@ -1112,10 +1112,22 @@ type ConsensusConfig struct {
 
 	DeprecatedQuorumType btcjson.LLMQType `mapstructure:"quorum-type"`
 
-	// TODO: The following fields are all temporary overrides that should exist only
-	// for the duration of the v0.36 release. The below fields should be completely
-	// removed in the v0.37 release of Tendermint.
-	// See: https://github.com/tendermint/tendermint/issues/8188
+	// These two overrode the Commit and BypassCommitTimeout consensus
+	// parameters, which no longer exist. They are decoded only so that an
+	// operator who still sets them is told they stopped working, instead of
+	// having the value silently ignored.
+	//
+	// Each is reported on the same condition that used to make it take effect:
+	// a non-zero duration, and a bypass value that was written at all. So a
+	// commit-timeout override of "0s" is not reported, matching the fact that
+	// it never overrode anything either.
+	DeprecatedUnsafeCommitTimeoutOverride       time.Duration `mapstructure:"unsafe-commit-timeout-override"`
+	DeprecatedUnsafeBypassCommitTimeoutOverride *bool         `mapstructure:"unsafe-bypass-commit-timeout-override"`
+
+	// The following fields let a single node override the Timeout consensus
+	// parameters it received. They exist as an escape hatch for timing trouble,
+	// and make that node disagree with the rest of the network about timing,
+	// so they are not intended for normal operation.
 
 	// UnsafeProposeTimeoutOverride provides an unsafe override of the Propose
 	// timeout consensus parameter. It configures how long the consensus engine
@@ -1133,17 +1145,6 @@ type ConsensusConfig struct {
 	// timeout consensus parameter. It configures how much the vote timeout
 	// increases with each round.
 	UnsafeVoteTimeoutDeltaOverride time.Duration `mapstructure:"unsafe-vote-timeout-delta-override"`
-	// UnsafeCommitTimeoutOverride provides an unsafe override of the Commit timeout
-	// consensus parameter. It configures how long the consensus engine will wait
-	// after receiving +2/3 precommits before beginning the next height.
-	UnsafeCommitTimeoutOverride time.Duration `mapstructure:"unsafe-commit-timeout-override"`
-
-	// UnsafeBypassCommitTimeoutOverride provides an unsafe override of the
-	// BypassCommitTimeout consensus parameter. It configures if the consensus
-	// engine will wait for the full Commit timeout before proceeding to the next height.
-	// If it is set to true, the consensus engine will proceed to the next height
-	// as soon as the node has gathered votes from all of the validators on the network.
-	UnsafeBypassCommitTimeoutOverride *bool `mapstructure:"unsafe-bypass-commit-timeout-override"`
 }
 
 // DefaultConsensusConfig returns a default configuration for the consensus service
@@ -1202,9 +1203,6 @@ func (cfg *ConsensusConfig) ValidateBasic() error {
 	if cfg.UnsafeVoteTimeoutDeltaOverride < 0 {
 		return errors.New("unsafe-vote-timeout-delta-override can't be negative")
 	}
-	if cfg.UnsafeCommitTimeoutOverride < 0 {
-		return errors.New("unsafe-commit-timeout-override can't be negative")
-	}
 	if cfg.CreateEmptyBlocksInterval < 0 {
 		return errors.New("create-empty-blocks-interval can't be negative")
 	}
@@ -1223,14 +1221,22 @@ func (cfg *ConsensusConfig) ValidateBasic() error {
 func (cfg *ConsensusConfig) DeprecatedFieldWarning() error {
 	var fields []string
 
+	// Each entry says where the setting went, because "removed" alone sends an
+	// operator looking for a replacement that may not exist.
 	if cfg.DeprecatedQuorumType != 0 {
-		fields = append(fields, "quorum-type")
+		fields = append(fields, "quorum-type (moved to the genesis document)")
+	}
+	if cfg.DeprecatedUnsafeCommitTimeoutOverride != 0 {
+		fields = append(fields, "unsafe-commit-timeout-override (the consensus "+
+			"parameter it overrode no longer exists, there is no replacement)")
+	}
+	if cfg.DeprecatedUnsafeBypassCommitTimeoutOverride != nil {
+		fields = append(fields, "unsafe-bypass-commit-timeout-override (the consensus "+
+			"parameter it overrode no longer exists, there is no replacement)")
 	}
 	if len(fields) != 0 {
 		return fmt.Errorf("the following deprecated fields were set in the "+
-			"configuration file: %s. These fields were removed. "+
-			"Timeout configuration has been moved to the ConsensusParams. "+
-			"quorum-type has been moved to genesis document. ",
+			"configuration file and are ignored: %s",
 			strings.Join(fields, ", "))
 	}
 	return nil

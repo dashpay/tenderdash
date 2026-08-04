@@ -400,9 +400,8 @@ peer-query-maj23-sleep-duration = "2s"
 # Use of these parameters is strongly discouraged. Using these parameters may have serious
 # liveness implications for the validator and for the chain.
 #
-# These fields will be removed from the configuration file in the v0.37 release of Tendermint.
-# For additional information, see ADR-74:
-# https://github.com/tendermint/tendermint/blob/master/docs/architecture/adr-074-timeout-params.md
+# Because they make a single node disagree with the rest of the network about
+# timing, they are not intended for normal operation.
 
 # This field provides an unsafe override of the Propose timeout consensus parameter.
 # This field configures how long the consensus engine will wait for a proposal block before prevoting nil.
@@ -424,19 +423,6 @@ peer-query-maj23-sleep-duration = "2s"
 # This field configures how much the vote timeout increases with each round.
 # If this field is set to a value greater than 0, it will take effect.
 # unsafe-vote-timeout-delta-override = 0s
-
-# This field provides an unsafe override of the Commit timeout consensus parameter.
-# This field configures how long the consensus engine will wait after receiving
-# +2/3 precommits before beginning the next height.
-# If this field is set to a value greater than 0, it will take effect.
-# unsafe-commit-timeout-override = 0s
-
-# This field provides an unsafe override of the BypassCommitTimeout consensus parameter.
-# This field configures if the consensus engine will wait for the full Commit timeout
-# before proceeding to the next height.
-# If this field is set to true, the consensus engine will proceed to the next height
-# as soon as the node has gathered votes from all of the validators on the network.
-# unsafe-bypass-commit-timeout-override =
 
 #######################################################
 ###   Transaction Indexer Configuration Options     ###
@@ -487,9 +473,11 @@ namespace = "tendermint"
 
 ### create-empty-blocks = true
 
-If `create-empty-blocks` is set to `true` in your config, blocks will be
-created ~ every second (with default consensus parameters). You can regulate
-the delay between blocks by changing the `timeout-commit`. E.g. `timeout-commit = "10s"` should result in ~ 10 second blocks.
+If `create-empty-blocks` is set to `true` in your config, empty blocks are
+created as soon as the previous one is committed. You can space them out by
+setting `create-empty-blocks-interval`: with `"10s"`, an empty block follows
+roughly ten seconds after the last one. The interval only paces empty blocks —
+when transactions arrive, a block is proposed without waiting for it.
 
 ### create-empty-blocks = false
 
@@ -583,24 +571,17 @@ psql ... -f state/indexer/sink/psql/schema.sql
 
 ## Unsafe Consensus Timeout Overrides
 
-Tendermint version v0.36 provides a set of unsafe overrides for the consensus
-timing parameters. These parameters are provided as a safety measure in case of
-unusual timing issues during the upgrade to v0.36 so that an operator may
-override the timings for a single node. These overrides will completely be
-removed in Tendermint v0.37.
+Tenderdash provides a set of unsafe overrides for the consensus timing
+parameters. They are a safety measure for unusual timing issues, letting an
+operator override the timings for a single node. Because they make one node
+disagree with the rest of the network about timing, they are unsafe and are
+not intended for normal operation.
 
-- `unsafe-propose-override`: How long the Tendermint consensus engine will wait
-  for a proposal block before prevoting nil.
-- `unsafe-propose-delta-override`: How much the propose timeout increase with
-  each round.
-- `unsafe-vote-override`: How long the consensus engine will wait after
+- `unsafe-propose-timeout-override`: How long the Tendermint consensus engine
+  will wait for a proposal block before prevoting nil.
+- `unsafe-propose-timeout-delta-override`: How much the propose timeout
+  increases with each round.
+- `unsafe-vote-timeout-override`: How long the consensus engine will wait after
   receiving +2/3 votes in a round.
-- `unsafe-vote-delta-override`: How much the vote timeout increases with each
-  round.
-- `unsafe-commit-override`: How long the consensus engine will wait after
-  receiving +2/3 precommits before beginning the next height.
-- `unsafe-bypass-commit-timeout-override`: Configures if the consensus engine
-  will wait for the full commit timeout before proceeding to the next height. If
-  this field is set to true, the consensus engine will proceed to the next
-  height as soon as the node has gathered votes from all of the validators on
-  the network.
+- `unsafe-vote-timeout-delta-override`: How much the vote timeout increases with
+  each round.

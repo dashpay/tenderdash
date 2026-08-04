@@ -1,11 +1,13 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"reflect"
 	"testing"
 	"time"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -174,8 +176,6 @@ func TestConsensusConfig_ValidateBasic(t *testing.T) {
 		"UnsafePrevoteTimeoutOverride negative":      {func(c *ConsensusConfig) { c.UnsafeVoteTimeoutOverride = -1 }, true},
 		"UnsafePrevoteTimeoutDeltaOverride":          {func(c *ConsensusConfig) { c.UnsafeVoteTimeoutDeltaOverride = time.Second }, false},
 		"UnsafePrevoteTimeoutDeltaOverride negative": {func(c *ConsensusConfig) { c.UnsafeVoteTimeoutDeltaOverride = -1 }, true},
-		"UnsafeCommitTimeoutOverride":                {func(c *ConsensusConfig) { c.UnsafeCommitTimeoutOverride = time.Second }, false},
-		"UnsafeCommitTimeoutOverride negative":       {func(c *ConsensusConfig) { c.UnsafeCommitTimeoutOverride = -1 }, true},
 		"PeerGossipSleepDuration":                    {func(c *ConsensusConfig) { c.PeerGossipSleepDuration = time.Second }, false},
 		"PeerGossipSleepDuration negative":           {func(c *ConsensusConfig) { c.PeerGossipSleepDuration = -1 }, true},
 		"PeerQueryMaj23SleepDuration":                {func(c *ConsensusConfig) { c.PeerQueryMaj23SleepDuration = time.Second }, false},
@@ -196,6 +196,54 @@ func TestConsensusConfig_ValidateBasic(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Dropping the override keys from the generated template leaves an operator who
+// already set them with no signal at all, because unknown keys decode silently.
+// The keys are therefore still decoded into deprecated fields purely so that
+// setting one is reported at startup.
+// The config is decoded the way the node decodes it, rather than by assigning
+// the fields directly, so that the mapstructure keys themselves are covered: a
+// field that no longer matches the key an operator writes would report nothing.
+func TestConsensusConfig_RemovedCommitTimeoutOverridesAreReported(t *testing.T) {
+	decode := func(t *testing.T, consensusSection string) *Config {
+		t.Helper()
+		v := viper.New()
+		v.SetConfigType("toml")
+		require.NoError(t, v.ReadConfig(bytes.NewBufferString("[consensus]\n"+consensusSection)))
+
+		cfg := DefaultConfig()
+		require.NoError(t, v.Unmarshal(cfg))
+		return cfg
+	}
+
+	t.Run("absent", func(t *testing.T) {
+		cfg := decode(t, "")
+		assert.NoError(t, cfg.Consensus.DeprecatedFieldWarning())
+	})
+
+	t.Run("set", func(t *testing.T) {
+		cfg := decode(t, `unsafe-commit-timeout-override = "5s"
+unsafe-bypass-commit-timeout-override = true
+`)
+
+		warning := cfg.Consensus.DeprecatedFieldWarning()
+		require.Error(t, warning)
+		assert.Contains(t, warning.Error(), "unsafe-commit-timeout-override")
+		assert.Contains(t, warning.Error(), "unsafe-bypass-commit-timeout-override")
+	})
+
+	// Disabling the bypass was as much an operator decision as enabling it, so
+	// it has to be reported as well. Decoding it is what tells the two apart
+	// from the key being absent, which is why the field is a pointer.
+	t.Run("bypass set to false", func(t *testing.T) {
+		cfg := decode(t, "unsafe-bypass-commit-timeout-override = false\n")
+
+		require.NotNil(t, cfg.Consensus.DeprecatedUnsafeBypassCommitTimeoutOverride)
+		warning := cfg.Consensus.DeprecatedFieldWarning()
+		require.Error(t, warning)
+		assert.Contains(t, warning.Error(), "unsafe-bypass-commit-timeout-override")
+	})
 }
 
 func TestInstrumentationConfigValidateBasic(t *testing.T) {
