@@ -21,6 +21,12 @@ import (
 
 var (
 	ErrRecvRateLimitExceeded = errors.New("receive rate limit exceeded")
+	// ErrTooManyEnvelopeAttributes is returned when an inbound envelope carries more
+	// attributes than maxEnvelopeAttributes.
+	ErrTooManyEnvelopeAttributes = errors.New("too many envelope attributes")
+	// ErrEnvelopeAttributesTooLarge is returned when the keys and values of an inbound
+	// envelope's attributes sum to more than maxEnvelopeAttributeBytes.
+	ErrEnvelopeAttributesTooLarge = errors.New("envelope attributes too large")
 )
 
 // Envelope contains a message with sender/receiver routing info.
@@ -33,8 +39,24 @@ type Envelope struct {
 	Attributes map[string]string
 }
 
+const (
+	// maxEnvelopeAttributes bounds how many entries the peer-supplied attribute map
+	// may carry. Honest senders set at most two (a request ID, plus the echoed
+	// request ID on a response), and the map is retained for the envelope's whole
+	// queue lifetime.
+	maxEnvelopeAttributes = 8
+	// maxEnvelopeAttributeBytes bounds the retained bytes, which is what the entry
+	// count alone does not: eight entries can still carry arbitrarily long keys and
+	// values. The honest worst case is two UUID-shaped request IDs (91 bytes), so
+	// this leaves ample headroom.
+	maxEnvelopeAttributeBytes = 512
+)
+
 // EnvelopeFromProto creates a domain Envelope from p2p representation
 func EnvelopeFromProto(proto p2p.Envelope) (Envelope, error) {
+	if err := validateEnvelopeAttributes(proto.Attributes); err != nil {
+		return Envelope{}, err
+	}
 	msg, err := proto.Unwrap()
 	if err != nil {
 		return Envelope{}, err
@@ -47,6 +69,22 @@ func EnvelopeFromProto(proto p2p.Envelope) (Envelope, error) {
 		envelope.Attributes[key] = val
 	}
 	return envelope, nil
+}
+
+// validateEnvelopeAttributes bounds both the entry count and the retained bytes of a
+// peer-supplied attribute map. The count is checked first, as it is the cheaper test.
+func validateEnvelopeAttributes(attributes map[string]string) error {
+	if len(attributes) > maxEnvelopeAttributes {
+		return fmt.Errorf("%w: %d attributes, max %d", ErrTooManyEnvelopeAttributes, len(attributes), maxEnvelopeAttributes)
+	}
+	attributeBytes := 0
+	for key, val := range attributes {
+		attributeBytes += len(key) + len(val)
+	}
+	if attributeBytes > maxEnvelopeAttributeBytes {
+		return fmt.Errorf("%w: %d bytes, max %d", ErrEnvelopeAttributesTooLarge, attributeBytes, maxEnvelopeAttributeBytes)
+	}
+	return nil
 }
 
 // AddAttribute adds an attribute to a attributes bag

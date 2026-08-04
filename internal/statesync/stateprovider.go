@@ -181,6 +181,10 @@ func (s *stateProviderRPC) State(ctx context.Context, height uint64) (sm.State, 
 		return sm.State{}, fmt.Errorf("unable to fetch consensus parameters for height %v: %w",
 			currentLightBlock.Height, err)
 	}
+	// This path does not call verifyConsensusParams: the equivalent checks run one
+	// layer down, in lightrpc.Client.ConsensusParams, which validates the params and
+	// compares their hash against the light-client-verified ConsensusHash before
+	// returning them. Note this is the provider used unless use-p2p is set.
 	state.ConsensusParams = result.ConsensusParams
 	state.LastHeightConsensusParamsChanged = currentLightBlock.Height
 
@@ -309,15 +313,29 @@ func (s *stateProviderP2P) State(ctx context.Context, height uint64) (sm.State, 
 	if err != nil {
 		return sm.State{}, fmt.Errorf("fetching consensus params: %w", err)
 	}
-	// validate the consensus params
-	if !bytes.Equal(currentLightBlock.ConsensusHash, state.ConsensusParams.HashConsensusParams()) {
-		return sm.State{}, fmt.Errorf("consensus params hash mismatch at height %d. Expected %v, got %v",
-			currentLightBlock.Height, currentLightBlock.ConsensusHash, state.ConsensusParams.HashConsensusParams())
+	if err := verifyConsensusParams(state.ConsensusParams, currentLightBlock.ConsensusHash, currentLightBlock.Height); err != nil {
+		return sm.State{}, err
 	}
 	// set the last height changed to the current height
 	state.LastHeightConsensusParamsChanged = currentLightBlock.Height
 
 	return state, nil
+}
+
+// verifyConsensusParams checks peer-supplied consensus params before Bootstrap
+// persists them. ConsensusParamsFromProto validates nothing and expectedHash covers
+// only Block.MaxBytes, Block.MaxGas and Version.ConsensusVersion, so validation runs
+// first and on the whole set — though it only rejects non-positive Synchrony,
+// Timeout and Evidence values, not positive but absurd ones.
+func verifyConsensusParams(params types.ConsensusParams, expectedHash tmbytes.HexBytes, height int64) error {
+	if err := params.ValidateConsensusParams(); err != nil {
+		return fmt.Errorf("invalid consensus params at height %d: %w", height, err)
+	}
+	if !bytes.Equal(expectedHash, params.HashConsensusParams()) {
+		return fmt.Errorf("consensus params hash mismatch at height %d. Expected %v, got %v",
+			height, expectedHash, params.HashConsensusParams())
+	}
+	return nil
 }
 
 // addProvider dynamically adds a peer as a new witness. A limit of 6 providers is kept as a

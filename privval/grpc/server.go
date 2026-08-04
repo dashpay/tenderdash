@@ -10,6 +10,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/encoding"
 	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/privval"
 	privvalproto "github.com/dashpay/tenderdash/proto/tendermint/privval"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -126,6 +127,13 @@ func (ss *SignerServer) SignVote(ctx context.Context, req *privvalproto.SignVote
 		return nil, err
 	}
 
+	if req.Vote == nil {
+		return nil, status.Error(codes.InvalidArgument, "error signing vote: vote is missing")
+	}
+	if err := privval.ValidateQuorumParams(req.QuorumType, req.QuorumHash); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "error signing vote: %v", err)
+	}
+
 	vote := req.Vote
 
 	err := ss.privVal.SignVote(ctx, req.ChainId, btcjson.LLMQType(req.QuorumType), req.QuorumHash, vote, nil)
@@ -143,6 +151,13 @@ func (ss *SignerServer) SignVote(ctx context.Context, req *privvalproto.SignVote
 func (ss *SignerServer) SignProposal(ctx context.Context, req *privvalproto.SignProposalRequest) (*privvalproto.SignedProposalResponse, error) {
 	if err := ss.validateChainID(req.ChainId); err != nil {
 		return nil, err
+	}
+
+	if req.Proposal == nil {
+		return nil, status.Error(codes.InvalidArgument, "error signing proposal: proposal is missing")
+	}
+	if err := privval.ValidateQuorumParams(req.QuorumType, req.QuorumHash); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "error signing proposal: %v", err)
 	}
 
 	proposal := req.Proposal

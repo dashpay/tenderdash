@@ -154,6 +154,13 @@ func (vals *ValidatorSet) ValidateBasic() error {
 		return fmt.Errorf("quorumHash error: %w", err)
 	}
 
+	// Checked here rather than only in ValidatorSetFromProto because the light
+	// client's HTTP provider builds a set with NewValidatorSet, bypassing the proto
+	// path. An out-of-range type reaches tmmath.MustConvertUint8, which panics.
+	if err := vals.QuorumType.Validate(); err != nil {
+		return fmt.Errorf("quorumType error: %w", err)
+	}
+
 	if err := vals.Proposer().ValidateBasic(); err != nil {
 		return fmt.Errorf("proposer failed validate basic, error: %w", err)
 	}
@@ -1109,6 +1116,8 @@ func ValidatorSetFromProto(vp *tmproto.ValidatorSet) (*ValidatorSet, error) {
 	}
 	vals := new(ValidatorSet)
 
+	vals.QuorumType = btcjson.LLMQType(vp.QuorumType)
+
 	vals.Validators = make([]*Validator, len(vp.Validators))
 	for i := 0; i < len(vp.Validators); i++ {
 		v, err := ValidatorFromProto(vp.Validators[i])
@@ -1141,8 +1150,6 @@ func ValidatorSetFromProto(vp *tmproto.ValidatorSet) (*ValidatorSet, error) {
 			return nil, fmt.Errorf("fromProto: thresholdPublicKey error: %w", err)
 		}
 	}
-
-	vals.QuorumType = btcjson.LLMQType(vp.QuorumType)
 
 	vals.QuorumHash = vp.QuorumHash
 

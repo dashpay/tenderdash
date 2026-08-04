@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	dbm "github.com/cometbft/cometbft-db"
+	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -374,6 +375,7 @@ func TestPruneStates(t *testing.T) {
 			validatorSet := &types.ValidatorSet{
 				Validators:         []*types.Validator{validator},
 				ThresholdPublicKey: validator.PubKey,
+				QuorumType:         btcjson.LLMQType_SINGLE_NODE,
 				QuorumHash:         crypto.RandQuorumHash(),
 			}
 			valsChanged := int64(0)

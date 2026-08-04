@@ -351,6 +351,9 @@ func (m *VoteSetBitsMessage) ValidateBasic() error {
 	if m.Height < 0 {
 		return errors.New("negative Height")
 	}
+	if m.Round < 0 {
+		return errors.New("negative Round")
+	}
 	if !types.IsVoteTypeValid(m.Type) {
 		return errors.New("invalid Type")
 	}

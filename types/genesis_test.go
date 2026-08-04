@@ -164,7 +164,12 @@ func TestGenesisBad(t *testing.T) {
 			), expectErrorContains: "cannot unmarshal string into Go struct field genesisValidatorJSON.power of type int64"},
 		{
 			jsonBlob:            []byte(`{"chain_id": "test-chain-QDKdJr"}`),
-			expectErrorContains: "validator_quorum_type must be provided",
+			expectErrorContains: "validator_quorum_type: unsupported quorum type 0",
+		},
+		{
+			// Rejected at the field the operator mistyped, not later in the block replayer.
+			jsonBlob:            []byte(`{"chain_id": "test-chain-QDKdJr", "validator_quorum_type": 200}`),
+			expectErrorContains: "validator_quorum_type: unsupported quorum type 200",
 		},
 	}
 
