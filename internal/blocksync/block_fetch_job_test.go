@@ -258,3 +258,29 @@ func (suite *BlockFetchJobTestSuite) getBlockReturnFunc(promiseFunc *promise.Pro
 		return promiseFunc
 	}
 }
+
+// TestJobGeneratorPushBackOrdersLowestFirst checks that re-queued heights are
+// retried lowest first, regardless of the order they were handed over in.
+//
+// Only the lowest missing height lets applyBlock make progress, and dropPeer
+// collects heights by ranging a map, so arrival order is arbitrary. Retrying in
+// that order can spend the no-progress window fetching heights that cannot be
+// applied until an earlier one lands.
+func (suite *BlockFetchJobTestSuite) TestJobGeneratorPushBackOrdersLowestFirst() {
+	jobGen := newJobGenerator(5, log.NewNopLogger(), suite.client, NewInMemPeerStore())
+
+	jobGen.pushBack(30, 10, 20)
+	suite.Require().Equal([]int64{10, 20, 30}, jobGen.pushedBack)
+
+	// a height arriving later still sorts ahead of what is already queued
+	jobGen.pushBack(5)
+	suite.Require().Equal([]int64{5, 10, 20, 30}, jobGen.pushedBack)
+
+	// and it is the one dispatched next
+	suite.Require().EqualValues(5, jobGen.nextHeight())
+	suite.Require().EqualValues(10, jobGen.nextHeight())
+
+	// duplicates are still skipped across a batch
+	jobGen.pushBack(20, 40, 20)
+	suite.Require().Equal([]int64{20, 30, 40}, jobGen.pushedBack)
+}
