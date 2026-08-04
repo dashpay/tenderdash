@@ -411,7 +411,7 @@ func (s *StateData) updateLockedBlock() {
 func (s *StateData) verifyCommit(commit *types.Commit, peerID types.NodeID, ignoreProposalBlock bool) (verified bool, err error) {
 	// Lets first do some basic commit validation before more complicated commit verification
 	if err := commit.ValidateBasic(); err != nil {
-		return false, fmt.Errorf("error validating commit: %v", err)
+		return false, fmt.Errorf("error validating commit: %w", err)
 	}
 
 	rs := s.RoundState

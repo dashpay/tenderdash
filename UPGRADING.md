@@ -2,6 +2,40 @@
 
 This guide provides instructions for upgrading to specific versions of Tendermint Core.
 
+## Unreleased
+
+### Vote-extension type validation
+
+`Commit.ValidateBasic` now rejects commits whose threshold vote extensions carry a
+type not defined in the protobuf schema (proto3 enums are open, so such values
+previously decoded — and could be persisted — unchallenged). Operator-visible
+consequences:
+
+- Peer-supplied commits carrying an undefined vote-extension type are rejected at
+  the p2p message boundary and never reach the WAL or the block store.
+- A block store that already contains such a commit (persisted by an earlier
+  version) fails when that record is read. Where the failure surfaces depends on
+  which record it is, and the two cases look very different to an operator:
+  - **The last-height seen commit, or the latest block's `LastCommit`**, is read
+    during startup, so the node fails to start with `converting commit from proto:
+    unknown vote extension type` (or the equivalent from seen-commit or block
+    loading). There is no repair tool for this state; the node must be resynced.
+  - **A historical commit**, such as one written by statesync backfill, is not read
+    at startup. The node starts normally, and the record is reached only later,
+    when a peer requests that height or an RPC client asks for it. Gossip handlers
+    recover and log the failure, so one unreadable record degrades to a logged
+    error rather than terminating the node, but that height cannot be served. A
+    node logging `panic in gossip handler` with this conversion error has such a
+    record and should be resynced.
+- A WAL written by an earlier version can also carry such a record. Replay reports
+  it as corruption and the node repairs the WAL automatically, truncating from that
+  record onwards. Note the repair rewrites only the most recent WAL file — if the
+  record sits in an older segment the node will not start, and the WAL must be
+  removed.
+- **Rollback hazard**: once a future release defines a new vote-extension type, a
+  node that has stored commits carrying that type can no longer roll back to this
+  version — reading those records fails as described above.
+
 ## v0.36
 
 ### ABCI Changes

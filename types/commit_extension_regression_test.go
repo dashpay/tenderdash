@@ -11,21 +11,26 @@ import (
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
-// hostileCommitProto builds the wire message an unprivileged peer can put on
-// ConsensusVoteChannel: a tmcons.Commit whose ThresholdVoteExtensions carry a
-// vote-extension type outside the generated enum. proto3 enums are open, so
-// gogoproto unmarshals any varint into VoteExtensionType.
-func hostileCommitProto(extType tmproto.VoteExtensionType) *tmproto.Commit {
-	return &tmproto.Commit{
+const unknownExtensionType = tmproto.VoteExtensionType(42)
+
+// hostileCommit builds the poison an unprivileged peer can put on
+// ConsensusVoteChannel: a Commit whose ThresholdVoteExtensions carry a vote-extension
+// type outside the generated enum. proto3 enums are open, so gogoproto unmarshals any
+// varint into VoteExtensionType.
+//
+// It is built as a struct rather than decoded through CommitFromProto, which rejects
+// an unknown extension type. The subject of the tests below is defense in depth —
+// what GetCanonicalVote and VerifyCommit do if a poison commit reaches memory by a
+// route that skips ValidateBasic. Both run on the consensus goroutine, where a panic
+// is fatal, so "unreachable today" is no reason to stop pinning that they error.
+func hostileCommit(extType tmproto.VoteExtensionType) *Commit {
+	return &Commit{
 		Height: 100,
 		Round:  0,
-		BlockID: tmproto.BlockID{
-			Hash: crypto.Checksum([]byte("block")),
-			PartSetHeader: tmproto.PartSetHeader{
-				Total: 1,
-				Hash:  crypto.Checksum([]byte("parts")),
-			},
-			StateID: crypto.Checksum([]byte("state")),
+		BlockID: BlockID{
+			Hash:          crypto.Checksum([]byte("block")),
+			PartSetHeader: PartSetHeader{Total: 1, Hash: crypto.Checksum([]byte("parts"))},
+			StateID:       crypto.Checksum([]byte("state")),
 		},
 		QuorumHash:              crypto.Checksum([]byte("quorum")),
 		ThresholdBlockSignature: make([]byte, SignatureSize),
@@ -35,7 +40,30 @@ func hostileCommitProto(extType tmproto.VoteExtensionType) *tmproto.Commit {
 	}
 }
 
-const unknownExtensionType = tmproto.VoteExtensionType(42)
+// hostileCommitProto is the same poison in wire form. ToProto is the real bridge
+// between the two shapes, so the wire message cannot drift from the struct.
+func hostileCommitProto(extType tmproto.VoteExtensionType) *tmproto.Commit {
+	return hostileCommit(extType).ToProto()
+}
+
+// The decode boundary itself rejects the poison. This is the property that lets every
+// downstream consumer — WAL replay, the block store, gossip — assume a decoded Commit
+// carries only dispatchable extension types.
+func TestCommitFromProto_UnknownExtensionType_ReturnsError(t *testing.T) {
+	var err error
+	require.NotPanics(t, func() {
+		// CommitFromProto returns `commit, commit.ValidateBasic()`, handing back a
+		// populated value alongside the error, so only the error is asserted here.
+		_, err = CommitFromProto(hostileCommitProto(unknownExtensionType))
+	})
+	require.ErrorIs(t, err, ErrUnknownVoteExtensionType,
+		"an unknown extension type must be rejected at the decode boundary")
+
+	// A defined type on the same message decodes, so the rejection is the type.
+	ok, err := CommitFromProto(hostileCommitProto(tmproto.VoteExtensionType_THRESHOLD_RECOVER))
+	require.NoError(t, err)
+	assert.NotNil(t, ok)
+}
 
 // An unknown vote-extension type must be rejected with an error, not a panic
 // and not a substituted value. proto3 enums are open, so any peer can put an
@@ -74,7 +102,8 @@ func TestVoteExtensionsFromProto_NilElement_ReturnsError(t *testing.T) {
 			nil,
 		)
 	}, "a nil vote extension must not panic the conversion")
-	require.ErrorContains(t, err, "nil vote extension at index 1",
+	require.ErrorIs(t, err, ErrNilVoteExtension)
+	require.EqualError(t, err, "nil vote extension at index 1",
 		"the rejection must name the offending index")
 	assert.Nil(t, extensions, "no partial container may be returned")
 }
@@ -83,10 +112,12 @@ func TestVoteExtensionsFromProto_NilElement_ReturnsError(t *testing.T) {
 // goroutine. An attacker-supplied unknown extension type must surface as an
 // error there, never a panic.
 func TestCommit_GetCanonicalVote_UnknownType_ReturnsError(t *testing.T) {
-	commit, err := CommitFromProto(hostileCommitProto(unknownExtensionType))
-	require.NoError(t, err)
+	commit := hostileCommit(unknownExtensionType)
 
-	var canonVote *Vote
+	var (
+		canonVote *Vote
+		err       error
+	)
 	require.NotPanics(t, func() {
 		canonVote, err = commit.GetCanonicalVote()
 	}, "unknown vote-extension type must not panic while building the canonical vote")

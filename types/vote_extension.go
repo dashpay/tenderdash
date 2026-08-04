@@ -26,6 +26,11 @@ var (
 	// defined enum values. proto3 enums are open, so this indicates peer misbehavior
 	// on the network paths.
 	ErrUnknownVoteExtensionType = errors.New("unknown vote extension type")
+
+	// ErrNilVoteExtension is returned for a nil element of a vote-extension slice. A
+	// decoder can produce one for an empty repeated-field entry, so every site that
+	// dereferences such a slice must reject it rather than trust the slice is dense.
+	ErrNilVoteExtension = errors.New("nil vote extension")
 )
 
 // VoteExtensions is a container where the key is vote-extension type and value is a list of VoteExtension
@@ -208,7 +213,7 @@ func VoteExtensionsFromProto(pve ...*tmproto.VoteExtension) (VoteExtensions, err
 	voteExtensions := make(VoteExtensions, 0, len(pve))
 	for i, ext := range pve {
 		if ext == nil {
-			return nil, fmt.Errorf("nil vote extension at index %d", i)
+			return nil, fmt.Errorf("%w at index %d", ErrNilVoteExtension, i)
 		}
 		converted, err := VoteExtensionFromProto(*ext)
 		if err != nil {
@@ -372,14 +377,18 @@ func (e GenericVoteExtension) SignItem(chainID string, height int64, round int32
 	if err != nil {
 		return SignItem{}, err
 	}
+	// CanonicalizeVoteExtension keeps its own list of the types it can canonicalize,
+	// separate from the conversion dispatch. A type that gains a dispatch arm but no
+	// canonical form reaches here from a peer-supplied commit, so this returns the
+	// error rather than panicking on the consensus goroutine.
 	canonical, err := CanonicalizeVoteExtension(chainID, &e.VoteExtension, height, round)
 	if err != nil {
-		panic(err)
+		return SignItem{}, err
 	}
 
 	signBytes, err := protoio.MarshalDelimited(&canonical)
 	if err != nil {
-		panic(err)
+		return SignItem{}, err
 	}
 
 	si := NewSignItem(quorumType, quorumHash, requestID, signBytes)
