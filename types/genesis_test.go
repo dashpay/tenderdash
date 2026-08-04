@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/stretchr/testify/assert"
@@ -203,6 +204,12 @@ func TestGenesisCorrect(t *testing.T) {
 
 func TestBasicGenesisDoc(t *testing.T) {
 	// test a good one by raw json
+	//
+	// The timeout block below deliberately carries "commit" and
+	// "bypass_commit_timeout", two consensus parameters that no longer exist.
+	// They pin the guarantee that a genesis file written for an older release
+	// still loads, because unknown keys are ignored rather than rejected.
+	// Do not remove them.
 	appState := base64.StdEncoding.AppendEncode(nil, []byte(`{"account_owner": "Bob"}`))
 	genDocBytes := []byte(fmt.Sprintf(
 		`{
@@ -210,7 +217,6 @@ func TestBasicGenesisDoc(t *testing.T) {
 			"chain_id": "test-chain-QDKdJr",
 			"initial_height": "1000",
             "initial_core_chain_locked_height": 3000,
-			"consensus_params": null,
 			"validators": [{
 				"pub_key":{"type": "tendermint/PubKeyBLS12381","value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"},
 				"power":100,
@@ -241,8 +247,15 @@ func TestBasicGenesisDoc(t *testing.T) {
 			}
 		}`, appState,
 	))
-	_, err := GenesisDocFromJSON(genDocBytes)
-	assert.NoError(t, err, "expected no error for good genDoc json")
+	legacyGenDoc, err := GenesisDocFromJSON(genDocBytes)
+	require.NoError(t, err, "expected no error for good genDoc json")
+	// The timeouts that still exist must survive alongside the removed keys:
+	// tolerating the old keys is worthless if it costs the operator the values
+	// they did set.
+	assert.Equal(t, 30*time.Second, legacyGenDoc.ConsensusParams.Timeout.Propose)
+	assert.Equal(t, 50*time.Millisecond, legacyGenDoc.ConsensusParams.Timeout.ProposeDelta)
+	assert.Equal(t, 30*time.Second, legacyGenDoc.ConsensusParams.Timeout.Vote)
+	assert.Equal(t, 50*time.Millisecond, legacyGenDoc.ConsensusParams.Timeout.VoteDelta)
 
 	pubkey := bls12381.GenPrivKey().PubKey()
 	// create a base gendoc from struct
@@ -288,6 +301,34 @@ func TestBasicGenesisDoc(t *testing.T) {
 		_, err := GenesisDocFromJSON(tc)
 		assert.NoError(t, err)
 	}
+}
+
+// A genesis whose only timeout entries are consensus parameters that no longer
+// exist must load on the default timeouts instead of being rejected for the
+// timeouts it does not set. The removed keys are dropped during decoding, which
+// leaves the timeout block empty and lets ConsensusParams.Complete fill it in.
+func TestGenesisDocFromJSON_OnlyRemovedTimeoutKeys(t *testing.T) {
+	genDocBytes := []byte(`{
+		"chain_id": "test-chain-removed-timeouts",
+		"validator_quorum_type": 100,
+		"consensus_params": {
+			"synchrony": {"precision": "1", "message_delay": "10"},
+			"timeout": {
+				"commit": "10000000000",
+				"bypass_commit_timeout": true
+			},
+			"validator": {"pub_key_types":["ed25519"]},
+			"block": {"max_bytes": "100"},
+			"evidence": {"max_age_num_blocks": "100", "max_age_duration": "10"}
+		}
+	}`)
+
+	genDoc, err := GenesisDocFromJSON(genDocBytes)
+	require.NoError(t, err)
+	assert.Equal(t, DefaultTimeoutParams(), genDoc.ConsensusParams.Timeout)
+	// The supplied consensus parameters must have been decoded, otherwise the
+	// defaults above would only prove that the whole block was skipped.
+	assert.EqualValues(t, 100, genDoc.ConsensusParams.Block.MaxBytes)
 }
 
 func TestGenesisSaveAs(t *testing.T) {
