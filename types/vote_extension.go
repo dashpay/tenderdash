@@ -503,6 +503,8 @@ func (e ThresholdRawVoteExtension) SignItem(_ string, height int64, round int32,
 
 	ext := &e.VoteExtension
 
+	// An app-supplied SignRequestId carries no height or round binding, so a
+	// signature over it stays valid at other heights for the lifetime of the quorum.
 	if ext.XSignRequestId != nil && ext.XSignRequestId.Size() > 0 {
 		receivedReqID := ext.GetSignRequestId()
 		signRequestID = crypto.Checksum(crypto.Checksum(receivedReqID)) // reverse ext.GetSignRequestId()?

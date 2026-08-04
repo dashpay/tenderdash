@@ -247,6 +247,12 @@ type peerList struct {
 	mtx     sync.Mutex
 	peers   []types.NodeID
 	waiting []chan types.NodeID
+	// taken counts every peer ever handed to a caller, including one passed
+	// straight to a waiting Pop. A caller that must tell an empty list apart from
+	// one whose peers are merely in use compares it against the hand-outs it has
+	// accounted for: a peer is out of the list from the moment it is handed over,
+	// not from the moment its new owner records it.
+	taken uint64
 }
 
 func newPeerList() *peerList {
@@ -282,8 +288,17 @@ func (l *peerList) Pop(ctx context.Context) types.NodeID {
 
 	peer := l.peers[0]
 	l.peers = l.peers[1:]
+	l.taken++
 	l.mtx.Unlock()
 	return peer
+}
+
+// Availability samples together the peers the list holds and the peers it has
+// handed out, so a caller can observe both without either changing in between.
+func (l *peerList) Availability() (available int, taken uint64) {
+	l.mtx.Lock()
+	defer l.mtx.Unlock()
+	return len(l.peers), l.taken
 }
 
 func (l *peerList) Append(peer types.NodeID) {
@@ -292,6 +307,7 @@ func (l *peerList) Append(peer types.NodeID) {
 	if len(l.waiting) > 0 {
 		wait := l.waiting[0]
 		l.waiting = l.waiting[1:]
+		l.taken++
 		wait <- peer
 		close(wait)
 	} else {
