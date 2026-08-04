@@ -849,6 +849,12 @@ func (commit *Commit) IsCommit() bool {
 
 // ValidateBasic performs basic validation that doesn't involve state data.
 // Does not actually check the cryptographic signatures.
+//
+// An invalid threshold vote extension is rejected with one of two sentinel
+// errors (match with errors.Is): ErrNilVoteExtension signals a nil slice
+// element, which would be dereferenced downstream; ErrUnknownVoteExtensionType
+// signals an extension type not defined in the .proto, which nothing can
+// dispatch on.
 func (commit *Commit) ValidateBasic() error {
 	if commit.Height < 0 {
 		return errors.New("negative Height")
@@ -872,6 +878,37 @@ func (commit *Commit) ValidateBasic() error {
 			)
 		}
 	}
+
+	// Reject extension types nothing can dispatch on: proto3's open enums let an
+	// undefined varint decode untouched, and no other check rejects it. Type only —
+	// each extension's contents are covered by its own threshold signature.
+	//
+	// The shape of the list itself (order, count, duplication) is bound by no hash
+	// or signature, so this check does not authenticate it.
+	//
+	// INTENTIONAL(pre-upgrade-poisoned-store-panics): this guards future writes only.
+	// A block store poisoned before the statesync backfill commit-verification gate
+	// shipped still fails to decode on load — in mustDecodeCommit, LoadSeenCommit, or
+	// LoadBlock (internal/store) — with no repair path. Accepted: the threat model is
+	// hardening against malicious peers from here on, not recovery from an attack that
+	// already landed — such a node needs a resync, not a repair tool.
+	//
+	// INTENTIONAL(rollback-hazard-post-new-extension-type): rejection is deliberately
+	// ungated (no version/height check) — the right call for a security fix. Accepted
+	// consequence: once a future release adds a new vote-extension type, this build
+	// is no longer a valid rollback target for a node that has stored commits
+	// carrying it; rolling back panics at store load, as above, with no repair path.
+	for i, ext := range commit.ThresholdVoteExtensions {
+		if ext == nil {
+			return fmt.Errorf("%w at index %d", ErrNilVoteExtension, i)
+		}
+		// The conversion is the membership check — its dispatch switch is the sole
+		// authority on which types map to a concrete extension.
+		if _, err := VoteExtensionFromProto(*ext); err != nil {
+			return fmt.Errorf("vote extension %d: %w", i, err)
+		}
+	}
+
 	return nil
 }
 
@@ -959,7 +996,10 @@ func (commit *Commit) ToProto() *tmproto.Commit {
 }
 
 // CommitFromProto creates a commit from a protobuf commit message.
-// It returns an error if the commit is invalid.
+// It returns an error if the commit is invalid. An error does NOT imply a nil
+// result: when ValidateBasic is what failed, the returned Commit is non-nil and
+// fully populated. Callers MUST branch on the error, never on the value, or
+// they will accept a commit that failed validation.
 func CommitFromProto(cp *tmproto.Commit) (*Commit, error) {
 	if cp == nil {
 		return nil, errors.New("nil Commit")

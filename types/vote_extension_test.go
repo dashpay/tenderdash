@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/dashpay/dashd-go/btcjson"
@@ -218,4 +219,27 @@ func TestAddThresholdSignature_LengthValidation(t *testing.T) {
 		"long sig should be rejected")
 	require.NoError(t, ext.AddThresholdSignature(goodValidator, goodSig),
 		"correct lengths must succeed")
+}
+
+// The dispatcher in VoteExtensionFromProto is the sole authority on which extension
+// types this package can build, and tmproto.VoteExtensionType.IsValid is the sole
+// authority on which types the .proto defines. They must answer identically: a type
+// the proto defines but the dispatcher cannot build would be accepted by every
+// membership check and then fail at conversion. Adding a type to the .proto without
+// a dispatch arm fails here.
+func TestVoteExtensionFromProto_DispatchCoversDefinedTypes(t *testing.T) {
+	for value, name := range tmproto.VoteExtensionType_name {
+		extType := tmproto.VoteExtensionType(value)
+
+		ext, err := VoteExtensionFromProto(tmproto.VoteExtension{Type: extType})
+		require.NoError(t, err, "defined type %s has no dispatch arm", name)
+		require.NotNil(t, ext)
+		require.Equal(t, extType, ext.GetType())
+	}
+
+	for _, undefined := range []tmproto.VoteExtensionType{-1, 3, 42, math.MaxInt32} {
+		_, err := VoteExtensionFromProto(tmproto.VoteExtension{Type: undefined})
+		require.ErrorIs(t, err, ErrUnknownVoteExtensionType,
+			"type %d is not dispatchable and must be rejected", undefined)
+	}
 }
