@@ -488,9 +488,15 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	block *types.Block,
 	commit *types.Commit,
 ) (State, error) {
-	// Validate before anything is persisted or delivered to the application. This
-	// is the only validation on the ApplyBlock path; the consensus path validates
-	// separately before calling in.
+	// This is the only ValidateBlockWithRoundState on the ApplyBlock path, so it
+	// must not be removed: ApplyBlock deliberately calls ProcessProposal with
+	// verify=false and relies on this call instead. The consensus path validates
+	// separately before calling in, via blockExecutor.mustValidate.
+	//
+	// It is not a gate on the block reaching the application or the stores. By
+	// the time block sync gets here the block has already been delivered to the
+	// app by ProcessProposal and written by blockApplier.Apply; what this guards
+	// is the state and ABCI responses written below.
 	if err := blockExec.ValidateBlockWithRoundState(ctx, state, uncommittedState, block); err != nil {
 		return state, ErrInvalidBlock{err}
 	}

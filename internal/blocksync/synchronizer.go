@@ -475,12 +475,13 @@ func (s *Synchronizer) advance() {
 }
 
 func (s *Synchronizer) updateMonitor() {
-	// get the current max peer height before locking to avoid deadlock
-	maxPeerHeight := s.peerStore.MaxHeight()
 	height, syncRate, ok := s.recordSyncRate()
 	if !ok {
 		return
 	}
+	// read after recordSyncRate has released the lock, and only once we know we
+	// are going to report: this is called for every applied block
+	maxPeerHeight := s.peerStore.MaxHeight()
 	keyvals := []interface{}{
 		"height", height,
 		"max_peer_height", maxPeerHeight,
@@ -490,11 +491,16 @@ func (s *Synchronizer) updateMonitor() {
 	// rate above is limited by serialization, signature verification, disk or the
 	// ABCI application
 	if timings, measured := s.applier.Timings(); measured {
+		// logged as durations rather than whole milliseconds: part set building
+		// and commit verification are often sub-millisecond, and truncating them
+		// to 0 would hide exactly the stages this is here to measure
 		keyvals = append(keyvals,
-			"partset_ms", timings.PartSet.Milliseconds(),
-			"verify_ms", timings.Verify.Milliseconds(),
-			"save_ms", timings.Save.Milliseconds(),
-			"abci_ms", timings.Exec.Milliseconds(),
+			"partset", timings.PartSet,
+			"verify", timings.Verify,
+			"save", timings.Save,
+			// exec, not abci: the span also covers SaveABCIResponses, the state
+			// store write and the mempool update, which are ours, not the app's
+			"exec", timings.Exec,
 		)
 	}
 	s.logger.Info("block sync rate", keyvals...)
