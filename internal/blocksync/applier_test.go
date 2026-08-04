@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -97,4 +98,54 @@ func TestBlockApplierApply(t *testing.T) {
 			fn()
 		})
 	}
+}
+
+// TestApplyStatsTakeEmpty checks that take reports nothing when no block has
+// been applied, so the sync rate line does not print averages of zero samples.
+func TestApplyStatsTakeEmpty(t *testing.T) {
+	var stats applyStats
+
+	_, measured := stats.take()
+	require.False(t, measured)
+}
+
+// TestApplyStatsTakeAveragesAndResets checks that take returns the mean over the
+// blocks since the previous call, and that it clears the counters so each caller
+// sees only its own interval.
+func TestApplyStatsTakeAveragesAndResets(t *testing.T) {
+	var stats applyStats
+
+	stats.add(10*time.Millisecond, 2*time.Millisecond, 30*time.Millisecond, 100*time.Millisecond)
+	stats.add(20*time.Millisecond, 4*time.Millisecond, 50*time.Millisecond, 200*time.Millisecond)
+
+	timings, measured := stats.take()
+	require.True(t, measured)
+	require.Equal(t, 15*time.Millisecond, timings.PartSet)
+	require.Equal(t, 3*time.Millisecond, timings.Verify)
+	require.Equal(t, 40*time.Millisecond, timings.Save)
+	require.Equal(t, 150*time.Millisecond, timings.Exec)
+
+	// the interval is consumed, so a second call has nothing to report
+	_, measured = stats.take()
+	require.False(t, measured, "take must reset the counters")
+
+	// and counting starts over rather than resuming the old average
+	stats.add(6*time.Millisecond, 6*time.Millisecond, 6*time.Millisecond, 6*time.Millisecond)
+	timings, measured = stats.take()
+	require.True(t, measured)
+	require.Equal(t, 6*time.Millisecond, timings.PartSet)
+}
+
+// TestApplyStatsSubMillisecondPreserved guards the reason the log line reports
+// durations rather than whole milliseconds: these stages are routinely
+// sub-millisecond, and truncating them would report 0 before and after any
+// improvement.
+func TestApplyStatsSubMillisecondPreserved(t *testing.T) {
+	var stats applyStats
+	stats.add(300*time.Microsecond, 900*time.Microsecond, time.Millisecond, time.Millisecond)
+
+	timings, measured := stats.take()
+	require.True(t, measured)
+	require.Equal(t, 300*time.Microsecond, timings.PartSet)
+	require.Zero(t, timings.PartSet.Milliseconds(), "the value this test exists to protect")
 }
