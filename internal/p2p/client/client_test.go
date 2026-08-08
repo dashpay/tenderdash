@@ -139,13 +139,15 @@ func (suite *ChannelTestSuite) TestGetBlockTimeout() {
 // would panic and take the whole process down, because the resolve path runs
 // outside the consumer's panic recovery. This reproduces that window with the
 // deschedule made explicit.
-func (suite *ChannelTestSuite) TestRemovePendingKeepsChannelSendable() {
-	reqID := uuid.NewString()
-	respCh := suite.client.addPending(reqID)
-	suite.client.removePending(reqID)
-	suite.Require().NotPanics(func() {
-		respCh <- result{Value: suite.response}
-	})
+func (suite *ChannelTestSuite) TestRetirePendingKeepsChannelSendable() {
+	for _, timedOut := range []bool{false, true} {
+		reqID := uuid.NewString()
+		respCh := suite.client.addPending(reqID)
+		suite.client.retirePending(reqID, timedOut)
+		suite.Require().NotPanics(func() {
+			respCh <- result{Value: suite.response}
+		}, "timedOut=%v", timedOut)
+	}
 }
 
 // A peer that answers a request we have already given up on is slow, not
@@ -189,15 +191,24 @@ func (suite *ChannelTestSuite) TestUnsolicitedResponseIDIsAnError() {
 	suite.Require().Contains(err.Error(), neverIssued)
 }
 
-// Retired IDs are remembered so late responses can be recognized, but the memory
-// has to be a window rather than a log: retention must track how many requests
-// are in flight, not how many have ever been issued.
-func (suite *ChannelTestSuite) TestRetiredRequestIDsAreBounded() {
-	const requests = 100
+// Retention has to track how many requests are in flight, not how many have ever
+// been issued. Requests that succeed or are abandoned vastly outnumber those that
+// time out, so remembering them too would tie memory to throughput: a node doing
+// thousands of requests a second would hold every ID for the whole window.
+func (suite *ChannelTestSuite) TestRetentionTracksInFlightNotThroughput() {
+	const requests = 1000
 	for i := 0; i < requests; i++ {
 		reqID := uuid.NewString()
 		suite.client.addPending(reqID)
-		suite.client.removePending(reqID)
+		suite.client.retirePending(reqID, false)
+	}
+	suite.Require().Equal(0, suite.pendingLen(), "settled requests must leave nothing behind")
+	suite.Require().Empty(suite.client.tombstones)
+
+	for i := 0; i < requests; i++ {
+		reqID := uuid.NewString()
+		suite.client.addPending(reqID)
+		suite.client.retirePending(reqID, true)
 	}
 	suite.Require().Equal(requests, suite.pendingLen())
 
@@ -205,6 +216,44 @@ func (suite *ChannelTestSuite) TestRetiredRequestIDsAreBounded() {
 	suite.client.addPending(uuid.NewString())
 	suite.Require().Equal(1, suite.pendingLen())
 	// The expiry index must drain with the map, or it becomes the leak instead.
+	suite.Require().Empty(suite.client.tombstones)
+}
+
+// The lifetime must hold on a client that has gone quiet. Sweeping is driven by
+// activity, so a node that stops issuing requests runs no sweep at all; if the
+// window were enforced only by sweeping, the last timed-out IDs would shield
+// their peers forever. Nothing here issues a request after the timeout.
+func (suite *ChannelTestSuite) TestTimedOutRequestStopsShieldingPeerWhenIdle() {
+	ctx := context.Background()
+	reqID := uuid.NewString()
+	suite.client.addPending(reqID)
+	suite.client.retirePending(reqID, true)
+
+	// Inside the window the peer is merely late, and is not reported.
+	suite.Require().NoError(suite.client.resolveMessage(ctx, reqID, result{Value: suite.response}))
+
+	suite.fakeClock.Advance(2*peerTimeout + time.Second)
+	err := suite.client.resolveMessage(ctx, reqID, result{Value: suite.response})
+	suite.Require().Error(err)
+	suite.Require().Contains(err.Error(), reqID)
+}
+
+// Retirement must reclaim as well, so the memory a burst leaves behind does not
+// wait on a request that may never come.
+func (suite *ChannelTestSuite) TestRetirementReclaimsExpiredTombstones() {
+	const requests = 100
+	for i := 0; i < requests; i++ {
+		reqID := uuid.NewString()
+		suite.client.addPending(reqID)
+		suite.client.retirePending(reqID, true)
+	}
+	suite.Require().Equal(requests, suite.pendingLen())
+
+	suite.fakeClock.Advance(2*peerTimeout + time.Second)
+	// A retirement alone must clear the lot. addPending is deliberately not called
+	// here - it sweeps too, and would mask whether the retirement path does.
+	suite.client.retirePending(uuid.NewString(), false)
+	suite.Require().Equal(0, suite.pendingLen())
 	suite.Require().Empty(suite.client.tombstones)
 }
 
@@ -216,7 +265,7 @@ func (suite *ChannelTestSuite) TestRetiredRequestIDsAreBounded() {
 func (suite *ChannelTestSuite) TestDuplicateResponseDoesNotBlockResolver() {
 	ctx := context.Background()
 	reqID := uuid.NewString()
-	suite.client.addPending(reqID)
+	respCh := suite.client.addPending(reqID)
 	// Fill the buffer. With no promise waiting, this response is never read.
 	suite.Require().NoError(suite.client.resolveMessage(ctx, reqID, result{Value: suite.response}))
 
@@ -230,6 +279,15 @@ func (suite *ChannelTestSuite) TestDuplicateResponseDoesNotBlockResolver() {
 	case <-time.After(2 * time.Second):
 		suite.Require().Fail("resolveMessage blocked on a response buffer nobody reads")
 	}
+	// The first response must survive. Dropping both would also not block, and
+	// would lose the answer a waiting promise is about to read.
+	select {
+	case res := <-respCh:
+		suite.Require().Equal(result{Value: suite.response}, res)
+	default:
+		suite.Require().Fail("the first response was dropped along with the duplicate")
+	}
+	suite.Require().Empty(respCh)
 }
 
 func (suite *ChannelTestSuite) TestGetSyncStatus() {
