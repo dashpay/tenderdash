@@ -115,12 +115,19 @@ type (
 		Value any
 		Err   error
 	}
-	// tombstone replaces a request's response channel in the pending map once the
-	// request's promise has settled. Keeping the request ID, rather than dropping
-	// it, is what lets resolveMessage tell a late answer to a request we really
-	// made from a response quoting an ID we never issued: the first is ordinary
-	// slowness, the second is unsolicited traffic.
-	tombstone struct{}
+	// tombstone replaces the response channel of a request that timed out. Keeping
+	// the request ID, rather than dropping it, is what lets resolveMessage tell a
+	// late answer to a request we really made from a response quoting an ID we
+	// never issued: the first is ordinary slowness, the second is unsolicited
+	// traffic.
+	//
+	// It carries its own deadline so that resolveMessage can enforce the lifetime
+	// on lookup. Sweeping reclaims memory, but correctness must not wait for it:
+	// an idle client sweeps nothing, and a tombstone that outlives its window
+	// would go on shielding a peer indefinitely.
+	tombstone struct {
+		expiresAt time.Time
+	}
 	// retiredRequest indexes one tombstone by the moment it stops being worth
 	// remembering.
 	retiredRequest struct {
@@ -375,7 +382,13 @@ func (c *Client) resolveMessage(_ctx context.Context, respID string, res result)
 		// the promise takes that one, so anything further is a duplicate; and if the
 		// promise has already settled, nothing will ever drain the buffer at all.
 		// Waiting there would park the consumer goroutine - and with it every message
-		// it carries - for as long as the node runs.
+		// it carries - for as long as the node runs. A receiver never waits on a
+		// channel whose buffer is non-empty, so a full buffer means nobody is owed
+		// this value and dropping it loses nothing.
+		//
+		// There is deliberately no context arm here. With a default the select cannot
+		// block, so there is nothing left to cancel, and an arm on an already-canceled
+		// context would instead win a coin flip against delivering the response.
 		select {
 		case v <- res:
 		default:
@@ -383,14 +396,27 @@ func (c *Client) resolveMessage(_ctx context.Context, respID string, res result)
 		}
 		return nil
 	case tombstone:
+		if c.clock.Now().After(v.expiresAt) {
+			// Older than we promise to remember. An answer this late is indistinguishable
+			// from one we never asked for, so it stops being shielded here.
+			break
+		}
 		// We did issue this request, but stopped waiting for it. The peer is late,
 		// which is not an offense, so the response is discarded and no error is
 		// returned - an error here would make iter report the peer, which can evict
 		// it outright and bypass the caller's own failure policy.
-		c.logger.Debug("discarding a response for an already retired request", "response_id", respID)
+		c.logger.Debug("discarding a response for a timed-out request", "response_id", respID)
+		return nil
+	default:
+		// Only a channel or a tombstone is ever stored, so reaching here means the
+		// map grew a third value type. That is our bug, not the peer's: log it rather
+		// than returning an error, which iter would turn into a PeerError against
+		// whoever happened to answer.
+		c.logger.Error("pending response has an unexpected type",
+			"response_id", respID, "type", fmt.Sprintf("%T", val))
 		return nil
 	}
-	return fmt.Errorf("pending response %s has an unexpected type %T: %w", respID, val, ErrCannotResolveResponse)
+	return fmt.Errorf("pending response %s not found", respID)
 }
 
 func (c *Client) sendWithResponse(ctx context.Context, reqID string, peerID types.NodeID, msg proto.Message) (chan result, error) {
@@ -423,19 +449,34 @@ func (c *Client) addPending(reqID string) chan result {
 	return respCh
 }
 
-// removePending retires a request whose promise has settled, leaving a tombstone
-// in its place so a response arriving afterwards is recognized as late rather
-// than unsolicited.
+// retirePending drops a settled request from the pending map.
 //
-// The response channel is deliberately not closed. Its only reader is the
-// promise executor, which has already returned by the time this deferred call
-// runs, so a close would signal nobody - while a resolver that loaded the channel
-// a moment earlier would panic sending into it, on a path with no panic recovery
-// above it. Leaving it open costs nothing, because resolveMessage never blocks on
-// it: a late send either fills the one-slot buffer nobody reads or is dropped, and
-// the channel is collected along with the tombstone.
-func (c *Client) removePending(reqID string) {
-	c.pending.Store(reqID, tombstone{})
+// Only a request that timed out leaves a tombstone behind, so that a peer which
+// answers afterwards is recognized as late rather than as sending a response we
+// never asked for. Every other ending - the answer arrived, or the caller went
+// away - removes the entry outright. Tombstoning those too would also spare a
+// duplicate response from being reported, but it would make what we retain scale
+// with total throughput instead of with the requests actually in flight: a busy
+// node completing thousands of requests a second would hold every one of their
+// IDs for the whole window, where timeouts alone are capped by how many requests
+// can be outstanding at once.
+//
+// The response channel is deliberately not closed in either case. Its only reader
+// is the promise executor, which has already returned by the time this deferred
+// call runs, so a close would signal nobody - while a resolver that loaded the
+// channel a moment earlier would panic sending into it, on a path with no panic
+// recovery above it. Leaving it open costs nothing, because resolveMessage never
+// blocks on it: a late send either fills the one-slot buffer nobody reads or is
+// dropped, and the channel becomes garbage as soon as it leaves the map.
+func (c *Client) retirePending(reqID string, timedOut bool) {
+	// Reclaim on retirement as well as on issuance. A node that stops making
+	// requests would otherwise never run a sweep again and would hold its final
+	// window of tombstones for as long as it lives.
+	c.expireTombstones()
+	if !timedOut {
+		c.pending.Delete(reqID)
+		return
+	}
 	c.tombstoneMtx.Lock()
 	defer c.tombstoneMtx.Unlock()
 	// Read the clock under the lock so the list stays sorted by expiry: concurrent
@@ -443,6 +484,7 @@ func (c *Client) removePending(reqID string) {
 	// Two request timeouts is long enough to still recognize a peer that answers
 	// just after we gave up, and short enough to bound what we hold on to.
 	expiresAt := c.clock.Now().Add(2 * c.reqTimeout)
+	c.pending.Store(reqID, tombstone{expiresAt: expiresAt})
 	c.tombstones = append(c.tombstones, retiredRequest{id: reqID, expiresAt: expiresAt})
 }
 
@@ -457,7 +499,7 @@ func (c *Client) expireTombstones() {
 	for expired < len(c.tombstones) && !c.tombstones[expired].expiresAt.After(now) {
 		// Compare before deleting so only a tombstone is ever removed, never a live
 		// request that somehow shares the ID.
-		c.pending.CompareAndDelete(c.tombstones[expired].id, tombstone{})
+		c.pending.CompareAndDelete(c.tombstones[expired].id, tombstone{expiresAt: c.tombstones[expired].expiresAt})
 		expired++
 	}
 	c.tombstones = c.tombstones[expired:]
@@ -474,7 +516,10 @@ func newPromise[T proto.Message](
 	client *Client,
 ) *promise.Promise[T] {
 	return promise.New(func(resolve func(data T), reject func(err error)) {
-		defer client.removePending(reqID)
+		// Only a timeout leaves the request ID recognizable afterwards; see
+		// retirePending for why the other endings must not.
+		timedOut := false
+		defer func() { client.retirePending(reqID, timedOut) }()
 		select {
 		case <-ctx.Done():
 			reject(fmt.Errorf("cannot complete a promise: %w", ctx.Err()))
@@ -493,6 +538,7 @@ func newPromise[T proto.Message](
 			// other request already in flight to it. Callers that want to act on
 			// repeated timeouts can count them, and a genuinely dead connection
 			// is still caught by the transport's ping/pong.
+			timedOut = true
 			reject(ErrPeerNotResponded)
 		}
 	})
