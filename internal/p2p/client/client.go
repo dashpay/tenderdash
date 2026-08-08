@@ -396,7 +396,10 @@ func (c *Client) resolveMessage(_ctx context.Context, respID string, res result)
 		}
 		return nil
 	case tombstone:
-		if c.clock.Now().After(v.expiresAt) {
+		// Expiry is inclusive of the deadline, matching expireTombstones. If the two
+		// disagreed, a response landing exactly on it would be shielded or reported
+		// depending only on which path happened to run first.
+		if !v.expiresAt.After(c.clock.Now()) {
 			// Older than we promise to remember. An answer this late is indistinguishable
 			// from one we never asked for, so it stops being shielded here.
 			break
@@ -438,11 +441,12 @@ func (c *Client) sendWithResponse(ctx context.Context, reqID string, peerID type
 }
 
 func (c *Client) addPending(reqID string) chan result {
-	// Issuing requests is the only thing that grows the pending map, so it is also
-	// the only place that has to shrink it. Sweeping inline keeps Client free of a
-	// background goroutine that shutdown would then have to join, and it ties what
-	// we retain to the rate at which we ourselves issue requests - a peer cannot
-	// inflate it.
+	// Issuance and retirement are both opportunistic sweep points: they are the
+	// moments the map changes, and sweeping there keeps Client free of a background
+	// goroutine that shutdown would have to join. Neither is guaranteed to run - an
+	// idle client sweeps nothing - so the lifetime itself is enforced at lookup in
+	// resolveMessage, and sweeping only reclaims the memory. What we retain is tied
+	// to the requests we issue; a peer cannot inflate it.
 	c.expireTombstones()
 	respCh := make(chan result, 1)
 	c.pending.Store(reqID, respCh)
@@ -451,15 +455,19 @@ func (c *Client) addPending(reqID string) chan result {
 
 // retirePending drops a settled request from the pending map.
 //
-// Only a request that timed out leaves a tombstone behind, so that a peer which
-// answers afterwards is recognized as late rather than as sending a response we
-// never asked for. Every other ending - the answer arrived, or the caller went
-// away - removes the entry outright. Tombstoning those too would also spare a
-// duplicate response from being reported, but it would make what we retain scale
-// with total throughput instead of with the requests actually in flight: a busy
-// node completing thousands of requests a second would hold every one of their
-// IDs for the whole window, where timeouts alone are capped by how many requests
-// can be outstanding at once.
+// A request that ended without an answer - it timed out, or the caller gave up -
+// leaves a tombstone behind, so a peer that answers afterwards is recognized as
+// late rather than as sending a response we never asked for. Both endings are
+// ours, not the peer's, and reporting a peer for answering a question we stopped
+// waiting on is the very fault this path exists to avoid.
+//
+// An answered request is forgotten immediately. A second response to a request
+// the peer has already answered takes two answers to one question, which is
+// misbehavior and fair to attribute. Keeping those IDs as well would tie what we
+// retain to total throughput - a busy node completing thousands of requests a
+// second would hold every one of their IDs for the whole window - whereas
+// timeouts and cancellations are both capped by how many requests can be
+// outstanding at once, so retention follows concurrency instead.
 //
 // The response channel is deliberately not closed in either case. Its only reader
 // is the promise executor, which has already returned by the time this deferred
@@ -468,12 +476,12 @@ func (c *Client) addPending(reqID string) chan result {
 // recovery above it. Leaving it open costs nothing, because resolveMessage never
 // blocks on it: a late send either fills the one-slot buffer nobody reads or is
 // dropped, and the channel becomes garbage as soon as it leaves the map.
-func (c *Client) retirePending(reqID string, timedOut bool) {
+func (c *Client) retirePending(reqID string, answered bool) {
 	// Reclaim on retirement as well as on issuance. A node that stops making
 	// requests would otherwise never run a sweep again and would hold its final
 	// window of tombstones for as long as it lives.
 	c.expireTombstones()
-	if !timedOut {
+	if answered {
 		c.pending.Delete(reqID)
 		return
 	}
@@ -516,15 +524,17 @@ func newPromise[T proto.Message](
 	client *Client,
 ) *promise.Promise[T] {
 	return promise.New(func(resolve func(data T), reject func(err error)) {
-		// Only a timeout leaves the request ID recognizable afterwards; see
-		// retirePending for why the other endings must not.
-		timedOut := false
-		defer func() { client.retirePending(reqID, timedOut) }()
+		// Every ending except an answer leaves the request ID recognizable for a
+		// while; see retirePending. The flag defaults to the cautious case, so a
+		// branch added here cannot silently start reporting peers.
+		answered := false
+		defer func() { client.retirePending(reqID, answered) }()
 		select {
 		case <-ctx.Done():
 			reject(fmt.Errorf("cannot complete a promise: %w", ctx.Err()))
 			return
 		case res := <-respCh:
+			answered = true
 			if res.Err != nil {
 				reject(res.Err)
 				return
@@ -538,7 +548,6 @@ func newPromise[T proto.Message](
 			// other request already in flight to it. Callers that want to act on
 			// repeated timeouts can count them, and a genuinely dead connection
 			// is still caught by the transport's ping/pong.
-			timedOut = true
 			reject(ErrPeerNotResponded)
 		}
 	})
