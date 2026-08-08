@@ -140,13 +140,13 @@ func (suite *ChannelTestSuite) TestGetBlockTimeout() {
 // outside the consumer's panic recovery. This reproduces that window with the
 // deschedule made explicit.
 func (suite *ChannelTestSuite) TestRetirePendingKeepsChannelSendable() {
-	for _, timedOut := range []bool{false, true} {
+	for _, answered := range []bool{false, true} {
 		reqID := uuid.NewString()
 		respCh := suite.client.addPending(reqID)
-		suite.client.retirePending(reqID, timedOut)
+		suite.client.retirePending(reqID, answered)
 		suite.Require().NotPanics(func() {
 			respCh <- result{Value: suite.response}
-		}, "timedOut=%v", timedOut)
+		}, "answered=%v", answered)
 	}
 }
 
@@ -196,27 +196,80 @@ func (suite *ChannelTestSuite) TestUnsolicitedResponseIDIsAnError() {
 // time out, so remembering them too would tie memory to throughput: a node doing
 // thousands of requests a second would hold every ID for the whole window.
 func (suite *ChannelTestSuite) TestRetentionTracksInFlightNotThroughput() {
-	const requests = 1000
-	for i := 0; i < requests; i++ {
-		reqID := uuid.NewString()
-		suite.client.addPending(reqID)
-		suite.client.retirePending(reqID, false)
+	ctx := context.Background()
+	const requests = 200
+	var reqID string
+	envelopeArg := func(envelope p2p.Envelope) bool {
+		var ok bool
+		reqID, ok = envelope.Attributes[RequestIDAttribute]
+		return ok
 	}
-	suite.Require().Equal(0, suite.pendingLen(), "settled requests must leave nothing behind")
-	suite.Require().Empty(suite.client.tombstones)
-
+	suite.p2pChannel.
+		On("Send", mock.Anything, mock.MatchedBy(envelopeArg)).
+		Times(requests).
+		Return(nil)
+	// Drive real promises to completion rather than calling retirePending directly,
+	// so this pins how newPromise classifies an outcome, not just what the map does
+	// once told.
 	for i := 0; i < requests; i++ {
-		reqID := uuid.NewString()
-		suite.client.addPending(reqID)
-		suite.client.retirePending(reqID, true)
+		p, err := suite.client.GetBlock(ctx, suite.height, suite.peerID)
+		suite.Require().NoError(err)
+		envelope := newEnvelope(uuid.NewString(), suite.peerID, suite.response)
+		envelope.AddAttribute(ResponseIDAttribute, reqID)
+		suite.Require().NoError(suite.client.resolve(ctx, envelope))
+		_, err = p.Await()
+		suite.Require().NoError(err)
 	}
-	suite.Require().Equal(requests, suite.pendingLen())
-
-	suite.fakeClock.Advance(2*peerTimeout + time.Second)
-	suite.client.addPending(uuid.NewString())
-	suite.Require().Equal(1, suite.pendingLen())
-	// The expiry index must drain with the map, or it becomes the leak instead.
+	suite.Require().Equal(0, suite.pendingLen(), "answered requests must leave nothing behind")
 	suite.Require().Empty(suite.client.tombstones)
+}
+
+// Canceling is our decision, not the peer's. A peer that answers a request we
+// abandoned behaved correctly and must not be reported for it - the same reason
+// a timed-out request is remembered.
+func (suite *ChannelTestSuite) TestCancelledRequestDoesNotReportALateResponse() {
+	ctx, cancel := context.WithCancel(context.Background())
+	var reqID string
+	envelopeArg := func(envelope p2p.Envelope) bool {
+		var ok bool
+		reqID, ok = envelope.Attributes[RequestIDAttribute]
+		return ok
+	}
+	suite.p2pChannel.
+		On("Send", mock.Anything, mock.MatchedBy(envelopeArg)).
+		Once().
+		Return(nil)
+	p, err := suite.client.GetBlock(ctx, suite.height, suite.peerID)
+	suite.Require().NoError(err)
+	cancel()
+	_, err = p.Await()
+	suite.Require().Error(err)
+
+	envelope := newEnvelope(uuid.NewString(), suite.peerID, suite.response)
+	envelope.AddAttribute(ResponseIDAttribute, reqID)
+	// No SendError is expected on the channel mock, so reporting the peer fails here.
+	suite.Require().NoError(suite.client.resolve(context.Background(), envelope))
+	suite.Require().Equal(1, suite.pendingLen(), "a canceled request must stay recognizable")
+}
+
+// A response landing exactly on the deadline must be judged the same way by both
+// the lookup and the sweep, or it is shielded or reported purely on which ran
+// first.
+func (suite *ChannelTestSuite) TestTombstoneLifetimeBoundaryIsInclusive() {
+	ctx := context.Background()
+	reqID := uuid.NewString()
+	suite.client.addPending(reqID)
+	suite.client.retirePending(reqID, false)
+
+	suite.fakeClock.Advance(2*peerTimeout - time.Nanosecond)
+	suite.Require().NoError(suite.client.resolveMessage(ctx, reqID, result{Value: suite.response}),
+		"one tick before the deadline the peer is still covered")
+
+	suite.fakeClock.Advance(time.Nanosecond)
+	suite.Require().Error(suite.client.resolveMessage(ctx, reqID, result{Value: suite.response}),
+		"at the deadline the lookup must stop covering the peer")
+	suite.client.expireTombstones()
+	suite.Require().Equal(0, suite.pendingLen(), "the sweep must expire at the same instant")
 }
 
 // The lifetime must hold on a client that has gone quiet. Sweeping is driven by
@@ -227,7 +280,7 @@ func (suite *ChannelTestSuite) TestTimedOutRequestStopsShieldingPeerWhenIdle() {
 	ctx := context.Background()
 	reqID := uuid.NewString()
 	suite.client.addPending(reqID)
-	suite.client.retirePending(reqID, true)
+	suite.client.retirePending(reqID, false)
 
 	// Inside the window the peer is merely late, and is not reported.
 	suite.Require().NoError(suite.client.resolveMessage(ctx, reqID, result{Value: suite.response}))
@@ -245,14 +298,14 @@ func (suite *ChannelTestSuite) TestRetirementReclaimsExpiredTombstones() {
 	for i := 0; i < requests; i++ {
 		reqID := uuid.NewString()
 		suite.client.addPending(reqID)
-		suite.client.retirePending(reqID, true)
+		suite.client.retirePending(reqID, false)
 	}
 	suite.Require().Equal(requests, suite.pendingLen())
 
 	suite.fakeClock.Advance(2*peerTimeout + time.Second)
 	// A retirement alone must clear the lot. addPending is deliberately not called
 	// here - it sweeps too, and would mask whether the retirement path does.
-	suite.client.retirePending(uuid.NewString(), false)
+	suite.client.retirePending(uuid.NewString(), true)
 	suite.Require().Equal(0, suite.pendingLen())
 	suite.Require().Empty(suite.client.tombstones)
 }
