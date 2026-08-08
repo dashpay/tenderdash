@@ -2,7 +2,6 @@ package blocksync
 
 import (
 	"math"
-	"sync"
 	"time"
 
 	"golang.org/x/exp/constraints"
@@ -15,9 +14,11 @@ import (
 type (
 	// InMemPeerStore in-memory peer store
 	InMemPeerStore struct {
-		mtx       sync.RWMutex
-		store     store.Store[types.NodeID, PeerData]
-		maxHeight int64
+		// Held as the concrete store rather than the store.Store interface so that
+		// Upsert can insert-or-merge in a single locked operation; composing that
+		// out of the interface's Get, Put and Update reintroduces a window in which
+		// a concurrent write is lost. Nothing here substitutes another store.
+		store *store.InMemStore[types.NodeID, PeerData]
 	}
 	// PeerData uses to keep peer related data like base height and the current height etc
 	PeerData struct {
@@ -55,21 +56,12 @@ func (p *InMemPeerStore) Get(peerID types.NodeID) (PeerData, bool) {
 
 // GetAndDelete combines Get operation and Delete in one call
 func (p *InMemPeerStore) GetAndDelete(peerID types.NodeID) (PeerData, bool) {
-	p.mtx.Lock()
-	defer p.mtx.Unlock()
-	peer, found := p.store.GetAndDelete(peerID)
-	if found && peer.height == p.maxHeight {
-		p.updateMaxHeight()
-	}
-	return peer, found
+	return p.store.GetAndDelete(peerID)
 }
 
 // Put adds the peer data to the store if the peer does not exist, otherwise update the current value
 func (p *InMemPeerStore) Put(peerID types.NodeID, newPeer PeerData) {
 	p.store.Put(peerID, newPeer)
-	p.mtx.Lock()
-	defer p.mtx.Unlock()
-	p.maxHeight = max(p.maxHeight, newPeer.height)
 }
 
 // Upsert records the range of blocks a peer advertises, adding the peer if it is
@@ -83,69 +75,46 @@ func (p *InMemPeerStore) Put(peerID types.NodeID, newPeer PeerData) {
 // more often than a block request times out, so replacing those counters here
 // would reset them faster than any threshold built on them can be reached and
 // would leave requests in flight that nothing accounts for.
+//
+// Insert and merge are a single store operation. Peers are made known by the p2p
+// consumer goroutine while the job producer is already issuing requests against
+// them, so a lookup followed by a separate write would let a peer inserted in
+// between be overwritten - losing precisely the state this exists to keep.
 func (p *InMemPeerStore) Upsert(newPeer PeerData) {
-	var (
-		known      bool
-		prevHeight int64
-	)
-	// Merged through the store's own update path, so it is atomic with respect to
-	// the request accounting applied from the worker goroutines.
-	p.store.Update(newPeer.peerID, func(_ types.NodeID, peer *PeerData) {
-		known = true
-		prevHeight = peer.height
+	p.store.Upsert(newPeer.peerID, newPeer, func(_ types.NodeID, peer *PeerData) {
 		peer.base = newPeer.base
 		peer.height = newPeer.height
 	})
-	if !known {
-		p.Put(newPeer.peerID, newPeer)
-		return
-	}
-	p.mtx.Lock()
-	defer p.mtx.Unlock()
-	if newPeer.height >= p.maxHeight {
-		p.maxHeight = newPeer.height
-		return
-	}
-	// The peer that held the highest advertised block just lowered its height -
-	// its blocks were pruned, or it restarted from a snapshot. Keeping the old
-	// value would leave the maximum pointing at a block no peer can serve, which
-	// the synchronizer reads as "still behind" for as long as that peer stays
-	// connected.
-	if prevHeight == p.maxHeight {
-		p.updateMaxHeight()
-	}
 }
 
 // Delete deletes the peer data from the store
 func (p *InMemPeerStore) Delete(peerID types.NodeID) {
-	p.mtx.Lock()
-	defer p.mtx.Unlock()
-	peer, found := p.store.GetAndDelete(peerID)
-	if !found {
-		return
-	}
-	if peer.height == p.maxHeight {
-		p.updateMaxHeight()
-	}
+	p.store.Delete(peerID)
 }
 
 // MaxHeight looks at all the peers in the store to get the maximum peer height.
+//
+// It is derived on read rather than cached. A cached maximum has to be maintained
+// by every path that adds, updates or removes a peer, each holding its own lock,
+// so two of them interleaving can publish a height that belonged to a peer already
+// gone or already lowered. This value decides whether the node considers itself
+// caught up and whether a stalled sync gives up, so a height no peer can serve does
+// not merely misreport - it keeps the node in block sync waiting for a block that
+// will never arrive. The scan is O(peers), the same order as FindPeer and
+// FindTimedoutPeers, which the producing loop already runs for every job.
 func (p *InMemPeerStore) MaxHeight() int64 {
-	p.mtx.RLock()
-	defer p.mtx.RUnlock()
-	return p.maxHeight
+	var maxHeight int64
+	// All takes a snapshot under the store's lock, so the result is the maximum of
+	// a state the store actually held, not a mix of several.
+	for _, peer := range p.store.All() {
+		maxHeight = max(maxHeight, peer.height)
+	}
+	return maxHeight
 }
 
 // Update applies update functions to the peer if it exists
 func (p *InMemPeerStore) Update(peerID types.NodeID, updates ...store.UpdateFunc[types.NodeID, PeerData]) {
 	p.store.Update(peerID, updates...)
-	peer, found := p.store.Get(peerID)
-	if !found {
-		return
-	}
-	p.mtx.Lock()
-	defer p.mtx.Unlock()
-	p.maxHeight = max(p.maxHeight, peer.height)
 }
 
 // Query finds and returns the copy of peers by specification conditions
@@ -208,13 +177,6 @@ func (p *InMemPeerStore) Len() int {
 // IsZero returns true if the store doesn't have a peer yet otherwise false
 func (p *InMemPeerStore) IsZero() bool {
 	return p.store.IsZero()
-}
-
-func (p *InMemPeerStore) updateMaxHeight() {
-	p.maxHeight = 0
-	for _, peer := range p.store.All() {
-		p.maxHeight = max(p.maxHeight, peer.height)
-	}
 }
 
 // TODO with fixed worker pool size this condition is not needed anymore
