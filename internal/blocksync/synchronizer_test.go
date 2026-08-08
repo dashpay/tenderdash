@@ -1221,13 +1221,13 @@ func (suite *SynchronizerTestSuite) newBacklogHarness() *backlogHarness {
 	wp := workerpool.New(0, workerpool.WithJobCh(jobCh), workerpool.WithResultCh(resultCh))
 	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
 	pool := NewSynchronizer(1, suite.client, applier, WithWorkerPool(wp))
-	// Enough peers for the whole window to be in flight at once. A peer takes at
-	// most maxPendingRequestsPerPeer requests and job production waits for one
-	// that can take another, so with fewer peers it would be the per-peer limit
-	// stopping production rather than the window under test. They advertise far
-	// more than the chain holds, so nothing here stops at the highest height a
-	// peer claims either.
-	for i := 0; i < maxOutstandingHeights/maxPendingRequestsPerPeer+10; i++ {
+	// Enough peers to hold every height in the chain in flight at once, not just
+	// a window's worth. A peer takes at most maxPendingRequestsPerPeer requests
+	// and job production waits for one that can take another, so a run that got
+	// past the limits under test would otherwise stop inside peer selection and
+	// report nothing about what it did. They advertise far more than the chain
+	// holds, so nothing here stops at the highest height a peer claims either.
+	for i := 0; i < backlogChainLen/maxPendingRequestsPerPeer+2; i++ {
 		pool.AddPeer(newPeerData(types.NodeID(fmt.Sprintf("backlog peer %02d", i)), 1, int64(1)<<40))
 	}
 	return &backlogHarness{suite: suite, pool: pool, jobCh: jobCh, resultCh: resultCh, chainLen: len(chain)}
