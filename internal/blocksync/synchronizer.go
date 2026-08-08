@@ -37,6 +37,18 @@ const (
 	maxPendingRequestsPerPeer           = 20
 	defaultSyncRateIntervalBlocks int64 = 100
 
+	// maxOutstandingHeights is how many heights block sync may have requested
+	// and not yet applied. A height is only requested while it lies inside a
+	// window of that many heights starting at the one being applied.
+	//
+	// It is the same width as the worker pool, which is the stage that turns a
+	// requested height into a network request. The pool works on at most
+	// poolWorkerSize of them at a time, so while nothing is piling up unapplied
+	// the window is wide enough for every worker to have something to fetch, and
+	// the bound binds only when responses are accumulating - which is what it is
+	// here for.
+	maxOutstandingHeights = poolWorkerSize
+
 	// maxConsecutiveFailures is how many block requests in a row a peer may fail
 	// before we drop it. Requests time out under load, and a peer serves its
 	// requests one at a time, so a single failure says very little about the
@@ -185,7 +197,7 @@ func (s *Synchronizer) OnStop() {
 }
 
 func (s *Synchronizer) produceJob(ctx context.Context) error {
-	if !s.jobGen.shouldJobBeGenerated() {
+	if !s.jobGen.shouldJobBeGenerated(s.currentHeight()) {
 		// TODO need to come up with a smarter way how to produce jobs without sleeping
 		select {
 		case <-ctx.Done():
@@ -298,6 +310,14 @@ func (s *Synchronizer) consumeJobResult(ctx context.Context) error {
 		_ = s.client.Send(ctx, p2p.PeerError{NodeID: failed.PeerID, Err: err})
 	}
 	return nil
+}
+
+// currentHeight returns the height block sync is waiting to apply, which is the
+// lowest height it has not applied yet.
+func (s *Synchronizer) currentHeight() int64 {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+	return s.height
 }
 
 // GetStatus returns synchronizer's height, count of in progress requests
