@@ -1,6 +1,7 @@
 package blocksync
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -15,12 +16,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/internal/p2p"
 	clientmocks "github.com/dashpay/tenderdash/internal/p2p/client/mocks"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/state/mocks"
 	statefactory "github.com/dashpay/tenderdash/internal/state/test/factory"
 	"github.com/dashpay/tenderdash/internal/test/factory"
+	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/libs/promise"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
 	"github.com/dashpay/tenderdash/libs/workerpool"
@@ -173,6 +176,9 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResult() {
 	respH1, _ := BlockResponseFromProto(suite.responses[0], peerID1)
 	respH2, _ := BlockResponseFromProto(suite.responses[1], peerID1)
 	respH3, _ := BlockResponseFromProto(suite.responses[2], peerID2)
+	// the same height answered by a second peer, i.e. the duplicate a retry race
+	// produces
+	duplicateH2, _ := BlockResponseFromProto(suite.responses[1], peerID2)
 	testCases := []struct {
 		result       workerpool.Result
 		mockFn       func(pool *Synchronizer)
@@ -239,6 +245,17 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResult() {
 			result: workerpool.Result{Value: respH2},
 			mockFn: func(pool *Synchronizer) {},
 		},
+		{
+			// The case this PR is about: height 2 was requested from two peers, the
+			// first answer is waiting on height 1 to arrive, and the second answer
+			// now shows up. It must be dropped without reporting its sender, and
+			// without re-queueing the height. suite.client has no Send expectation,
+			// so a peer report fails this case.
+			result: workerpool.Result{Value: duplicateH2},
+			mockFn: func(pool *Synchronizer) {
+				pool.pendingToApply[respH2.Block.Height] = *respH2
+			},
+		},
 	}
 	for i, tc := range testCases {
 		applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
@@ -275,13 +292,14 @@ func (suite *SynchronizerTestSuite) TestRemovePeer() {
 	respH7, _ := BlockResponseFromProto(suite.responses[6], peerID2)
 	responses := []*BlockResponse{respH1, respH2, respH3, respH4, respH5, respH6, respH7}
 	testCases := []struct {
-		peers         []PeerData
-		responses     []*BlockResponse
-		peerID        types.NodeID
-		wantPushBack  []int64
-		wantPending   []int64
-		wantPeers     []PeerData
-		wantMaxHeight int64
+		peers           []PeerData
+		responses       []*BlockResponse
+		peerID          types.NodeID
+		initialPushBack []int64
+		wantPushBack    []int64
+		wantPending     []int64
+		wantPeers       []PeerData
+		wantMaxHeight   int64
 	}{
 		{
 			peers:         peers,
@@ -291,6 +309,17 @@ func (suite *SynchronizerTestSuite) TestRemovePeer() {
 			wantPending:   []int64{2, 3, 6, 7},
 			wantPeers:     []PeerData{peers[1], peers[2]},
 			wantMaxHeight: maxHeight,
+		},
+		{
+			// Heights queued for re-fetch before the removal are not queued twice.
+			peers:           peers,
+			responses:       responses,
+			peerID:          peerID1,
+			initialPushBack: []int64{4},
+			wantPushBack:    []int64{1, 4, 5},
+			wantPending:     []int64{2, 3, 6, 7},
+			wantPeers:       []PeerData{peers[1], peers[2]},
+			wantMaxHeight:   maxHeight,
 		},
 		{
 			peers:         peers,
@@ -321,13 +350,16 @@ func (suite *SynchronizerTestSuite) TestRemovePeer() {
 			for _, resp := range tc.responses {
 				pool.pendingToApply[resp.Block.Height] = *resp
 			}
+			for _, height := range tc.initialPushBack {
+				pool.jobGen.pushBack(height)
+			}
 			pool.RemovePeer(tc.peerID)
 			sort.Slice(pool.jobGen.pushedBack, func(i, j int) bool {
 				return pool.jobGen.pushedBack[i] < pool.jobGen.pushedBack[j]
 			})
 			suite.Require().Equal(tc.wantPushBack, pool.jobGen.pushedBack)
-			// re-requested heights must not stay pending, otherwise the re-fetched
-			// block is rejected as a duplicate
+			// Re-requested heights must not stay pending, otherwise the re-fetched
+			// block is rejected as a duplicate.
 			pending := make([]int64, 0, len(pool.pendingToApply))
 			for height := range pool.pendingToApply {
 				pending = append(pending, height)
@@ -341,11 +373,70 @@ func (suite *SynchronizerTestSuite) TestRemovePeer() {
 	}
 }
 
-// TestConsumeDuplicateBlock checks that a block response for a height that is
-// already pending is dropped without reporting the peer that served it. The peer
-// answered a request we sent, so blaming it for the duplicate evicts good peers.
-func (suite *SynchronizerTestSuite) TestConsumeDuplicateBlock() {
+// TestConsumeDuplicateThenDrain covers what the TestConsumeJobResult table cannot,
+// because it needs two results in sequence: that dropping a duplicate leaves the
+// synchronizer able to make progress afterwards.
+//
+// Height 2 is answered by two peers while height 1 is still outstanding. The
+// duplicate is dropped without reporting its sender, and once height 1 arrives
+// both blocks apply - which exercises the fall-through from the duplicate branch
+// into applyBlock, not just the drop itself.
+func (suite *SynchronizerTestSuite) TestConsumeDuplicateThenDrain() {
 	ctx := context.Background()
+
+	peerID1 := types.NodeID("peer 1")
+	peerID2 := types.NodeID("peer 2")
+	respH1, _ := BlockResponseFromProto(suite.responses[0], peerID1)
+	respH2, _ := BlockResponseFromProto(suite.responses[1], peerID1)
+	duplicateH2, _ := BlockResponseFromProto(suite.responses[1], peerID2)
+
+	resultCh := make(chan workerpool.Result, 2)
+	wp := workerpool.New(1, workerpool.WithResultCh(resultCh))
+	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+	pool := NewSynchronizer(1, suite.client, applier, WithWorkerPool(wp))
+	// height 2 is already in hand and waiting on height 1
+	pool.pendingToApply[respH2.Block.Height] = *respH2
+
+	resultCh <- workerpool.Result{Value: duplicateH2}
+	suite.Require().NoError(pool.consumeJobResult(ctx))
+	suite.Require().Equal(peerID1, pool.pendingToApply[respH2.Block.Height].PeerID,
+		"the response already held must be kept")
+	suite.Require().Empty(pool.jobGen.pushedBack, "a duplicate must not re-queue the height")
+	suite.client.AssertNotCalled(suite.T(), "Send", mock.Anything, mock.Anything)
+
+	suite.store.
+		On("SaveBlock", mock.Anything, mock.Anything, mock.Anything).
+		Twice()
+	suite.blockExec.
+		On("ValidateBlock", mock.Anything, mock.Anything, mock.Anything).
+		Twice().
+		Return(nil)
+	suite.blockExec.
+		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Twice().
+		Return(func(_ context.Context, state sm.State, _ types.BlockID, _ *types.Block, _ *types.Commit) sm.State {
+			return state
+		}, nil)
+
+	resultCh <- workerpool.Result{Value: respH1}
+	suite.Require().NoError(pool.consumeJobResult(ctx))
+
+	suite.Require().Empty(pool.pendingToApply, "both blocks must have been applied")
+	height, _ := pool.GetStatus()
+	suite.Require().EqualValues(3, height, "the synchronizer must have advanced past both blocks")
+	suite.client.AssertNotCalled(suite.T(), "Send", mock.Anything, mock.Anything)
+}
+
+// TestDuplicateBlockIsVisibleAtDefaultLogLevel checks that dropping a duplicate
+// response is reported at the default log level. A duplicate means we requested a
+// height twice, and that re-request cascade is what an operator has to be able to
+// see; the package exposes no metric to see it by.
+func (suite *SynchronizerTestSuite) TestDuplicateBlockIsVisibleAtDefaultLogLevel() {
+	ctx := context.Background()
+
+	var logs bytes.Buffer
+	logger, err := log.NewLogger(config.DefaultLogLevel, &logs)
+	suite.Require().NoError(err)
 
 	peerID1 := types.NodeID("peer 1")
 	peerID2 := types.NodeID("peer 2")
@@ -355,18 +446,130 @@ func (suite *SynchronizerTestSuite) TestConsumeDuplicateBlock() {
 	resultCh := make(chan workerpool.Result, 1)
 	wp := workerpool.New(1, workerpool.WithResultCh(resultCh))
 	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
-	// start at height 2 so that nothing is applied and the duplicate is all that
-	// is under test
-	pool := NewSynchronizer(2, suite.client, applier, WithWorkerPool(wp))
+	// Start above the duplicated height so nothing is applied and the duplicate is
+	// all that is under test.
+	pool := NewSynchronizer(2, suite.client, applier, WithWorkerPool(wp), WithLogger(logger))
 	pool.pendingToApply[respH1.Block.Height] = *respH1
 
 	resultCh <- workerpool.Result{Value: duplicateH1}
 	suite.Require().NoError(pool.consumeJobResult(ctx))
 
-	// the response we already had is kept, and no peer error was sent. The client
-	// mock has no Send expectation, so a report would fail this test.
-	suite.Require().Equal(peerID1, pool.pendingToApply[respH1.Block.Height].PeerID)
+	suite.Require().Contains(logs.String(), "dropping duplicate block response")
+	suite.Require().Contains(logs.String(), string(peerID2))
+}
+
+// TestApplyFailurePunishesSupplyingPeer checks that an apply failure is charged to
+// the peer that supplied the failing block, not to the peer whose response merely
+// happened to be consumed last. Otherwise a single peer can poison a height and
+// evict every honest peer answering after it, while never advancing the height.
+func (suite *SynchronizerTestSuite) TestApplyFailurePunishesSupplyingPeer() {
+	ctx := context.Background()
+
+	poisonPeerID := types.NodeID("poison peer")
+	honestPeerID := types.NodeID("honest peer")
+	poisonH1, _ := BlockResponseFromProto(suite.responses[0], poisonPeerID)
+	honestH2, _ := BlockResponseFromProto(suite.responses[1], honestPeerID)
+
+	resultCh := make(chan workerpool.Result, 1)
+	wp := workerpool.New(1, workerpool.WithResultCh(resultCh))
+	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+	pool := NewSynchronizer(1, suite.client, applier, WithWorkerPool(wp))
+	pool.AddPeer(newPeerData(poisonPeerID, 1, 100))
+	pool.AddPeer(newPeerData(honestPeerID, 1, 100))
+	pool.pendingToApply[poisonH1.Block.Height] = *poisonH1
+
+	suite.blockExec.
+		On("ValidateBlock", mock.Anything, mock.Anything, poisonH1.Block).
+		Once().
+		Return(errors.New("invalid block"))
+	suite.client.
+		On("Send", mock.Anything, mock.MatchedBy(func(peerErr p2p.PeerError) bool {
+			return peerErr.NodeID == poisonPeerID
+		})).
+		Once().
+		Return(nil)
+
+	resultCh <- workerpool.Result{Value: honestH2}
+	suite.Require().NoError(pool.consumeJobResult(ctx))
+
+	// The poisoned height is dropped and re-requested from someone else, so the
+	// synchronizer can still advance.
+	suite.Require().Equal([]int64{poisonH1.Block.Height}, pool.jobGen.pushedBack)
+	suite.Require().NotContains(pool.pendingToApply, poisonH1.Block.Height)
+	_, found := pool.peerStore.Get(poisonPeerID)
+	suite.Require().False(found)
+
+	// The honest peer keeps both its response and its place in the peer store.
+	suite.Require().Contains(pool.pendingToApply, honestH2.Block.Height)
+	_, found = pool.peerStore.Get(honestPeerID)
+	suite.Require().True(found)
+}
+
+// TestAddBlockDropsAlreadyAppliedHeight checks that a straggler response for an
+// already applied height is dropped instead of stored. Only the entry at the
+// current height is ever read, so an entry below it occupies pendingToApply
+// forever, and the peer that answered our own late request must not be punished.
+func (suite *SynchronizerTestSuite) TestAddBlockDropsAlreadyAppliedHeight() {
+	ctx := context.Background()
+
+	const currentHeight = int64(5)
+	peerID := types.NodeID("peer 1")
+	staleH1, _ := BlockResponseFromProto(suite.responses[0], peerID)
+	suite.Require().Less(staleH1.Block.Height, currentHeight)
+
+	resultCh := make(chan workerpool.Result, 1)
+	wp := workerpool.New(1, workerpool.WithResultCh(resultCh))
+	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+	pool := NewSynchronizer(currentHeight, suite.client, applier, WithWorkerPool(wp))
+
+	resultCh <- workerpool.Result{Value: staleH1}
+	suite.Require().NoError(pool.consumeJobResult(ctx))
+
+	suite.Require().Empty(pool.pendingToApply)
 	suite.client.AssertNotCalled(suite.T(), "Send", mock.Anything, mock.Anything)
+}
+
+// TestRemovePeerReleasesLockBeforePushBack checks that removing a peer does not
+// hold the synchronizer lock while re-queueing heights on the job generator.
+// Holding both couples every status read to the job generator lock, and peer
+// removals are triggered by connection churn.
+func (suite *SynchronizerTestSuite) TestRemovePeerReleasesLockBeforePushBack() {
+	peerID := types.NodeID("peer 1")
+	respH1, _ := BlockResponseFromProto(suite.responses[0], peerID)
+
+	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+	pool := NewSynchronizer(1, suite.client, applier)
+	pool.AddPeer(newPeerData(peerID, 1, 100))
+	pool.pendingToApply[respH1.Block.Height] = *respH1
+
+	// Block the job generator so the re-queue cannot complete.
+	pool.jobGen.mtx.Lock()
+	removed := make(chan struct{})
+	go func() {
+		defer close(removed)
+		pool.RemovePeer(peerID)
+	}()
+	// Give the removal time to reach the re-queue and stall there.
+	time.Sleep(50 * time.Millisecond)
+
+	status := make(chan struct{})
+	go func() {
+		defer close(status)
+		pool.GetStatus()
+	}()
+	select {
+	case <-status:
+	case <-time.After(2 * time.Second):
+		suite.Require().Fail("GetStatus blocked on the job generator lock held elsewhere")
+	}
+
+	pool.jobGen.mtx.Unlock()
+	select {
+	case <-removed:
+	case <-time.After(2 * time.Second):
+		suite.Require().Fail("RemovePeer did not finish after the job generator lock was released")
+	}
+	suite.Require().Equal([]int64{respH1.Block.Height}, pool.jobGen.pushedBack)
 }
 
 func (suite *SynchronizerTestSuite) TestUpdateMonitor() {
