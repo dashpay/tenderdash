@@ -342,17 +342,10 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool) {
 			if s.IsCaughtUp() {
 				return true
 			}
-			var (
-				height, _     = s.GetStatus()
-				maxPeerHeight = s.MaxPeerHeight()
-				stalledFor    = s.clock.Since(s.LastAdvance())
-				// Blocks are applied in order, so height is the only one that can
-				// move us forward. Whether a peer can serve it is what decides
-				// whether waiting is worth anything; the highest height anyone
-				// claims does not, since a peer whose blocks start above height
-				// has nothing we can use however high it claims to be.
-				servable = s.peerStore.HasPeerForHeight(height)
-			)
+			height, stalledFor, servable := s.stallSnapshot()
+			// read separately because nothing is decided on it: it only gives the
+			// log lines below the number an operator compares against
+			maxPeerHeight := s.MaxPeerHeight()
 			switch stallVerdictFor(servable, stalledFor) {
 			case stopNothingToFetch:
 				if maxPeerHeight > height {
@@ -394,6 +387,31 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool) {
 			)
 		}
 	}
+}
+
+// stallSnapshot reads everything the stall verdict is formed from as one
+// observation: the height block sync is waiting for, how long it has been
+// waiting for it, and whether any peer can serve it.
+//
+// Blocks are applied in order, so the current height is the only one that can
+// move us forward, and whether a peer can serve that one is what decides
+// whether waiting is worth anything. The highest height anyone claims decides
+// nothing: a peer whose blocks start above us has nothing we can use however
+// high it claims to be.
+//
+// The three are read under one lock because advance() stamps the height and the
+// advance time together under that same lock. A block applied concurrently
+// therefore lands either wholly inside the snapshot or wholly outside it, and
+// the verdict can never pair a height with a staleness or a servability
+// measured against a different one. Read separately, it could: a height read
+// before an advance, checked for servability after one, reports nothing to
+// fetch while the height we had by then moved on to is served. Ending block
+// sync is a one-way door, so a stop assembled from two inconsistent readings
+// leaves the node in consensus catch-up it cannot leave.
+func (s *Synchronizer) stallSnapshot() (height int64, stalledFor time.Duration, servable bool) {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+	return s.height, s.clock.Since(s.lastAdvance), s.peerStore.HasPeerForHeight(s.height)
 }
 
 // stallVerdict says what a lack of progress in block sync means.

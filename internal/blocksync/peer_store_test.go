@@ -121,18 +121,42 @@ func TestInMemPeerStoreFindPeer(t *testing.T) {
 	require.Equal(t, peers[3].peerID, timedoutPeers[0].peerID)
 }
 
-// TestHasPeerForHeight checks what "this height is fetchable" means: some peer's
-// advertised range covers it. The stall verdict ends block sync when it does not,
-// so the answer must turn on which blocks peers hold and on nothing else - a peer
-// that is merely busy right now still holds its blocks, and calling it unfetchable
-// would end block sync exactly when the request pipeline is fullest.
+// newSlowMonitor returns a receive-rate monitor already reporting a rate below
+// minRecvRate: the state a peer is left in once it has answered block requests
+// too slowly. flowrate measures against a package-level clock, so producing one
+// means swapping that clock out and putting it back.
+func newSlowMonitor(t *testing.T) *flowrate.Monitor {
+	fakeClock := clockwork.NewFakeClock()
+	flowrate.Now = func() time.Time { return fakeClock.Now() }
+	t.Cleanup(func() { flowrate.Now = flowrate.TimeNow })
+	monitor := flowrate.New(fakeClock.Now(), time.Second, 40*time.Second)
+	// one completed sample: minRecvRate bytes spread over five seconds
+	fakeClock.Advance(5 * time.Second)
+	monitor.Update(int(minRecvRate))
+	rate := monitor.CurrentTransferRate()
+	// a monitor reporting zero is treated as "no measurement yet" and passes the
+	// rate check, so a test built on one would prove nothing
+	require.Positive(t, rate)
+	require.Less(t, rate, int64(minRecvRate))
+	return monitor
+}
+
+// TestHasPeerForHeight checks what "this height is fetchable" means. The stall
+// verdict ends block sync when the answer is no, and the line it draws is
+// transient versus permanent unusability: a peer at its request limit is busy for
+// as long as its in-flight requests take and then selectable again, while a peer
+// below minRecvRate is never selected again and never evicted, so waiting on it
+// is waiting on nothing.
 func TestHasPeerForHeight(t *testing.T) {
 	busyID := types.NodeID("busy peer")
-	inmem := NewInMemPeerStore(
+	peers := []PeerData{
 		newPeerData("low peer", 1, 100),
 		newPeerData("high peer", 500, 1000),
 		newPeerData(busyID, 200, 300),
-	)
+		newPeerData("slow peer", 2000, 3000),
+	}
+	peers[3].recvMonitor = newSlowMonitor(t)
+	inmem := NewInMemPeerStore(peers...)
 	inmem.Update(busyID, AddNumPending(maxPendingRequestsPerPeer))
 
 	testCases := []struct {
@@ -142,14 +166,34 @@ func TestHasPeerForHeight(t *testing.T) {
 	}{
 		{name: "covered by a peer", height: 100, want: true},
 		{name: "in a gap between the ranges peers hold", height: 150, want: false},
-		{name: "above every peer's height", height: 1001, want: false},
+		{name: "above every peer's height", height: 3001, want: false},
 		{name: "covered only by a peer at its request limit", height: 250, want: true},
+		{name: "covered only by a peer below the minimum receive rate", height: 2500, want: false},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			require.Equal(t, tc.want, inmem.HasPeerForHeight(tc.height))
 		})
 	}
+}
+
+// TestRateRejectedPeerIsNeverUsableAgain is the reason HasPeerForHeight applies
+// the receive-rate check at all. Once a peer's rate falls below minRecvRate,
+// FindPeer stops selecting it, which is also the only path that would reset its
+// monitor, and FindTimedoutPeers only removes peers with requests outstanding.
+// With nothing pending it is therefore unusable and unremovable for good, so
+// counting it as fetchable would hold block sync open on a peer that will never
+// be asked again.
+func TestRateRejectedPeerIsNeverUsableAgain(t *testing.T) {
+	peerID := types.NodeID("slow peer")
+	peer := newPeerData(peerID, 1, 100)
+	peer.recvMonitor = newSlowMonitor(t)
+	inmem := NewInMemPeerStore(peer)
+
+	_, found := inmem.FindPeer(50)
+	require.False(t, found, "a peer below the minimum receive rate is not selectable")
+	require.Empty(t, inmem.FindTimedoutPeers(), "with nothing pending it is not removable either")
+	require.Len(t, inmem.All(), 1, "and so it stays in the store")
 }
 
 // TestAddFailure checks that a peer is only reported once it has failed
