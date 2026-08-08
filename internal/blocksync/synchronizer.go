@@ -46,6 +46,11 @@ const (
 	minRecvRate = 7680
 )
 
+// errDuplicateBlock reports a block response for a height that is already pending
+// or already applied. Requesting a height twice causes it, so the peer that
+// answered is not at fault and must not be reported to the p2p layer.
+var errDuplicateBlock = errors.New("block response already exists")
+
 /*
 	Peers self report their heights when we join the block synchronizer.
 	Starting from our latest synchronizer.height, we request blocks
@@ -239,17 +244,36 @@ func (s *Synchronizer) consumeJobResult(ctx context.Context) error {
 	s.peerStore.Update(resp.PeerID, AddNumPending(-1), UpdateMonitor(resp.Block.Size()))
 	err = s.addBlock(*resp)
 	if err != nil {
-		s.logger.Error("cannot add a block to the pending list",
+		if !errors.Is(err, errDuplicateBlock) {
+			s.logger.Error("cannot add a block to the pending list",
+				"height", resp.Block.Height,
+				"error", err.Error())
+			_ = s.client.Send(ctx, p2p.PeerError{NodeID: resp.PeerID, Err: err})
+			return nil
+		}
+		// A duplicate is not the sending peer's fault, we asked more than one peer for
+		// this height. Info level: a healthy sync produces none, so this is the only
+		// signal an operator gets that heights are being re-requested.
+		s.logger.Info("dropping duplicate block response",
 			"height", resp.Block.Height,
-			"error", err.Error())
-		_ = s.client.Send(ctx, p2p.PeerError{NodeID: resp.PeerID, Err: err})
-		return nil
+			"peer", resp.PeerID,
+			"reason", err.Error())
 	}
-	err = s.applyBlock(ctx)
+	failed, err := s.applyBlock(ctx)
 	if err != nil {
-		s.logger.Error("cannot apply a block", "height", resp.Block.Height, "error", err.Error())
-		s.RemovePeer(resp.PeerID)
-		_ = s.client.Send(ctx, p2p.PeerError{NodeID: resp.PeerID, Err: err})
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			// Cancellation is our own doing, so no peer is at fault. The response stays
+			// pending and is retried when the next result arrives.
+			return err
+		}
+		// Charge the failure to the peer that supplied the failing block: removing it
+		// also drops its pending entry, so the height is fetched from someone else.
+		s.logger.Error("cannot apply a block",
+			"height", failed.Block.Height,
+			"peer", failed.PeerID,
+			"error", err.Error())
+		s.RemovePeer(failed.PeerID)
+		_ = s.client.Send(ctx, p2p.PeerError{NodeID: failed.PeerID, Err: err})
 	}
 	return nil
 }
@@ -321,29 +345,41 @@ func (s *Synchronizer) AddPeer(peer PeerData) {
 // RemovePeer removes the peer with peerID from the synchronizer. If there's no peer
 // with peerID, function is a no-op.
 func (s *Synchronizer) RemovePeer(peerID types.NodeID) {
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
-	s.removePeer(peerID)
+	heights := s.dropPeer(peerID)
+	// Re-queue once dropPeer released s.mtx: pushBack takes the job generator lock,
+	// and holding both serializes every status read behind a peer removal.
+	s.jobGen.pushBack(heights...)
 }
 
-func (s *Synchronizer) removePeer(peerID types.NodeID) {
-	for _, resp := range s.pendingToApply {
+// dropPeer deletes the peer along with its pending responses and returns the heights
+// that have to be fetched again. A dropped response must not be kept: it would make
+// addBlock reject the block re-fetched in its place as a duplicate.
+func (s *Synchronizer) dropPeer(peerID types.NodeID) []int64 {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+	var heights []int64
+	for height, resp := range s.pendingToApply {
 		if resp.PeerID == peerID {
-			s.jobGen.pushBack(resp.Block.Height)
+			delete(s.pendingToApply, height)
+			heights = append(heights, height)
 		}
 	}
 	s.peerStore.Delete(peerID)
+	return heights
 }
 
-func (s *Synchronizer) applyBlock(ctx context.Context) error {
+// applyBlock applies pending responses in height order until the next height is
+// missing. On failure it returns the response that failed to apply, so the caller
+// can charge the peer that supplied it rather than an arbitrary one.
+func (s *Synchronizer) applyBlock(ctx context.Context) (BlockResponse, error) {
 	for {
 		resp, ok := s.getPendingResponse()
 		if !ok {
-			return nil
+			return BlockResponse{}, nil
 		}
 		err := s.applier.Apply(ctx, resp.Block, resp.Commit)
 		if err != nil {
-			return fmt.Errorf("cannot apply block: %w", err)
+			return resp, fmt.Errorf("cannot apply block: %w", err)
 		}
 		s.advance()
 		s.updateMonitor()
@@ -399,23 +435,22 @@ func (s *Synchronizer) updateMonitor() {
 	s.lastMonitorUpdate = s.clock.Now()
 }
 
-// addBlock validates that the block comes from the peer it was expected from
-// and calls the requester to store it.
-//
-// This requires an extended commit at the same height as the supplied block -
-// the block contains the last commit, but we need the latest commit in case we
-// need to switch over from block sync to consensus at this height. If the
-// height of the extended commit and the height of the block do not match, we
-// do not add the block and return an error.
+// addBlock stores a block response until every lower height has been applied.
+// Only heights from the current one up are ever read again, so a response for an
+// already applied or already pending height is rejected with errDuplicateBlock.
 // TODO: ensure that blocks come in order for each peer.
 func (s *Synchronizer) addBlock(resp BlockResponse) error {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
 	block := resp.Block
+	if block.Height < s.height {
+		return fmt.Errorf("%w (peer: %s, block height: %d already applied)",
+			errDuplicateBlock, resp.PeerID, block.Height)
+	}
 	_, ok := s.pendingToApply[block.Height]
 	if ok {
-		return fmt.Errorf("block response already exists (peer: %s, block height: %d)", resp.PeerID, block.Height)
+		return fmt.Errorf("%w (peer: %s, block height: %d)", errDuplicateBlock, resp.PeerID, block.Height)
 	}
 	s.pendingToApply[block.Height] = resp
 	return nil
