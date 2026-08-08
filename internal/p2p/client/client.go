@@ -100,12 +100,32 @@ type (
 		chanIDResolver func(msg proto.Message) p2p.ChannelID
 		// rateLimit represents a rate limiter for the channel; can be nil
 		rateLimit map[p2p.ChannelID]*RateLimit
+		// tombstoneMtx guards tombstones
+		tombstoneMtx sync.Mutex
+		// tombstones lists retired request IDs in the order they were retired.
+		// Every tombstone is given the same lifetime, so that order is also expiry
+		// order and the entry due to expire first is always at the front. Forgetting
+		// them is therefore a pop of the front prefix - one push and one pop per
+		// request, O(1) amortized - rather than a scan of the whole map per request.
+		tombstones []retiredRequest
 	}
 	// OptionFunc is a client optional function, it is used to override the default parameters in a Client
 	OptionFunc func(c *Client)
 	result     struct {
 		Value any
 		Err   error
+	}
+	// tombstone replaces a request's response channel in the pending map once the
+	// request's promise has settled. Keeping the request ID, rather than dropping
+	// it, is what lets resolveMessage tell a late answer to a request we really
+	// made from a response quoting an ID we never issued: the first is ordinary
+	// slowness, the second is unsolicited traffic.
+	tombstone struct{}
+	// retiredRequest indexes one tombstone by the moment it stops being worth
+	// remembering.
+	retiredRequest struct {
+		id        string
+		expiresAt time.Time
 	}
 )
 
@@ -344,18 +364,33 @@ func (c *Client) resolve(ctx context.Context, envelope *p2p.Envelope) error {
 	return c.resolveMessage(ctx, respID, result{Value: envelope.Message})
 }
 
-func (c *Client) resolveMessage(ctx context.Context, respID string, res result) error {
+func (c *Client) resolveMessage(_ctx context.Context, respID string, res result) error {
 	val, ok := c.pending.Load(respID)
 	if !ok {
 		return fmt.Errorf("pending response %s not found", respID)
 	}
-	respCh := val.(chan result)
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case respCh <- res:
+	switch v := val.(type) {
+	case chan result:
+		// The send must never block. Once the buffer holds an answer to this request
+		// the promise takes that one, so anything further is a duplicate; and if the
+		// promise has already settled, nothing will ever drain the buffer at all.
+		// Waiting there would park the consumer goroutine - and with it every message
+		// it carries - for as long as the node runs.
+		select {
+		case v <- res:
+		default:
+			c.logger.Debug("discarding a duplicate response", "response_id", respID)
+		}
+		return nil
+	case tombstone:
+		// We did issue this request, but stopped waiting for it. The peer is late,
+		// which is not an offense, so the response is discarded and no error is
+		// returned - an error here would make iter report the peer, which can evict
+		// it outright and bypass the caller's own failure policy.
+		c.logger.Debug("discarding a response for an already retired request", "response_id", respID)
+		return nil
 	}
-	return nil
+	return fmt.Errorf("pending response %s has an unexpected type %T: %w", respID, val, ErrCannotResolveResponse)
 }
 
 func (c *Client) sendWithResponse(ctx context.Context, reqID string, peerID types.NodeID, msg proto.Message) (chan result, error) {
@@ -377,18 +412,55 @@ func (c *Client) sendWithResponse(ctx context.Context, reqID string, peerID type
 }
 
 func (c *Client) addPending(reqID string) chan result {
+	// Issuing requests is the only thing that grows the pending map, so it is also
+	// the only place that has to shrink it. Sweeping inline keeps Client free of a
+	// background goroutine that shutdown would then have to join, and it ties what
+	// we retain to the rate at which we ourselves issue requests - a peer cannot
+	// inflate it.
+	c.expireTombstones()
 	respCh := make(chan result, 1)
 	c.pending.Store(reqID, respCh)
 	return respCh
 }
 
+// removePending retires a request whose promise has settled, leaving a tombstone
+// in its place so a response arriving afterwards is recognized as late rather
+// than unsolicited.
+//
+// The response channel is deliberately not closed. Its only reader is the
+// promise executor, which has already returned by the time this deferred call
+// runs, so a close would signal nobody - while a resolver that loaded the channel
+// a moment earlier would panic sending into it, on a path with no panic recovery
+// above it. Leaving it open costs nothing, because resolveMessage never blocks on
+// it: a late send either fills the one-slot buffer nobody reads or is dropped, and
+// the channel is collected along with the tombstone.
 func (c *Client) removePending(reqID string) {
-	val, loaded := c.pending.LoadAndDelete(reqID)
-	if !loaded {
-		return
+	c.pending.Store(reqID, tombstone{})
+	c.tombstoneMtx.Lock()
+	defer c.tombstoneMtx.Unlock()
+	// Read the clock under the lock so the list stays sorted by expiry: concurrent
+	// retirements would otherwise append in a different order than they timestamped.
+	// Two request timeouts is long enough to still recognize a peer that answers
+	// just after we gave up, and short enough to bound what we hold on to.
+	expiresAt := c.clock.Now().Add(2 * c.reqTimeout)
+	c.tombstones = append(c.tombstones, retiredRequest{id: reqID, expiresAt: expiresAt})
+}
+
+// expireTombstones forgets retired request IDs whose lifetime has run out. A
+// response later than that is indistinguishable from one we never asked for, so
+// reporting the peer for it is fair.
+func (c *Client) expireTombstones() {
+	now := c.clock.Now()
+	c.tombstoneMtx.Lock()
+	defer c.tombstoneMtx.Unlock()
+	expired := 0
+	for expired < len(c.tombstones) && !c.tombstones[expired].expiresAt.After(now) {
+		// Compare before deleting so only a tombstone is ever removed, never a live
+		// request that somehow shares the ID.
+		c.pending.CompareAndDelete(c.tombstones[expired].id, tombstone{})
+		expired++
 	}
-	respCh := val.(chan result)
-	close(respCh)
+	c.tombstones = c.tombstones[expired:]
 }
 
 func (c *Client) timeout() <-chan time.Time {
