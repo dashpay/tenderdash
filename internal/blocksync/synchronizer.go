@@ -56,34 +56,42 @@ const (
 	// height still in flight costs it nothing. Without a limit on those, an
 	// empty backlog would let the producer run as far ahead as the peers and the
 	// worker pool allow, and every one of those requests would land in the
-	// backlog the moment a height below them went missing. It is also the limit
-	// that governs small blocks, where the serialized size understates what is
-	// held by the widest margin.
+	// backlog the moment a height below them went missing.
+	//
+	// Which of the two binds depends on block size, and they cross at
+	// maxPendingApplyBytes/maxOutstandingHeights, 4 MiB a block. Below that the
+	// count binds and the budget is never approached - sixty-four 2 KiB blocks
+	// are 128 KiB of block data - so the common case is bounded by this limit
+	// and not by the budget at all. Above it the budget binds first and stops
+	// the backlog at 256 MiB however few blocks that is. Neither limit can see
+	// the case the other covers.
 	//
 	// What the two bound together is
 	//
-	//	held <= maxPendingApplyBytes + maxOutstandingHeights * maximum block size
+	//	held <= maxPendingApplyBytes + maxOutstandingHeights * largest block accepted
 	//
-	// where the last term is the chain's own configured maximum, so the ceiling
-	// belongs to the chain rather than to this file:
+	// The last term is not the chain's configured maximum. The block sync
+	// channel accepts a message up to types.MaxBlockSizeBytes, 100 MiB,
+	// whatever the chain's own parameters say, and a block is not rejected for
+	// exceeding those parameters until it is applied - which is precisely what
+	// does not happen while a lower height is missing. The ceiling is therefore
+	// unconditional, about 6.98 GB, and configuring a chain for smaller blocks
+	// does not lower it.
 	//
-	//	blocks that stay small     budget-dominated, about 256 MiB
-	//	22,020,096 B (21 MiB)      the default block parameters, about 1.68 GB
-	//	104,857,600 B (100 MiB)    the largest valid setting, about 6.98 GB
+	// Lowering maxOutstandingHeights does, in proportion, and it is the only
+	// lever on it here. 64 is the balance struck: holding that term to the
+	// budget itself would mean a window of two, and even a 1 GiB allowance for
+	// it gives ten, either of which throttles every chain whose peers never
+	// actually send a block near the ingress limit. At a tenth of a second per
+	// round trip, 64 in flight fetch several hundred blocks a second, far more
+	// than applying them can consume.
 	//
-	// An operator whose chain genuinely fills large blocks should lower
-	// maxOutstandingHeights, which brings the second term down in proportion.
-	// 64 suits the regime this is built for, a chain that permits large blocks
-	// and ships small ones: sizing the window for the maximum instead would leave
-	// about eleven fetches in flight at the 100 MiB setting and throttle every
-	// chain that never sends such a block. At a tenth of a second per round trip,
-	// 64 in flight fetch several hundred blocks a second, far more than applying
-	// them can consume.
-	//
-	// The second term is the fetch pipeline's footprint rather than the backlog's,
-	// and it is not the only one of its kind: the block sync channel's receive
-	// buffer independently holds up to 1024 messages of up to a whole block each,
-	// which is outside what these limits cover.
+	// The second term is the fetch pipeline's footprint rather than the
+	// backlog's, and it is not the only one of its kind: the block sync
+	// channel's receive queue is sized from a RecvBufferCapacity of 1024, which
+	// the default simple-priority queue squares into a limit of 1,048,576
+	// messages, each able to carry a whole block. That is outside what these
+	// limits cover.
 	maxOutstandingHeights = 64
 
 	// maxConsecutiveFailures is how many block requests in a row a peer may fail
