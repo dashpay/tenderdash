@@ -42,6 +42,9 @@ type SynchronizerTestSuite struct {
 	client       *clientmocks.BlockClient
 	responses    []*blocksync.BlockResponse
 	initialState sm.State
+	// backlogResponses is a chain long enough to run past the pending window,
+	// built on first use - see backlogChain.
+	backlogResponses []*blocksync.BlockResponse
 }
 
 func TestSynchronizer(t *testing.T) {
@@ -697,7 +700,7 @@ func (suite *SynchronizerTestSuite) TestProduceJobFailureKeepsCounterBalanced() 
 			peerID := types.NodeID(tmrand.Str(12))
 			sync.AddPeer(newPeerData(peerID, startAt, startAt+100))
 
-			suite.Require().True(sync.jobGen.shouldJobBeGenerated())
+			suite.Require().True(sync.jobGen.shouldJobBeGenerated(startAt))
 			_, baseline := sync.GetStatus()
 
 			ctx := tc.prepare(sync)
@@ -1137,6 +1140,290 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncStopsWhenThereIsNothingToFetc
 	caughtUp, ended := h.result(2 * time.Second)
 	suite.Require().True(ended, "block sync kept waiting with no peer to fetch from")
 	suite.Require().False(caughtUp)
+}
+
+// backlogChainLen is how many heights the backlog tests have blocks for. It is
+// wider than the pending window so that a run which ignores the window keeps
+// going well past it instead of stopping for want of a block to serve.
+const backlogChainLen = maxOutstandingHeights + 200
+
+// backlogChain returns block responses for heights 1..backlogChainLen of one
+// chain, built on first use and reused afterwards. The backlog tests need more
+// heights than the pending window is wide, and signing that many blocks is by
+// far the most expensive thing in this file.
+func (suite *SynchronizerTestSuite) backlogChain() []*blocksync.BlockResponse {
+	if suite.backlogResponses == nil {
+		ctx := context.Background()
+		_, privVals := factory.MockValidatorSet()
+		state := suite.initialState.Copy()
+		blocks := statefactory.MakeBlocks(ctx, suite.T(), backlogChainLen+1, &state, privVals, 1)
+		suite.backlogResponses = generateBlockResponses(suite.T(), blocks)
+	}
+	return suite.backlogResponses
+}
+
+// backlogHarness drives one synchronizer's producer and consumer by hand. The
+// worker pool holds no workers, so the test runs each job itself the way a
+// worker would; job production, peer selection, addBlock and applyBlock are the
+// real thing, and all the test decides is which responses come back and when.
+type backlogHarness struct {
+	suite    *SynchronizerTestSuite
+	pool     *Synchronizer
+	jobCh    chan *workerpool.Job
+	resultCh chan workerpool.Result
+	chainLen int
+}
+
+// newBacklogHarness builds a synchronizer starting at height 1 with peers that
+// hold the whole chain.
+func (suite *SynchronizerTestSuite) newBacklogHarness() *backlogHarness {
+	chain := suite.backlogChain()
+
+	// Freeze the clock the receive-rate monitors read. A peer measured below
+	// minRecvRate is never selected again, and the rate here would be measured
+	// over however long the test itself takes, so a slow run would leave job
+	// production waiting forever for a peer to become selectable.
+	frozen := time.Now()
+	flowrate.Now = func() time.Time { return frozen }
+	suite.T().Cleanup(func() { flowrate.Now = flowrate.TimeNow })
+
+	suite.client.
+		On("GetBlock", mock.Anything, mock.Anything, mock.Anything).
+		Maybe().
+		Return(func(_ context.Context, height int64, _ types.NodeID) *promise.Promise[*blocksync.BlockResponse] {
+			return promise.New(func(resolve func(data *blocksync.BlockResponse), reject func(err error)) {
+				if height < 1 || height > int64(len(chain)) {
+					reject(fmt.Errorf("height %d is past the end of the %d-block test chain", height, len(chain)))
+					return
+				}
+				resolve(chain[height-1])
+			})
+		}, nil)
+	suite.store.
+		On("SaveBlock", mock.Anything, mock.Anything, mock.Anything).
+		Maybe()
+	suite.blockExec.
+		On("ValidateBlock", mock.Anything, mock.Anything, mock.Anything).
+		Maybe().
+		Return(nil)
+	suite.blockExec.
+		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Maybe().
+		Return(func(_ context.Context, state sm.State, _ types.BlockID, _ *types.Block, _ *types.Commit) sm.State {
+			return state
+		}, nil)
+
+	jobCh := make(chan *workerpool.Job, 1)
+	resultCh := make(chan workerpool.Result, 1)
+	wp := workerpool.New(0, workerpool.WithJobCh(jobCh), workerpool.WithResultCh(resultCh))
+	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+	pool := NewSynchronizer(1, suite.client, applier, WithWorkerPool(wp))
+	// Enough peers for the whole window to be in flight at once. A peer takes at
+	// most maxPendingRequestsPerPeer requests and job production waits for one
+	// that can take another, so with fewer peers it would be the per-peer limit
+	// stopping production rather than the window under test. They advertise far
+	// more than the chain holds, so nothing here stops at the highest height a
+	// peer claims either.
+	for i := 0; i < maxOutstandingHeights/maxPendingRequestsPerPeer+10; i++ {
+		pool.AddPeer(newPeerData(types.NodeID(fmt.Sprintf("backlog peer %02d", i)), 1, int64(1)<<40))
+	}
+	return &backlogHarness{suite: suite, pool: pool, jobCh: jobCh, resultCh: resultCh, chainLen: len(chain)}
+}
+
+// produce runs one iteration of the job producer and, when it hands a job to the
+// pool, runs that job the way a worker would. It returns the response the peer
+// gave, or nil when production was refused.
+func (h *backlogHarness) produce(ctx context.Context) *BlockResponse {
+	h.suite.Require().NoError(h.pool.produceJob(ctx))
+	select {
+	case job := <-h.jobCh:
+		res := job.Execute(ctx)
+		h.suite.Require().NoError(res.Err)
+		return res.Value.(*BlockResponse)
+	default:
+		return nil
+	}
+}
+
+// deliver hands a fetched response to the consumer, as the worker pool would.
+func (h *backlogHarness) deliver(ctx context.Context, resp *BlockResponse) {
+	h.resultCh <- workerpool.Result{Value: resp}
+	h.suite.Require().NoError(h.pool.consumeJobResult(ctx))
+}
+
+// timeout hands the consumer a failed fetch, as a request the peer never
+// answered would once it ran out of time.
+func (h *backlogHarness) timeout(ctx context.Context, peerID types.NodeID, height int64) {
+	h.resultCh <- workerpool.Result{
+		Err: &errBlockFetch{peerID: peerID, height: height, err: errors.New("peer did not respond")},
+	}
+	h.suite.Require().NoError(h.pool.consumeJobResult(ctx))
+}
+
+// fillWindow requests heights until production is refused, answering everything
+// except blocking, whose request is left in flight as a peer that never replies
+// would leave it. It returns the peer that request went to.
+func (h *backlogHarness) fillWindow(ctx context.Context, blocking int64) types.NodeID {
+	var blockingPeer types.NodeID
+	for attempt := 0; attempt < h.chainLen; attempt++ {
+		resp := h.produce(ctx)
+		if resp == nil {
+			return blockingPeer
+		}
+		if resp.Block.Height == blocking {
+			blockingPeer = resp.PeerID
+			continue
+		}
+		h.deliver(ctx, resp)
+	}
+	h.suite.Require().Fail("job production never stopped",
+		"%d heights offered, %d responses buffered", h.chainLen, len(h.pool.pendingToApply))
+	return blockingPeer
+}
+
+// TestBacklogIsBoundedWhileTheBlockingHeightIsMissing checks that responses which
+// cannot be applied yet stop accumulating at the pending window instead of
+// growing with however many heights are on offer.
+//
+// Applying in order is what normally throttles the whole pipeline: the consumer
+// applies synchronously, so while apply is doing work the result channel fills,
+// the workers block and the producer stalls. Withholding one height removes
+// exactly that. applyBlock returns immediately, the consumer drains at network
+// speed and every stage above it goes slack, while nothing else limits what is
+// held in memory - a peer's in-flight count is released when its response
+// arrives, not when its block is applied.
+func (suite *SynchronizerTestSuite) TestBacklogIsBoundedWhileTheBlockingHeightIsMissing() {
+	ctx := context.Background()
+	h := suite.newBacklogHarness()
+	// The height the synchronizer starts at, and the one its peers never answer.
+	const blocking = int64(1)
+
+	// Once production is refused it stays refused, because nothing here advances
+	// the height, so ask a few more times to show the refusal is the bound and
+	// not a hiccup.
+	const refusalsToConfirm = 5
+	requested, refused := 0, 0
+	for attempt := 0; attempt < h.chainLen && refused < refusalsToConfirm; attempt++ {
+		resp := h.produce(ctx)
+		if resp == nil {
+			refused++
+			continue
+		}
+		requested++
+		if resp.Block.Height == blocking {
+			continue
+		}
+		h.deliver(ctx, resp)
+	}
+
+	suite.Require().Equal(refusalsToConfirm, refused,
+		"job production never stopped: %d heights requested, %d responses buffered",
+		requested, len(h.pool.pendingToApply))
+	suite.Require().Equal(maxOutstandingHeights, requested,
+		"heights requested ahead of the blocking one are not bounded by the window")
+	suite.Require().Len(h.pool.pendingToApply, maxOutstandingHeights-1,
+		"the buffered backlog is not bounded by the window")
+	height, _ := h.pool.GetStatus()
+	suite.Require().EqualValues(blocking, height,
+		"nothing can be applied while the height everything is waiting for is missing")
+}
+
+// TestBlockingHeightIsStillFetchableAtTheBound is the regression guard on the
+// bound, and the more important of the pair: a bound that wedges sync is worse
+// than no bound. With the window full, the one height that would unblock
+// everything must still be issuable, and issuing it must drain the whole
+// backlog.
+func (suite *SynchronizerTestSuite) TestBlockingHeightIsStillFetchableAtTheBound() {
+	ctx := context.Background()
+	h := suite.newBacklogHarness()
+	const blocking = int64(1)
+
+	blockingPeer := h.fillWindow(ctx, blocking)
+	suite.Require().Len(h.pool.pendingToApply, maxOutstandingHeights-1, "the window did not fill")
+	suite.Require().NotEmpty(blockingPeer)
+
+	// The unanswered request runs out of time and is queued for a retry.
+	h.timeout(ctx, blockingPeer, blocking)
+
+	resp := h.produce(ctx)
+	suite.Require().NotNil(resp,
+		"the window is full and the height it is waiting for can never be requested again")
+	suite.Require().EqualValues(blocking, resp.Block.Height,
+		"the retry of the blocking height must be what goes out first")
+
+	h.deliver(ctx, resp)
+
+	suite.Require().Empty(h.pool.pendingToApply, "the backlog did not drain once the blocking height arrived")
+	height, _ := h.pool.GetStatus()
+	suite.Require().EqualValues(blocking+maxOutstandingHeights, height,
+		"every buffered height must have been applied behind the one that arrived")
+}
+
+// TestInOrderSyncIsNotThrottledByTheBound checks that the window does not slow a
+// healthy sync. With responses arriving in order there is never anything to
+// buffer, so the pipeline must stay as full as the window allows and every
+// applied block must let exactly one more height be requested.
+func (suite *SynchronizerTestSuite) TestInOrderSyncIsNotThrottledByTheBound() {
+	ctx := context.Background()
+	h := suite.newBacklogHarness()
+
+	// The producer runs ahead until the window is full, the state a healthy sync
+	// runs in.
+	fetched := make([]*BlockResponse, 0, h.chainLen)
+	for attempt := 0; attempt < h.chainLen; attempt++ {
+		resp := h.produce(ctx)
+		if resp == nil {
+			break
+		}
+		fetched = append(fetched, resp)
+	}
+	suite.Require().Equal(maxOutstandingHeights, len(fetched), "the window did not fill to its stated width")
+
+	for applied := 0; applied < h.chainLen; applied++ {
+		h.deliver(ctx, fetched[applied])
+		height, _ := h.pool.GetStatus()
+		suite.Require().EqualValues(applied+2, height, "in-order arrival did not advance the height")
+		if len(fetched) == h.chainLen {
+			continue
+		}
+		resp := h.produce(ctx)
+		suite.Require().NotNil(resp, "the window did not slide when the block at height %d was applied", height-1)
+		fetched = append(fetched, resp)
+	}
+	suite.Require().Empty(h.pool.pendingToApply, "an in-order sync must leave nothing buffered")
+}
+
+// TestRequeuedHeightsAreNotStarvedByTheBound checks that heights queued for a
+// retry go out even while the window is refusing new ones. A re-queued height
+// was inside the window when it was first requested and the window only moves
+// up, so re-issuing it cannot widen the backlog - and holding it back is how a
+// bound turns into a permanent stall, because the lowest re-queued height is
+// typically the one everything else is waiting for.
+func (suite *SynchronizerTestSuite) TestRequeuedHeightsAreNotStarvedByTheBound() {
+	ctx := context.Background()
+	h := suite.newBacklogHarness()
+	const blocking = int64(1)
+
+	h.fillWindow(ctx, blocking)
+	suite.Require().Len(h.pool.pendingToApply, maxOutstandingHeights-1, "the window did not fill")
+
+	// Dropping a peer re-queues every height it had answered.
+	dropped := h.pool.pendingToApply[maxOutstandingHeights/2].PeerID
+	suite.Require().NotEmpty(dropped)
+	h.pool.RemovePeer(dropped)
+	requeued := append([]int64(nil), h.pool.jobGen.pushedBack...)
+	suite.Require().NotEmpty(requeued, "dropping a peer must re-queue the heights it had answered")
+
+	reissued := make([]int64, 0, len(requeued))
+	for range requeued {
+		resp := h.produce(ctx)
+		suite.Require().NotNil(resp, "a re-queued height was starved by the window")
+		reissued = append(reissued, resp.Block.Height)
+	}
+	suite.Require().Equal(requeued, reissued, "re-queued heights must go out lowest first")
+
+	suite.Require().Nil(h.produce(ctx),
+		"with the retry queue drained the window must refuse new heights again")
 }
 
 // TestConsumeJobResultKeepsPeerOnTransientFailure checks that a single failed

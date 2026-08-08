@@ -155,11 +155,35 @@ func (p *jobGenerator) getPeer(ctx context.Context, height int64) (PeerData, err
 	}
 }
 
-func (p *jobGenerator) shouldJobBeGenerated() bool {
+// shouldJobBeGenerated reports whether another height may be requested now.
+// applyHeight is the height block sync is waiting to apply.
+//
+// New heights are only handed out inside a window of maxOutstandingHeights
+// starting at applyHeight. Blocks are applied strictly in order, so a response
+// that arrives before the height below it has been applied is held in memory
+// until that one does; and nothing else limits how many are held, because a
+// peer's in-flight request count is released when its response arrives, not
+// when its block is applied. While blocks are being applied the whole pipeline
+// throttles itself - the consumer applies synchronously, so the result channel
+// fills, the workers block and this loop stalls - but a single missing height
+// removes precisely that, leaving what is held bounded only by how far above us
+// peers claim to be. Bounding the heights outstanding bounds it instead: every
+// held response is a height requested inside the window and not yet applied,
+// and the window only moves up.
+//
+// Heights queued for a retry are handed out whatever the window says. Each was
+// inside the window when it was first requested and the window only moves up,
+// so re-issuing one cannot widen the backlog - and the lowest of them is
+// typically the very height everything else is waiting for, so holding those
+// back at the window is what would turn the bound into a permanent stall.
+func (p *jobGenerator) shouldJobBeGenerated(applyHeight int64) bool {
 	p.mtx.RLock()
 	defer p.mtx.RUnlock()
 	if len(p.pushedBack) > 0 {
 		return true
+	}
+	if p.height-applyHeight >= maxOutstandingHeights {
+		return false
 	}
 	return p.height <= p.peerStore.MaxHeight()
 }
