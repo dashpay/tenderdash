@@ -428,9 +428,11 @@ func (s *Synchronizer) LastAdvance() time.Time {
 	return s.lastAdvance
 }
 
-// AddPeer adds the peer's alleged blockchain base and height
+// AddPeer records the peer's alleged blockchain base and height. Peers report
+// their range repeatedly, so for a peer we already track this only moves that
+// range and leaves everything we know about its outstanding requests intact.
 func (s *Synchronizer) AddPeer(peer PeerData) {
-	s.peerStore.Put(peer.peerID, peer)
+	s.peerStore.Upsert(peer)
 }
 
 // RemovePeer removes the peer with peerID from the synchronizer. If there's no peer

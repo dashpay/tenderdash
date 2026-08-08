@@ -72,6 +72,50 @@ func (p *InMemPeerStore) Put(peerID types.NodeID, newPeer PeerData) {
 	p.maxHeight = max(p.maxHeight, newPeer.height)
 }
 
+// Upsert records the range of blocks a peer advertises, adding the peer if it is
+// not known yet.
+//
+// The advertised base and height are the only things a peer tells us about itself;
+// everything else held in PeerData - the count of requests we have issued and not
+// yet accounted for, the run of consecutive failures, the receive-rate monitor and
+// the time we first saw the peer - describes our own outstanding requests and the
+// peer's service quality. Peers re-advertise their range every few seconds, far
+// more often than a block request times out, so replacing those counters here
+// would reset them faster than any threshold built on them can be reached and
+// would leave requests in flight that nothing accounts for.
+func (p *InMemPeerStore) Upsert(newPeer PeerData) {
+	var (
+		known      bool
+		prevHeight int64
+	)
+	// Merged through the store's own update path, so it is atomic with respect to
+	// the request accounting applied from the worker goroutines.
+	p.store.Update(newPeer.peerID, func(_ types.NodeID, peer *PeerData) {
+		known = true
+		prevHeight = peer.height
+		peer.base = newPeer.base
+		peer.height = newPeer.height
+	})
+	if !known {
+		p.Put(newPeer.peerID, newPeer)
+		return
+	}
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+	if newPeer.height >= p.maxHeight {
+		p.maxHeight = newPeer.height
+		return
+	}
+	// The peer that held the highest advertised block just lowered its height -
+	// its blocks were pruned, or it restarted from a snapshot. Keeping the old
+	// value would leave the maximum pointing at a block no peer can serve, which
+	// the synchronizer reads as "still behind" for as long as that peer stays
+	// connected.
+	if prevHeight == p.maxHeight {
+		p.updateMaxHeight()
+	}
+}
+
 // Delete deletes the peer data from the store
 func (p *InMemPeerStore) Delete(peerID types.NodeID) {
 	p.mtx.Lock()
@@ -136,7 +180,7 @@ func (p *InMemPeerStore) FindPeer(height int64) (PeerData, bool) {
 func (p *InMemPeerStore) AddFailure(peerID types.NodeID, maxFailures int32) bool {
 	tooMany := false
 	p.store.Update(peerID, func(_ types.NodeID, peer *PeerData) {
-		peer.numPending--
+		peer.addPending(-1)
 		peer.numFailures++
 		tooMany = peer.numFailures >= maxFailures
 	})
@@ -229,7 +273,24 @@ func newPeerMonitor(at time.Time) *flowrate.Monitor {
 // AddNumPending adds a value to the numPending field
 func AddNumPending(val int32) store.UpdateFunc[types.NodeID, PeerData] {
 	return func(peerID types.NodeID, peer *PeerData) {
-		peer.numPending += val
+		peer.addPending(val)
+	}
+}
+
+// addPending changes the count of block requests issued to this peer that have
+// not been accounted for yet, and never lets it fall below zero.
+//
+// The count only grows when a request is issued and only shrinks when one is
+// answered or fails, so a negative value is always a bug in the accounting. It is
+// floored here rather than at the call sites because there are several of them and
+// the consequences are silent: a negative count always satisfies the per-peer
+// request limit, so the peer is handed unlimited concurrent requests, and it never
+// satisfies the slow-peer check, so the peer can no longer be evicted for being
+// too slow.
+func (p *PeerData) addPending(delta int32) {
+	p.numPending += delta
+	if p.numPending < 0 {
+		p.numPending = 0
 	}
 }
 

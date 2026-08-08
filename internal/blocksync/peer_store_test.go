@@ -145,6 +145,29 @@ func TestAddFailure(t *testing.T) {
 	require.False(t, inmem.AddFailure(types.NodeID("nope"), maxFailures))
 }
 
+// TestNumPendingNeverGoesNegative checks that the pending request count stops at
+// zero however the caller sequences its updates. The count gates both the per-peer
+// request limit and the slow-peer check, and a negative value passes the first
+// unconditionally while never matching the second, so a peer that has drifted
+// below zero is handed unlimited concurrent requests and can never be evicted for
+// being slow.
+func TestNumPendingNeverGoesNegative(t *testing.T) {
+	peerID := types.NodeID("peer1")
+	inmem := NewInMemPeerStore(newPeerData(peerID, 1, 100))
+
+	inmem.Update(peerID, AddNumPending(1))
+	// more completions than requests issued: both the success and the failure path
+	// account for a request, and a caller that accounts for the same one twice must
+	// not leave the count below zero
+	inmem.Update(peerID, AddNumPending(-1))
+	inmem.AddFailure(peerID, 10)
+	inmem.Update(peerID, AddNumPending(-1))
+
+	peer, found := inmem.Get(peerID)
+	require.True(t, found)
+	require.EqualValues(t, 0, peer.numPending)
+}
+
 // TestAddFailureClearsPending checks that a failed request stops being counted
 // as pending; otherwise the peer's pending count only grows and it stops being
 // selected once it reaches maxPendingRequestsPerPeer.
