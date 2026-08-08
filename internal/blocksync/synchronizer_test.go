@@ -900,62 +900,172 @@ func makePeers(numPeers int, minHeight, maxHeight int64) map[types.NodeID]PeerDa
 
 // TestStallVerdictFor checks when a lack of progress ends block sync. Handing
 // over to consensus is effectively irreversible, so a stall must not end block
-// sync while peers still have blocks we need.
+// sync while a peer still holds the block we are waiting for.
 func TestStallVerdictFor(t *testing.T) {
 	testCases := []struct {
 		name       string
-		behind     int64
+		servable   bool
 		stalledFor time.Duration
 		want       stallVerdict
 	}{
 		{
-			name:       "progressing while behind",
-			behind:     500,
+			name:       "progressing with the block available",
+			servable:   true,
 			stalledFor: syncTimeout / 2,
 			want:       keepSyncing,
 		},
 		{
-			name:       "progressing and level with peers",
-			behind:     0,
+			name:       "progressing with nobody holding the block",
+			servable:   false,
 			stalledFor: syncTimeout / 2,
 			want:       keepSyncing,
 		},
 		{
 			name:       "stalled with nothing left to fetch",
-			behind:     0,
+			servable:   false,
 			stalledFor: syncTimeout + time.Second,
 			want:       stopNothingToFetch,
 		},
 		{
-			name:       "stalled while ahead of every peer",
-			behind:     -5,
-			stalledFor: syncTimeout + time.Second,
-			want:       stopNothingToFetch,
-		},
-		{
-			name:       "stalled but peers still have blocks",
-			behind:     500,
+			name:       "stalled but a peer still holds the block",
+			servable:   true,
 			stalledFor: syncTimeout + time.Second,
 			want:       keepSyncing,
 		},
 		{
 			name:       "stalled just short of the wedge limit",
-			behind:     500,
+			servable:   true,
 			stalledFor: maxSyncStall,
 			want:       keepSyncing,
 		},
 		{
 			name:       "stalled past the wedge limit",
-			behind:     500,
+			servable:   true,
 			stalledFor: maxSyncStall + time.Second,
 			want:       stopStalledTooLong,
+		},
+		{
+			name:       "the wedge limit does not override nothing to fetch",
+			servable:   false,
+			stalledFor: maxSyncStall + time.Second,
+			want:       stopNothingToFetch,
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.want, stallVerdictFor(tc.behind, tc.stalledFor))
+			require.Equal(t, tc.want, stallVerdictFor(tc.servable, tc.stalledFor))
 		})
 	}
+}
+
+// waitForSyncHarness runs WaitForSync on its own goroutine against a fake clock.
+// The synchronizer never advances a height, so the only thing that changes the
+// verdict is how far the clock is moved.
+type waitForSyncHarness struct {
+	clock  *clockwork.FakeClock
+	done   chan bool
+	cancel context.CancelFunc
+}
+
+// newWaitForSyncHarness starts WaitForSync at the given height with the given
+// peers already known, and returns once its ticker is registered with the fake
+// clock - advancing the clock before that would move time nothing is waiting on.
+func (suite *SynchronizerTestSuite) newWaitForSyncHarness(height int64, peers ...PeerData) *waitForSyncHarness {
+	clock := clockwork.NewFakeClock()
+	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+	sync := NewSynchronizer(height, suite.client, applier, WithClock(clock))
+	// Deliberately not started: WaitForSync reads only the height, the peer store
+	// and lastAdvance, and leaving the job pipeline out keeps the ticker the sole
+	// waiter on the fake clock.
+	sync.lastAdvance = clock.Now()
+	for _, peer := range peers {
+		sync.AddPeer(peer)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan bool, 1)
+	go func() {
+		done <- sync.WaitForSync(ctx)
+	}()
+	suite.Require().NoError(clock.BlockUntilContext(ctx, 1))
+	return &waitForSyncHarness{clock: clock, done: done, cancel: cancel}
+}
+
+// result waits up to timeout of real time for WaitForSync to return. ended
+// reports whether it did; caughtUp is its verdict when it did.
+func (h *waitForSyncHarness) result(timeout time.Duration) (caughtUp bool, ended bool) {
+	select {
+	case caughtUp = <-h.done:
+		return caughtUp, true
+	case <-time.After(timeout):
+		return false, false
+	}
+}
+
+// TestWaitForSyncStopsWhenNoPeerCanServeNextHeight checks that a peer which
+// cannot serve the height we need does not keep block sync alive. A peer whose
+// advertised base is above that height holds none of the blocks we are waiting
+// for, however large the height it claims, so waiting on it means waiting for a
+// block that will never arrive.
+func (suite *SynchronizerTestSuite) TestWaitForSyncStopsWhenNoPeerCanServeNextHeight() {
+	const height = int64(100)
+	// The largest height the status handler accepts, paired with a base above the
+	// next height we need: nothing this peer advertises overlaps what we want.
+	peer := newPeerData("peer out of range", height+2, int64(1)<<60)
+	h := suite.newWaitForSyncHarness(height, peer)
+	defer h.cancel()
+
+	h.clock.Advance(syncTimeout + time.Second)
+
+	caughtUp, ended := h.result(2 * time.Second)
+	suite.Require().True(ended, "block sync kept waiting on a peer whose blocks start above height %d", height)
+	suite.Require().False(caughtUp)
+}
+
+// TestWaitForSyncKeepsGoingWhileAPeerCanServeUs is the regression guard on the
+// test above: a stall is not by itself a reason to hand over. Handing over to
+// consensus is one-way and consensus catch-up is far slower, so while some peer
+// still holds the block we need, block sync keeps retrying.
+func (suite *SynchronizerTestSuite) TestWaitForSyncKeepsGoingWhileAPeerCanServeUs() {
+	const height = int64(100)
+	peer := newPeerData("peer in range", 1, 1000)
+	h := suite.newWaitForSyncHarness(height, peer)
+	defer h.cancel()
+
+	h.clock.Advance(syncTimeout + time.Second)
+
+	_, ended := h.result(200 * time.Millisecond)
+	suite.Require().False(ended, "block sync gave up while a peer still held height %d", height)
+}
+
+// TestWaitForSyncHandsOverAfterMaxSyncStall checks the wall-clock backstop.
+// Servability is judged from what peers advertise about themselves, so a peer
+// that claims our height and never answers keeps the node in block sync
+// indefinitely unless a stall long enough to look like a wedge ends it.
+func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverAfterMaxSyncStall() {
+	const height = int64(100)
+	peer := newPeerData("peer in range", 1, 1000)
+	h := suite.newWaitForSyncHarness(height, peer)
+	defer h.cancel()
+
+	h.clock.Advance(maxSyncStall + time.Second)
+
+	caughtUp, ended := h.result(2 * time.Second)
+	suite.Require().True(ended, "no progress for %s did not hand over to consensus", maxSyncStall)
+	suite.Require().False(caughtUp, "handing over after a stall is not catching up")
+}
+
+// TestWaitForSyncStopsWhenThereIsNothingToFetch checks that a stall with no peer
+// to fetch from ends block sync as soon as the stall is recognized, rather than
+// sitting out the wedge backstop.
+func (suite *SynchronizerTestSuite) TestWaitForSyncStopsWhenThereIsNothingToFetch() {
+	h := suite.newWaitForSyncHarness(100)
+	defer h.cancel()
+
+	h.clock.Advance(syncTimeout + time.Second)
+
+	caughtUp, ended := h.result(2 * time.Second)
+	suite.Require().True(ended, "block sync kept waiting with no peer to fetch from")
+	suite.Require().False(caughtUp)
 }
 
 // TestConsumeJobResultKeepsPeerOnTransientFailure checks that a single failed

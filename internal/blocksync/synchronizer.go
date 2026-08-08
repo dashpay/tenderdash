@@ -326,47 +326,61 @@ func (s *Synchronizer) IsCaughtUp() bool {
 // A stall on its own is not a reason to stop. Handing over to consensus is a
 // one-way door - only the state sync path ever switches back to block sync - and
 // consensus catch-up is far slower than block sync, so a node that gives up
-// while it is still thousands of blocks behind stays behind. As long as peers
-// report heights above ours there are blocks left to fetch and something to
-// retry, so keep going and say so loudly. Give up on the stall only once no peer
-// can help us, or once the stall has outlasted maxSyncStall, so that a wedged
+// while it is still thousands of blocks behind stays behind. As long as some
+// peer holds the block we are waiting for there is something to retry, so keep
+// going and say so loudly. Give up on the stall only once no peer can serve that
+// block, or once the stall has outlasted maxSyncStall, so that a wedged
 // synchronizer can still hand over rather than blocking forever.
 func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool) {
-	ticker := time.NewTicker(switchToConsensusIntervalSeconds * time.Second)
+	ticker := s.clock.NewTicker(switchToConsensusIntervalSeconds * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return s.IsCaughtUp()
-		case <-ticker.C:
+		case <-ticker.Chan():
 			if s.IsCaughtUp() {
 				return true
 			}
 			var (
 				height, _     = s.GetStatus()
 				maxPeerHeight = s.MaxPeerHeight()
-				stalledFor    = time.Since(s.LastAdvance())
-				behind        = maxPeerHeight - height
+				stalledFor    = s.clock.Since(s.LastAdvance())
+				// Blocks are applied in order, so height is the only one that can
+				// move us forward. Whether a peer can serve it is what decides
+				// whether waiting is worth anything; the highest height anyone
+				// claims does not, since a peer whose blocks start above height
+				// has nothing we can use however high it claims to be.
+				servable = s.peerStore.HasPeerForHeight(height)
 			)
-			switch stallVerdictFor(behind, stalledFor) {
+			switch stallVerdictFor(servable, stalledFor) {
 			case stopNothingToFetch:
+				if maxPeerHeight > height {
+					// Peers claim to be ahead yet none of them holds the block we
+					// need. Worth saying: the node stops while apparently behind,
+					// which otherwise looks like it gave up for no reason.
+					s.logger.Error(
+						"no peer can serve the next block, handing over to consensus",
+						"height", height,
+						"max_peer_height", maxPeerHeight,
+						"stalled_for", stalledFor,
+					)
+				}
 				return false
 			case stopStalledTooLong:
 				s.logger.Error(
 					"block sync stalled for too long, handing over to consensus while still behind",
 					"height", height,
 					"max_peer_height", maxPeerHeight,
-					"behind", behind,
 					"stalled_for", stalledFor,
 				)
 				return false
 			}
 			if stalledFor > syncTimeout {
 				s.logger.Error(
-					"block sync has stalled but peers report higher blocks, still trying",
+					"block sync has stalled but a peer still holds the block we need, still trying",
 					"height", height,
 					"max_peer_height", maxPeerHeight,
-					"behind", behind,
 					"stalled_for", stalledFor,
 					"giving_up_in", maxSyncStall-stalledFor,
 				)
@@ -388,25 +402,31 @@ type stallVerdict int
 const (
 	// keepSyncing means the stall is not a reason to stop yet
 	keepSyncing stallVerdict = iota
-	// stopNothingToFetch means no peer has a block we are missing
+	// stopNothingToFetch means no peer holds the block we are waiting for
 	stopNothingToFetch
-	// stopStalledTooLong means we are still behind but have to hand over anyway
+	// stopStalledTooLong means a peer still holds it but we have to hand over anyway
 	stopStalledTooLong
 )
 
 // stallVerdictFor decides what to do when block sync has made no progress for
-// stalledFor, given how many blocks the best peer is ahead of us.
+// stalledFor, given whether any peer holds the block we are waiting for.
 //
-// Being behind with peers that can serve us is a reason to keep retrying, not to
-// stop: handing over to consensus is effectively irreversible, so stopping while
+// Waiting on a block someone has is a reason to keep retrying, not to stop:
+// handing over to consensus is effectively irreversible, so stopping while
 // behind leaves the node grinding through consensus catch-up instead. Only a
-// stall with nothing left to fetch, or one long enough to look like a wedge,
-// ends block sync.
-func stallVerdictFor(behind int64, stalledFor time.Duration) stallVerdict {
+// stall on a block nobody has, or one long enough to look like a wedge, ends
+// block sync.
+//
+// servable is judged from what peers advertise about themselves, so it cannot
+// distinguish a peer that has the block from one that says it does and never
+// answers. maxSyncStall stays as the wall-clock backstop for that case, and for
+// a synchronizer wedged on our own side, where peers are willing and able and
+// no block arrives anyway.
+func stallVerdictFor(servable bool, stalledFor time.Duration) stallVerdict {
 	switch {
 	case stalledFor <= syncTimeout:
 		return keepSyncing
-	case behind <= 0:
+	case !servable:
 		return stopNothingToFetch
 	case stalledFor > maxSyncStall:
 		return stopStalledTooLong

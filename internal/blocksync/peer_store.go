@@ -140,6 +140,20 @@ func (p *InMemPeerStore) FindPeer(height int64) (PeerData, bool) {
 	return peers[0], true
 }
 
+// HasPeerForHeight reports whether any peer advertises a block range that covers
+// height, i.e. whether that height is fetchable at all.
+//
+// It shares heightBetweenPeerHeightRange with FindPeer, so "some peer holds this
+// block" means the same thing to both. The rest of FindPeer's criteria are
+// deliberately left out: they describe whether a peer can take another request
+// right now - it is below its pending-request limit, it is not crawling - not
+// whether it holds the block. A peer at its request limit still holds it, and a
+// caller asking whether a height is fetchable at all must not be told no just
+// because every peer is busy.
+func (p *InMemPeerStore) HasPeerForHeight(height int64) bool {
+	return len(p.Query(heightBetweenPeerHeightRange(height), 1)) > 0
+}
+
 // AddFailure records a block request that this peer failed to answer: the
 // request stops being pending, and the peer's consecutive failure count grows.
 //

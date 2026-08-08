@@ -121,6 +121,37 @@ func TestInMemPeerStoreFindPeer(t *testing.T) {
 	require.Equal(t, peers[3].peerID, timedoutPeers[0].peerID)
 }
 
+// TestHasPeerForHeight checks what "this height is fetchable" means: some peer's
+// advertised range covers it. The stall verdict ends block sync when it does not,
+// so the answer must turn on which blocks peers hold and on nothing else - a peer
+// that is merely busy right now still holds its blocks, and calling it unfetchable
+// would end block sync exactly when the request pipeline is fullest.
+func TestHasPeerForHeight(t *testing.T) {
+	busyID := types.NodeID("busy peer")
+	inmem := NewInMemPeerStore(
+		newPeerData("low peer", 1, 100),
+		newPeerData("high peer", 500, 1000),
+		newPeerData(busyID, 200, 300),
+	)
+	inmem.Update(busyID, AddNumPending(maxPendingRequestsPerPeer))
+
+	testCases := []struct {
+		name   string
+		height int64
+		want   bool
+	}{
+		{name: "covered by a peer", height: 100, want: true},
+		{name: "in a gap between the ranges peers hold", height: 150, want: false},
+		{name: "above every peer's height", height: 1001, want: false},
+		{name: "covered only by a peer at its request limit", height: 250, want: true},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, inmem.HasPeerForHeight(tc.height))
+		})
+	}
+}
+
 // TestAddFailure checks that a peer is only reported once it has failed
 // maxFailures requests in a row, and that a success in between clears the run.
 func TestAddFailure(t *testing.T) {
