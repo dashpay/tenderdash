@@ -2,6 +2,7 @@ package blocksync
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -166,6 +167,87 @@ func TestNumPendingNeverGoesNegative(t *testing.T) {
 	peer, found := inmem.Get(peerID)
 	require.True(t, found)
 	require.EqualValues(t, 0, peer.numPending)
+}
+
+// TestUpsertRacingFirstInsertKeepsIssuedRequests checks that recording a peer's
+// advertised range never overwrites state stored concurrently under the same peer.
+// The p2p consumer goroutine makes a peer known while the job producer starts
+// issuing requests against it immediately, so a lookup and an insert that are not
+// one operation lose exactly the accounting a status refresh must preserve.
+func TestUpsertRacingFirstInsertKeepsIssuedRequests(t *testing.T) {
+	const (
+		refreshers = 8
+		trials     = 200
+	)
+	peerID := types.NodeID("peer1")
+	for trial := 0; trial < trials; trial++ {
+		inmem := NewInMemPeerStore()
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		wg.Add(refreshers)
+		for i := 0; i < refreshers; i++ {
+			go func(i int) {
+				defer wg.Done()
+				<-start
+				inmem.Upsert(newPeerData(peerID, 1, int64(100+i)))
+				inmem.Update(peerID, AddNumPending(1))
+			}(i)
+		}
+		close(start)
+		wg.Wait()
+
+		peer, found := inmem.Get(peerID)
+		require.True(t, found)
+		require.EqualValues(t, refreshers, peer.numPending,
+			"status refreshes racing the peer's first insert lost issued requests (trial %d)", trial)
+	}
+}
+
+// TestMaxHeightMatchesStoredPeers checks that the highest advertised height is one
+// a peer we still hold actually claims to serve. It decides whether the node is
+// caught up and whether a stalled sync gives up, so a height above every peer's
+// leaves the node waiting in block sync for a block nobody can send it.
+func TestMaxHeightMatchesStoredPeers(t *testing.T) {
+	const (
+		trials  = 200
+		rounds  = 50
+		lowPeer = int64(10)
+	)
+	peerID := types.NodeID("peer1")
+	otherID := types.NodeID("peer2")
+	for trial := 0; trial < trials; trial++ {
+		inmem := NewInMemPeerStore(newPeerData(otherID, 1, lowPeer))
+		var wg sync.WaitGroup
+		wg.Add(3)
+		// the same peer re-advertising a growing range, re-advertising a lower one,
+		// and being dropped - the three ways its stored height moves
+		go func() {
+			defer wg.Done()
+			for i := 0; i < rounds; i++ {
+				inmem.Upsert(newPeerData(peerID, 1, int64(100+i)))
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < rounds; i++ {
+				inmem.Upsert(newPeerData(peerID, 1, 20))
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < rounds; i++ {
+				inmem.Delete(peerID)
+			}
+		}()
+		wg.Wait()
+
+		var want int64
+		for _, peer := range inmem.All() {
+			want = max(want, peer.height)
+		}
+		require.Equal(t, want, inmem.MaxHeight(),
+			"reported a height no stored peer advertises (trial %d)", trial)
+	}
 }
 
 // TestAddFailureClearsPending checks that a failed request stops being counted

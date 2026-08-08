@@ -72,6 +72,26 @@ func (p *InMemStore[K, T]) Delete(key K) {
 	p.items.Delete(key)
 }
 
+// Upsert applies the update functions to the value stored at key, inserting init
+// first if the key is absent.
+//
+// The lookup, the insert and the updates are one operation under one lock. A
+// caller that composes the same thing out of Get, Put and Update instead has a
+// window between them in which another goroutine can insert or modify the value,
+// and the caller's own write then silently discards it.
+func (p *InMemStore[K, T]) Upsert(key K, init T, updates ...UpdateFunc[K, T]) {
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+	val, found := p.items.Get(key)
+	if !found {
+		val = init
+	}
+	for _, update := range updates {
+		update(key, &val)
+	}
+	p.items.Put(key, val)
+}
+
 // Update applies update functions to the peer if it exists
 func (p *InMemStore[K, T]) Update(key K, updates ...UpdateFunc[K, T]) {
 	p.mtx.Lock()
