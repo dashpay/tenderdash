@@ -140,18 +140,30 @@ func (p *InMemPeerStore) FindPeer(height int64) (PeerData, bool) {
 	return peers[0], true
 }
 
-// HasPeerForHeight reports whether any peer advertises a block range that covers
-// height, i.e. whether that height is fetchable at all.
+// HasPeerForHeight reports whether height is fetchable at all: some peer both
+// advertises a range covering it and is one FindPeer would still select.
 //
-// It shares heightBetweenPeerHeightRange with FindPeer, so "some peer holds this
-// block" means the same thing to both. The rest of FindPeer's criteria are
-// deliberately left out: they describe whether a peer can take another request
-// right now - it is below its pending-request limit, it is not crawling - not
-// whether it holds the block. A peer at its request limit still holds it, and a
-// caller asking whether a height is fetchable at all must not be told no just
-// because every peer is busy.
+// It takes two of FindPeer's three criteria, and the line between them is
+// transient versus permanent unusability rather than holding versus serving.
+//
+// The receive-rate check is in. A peer whose rate has fallen below minRecvRate
+// is not merely slow, it is out of the game for good: FindPeer will not select
+// it, so nextJob never resets its monitor, so the rate never recovers; and
+// FindTimedoutPeers only removes peers with requests outstanding, so once its
+// last request completes nothing evicts it either. Counting such a peer as
+// fetchable is the same lock-out this predicate exists to prevent, reached by a
+// merely slow peer instead of a lying one.
+//
+// The pending-request limit is out. A peer at its cap is busy for as long as its
+// in-flight requests take and then selectable again, so excluding it would make
+// the verdict flap under load and end block sync exactly when the request
+// pipeline is fullest.
 func (p *InMemPeerStore) HasPeerForHeight(height int64) bool {
-	return len(p.Query(heightBetweenPeerHeightRange(height), 1)) > 0
+	spec := store.AndX(
+		heightBetweenPeerHeightRange(height),
+		ignoreTimedOutPeers(minRecvRate),
+	)
+	return len(p.Query(spec, 1)) > 0
 }
 
 // AddFailure records a block request that this peer failed to answer: the

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	mrand "math/rand"
+	"runtime"
 	"sort"
 	"testing"
 	"time"
@@ -1052,6 +1053,76 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverAfterMaxSyncStall() 
 	caughtUp, ended := h.result(2 * time.Second)
 	suite.Require().True(ended, "no progress for %s did not hand over to consensus", maxSyncStall)
 	suite.Require().False(caughtUp, "handing over after a stall is not catching up")
+}
+
+// TestWaitForSyncStopsWhenTheOnlyPeerIsRateRejected covers the slow-peer route to
+// the same lock-out. A peer below minRecvRate holds the block we want but will
+// never be selected again and cannot be evicted while nothing is pending, so
+// treating it as something to wait for costs the full wedge backstop with no
+// attacker involved.
+func (suite *SynchronizerTestSuite) TestWaitForSyncStopsWhenTheOnlyPeerIsRateRejected() {
+	const height = int64(100)
+	peer := newPeerData("slow peer", 1, 1000)
+	peer.recvMonitor = newSlowMonitor(suite.T())
+	h := suite.newWaitForSyncHarness(height, peer)
+	defer h.cancel()
+
+	h.clock.Advance(syncTimeout + time.Second)
+
+	caughtUp, ended := h.result(2 * time.Second)
+	suite.Require().True(ended, "block sync kept waiting on a peer it can no longer ask")
+	suite.Require().False(caughtUp)
+}
+
+// TestStallSnapshotIsOneObservation checks that a block applied concurrently
+// cannot tear the stall verdict's inputs apart. advance() stamps the height and
+// the advance time together, so a snapshot must show the state either wholly
+// before that or wholly after it - never a height from one side paired with a
+// staleness or a servability from the other. Ending block sync is a one-way door,
+// so a stop assembled from mixed readings is unrecoverable.
+//
+// The peer here holds startHeight+1 upwards, which makes servability flip exactly
+// when the height moves, so a mixed reading shows up as a contradiction rather
+// than as the same answer by luck.
+func (suite *SynchronizerTestSuite) TestStallSnapshotIsOneObservation() {
+	const (
+		startHeight = int64(100)
+		stalledFor  = syncTimeout + time.Second
+		trials      = 2000
+	)
+	for trial := 0; trial < trials; trial++ {
+		clock := clockwork.NewFakeClock()
+		applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+		sync := NewSynchronizer(startHeight, suite.client, applier,
+			WithClock(clock), WithWorkerPool(workerpool.New(0)))
+		sync.AddPeer(newPeerData("peer above us", startHeight+1, 1000))
+		sync.lastAdvance = clock.Now().Add(-stalledFor)
+
+		ready := make(chan struct{})
+		applied := make(chan struct{})
+		go func() {
+			<-ready
+			sync.advance()
+			close(applied)
+		}()
+		runtime.Gosched()
+		close(ready)
+		height, stalled, servable := sync.stallSnapshot()
+		<-applied
+
+		if height == startHeight {
+			suite.Require().Equal(stalledFor, stalled,
+				"height %d reported with the advance time stamped by a later height (trial %d)", height, trial)
+			suite.Require().False(servable,
+				"height %d reported as servable by a peer whose blocks start above it (trial %d)", height, trial)
+			continue
+		}
+		suite.Require().Equal(startHeight+1, height, "height moved by more than the one applied block")
+		suite.Require().Zero(stalled,
+			"height %d reported with the advance time from before it was applied (trial %d)", height, trial)
+		suite.Require().True(servable,
+			"height %d reported as unservable by the peer that holds it (trial %d)", height, trial)
+	}
 }
 
 // TestWaitForSyncStopsWhenThereIsNothingToFetch checks that a stall with no peer
