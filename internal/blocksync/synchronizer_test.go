@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/internal/libs/flowrate"
 	"github.com/dashpay/tenderdash/internal/p2p"
 	clientmocks "github.com/dashpay/tenderdash/internal/p2p/client/mocks"
 	sm "github.com/dashpay/tenderdash/internal/state"
@@ -707,6 +708,153 @@ func (suite *SynchronizerTestSuite) TestProduceJobFailureKeepsCounterBalanced() 
 			suite.Require().Equal(baseline, after, "in-progress counter must return to baseline after a failed produceJob")
 		})
 	}
+}
+
+// TestStatusRefreshPreservesFailureCount checks that a status response does not
+// restart a peer's run of consecutive failures. Peers refresh their status every
+// few seconds while the block request timeout is far longer, so a failing peer
+// would otherwise be handed a clean slate between every two failures and the
+// threshold would never be reached.
+func (suite *SynchronizerTestSuite) TestStatusRefreshPreservesFailureCount() {
+	ctx := context.Background()
+
+	peerID := types.NodeID("peer 1")
+	resultCh := make(chan workerpool.Result, 1)
+	wp := workerpool.New(1, workerpool.WithResultCh(resultCh))
+	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+	pool := NewSynchronizer(1, suite.client, applier, WithWorkerPool(wp))
+	pool.AddPeer(newPeerData(peerID, 1, 100))
+
+	failRequest := func(height int64) {
+		resultCh <- workerpool.Result{
+			Err: &errBlockFetch{peerID: peerID, height: height, err: errors.New("timeout")},
+		}
+		suite.Require().NoError(pool.consumeJobResult(ctx))
+	}
+
+	// stop one short of the threshold, then let a status response land mid-run
+	for i := int32(1); i < maxConsecutiveFailures; i++ {
+		failRequest(int64(i))
+	}
+	pool.AddPeer(newPeerData(peerID, 1, 200))
+	suite.Require().Len(pool.peerStore.All(), 1, "the peer must still be known after a status refresh")
+
+	// the next failure completes the run and must report the peer
+	suite.client.
+		On("Send", mock.Anything, mock.Anything).
+		Once().
+		Return(nil)
+	failRequest(99)
+
+	suite.Require().Empty(pool.peerStore.All(),
+		"a status refresh must not restart the run of consecutive failures")
+}
+
+// TestStatusRefreshPreservesPendingRequests checks that a status response leaves
+// the count of requests already in flight alone. Losing it lets the peer be picked
+// past the per-peer request limit, and the completions of those forgotten requests
+// then drive the count below zero.
+func (suite *SynchronizerTestSuite) TestStatusRefreshPreservesPendingRequests() {
+	ctx := context.Background()
+
+	const inFlight = 3
+	peerID := types.NodeID("peer 1")
+	jobCh := make(chan *workerpool.Job, inFlight)
+	resultCh := make(chan workerpool.Result, 1)
+	wp := workerpool.New(0, workerpool.WithJobCh(jobCh), workerpool.WithResultCh(resultCh))
+	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+	pool := NewSynchronizer(1, suite.client, applier, WithWorkerPool(wp))
+	pool.AddPeer(newPeerData(peerID, 1, 100))
+
+	numPending := func() int32 {
+		peer, found := pool.peerStore.Get(peerID)
+		suite.Require().True(found)
+		return peer.numPending
+	}
+
+	for i := 0; i < inFlight; i++ {
+		suite.Require().NoError(pool.produceJob(ctx))
+	}
+	suite.Require().EqualValues(inFlight, numPending())
+
+	pool.AddPeer(newPeerData(peerID, 1, 200))
+	suite.Require().EqualValues(inFlight, numPending(),
+		"requests already in flight must survive a status refresh")
+
+	// the peer stays below the failure threshold, so the client mock has no Send
+	// expectation and reporting the peer would fail this test
+	for i := 0; i < inFlight; i++ {
+		resultCh <- workerpool.Result{
+			Err: &errBlockFetch{peerID: peerID, height: int64(i + 1), err: errors.New("timeout")},
+		}
+		suite.Require().NoError(pool.consumeJobResult(ctx))
+		suite.Require().GreaterOrEqual(numPending(), int32(0),
+			"the pending request count must never go negative")
+	}
+	suite.Require().EqualValues(0, numPending())
+}
+
+// TestStatusRefreshUpdatesAdvertisedRange checks that a status response still does
+// the one thing it is for: moving the range of blocks the peer claims to serve. It
+// is the guard on the tests above, which a synchronizer that ignored status
+// responses outright would also pass.
+func (suite *SynchronizerTestSuite) TestStatusRefreshUpdatesAdvertisedRange() {
+	peerID1 := types.NodeID("peer 1")
+	peerID2 := types.NodeID("peer 2")
+
+	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+	pool := NewSynchronizer(1, suite.client, applier)
+	pool.AddPeer(newPeerData(peerID1, 1, 100))
+	pool.AddPeer(newPeerData(peerID2, 1, 50))
+	suite.Require().EqualValues(100, pool.MaxPeerHeight())
+
+	pool.AddPeer(newPeerData(peerID1, 10, 200))
+	peer, found := pool.peerStore.Get(peerID1)
+	suite.Require().True(found)
+	suite.Require().EqualValues(10, peer.base)
+	suite.Require().EqualValues(200, peer.height)
+	suite.Require().EqualValues(200, pool.MaxPeerHeight())
+
+	// a peer whose blocks were pruned reports a higher base and a lower height; the
+	// highest block we believe is reachable must not stay at a height no peer has,
+	// or the synchronizer never considers itself caught up
+	pool.AddPeer(newPeerData(peerID1, 60, 70))
+	peer, found = pool.peerStore.Get(peerID1)
+	suite.Require().True(found)
+	suite.Require().EqualValues(60, peer.base)
+	suite.Require().EqualValues(70, peer.height)
+	suite.Require().EqualValues(70, pool.MaxPeerHeight())
+}
+
+// TestStatusRefreshKeepsSlowPeerEvictable checks that a status response does not
+// hide a peer that is answering too slowly. The check needs both the peer's
+// pending requests and the receive rate measured across them, and a refresh that
+// replaced either would restart the measurement every few seconds, so no peer
+// could ever be measured over a long enough window to be evicted.
+func (suite *SynchronizerTestSuite) TestStatusRefreshKeepsSlowPeerEvictable() {
+	fakeClock := clockwork.NewFakeClock()
+	flowrate.Now = func() time.Time { return fakeClock.Now() }
+	defer func() { flowrate.Now = flowrate.TimeNow }()
+
+	// 10000 bytes over 5 seconds - non-zero, and well below minRecvRate
+	monitor := flowrate.New(time.Now(), time.Second, 10*time.Second)
+	fakeClock.Advance(5 * time.Second)
+	monitor.Update(10000)
+
+	peerID := types.NodeID("peer 1")
+	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+	pool := NewSynchronizer(1, suite.client, applier)
+	pool.AddPeer(newPeerData(peerID, 1, 100))
+	pool.peerStore.Update(peerID, AddNumPending(1), func(_ types.NodeID, peer *PeerData) {
+		peer.recvMonitor = monitor
+	})
+	suite.Require().Len(pool.peerStore.FindTimedoutPeers(), 1)
+
+	pool.AddPeer(newPeerData(peerID, 1, 200))
+
+	timedout := pool.peerStore.FindTimedoutPeers()
+	suite.Require().Len(timedout, 1, "a status refresh must not hide a peer that is too slow")
+	suite.Require().Equal(peerID, timedout[0].peerID)
 }
 
 func generateBlockResponses(t *testing.T, blocks []*types.Block) []*blocksync.BlockResponse {
