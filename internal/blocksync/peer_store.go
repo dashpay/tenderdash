@@ -21,7 +21,10 @@ type (
 	}
 	// PeerData uses to keep peer related data like base height and the current height etc
 	PeerData struct {
-		numPending  int32
+		numPending int32
+		// numFailures counts block requests this peer failed in a row. It resets
+		// on the first successful response.
+		numFailures int32
 		height      int64
 		base        int64
 		peerID      types.NodeID
@@ -124,6 +127,22 @@ func (p *InMemPeerStore) FindPeer(height int64) (PeerData, bool) {
 	return peers[0], true
 }
 
+// AddFailure records a block request that this peer failed to answer: the
+// request stops being pending, and the peer's consecutive failure count grows.
+//
+// It reports true once the peer has failed maxFailures requests in a row and
+// should be dropped. An unknown peer reports false, so the failures of a peer
+// that was already removed do not report it again.
+func (p *InMemPeerStore) AddFailure(peerID types.NodeID, maxFailures int32) bool {
+	tooMany := false
+	p.store.Update(peerID, func(_ types.NodeID, peer *PeerData) {
+		peer.numPending--
+		peer.numFailures++
+		tooMany = peer.numFailures >= maxFailures
+	})
+	return tooMany
+}
+
 // FindTimedoutPeers finds and returns the timed out peers
 func (p *InMemPeerStore) FindTimedoutPeers() []PeerData {
 	return p.Query(store.AndX(
@@ -211,6 +230,14 @@ func newPeerMonitor(at time.Time) *flowrate.Monitor {
 func AddNumPending(val int32) store.UpdateFunc[types.NodeID, PeerData] {
 	return func(peerID types.NodeID, peer *PeerData) {
 		peer.numPending += val
+	}
+}
+
+// ResetFailures clears the count of consecutive failed requests, so that the
+// threshold only ever trips on an unbroken run of failures
+func ResetFailures() store.UpdateFunc[types.NodeID, PeerData] {
+	return func(_ types.NodeID, peer *PeerData) {
+		peer.numFailures = 0
 	}
 }
 
