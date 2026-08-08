@@ -24,9 +24,20 @@ type BlockMeta struct {
 func NewBlockMeta(block *Block, blockParts *PartSet, round int32) *BlockMeta {
 	blockID := block.BlockID(blockParts)
 
+	// blockParts already holds the serialized block, so its byte size is exactly
+	// the block size. Asking the block instead serializes the whole thing a
+	// second time, and this runs on the block sync apply path. Only fall back to
+	// that when there is no part set to read the size from.
+	var blockSize int
+	if blockParts != nil {
+		blockSize = int(blockParts.ByteSize())
+	} else {
+		blockSize = block.Size()
+	}
+
 	return &BlockMeta{
 		BlockID:          blockID,
-		BlockSize:        block.Size(),
+		BlockSize:        blockSize,
 		Header:           block.Header,
 		HasCoreChainLock: block.CoreChainLock != nil,
 		NumTxs:           len(block.Data.Txs),
