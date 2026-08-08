@@ -8,6 +8,7 @@ import (
 	mrand "math/rand"
 	"runtime"
 	"sort"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,7 +21,9 @@ import (
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/internal/libs/flowrate"
 	"github.com/dashpay/tenderdash/internal/p2p"
+	"github.com/dashpay/tenderdash/internal/p2p/client"
 	clientmocks "github.com/dashpay/tenderdash/internal/p2p/client/mocks"
+	p2pmocks "github.com/dashpay/tenderdash/internal/p2p/mocks"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/state/mocks"
 	statefactory "github.com/dashpay/tenderdash/internal/state/test/factory"
@@ -700,7 +703,7 @@ func (suite *SynchronizerTestSuite) TestProduceJobFailureKeepsCounterBalanced() 
 			peerID := types.NodeID(tmrand.Str(12))
 			sync.AddPeer(newPeerData(peerID, startAt, startAt+100))
 
-			suite.Require().True(sync.jobGen.shouldJobBeGenerated(startAt))
+			suite.Require().True(sync.jobGen.shouldJobBeGenerated(startAt, 0))
 			_, baseline := sync.GetStatus()
 
 			ctx := tc.prepare(sync)
@@ -1251,6 +1254,15 @@ func (h *backlogHarness) deliver(ctx context.Context, resp *BlockResponse) {
 	h.suite.Require().NoError(h.pool.consumeJobResult(ctx))
 }
 
+// deliverSized delivers a response that reports the given serialized size. The
+// blocks in the test chain are empty and the byte budget reads only the size
+// recorded while a response was decoded, so a size is stated here rather than
+// signing and shipping hundreds of megabytes of real blocks.
+func (h *backlogHarness) deliverSized(ctx context.Context, resp *BlockResponse, size int) {
+	resp.Size = size
+	h.deliver(ctx, resp)
+}
+
 // timeout hands the consumer a failed fetch, as a request the peer never
 // answered would once it ran out of time.
 func (h *backlogHarness) timeout(ctx context.Context, peerID types.NodeID, height int64) {
@@ -1328,6 +1340,89 @@ func (suite *SynchronizerTestSuite) TestBacklogIsBoundedWhileTheBlockingHeightIs
 		"nothing can be applied while the height everything is waiting for is missing")
 }
 
+// TestBacklogIsBoundedByBytesWhenBlocksAreLarge checks that the backlog is
+// bounded by what it costs, not only by how many entries it has. A count is not
+// a memory bound when one block may be tens of megabytes, so with large blocks
+// the byte budget has to stop the backlog long before the height window would.
+func (suite *SynchronizerTestSuite) TestBacklogIsBoundedByBytesWhenBlocksAreLarge() {
+	ctx := context.Background()
+	h := suite.newBacklogHarness()
+	const blocking = int64(1)
+	// Eight of these exhaust the budget, well inside the height window.
+	const blockSize = maxPendingApplyBytes / 8
+	const wantBuffered = 8
+
+	const refusalsToConfirm = 5
+	buffered, refused := 0, 0
+	for attempt := 0; attempt < h.chainLen && refused < refusalsToConfirm; attempt++ {
+		resp := h.produce(ctx)
+		if resp == nil {
+			refused++
+			continue
+		}
+		if resp.Block.Height == blocking {
+			continue
+		}
+		h.deliverSized(ctx, resp, blockSize)
+		buffered++
+	}
+
+	suite.Require().Equal(refusalsToConfirm, refused,
+		"job production never stopped: %d responses of %d bytes buffered", buffered, blockSize)
+	suite.Require().Equal(wantBuffered, buffered, "the byte budget did not stop the backlog where it should")
+	suite.Require().Less(buffered, maxOutstandingHeights,
+		"the height window stopped this, so it says nothing about the byte budget")
+	_, pendingBytes := h.pool.backlog()
+	suite.Require().Equal(maxPendingApplyBytes, pendingBytes)
+}
+
+// TestBlockingHeightIsStillFetchableAtTheByteBound is the no-wedge guard for
+// the byte budget, the counterpart of the one for the height window. A budget
+// that can refuse the retry of the height the backlog is waiting for wedges
+// sync exactly as completely as a count that can, and the height window tests
+// cannot see it: their blocks are small enough that the budget is never near
+// spent.
+func (suite *SynchronizerTestSuite) TestBlockingHeightIsStillFetchableAtTheByteBound() {
+	ctx := context.Background()
+	h := suite.newBacklogHarness()
+	const blocking = int64(1)
+	const blockSize = maxPendingApplyBytes / 8
+
+	var blockingPeer types.NodeID
+	buffered := 0
+	for attempt := 0; attempt < h.chainLen; attempt++ {
+		resp := h.produce(ctx)
+		if resp == nil {
+			break
+		}
+		if resp.Block.Height == blocking {
+			blockingPeer = resp.PeerID
+			continue
+		}
+		h.deliverSized(ctx, resp, blockSize)
+		buffered++
+	}
+	suite.Require().Equal(8, buffered, "the byte budget did not stop the backlog where it should")
+	suite.Require().Less(buffered, maxOutstandingHeights,
+		"the height window stopped this, so it says nothing about the byte budget")
+	suite.Require().NotEmpty(blockingPeer)
+
+	// The unanswered request runs out of time and is queued for a retry.
+	h.timeout(ctx, blockingPeer, blocking)
+
+	resp := h.produce(ctx)
+	suite.Require().NotNil(resp,
+		"the byte budget is spent and the height it is waiting for can never be requested again")
+	suite.Require().EqualValues(blocking, resp.Block.Height)
+
+	h.deliver(ctx, resp)
+
+	suite.Require().Empty(h.pool.pendingToApply, "the backlog did not drain once the blocking height arrived")
+	height, _ := h.pool.GetStatus()
+	suite.Require().EqualValues(blocking+1+int64(buffered), height,
+		"every buffered height must have been applied behind the one that arrived")
+}
+
 // TestBlockingHeightIsStillFetchableAtTheBound is the regression guard on the
 // bound, and the more important of the pair: a bound that wedges sync is worse
 // than no bound. With the window full, the one height that would unblock
@@ -1357,6 +1452,42 @@ func (suite *SynchronizerTestSuite) TestBlockingHeightIsStillFetchableAtTheBound
 	height, _ := h.pool.GetStatus()
 	suite.Require().EqualValues(blocking+maxOutstandingHeights, height,
 		"every buffered height must have been applied behind the one that arrived")
+}
+
+// TestDroppingTheBlockingPeerLeavesTheHeightToTheTimeout pins what happens at
+// the bound when the peer holding the request everything is waiting on is
+// dropped for some other reason. Dropping a peer re-queues the heights it had
+// already answered, and a request still in flight is not among them, so the
+// height that would release the backlog is not rescued by the removal - the
+// client's timeout is still the only thing that frees it.
+func (suite *SynchronizerTestSuite) TestDroppingTheBlockingPeerLeavesTheHeightToTheTimeout() {
+	ctx := context.Background()
+	h := suite.newBacklogHarness()
+	const blocking = int64(1)
+
+	blockingPeer := h.fillWindow(ctx, blocking)
+	suite.Require().Len(h.pool.pendingToApply, maxOutstandingHeights-1, "the window did not fill")
+	suite.Require().NotEmpty(blockingPeer)
+
+	h.pool.RemovePeer(blockingPeer)
+	requeued := append([]int64(nil), h.pool.jobGen.pushedBack...)
+	suite.Require().NotContains(requeued, blocking,
+		"a request still in flight must not be re-queued by dropping its peer")
+
+	// What the dropped peer had answered goes out again, and then the window
+	// refuses new heights: the blocking height is still outstanding.
+	for range requeued {
+		resp := h.produce(ctx)
+		suite.Require().NotNil(resp, "a re-queued height was starved by the window")
+		suite.Require().NotEqualValues(blocking, resp.Block.Height)
+	}
+	suite.Require().Nil(h.produce(ctx), "the window must still refuse new heights")
+
+	// The timeout is what frees it.
+	h.timeout(ctx, blockingPeer, blocking)
+	resp := h.produce(ctx)
+	suite.Require().NotNil(resp, "the blocking height was stranded by dropping its peer")
+	suite.Require().EqualValues(blocking, resp.Block.Height)
 }
 
 // TestInOrderSyncIsNotThrottledByTheBound checks that the window does not slow a
@@ -1424,6 +1555,146 @@ func (suite *SynchronizerTestSuite) TestRequeuedHeightsAreNotStarvedByTheBound()
 
 	suite.Require().Nil(h.produce(ctx),
 		"with the retry queue drained the window must refuse new heights again")
+}
+
+// droppedRequestHandler answers no p2p message itself. Block responses are
+// resolved by the client before a handler is consulted, and nothing else is
+// exchanged in this test.
+type droppedRequestHandler struct{}
+
+func (droppedRequestHandler) Handle(_ context.Context, _ *client.Client, _ *p2p.Envelope) error {
+	return nil
+}
+
+// TestClientTimeoutUnwedgesAFullWindow drives the whole no-wedge path with
+// nothing stubbed between a request and its failure: a real block client on a
+// fake clock, real workers, and the synchronizer's own producer and consumer
+// goroutines.
+//
+// The bound's liveness rests on an unanswered request eventually settling as a
+// failure, which is what re-queues the height and lets it past the bound. That
+// happens in the block client, in another package, so a test that hands the
+// consumer a failure directly assumes the very thing at issue. Here the peer
+// drops the first request for the lowest height and answers its retry: the
+// backlog fills to the window, the request that would release it is
+// outstanding, and only the client's own timeout can turn it back into a job.
+func (suite *SynchronizerTestSuite) TestClientTimeoutUnwedgesAFullWindow() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	chain := suite.backlogChain()
+	const blocking = int64(1)
+
+	// Peer selection must not depend on how fast the test runs, as in
+	// newBacklogHarness.
+	frozen := time.Now()
+	flowrate.Now = func() time.Time { return frozen }
+	defer func() { flowrate.Now = flowrate.TimeNow }()
+
+	// The peer answers every request by posting a response back, except that it
+	// silently drops the first request for the blocking height.
+	//
+	// It answers from its own goroutine, after a pause. A peer cannot answer
+	// before the request has left the node, and the client only starts waiting
+	// for a response once the send has returned, so a reply posted from inside
+	// Send arrives before anything is waiting for it and is discarded as
+	// unsolicited. The pause is the round trip that ordering comes from.
+	responses := make(chan p2p.Envelope, 2*len(chain))
+	var alreadyDropped atomic.Bool
+	p2pChannel := p2pmocks.NewChannel(suite.T())
+	p2pChannel.
+		On("Send", mock.Anything, mock.Anything).
+		Return(func(_ context.Context, envelope p2p.Envelope) error {
+			req, ok := envelope.Message.(*blocksync.BlockRequest)
+			if !ok {
+				return nil
+			}
+			if req.Height == blocking && !alreadyDropped.Swap(true) {
+				return nil
+			}
+			answer := p2p.Envelope{
+				From:      envelope.To,
+				ChannelID: p2p.BlockSyncChannel,
+				Message:   chain[req.Height-1],
+				Attributes: map[string]string{
+					client.ResponseIDAttribute: envelope.Attributes[client.RequestIDAttribute],
+				},
+			}
+			go func() {
+				time.Sleep(5 * time.Millisecond)
+				select {
+				case responses <- answer:
+				case <-ctx.Done():
+				}
+			}()
+			return nil
+		})
+	p2pChannel.
+		On("Receive", mock.Anything).
+		Return(func(_ context.Context) p2p.ChannelIterator { return p2p.NewChannelIterator(responses) })
+	p2pChannel.On("SendError", mock.Anything, mock.Anything).Maybe().Return(nil)
+	p2pChannel.On("String").Maybe().Return("blocksync test channel")
+	p2pChannel.On("Err").Maybe().Return(nil)
+
+	clientClock := clockwork.NewFakeClock()
+	blockClient := client.New(
+		map[p2p.ChannelID]*p2p.ChannelDescriptor{
+			p2p.BlockSyncChannel: {ID: p2p.BlockSyncChannel, Name: "blocksync"},
+			p2p.ErrorChannel:     {ID: p2p.ErrorChannel, Name: "error"},
+		},
+		func(_ context.Context, _ *p2p.ChannelDescriptor) (p2p.Channel, error) { return p2pChannel, nil },
+		client.WithClock(clientClock),
+	)
+	go func() {
+		_ = blockClient.Consume(ctx, client.ConsumerParams{
+			ReadChannels: []p2p.ChannelID{p2p.BlockSyncChannel},
+			Handler:      droppedRequestHandler{},
+		})
+	}()
+
+	suite.store.
+		On("SaveBlock", mock.Anything, mock.Anything, mock.Anything).
+		Maybe()
+	suite.blockExec.
+		On("ValidateBlock", mock.Anything, mock.Anything, mock.Anything).
+		Maybe().
+		Return(nil)
+	suite.blockExec.
+		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Maybe().
+		Return(func(_ context.Context, state sm.State, _ types.BlockID, _ *types.Block, _ *types.Commit) sm.State {
+			return state
+		}, nil)
+
+	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+	pool := NewSynchronizer(blocking, blockClient, applier,
+		WithWorkerPool(workerpool.New(maxOutstandingHeights)))
+	suite.Require().NoError(pool.Start(ctx))
+	defer pool.Stop()
+	for i := 0; i < maxOutstandingHeights/maxPendingRequestsPerPeer+4; i++ {
+		pool.AddPeer(newPeerData(types.NodeID(fmt.Sprintf("dropping peer %d", i)), 1, int64(len(chain))))
+	}
+
+	// Everything above the dropped height fills the window and stops there.
+	wantBytes := 0
+	for height := blocking + 1; height < blocking+maxOutstandingHeights; height++ {
+		wantBytes += chain[height-1].Block.Size()
+	}
+	suite.Require().Eventually(func() bool {
+		_, pendingBytes := pool.backlog()
+		return pendingBytes == wantBytes
+	}, 30*time.Second, 5*time.Millisecond, "the backlog never filled to the window")
+	height, _ := pool.GetStatus()
+	suite.Require().EqualValues(blocking, height, "the dropped height must still be the one being waited for")
+
+	// Nothing but the timeout can move it now.
+	clientClock.Advance(time.Minute)
+
+	suite.Require().Eventually(func() bool {
+		height, _ := pool.GetStatus()
+		return height == int64(len(chain))+1
+	}, 60*time.Second, 10*time.Millisecond,
+		"block sync did not finish after the dropped request timed out and was retried")
 }
 
 // TestConsumeJobResultKeepsPeerOnTransientFailure checks that a single failed

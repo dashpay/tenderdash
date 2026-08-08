@@ -37,17 +37,34 @@ const (
 	maxPendingRequestsPerPeer           = 20
 	defaultSyncRateIntervalBlocks int64 = 100
 
-	// maxOutstandingHeights is how many heights block sync may have requested
-	// and not yet applied. A height is only requested while it lies inside a
-	// window of that many heights starting at the one being applied.
+	// maxPendingApplyBytes is how much block data block sync may hold waiting for
+	// a lower height to arrive, measured from the serialized size recorded while
+	// each response was decoded. It is the bound that decides how much memory
+	// the backlog can cost, because a count of blocks says nothing about that
+	// when one block may be tens of megabytes.
+	maxPendingApplyBytes = 256 << 20
+
+	// maxOutstandingHeights is how many heights may be requested and not yet
+	// applied. It is the second half of the bound, not a restatement of it: the
+	// byte budget can only be spent by a response that has already arrived, so a
+	// height still in flight costs it nothing. Without a limit on those, an
+	// empty backlog would let the producer run as far ahead as the peers and the
+	// worker pool allow, and every one of those requests would land in the
+	// backlog the moment a height below them went missing.
 	//
-	// It is the same width as the worker pool, which is the stage that turns a
-	// requested height into a network request. The pool works on at most
-	// poolWorkerSize of them at a time, so while nothing is piling up unapplied
-	// the window is wide enough for every worker to have something to fetch, and
-	// the bound binds only when responses are accumulating - which is what it is
-	// here for.
-	maxOutstandingHeights = poolWorkerSize
+	// The two are therefore chosen together. What can be held is at most
+	// maxPendingApplyBytes plus one pipeline of in-flight responses, so
+	// maxOutstandingHeights times the largest block the chain permits is the
+	// worst case - roughly 1.4 GB against this repository's 22 MB default block
+	// limit. The in-flight half of that is the fetch pipeline's own footprint,
+	// since the p2p receive path already accepts a whole block per outstanding
+	// request; bounding the heights only makes it a stated number rather than
+	// whatever the peer count and the worker pool happened to permit.
+	//
+	// 64 is well clear of throttling a healthy sync. At a tenth of a second per
+	// round trip it fetches several hundred blocks a second, which is far more
+	// than applying them can consume.
+	maxOutstandingHeights = 64
 
 	// maxConsecutiveFailures is how many block requests in a row a peer may fail
 	// before we drop it. Requests time out under load, and a peer serves its
@@ -197,7 +214,7 @@ func (s *Synchronizer) OnStop() {
 }
 
 func (s *Synchronizer) produceJob(ctx context.Context) error {
-	if !s.jobGen.shouldJobBeGenerated(s.currentHeight()) {
+	if !s.jobGen.shouldJobBeGenerated(s.backlog()) {
 		// TODO need to come up with a smarter way how to produce jobs without sleeping
 		select {
 		case <-ctx.Done():
@@ -312,12 +329,25 @@ func (s *Synchronizer) consumeJobResult(ctx context.Context) error {
 	return nil
 }
 
-// currentHeight returns the height block sync is waiting to apply, which is the
-// lowest height it has not applied yet.
-func (s *Synchronizer) currentHeight() int64 {
+// backlog reports what block sync is holding: the height it is waiting to
+// apply, which is the lowest height not applied yet, and the serialized size of
+// the responses held above it. Both are read under one lock, so the pair
+// describes a single state and a job cannot be admitted against a height from
+// one moment and a backlog from another.
+//
+// The size is summed on read rather than carried as a counter. pendingToApply
+// holds at most maxOutstandingHeights entries, so the sum costs less than the
+// two full peer scans the producing loop already runs for every job, and a
+// counter would have to be kept correct by addBlock, advance and dropPeer
+// independently - which is how an aggregate comes to disagree with what it
+// aggregates.
+func (s *Synchronizer) backlog() (applyHeight int64, pendingBytes int) {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
-	return s.height
+	for _, resp := range s.pendingToApply {
+		pendingBytes += resp.Size
+	}
+	return s.height, pendingBytes
 }
 
 // GetStatus returns synchronizer's height, count of in progress requests
