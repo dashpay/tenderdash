@@ -38,10 +38,16 @@ const (
 	defaultSyncRateIntervalBlocks int64 = 100
 
 	// maxPendingApplyBytes is how much block data block sync may hold waiting for
-	// a lower height to arrive, measured from the serialized size recorded while
-	// each response was decoded. It is the bound that decides how much memory
-	// the backlog can cost, because a count of blocks says nothing about that
-	// when one block may be tens of megabytes.
+	// a lower height to arrive, summed from the serialized size recorded while
+	// each response was decoded. It is the limit that decides what the backlog
+	// costs once blocks are large, because a count of blocks says nothing about
+	// that when one block may be tens of megabytes.
+	//
+	// Serialized bytes understate the heap actually retained. The size covers the
+	// block alone, not the commit held alongside it, and a decoded block costs
+	// more than its wire form - several times more for blocks small enough that
+	// fixed per-response overhead dominates. Read this as a budget for block
+	// data, not as the memory the backlog occupies.
 	maxPendingApplyBytes = 256 << 20
 
 	// maxOutstandingHeights is how many heights may be requested and not yet
@@ -50,20 +56,34 @@ const (
 	// height still in flight costs it nothing. Without a limit on those, an
 	// empty backlog would let the producer run as far ahead as the peers and the
 	// worker pool allow, and every one of those requests would land in the
-	// backlog the moment a height below them went missing.
+	// backlog the moment a height below them went missing. It is also the limit
+	// that governs small blocks, where the serialized size understates what is
+	// held by the widest margin.
 	//
-	// The two are therefore chosen together. What can be held is at most
-	// maxPendingApplyBytes plus one pipeline of in-flight responses, so
-	// maxOutstandingHeights times the largest block the chain permits is the
-	// worst case - roughly 1.4 GB against this repository's 22 MB default block
-	// limit. The in-flight half of that is the fetch pipeline's own footprint,
-	// since the p2p receive path already accepts a whole block per outstanding
-	// request; bounding the heights only makes it a stated number rather than
-	// whatever the peer count and the worker pool happened to permit.
+	// What the two bound together is
 	//
-	// 64 is well clear of throttling a healthy sync. At a tenth of a second per
-	// round trip it fetches several hundred blocks a second, which is far more
-	// than applying them can consume.
+	//	held <= maxPendingApplyBytes + maxOutstandingHeights * maximum block size
+	//
+	// where the last term is the chain's own configured maximum, so the ceiling
+	// belongs to the chain rather than to this file:
+	//
+	//	blocks that stay small     budget-dominated, about 256 MiB
+	//	22,020,096 B (21 MiB)      the default block parameters, about 1.68 GB
+	//	104,857,600 B (100 MiB)    the largest valid setting, about 6.98 GB
+	//
+	// An operator whose chain genuinely fills large blocks should lower
+	// maxOutstandingHeights, which brings the second term down in proportion.
+	// 64 suits the regime this is built for, a chain that permits large blocks
+	// and ships small ones: sizing the window for the maximum instead would leave
+	// about eleven fetches in flight at the 100 MiB setting and throttle every
+	// chain that never sends such a block. At a tenth of a second per round trip,
+	// 64 in flight fetch several hundred blocks a second, far more than applying
+	// them can consume.
+	//
+	// The second term is the fetch pipeline's footprint rather than the backlog's,
+	// and it is not the only one of its kind: the block sync channel's receive
+	// buffer independently holds up to 1024 messages of up to a whole block each,
+	// which is outside what these limits cover.
 	maxOutstandingHeights = 64
 
 	// maxConsecutiveFailures is how many block requests in a row a peer may fail
@@ -331,9 +351,11 @@ func (s *Synchronizer) consumeJobResult(ctx context.Context) error {
 
 // backlog reports what block sync is holding: the height it is waiting to
 // apply, which is the lowest height not applied yet, and the serialized size of
-// the responses held above it. Both are read under one lock, so the pair
-// describes a single state and a job cannot be admitted against a height from
-// one moment and a backlog from another.
+// the responses held above it. That size is what the blocks measured on the
+// wire, which is less than what holding them decoded costs; see
+// maxPendingApplyBytes. Both are read under one lock, so the pair describes a
+// single state and a job cannot be admitted against a height from one moment
+// and a backlog from another.
 //
 // The size is summed on read rather than carried as a counter. pendingToApply
 // holds at most maxOutstandingHeights entries, so the sum costs less than the
