@@ -20,7 +20,19 @@ var (
 	errNoConnectedPeers    = errors.New("no available peers to dispatch request to")
 	errUnsolicitedResponse = errors.New("unsolicited light block response")
 	errPeerAlreadyBusy     = errors.New("peer is already processing a request")
+	// errMalformedLightBlock marks a response that could not be turned into a light
+	// block at all. What a peer sends is its own choice, so unlike a timeout this is
+	// attributable, and callers must be able to tell the two apart.
+	errMalformedLightBlock = errors.New("malformed light block response")
 )
+
+// lightBlockResult is what one dispatched call resolves to. A nil block with a nil
+// error is the peer answering that it does not have the height; a non-nil error is
+// a response that arrived and could not be used, carrying the reason it was refused.
+type lightBlockResult struct {
+	block *types.LightBlock
+	err   error
+}
 
 // A Dispatcher multiplexes concurrent requests by multiple peers for light blocks.
 // Only one request per peer can be sent at a time. Subsequent concurrent requests will
@@ -32,14 +44,14 @@ type Dispatcher struct {
 	logger    log.Logger
 	mtx       sync.Mutex
 	// all pending calls that have been dispatched and are awaiting an answer
-	calls map[types.NodeID]chan *types.LightBlock
+	calls map[types.NodeID]chan lightBlockResult
 }
 
 func NewDispatcher(requestChannel p2p.Channel, logger log.Logger) *Dispatcher {
 	return &Dispatcher{
 		logger:    logger.With("module", "lb-dispatcher"),
 		requestCh: requestChannel,
-		calls:     make(map[types.NodeID]chan *types.LightBlock),
+		calls:     make(map[types.NodeID]chan lightBlockResult),
 	}
 }
 
@@ -67,11 +79,19 @@ func (d *Dispatcher) LightBlock(ctx context.Context, height int64, peer types.No
 	start := time.Now()
 	select {
 	case resp := <-callCh:
+		if resp.err != nil {
+			d.logger.Debug("received an unusable light-block response",
+				"height", height,
+				"took", time.Since(start).String(),
+				"error", resp.err,
+			)
+			return nil, resp.err
+		}
 		d.logger.Debug("received light-block",
 			"height", height,
 			"took", time.Since(start).String(),
 		)
-		return resp, nil
+		return resp.block, nil
 
 	case <-ctx.Done():
 		d.logger.Debug("failed to get a light-block",
@@ -84,7 +104,7 @@ func (d *Dispatcher) LightBlock(ctx context.Context, height int64, peer types.No
 
 // dispatch takes a peer and allocates it a channel so long as it's not already
 // busy and the receiving channel is still running. It then dispatches the message
-func (d *Dispatcher) dispatch(ctx context.Context, peer types.NodeID, height int64) (chan *types.LightBlock, error) {
+func (d *Dispatcher) dispatch(ctx context.Context, peer types.NodeID, height int64) (chan lightBlockResult, error) {
 	d.mtx.Lock()
 	defer d.mtx.Unlock()
 	select {
@@ -93,7 +113,7 @@ func (d *Dispatcher) dispatch(ctx context.Context, peer types.NodeID, height int
 	default:
 	}
 
-	ch := make(chan *types.LightBlock, 1)
+	ch := make(chan lightBlockResult, 1)
 
 	// check if a request for the same peer has already been made
 	if _, ok := d.calls[peer]; ok {
@@ -119,6 +139,11 @@ func (d *Dispatcher) dispatch(ctx context.Context, peer types.NodeID, height int
 // Respond allows the underlying process which receives requests on the
 // requestCh to respond with the respective light block. A nil response is used to
 // represent that the receiver of the request does not have a light block at that height.
+//
+// A response that cannot be decoded is delivered to the caller as a refusal rather
+// than dropped. Dropping it leaves the caller waiting out its own deadline and
+// reading the sender as slow, which charges a shared retry budget for one peer's
+// choice and hides the reason the response was unusable.
 func (d *Dispatcher) Respond(ctx context.Context, lb *tmproto.LightBlock, peer types.NodeID) error {
 	d.mtx.Lock()
 	defer d.mtx.Unlock()
@@ -134,22 +159,31 @@ func (d *Dispatcher) Respond(ctx context.Context, lb *tmproto.LightBlock, peer t
 	// block and thus pass on the nil to the caller.
 	if lb == nil {
 		select {
-		case answerCh <- nil:
+		case answerCh <- lightBlockResult{}:
 			return nil
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	}
 
+	// LightBlockFromProto runs the ValidateBasic of every part it decodes, so this
+	// covers the whole of the header, commit and validator set - including the
+	// quorum type, whose sign-hash conversion panics on a value outside a uint8.
 	block, err := types.LightBlockFromProto(lb)
 	if err != nil {
-		return err
+		err = fmt.Errorf("%w: %w", errMalformedLightBlock, err)
+		select {
+		case answerCh <- lightBlockResult{err: err}:
+			return err
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case answerCh <- block:
+	case answerCh <- lightBlockResult{block: block}:
 		return nil
 	}
 }
