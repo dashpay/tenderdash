@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -1087,6 +1088,14 @@ func (cfg *StateSyncConfig) ValidateBasic() error {
 //-----------------------------------------------------------------------------
 // ConsensusConfig
 
+// MinVerificationRateLimit is the smallest usable non-zero VerificationRateLimit.
+// The most expensive message the protocol permits carries the maximum vote
+// extensions, costing one verification for its block signature and one for each
+// extension; a budget that cannot refill that much work within a second leaves
+// such a message waiting seconds to minutes, which stalls the vote path rather
+// than shedding load. 0 still disables the limit entirely.
+const MinVerificationRateLimit = 1 + types.MaxVoteExtensions
+
 // ConsensusConfig defines the configuration for the Tendermint consensus service,
 // including timeouts and details about the WAL and the block structure.
 type ConsensusConfig struct {
@@ -1107,6 +1116,35 @@ type ConsensusConfig struct {
 	// Reactor sleep duration parameters
 	PeerGossipSleepDuration     time.Duration `mapstructure:"peer-gossip-sleep-duration"`
 	PeerQueryMaj23SleepDuration time.Duration `mapstructure:"peer-query-maj23-sleep-duration"`
+
+	// PeerVoteRateLimit bounds the per-second token budget a single peer may
+	// spend on the vote channel (votes and commits). Tokens are charged by
+	// verification work, not message count: a prevote costs one, while a
+	// precommit carrying the maximum vote extensions costs 33, because that is
+	// how many signature verifications it forces. Messages over the budget are
+	// dropped before verification. It is a per-peer allowance and says nothing
+	// about what the peers can force between them; the node-wide bound is
+	// VerificationRateLimit. 0 disables the limit.
+	PeerVoteRateLimit float64 `mapstructure:"peer-vote-rate-limit"`
+
+	// VerificationRateLimit bounds BLS signature verification work for peer
+	// Vote, Commit and Proposal messages, in verification operations per second.
+	// Block signatures cost one token, and vote extensions cost one token each.
+	// A message waits for the budget to cover its whole cost before it is
+	// verified, so the limit must be at least MinVerificationRateLimit. 0
+	// disables the limit.
+	VerificationRateLimit float64 `mapstructure:"verification-rate-limit"`
+
+	// PeerDataRateLimit bounds the per-second token budget a single peer may
+	// spend on the data channel (proposals and block parts). Tokens are charged
+	// by verification cost, not message count: a proposal costs
+	// proposalTokenCost tokens because it forces a BLS verification, while a
+	// block part costs one. Block-part gossip is therefore left generous
+	// headroom while what one peer can spend on proposals stays low. Like the
+	// vote channel's, this is a per-peer allowance; what the peers can force
+	// between them is bounded by VerificationRateLimit, which proposals are also
+	// charged against. 0 disables the limit.
+	PeerDataRateLimit float64 `mapstructure:"peer-data-rate-limit"`
 
 	DoubleSignCheckHeight int64 `mapstructure:"double-sign-check-height"`
 
@@ -1158,6 +1196,22 @@ func DefaultConsensusConfig() *ConsensusConfig {
 		PeerQueryMaj23SleepDuration: 2000 * time.Millisecond,
 		DoubleSignCheckHeight:       int64(0),
 		DontAutoPropose:             false,
+		// Denominated in verification work. A Dash-realistic precommit (four
+		// vote extensions) costs 10, so this admits ~60 of them per second from
+		// one peer — well above the 10-20 vote-channel messages/s an honest peer
+		// gossips. Provisional: the value must be confirmed against catch-up
+		// bursts on a busy testnet.
+		PeerVoteRateLimit: 600,
+		// Offline measurements put the single consensus verifier near 370
+		// operations/s. Keep headroom for consensus transitions and other work.
+		VerificationRateLimit: 300,
+		// The honest data-channel rate is one message per gossip tick per peer
+		// (the gossiper sends at most one part or proposal per iteration), i.e.
+		// 10/s at the 100ms default and 200/s at the 5ms used by test configs.
+		// 500 leaves room for both while still bounding what one peer can send;
+		// proposals are charged proposalTokenCost tokens each, so a single peer
+		// buys far fewer of them than of block parts.
+		PeerDataRateLimit: 500,
 	}
 }
 
@@ -1214,6 +1268,18 @@ func (cfg *ConsensusConfig) ValidateBasic() error {
 	}
 	if cfg.DoubleSignCheckHeight < 0 {
 		return errors.New("double-sign-check-height can't be negative")
+	}
+	if math.IsNaN(cfg.PeerVoteRateLimit) || math.IsInf(cfg.PeerVoteRateLimit, 0) || cfg.PeerVoteRateLimit < 0 {
+		return errors.New("peer-vote-rate-limit must be a finite, non-negative number")
+	}
+	if math.IsNaN(cfg.VerificationRateLimit) || math.IsInf(cfg.VerificationRateLimit, 0) || cfg.VerificationRateLimit < 0 {
+		return errors.New("verification-rate-limit must be a finite, non-negative number")
+	}
+	if cfg.VerificationRateLimit > 0 && cfg.VerificationRateLimit < MinVerificationRateLimit {
+		return fmt.Errorf("verification-rate-limit must be 0 or at least %d", MinVerificationRateLimit)
+	}
+	if math.IsNaN(cfg.PeerDataRateLimit) || math.IsInf(cfg.PeerDataRateLimit, 0) || cfg.PeerDataRateLimit < 0 {
+		return errors.New("peer-data-rate-limit must be a finite, non-negative number")
 	}
 	return nil
 }

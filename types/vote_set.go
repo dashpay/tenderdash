@@ -3,6 +3,7 @@ package types
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -184,17 +185,55 @@ func (voteSet *VoteSet) Size() int {
 // NOTE: VoteSet must not be nil
 // NOTE: Vote must not be nil
 func (voteSet *VoteSet) AddVote(vote *Vote) (added bool, err error) {
+	return voteSet.addVoteWithBudget(vote, nil, nil)
+}
+
+// AddVoteWithVerificationBudget adds a vote while charging each signature
+// verification to budget.
+func (voteSet *VoteSet) AddVoteWithVerificationBudget(
+	vote *Vote,
+	budget VerificationBudget,
+) (added bool, err error) {
+	return voteSet.addVoteWithBudget(vote, budget, nil)
+}
+
+// AddVerifiedVote adds a vote whose signatures a caller has already verified,
+// on the evidence of that verification rather than by repeating it.
+//
+// The evidence records what was verified and under which chain, quorum and
+// validator key; it is accepted only when all of those are what this vote set
+// would have verified against itself, and refused with
+// ErrVoteVerificationMismatch otherwise. A refusal is never turned into a
+// verification here: falling back to checking the signatures would mean a vote
+// could be verified twice on a path priced for one, which is the whole reason
+// the evidence exists.
+func (voteSet *VoteSet) AddVerifiedVote(
+	vote *Vote,
+	verified VoteVerification,
+) (added bool, err error) {
+	return voteSet.addVoteWithBudget(vote, nil, &verified)
+}
+
+func (voteSet *VoteSet) addVoteWithBudget(
+	vote *Vote,
+	budget VerificationBudget,
+	verified *VoteVerification,
+) (added bool, err error) {
 	if voteSet == nil {
 		panic("AddVote() on nil VoteSet")
 	}
 	voteSet.mtx.Lock()
 	defer voteSet.mtx.Unlock()
 
-	return voteSet.addVote(vote)
+	return voteSet.addVote(vote, budget, verified)
 }
 
 // NOTE: Validates as much as possible before attempting to verify the signature.
-func (voteSet *VoteSet) addVote(vote *Vote) (added bool, err error) {
+func (voteSet *VoteSet) addVote(
+	vote *Vote,
+	budget VerificationBudget,
+	verified *VoteVerification,
+) (added bool, err error) {
 	if vote == nil {
 		return false, ErrVoteNil
 	}
@@ -244,15 +283,42 @@ func (voteSet *VoteSet) addVote(vote *Vote) (added bool, err error) {
 		)
 	}
 
-	// Check signature.
-	err = vote.Verify(
-		voteSet.chainID,
-		voteSet.valSet.QuorumType,
-		voteSet.valSet.QuorumHash,
-		val.PubKey,
-		val.ProTxHash,
-	)
+	// Check signature, unless the caller brings evidence that this exact vote
+	// already had it checked against this exact chain, quorum and validator.
+	if verified != nil {
+		err = verified.checkMatches(
+			vote,
+			voteSet.chainID,
+			voteSet.valSet.QuorumType,
+			voteSet.valSet.QuorumHash,
+			val.PubKey,
+			val.ProTxHash,
+		)
+		if err != nil {
+			return false, err
+		}
+	} else if budget != nil {
+		err = vote.VerifyWithBudget(
+			voteSet.chainID,
+			voteSet.valSet.QuorumType,
+			voteSet.valSet.QuorumHash,
+			val.PubKey,
+			val.ProTxHash,
+			budget,
+		)
+	} else {
+		err = vote.Verify(
+			voteSet.chainID,
+			voteSet.valSet.QuorumType,
+			voteSet.valSet.QuorumHash,
+			val.PubKey,
+			val.ProTxHash,
+		)
+	}
 	if err != nil {
+		if errors.Is(err, ErrVerificationBudgetExhausted) {
+			return false, err
+		}
 		return false, ErrInvalidVoteSignature(
 			fmt.Errorf("failed to verify vote with ChainID %s and PubKey %s ProTxHash %s: %w",
 				voteSet.chainID, val.PubKey, val.ProTxHash, err))

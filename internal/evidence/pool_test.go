@@ -57,6 +57,8 @@ func TestEvidencePoolBasic(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	valSet, privVals := types.RandValidatorSet(1)
+	blockStore.On("Base").Return(int64(1))
+	blockStore.On("Height").Return(height)
 	blockStore.On("LoadBlockMeta", mock.AnythingOfType("int64")).Return(
 		&types.BlockMeta{Header: types.Header{Time: defaultEvidenceTime}},
 	)
@@ -140,6 +142,7 @@ func TestAddExpiredEvidence(t *testing.T) {
 	)
 
 	blockStore.On("Base").Return(int64(3))
+	blockStore.On("Height").Return(height)
 	blockStore.On("LoadBlockMeta", mock.AnythingOfType("int64")).Return(func(h int64) *types.BlockMeta {
 		if h == height || h == expiredHeight {
 			return makeBlockMeta(h, defaultEvidenceTime, valSet)

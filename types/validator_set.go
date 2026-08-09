@@ -894,7 +894,28 @@ func (vals *ValidatorSet) UpdateWithChangeSet(
 // with a bonus for including more than +2/3 of the signatures.
 func (vals *ValidatorSet) VerifyCommit(chainID string, blockID BlockID,
 	height int64, commit *Commit) error {
+	return vals.verifyCommit(chainID, blockID, height, commit, nil)
+}
 
+// VerifyCommitWithBudget verifies a commit while charging each signature
+// verification to budget.
+func (vals *ValidatorSet) VerifyCommitWithBudget(
+	chainID string,
+	blockID BlockID,
+	height int64,
+	commit *Commit,
+	budget VerificationBudget,
+) error {
+	return vals.verifyCommit(chainID, blockID, height, commit, budget)
+}
+
+func (vals *ValidatorSet) verifyCommit(
+	chainID string,
+	blockID BlockID,
+	height int64,
+	commit *Commit,
+	budget VerificationBudget,
+) error {
 	// Validate Height and BlockID.
 	if height != commit.Height {
 		return NewErrInvalidCommitHeight(height, commit.Height)
@@ -908,7 +929,7 @@ func (vals *ValidatorSet) VerifyCommit(chainID string, blockID BlockID,
 	if err != nil {
 		return err
 	}
-	quorumSigns, err := MakeQuorumSigns(chainID, vals.QuorumType, vals.QuorumHash, canonVote.ToProto())
+	quorumSigns, err := makeVerifyQuorumSigns(chainID, vals.QuorumType, vals.QuorumHash, canonVote.ToProto())
 	if err != nil {
 		return err
 	}
@@ -917,10 +938,32 @@ func (vals *ValidatorSet) VerifyCommit(chainID string, blockID BlockID,
 			vals.QuorumHash, commit.QuorumHash)
 
 	}
-	err = quorumSigns.Verify(vals.ThresholdPublicKey, NewQuorumSignsFromCommit(commit))
+	if budget != nil {
+		err = quorumSigns.VerifyWithBudget(vals.ThresholdPublicKey, NewQuorumSignsFromCommit(commit), budget)
+	} else {
+		err = quorumSigns.Verify(vals.ThresholdPublicKey, NewQuorumSignsFromCommit(commit))
+	}
 	if err != nil {
-		return fmt.Errorf("invalid commit signatures for quorum(type=%v, hash=%X), thresholdPubKey=%X: %w",
-			vals.QuorumType, vals.QuorumHash, vals.ThresholdPublicKey, err)
+		if errors.Is(err, ErrVerificationBudgetExhausted) {
+			return err
+		}
+		// A vote-extension count mismatch is an application/version disagreement an
+		// honest peer can produce (it stores and relays a commit whose extension
+		// configuration differs from ours), not forgery. Surface it untyped so the
+		// caller does not evict the sender for it.
+		var countMismatch ErrVoteExtensionCountMismatch
+		if errors.As(err, &countMismatch) {
+			return err
+		}
+		// Otherwise the threshold signature itself is forged: a node stores a commit
+		// only after it verifies, so no honest peer relays one with a bad signature.
+		// Typed so the caller can evict the sender.
+		return ErrInvalidCommitSignature{
+			QuorumType:         vals.QuorumType,
+			QuorumHash:         vals.QuorumHash,
+			ThresholdPublicKey: vals.ThresholdPublicKey,
+			Err:                err,
+		}
 	}
 	return nil
 }
@@ -943,6 +986,28 @@ type ErrNotEnoughVotingPowerSigned struct {
 func (e ErrNotEnoughVotingPowerSigned) Error() string {
 	return fmt.Sprintf("invalid commit -- insufficient voting power: got %d, needed more than %d", e.Got, e.Needed)
 }
+
+// ErrInvalidCommitSignature is returned when a commit's threshold signature does
+// not verify against the validator set's threshold public key.
+//
+// It marks the one commit failure that is unambiguous misbehaviour: a node stores
+// a commit only after it verifies, so no honest peer can relay one whose threshold
+// signature is invalid. Callers match it with errors.As to evict the sender.
+// Failures that an honest peer CAN produce — a commit for a block we do not have,
+// a quorum-hash disagreement, a stale height — deliberately do not carry this type.
+type ErrInvalidCommitSignature struct {
+	QuorumType         btcjson.LLMQType
+	QuorumHash         crypto.QuorumHash
+	ThresholdPublicKey crypto.PubKey
+	Err                error
+}
+
+func (e ErrInvalidCommitSignature) Error() string {
+	return fmt.Sprintf("invalid commit signatures for quorum(type=%v, hash=%X), thresholdPubKey=%X: %v",
+		e.QuorumType, e.QuorumHash, e.ThresholdPublicKey, e.Err)
+}
+
+func (e ErrInvalidCommitSignature) Unwrap() error { return e.Err }
 
 func (vals *ValidatorSet) ABCIEquivalentValidatorUpdates() *abci.ValidatorSetUpdate {
 	var valUpdates []abci.ValidatorUpdate

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -57,6 +58,33 @@ func TestEnsureTestRoot(t *testing.T) {
 	ensureFiles(t, rootDir, defaultDataDir, baseConfig.Genesis, pvConfig.Key, pvConfig.State)
 }
 
+// The generated config.toml is the only statement of the rate limits most
+// operators ever read. It quotes both the cost of the most expensive message and
+// the smallest rate that can carry it, and a wrong number there is worse than no
+// number: it makes valid settings look invalid and misstates the capacity an
+// operator plans for. Both come from the constant the node validates against, so
+// the file cannot say one thing while the node enforces another.
+func TestGeneratedConfigQuotesTheRateLimitTheNodeEnforces(t *testing.T) {
+	tmpDir := t.TempDir()
+	EnsureRoot(tmpDir)
+	require.NoError(t, WriteConfigFile(tmpDir, DefaultConfig()))
+
+	data, err := os.ReadFile(filepath.Join(tmpDir, defaultConfigFilePath))
+	require.NoError(t, err)
+	rendered := string(data)
+
+	limit := strconv.Itoa(MinVerificationRateLimit)
+	require.Contains(t, rendered,
+		"a precommit carrying the maximum vote extensions costs "+limit)
+	require.Contains(t, rendered,
+		"the value must be 0 (disabled) or at least "+limit)
+
+	// The smallest rate the file calls valid has to be one the node accepts.
+	cfg := DefaultConsensusConfig()
+	cfg.VerificationRateLimit = float64(MinVerificationRateLimit)
+	require.NoError(t, cfg.ValidateBasic())
+}
+
 func checkConfig(t *testing.T, configFile string) {
 	t.Helper()
 	// list of words we expect in the config
@@ -65,6 +93,7 @@ func checkConfig(t *testing.T, configFile string) {
 		"seeds",
 		"address",
 		"create-empty-blocks",
+		"verification-rate-limit",
 		"peer",
 		"timeout",
 		"broadcast",

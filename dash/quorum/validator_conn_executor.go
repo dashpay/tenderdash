@@ -325,6 +325,46 @@ func (vc *ValidatorConnExecutor) selectValidators() (validatorMap, error) {
 	return newValidatorMap(selectedValidators), nil
 }
 
+// quorumNeighbourNodeIDs returns the node IDs of the quorum members this node
+// has to stay connected to, in both directions of the DIP-6 overlay: the ones it
+// dials, and the ones that dial it, which it would otherwise only ever learn
+// about from the connection they open.
+//
+// Only node IDs the chain published with the validator address are returned. The
+// resolvers that fill in a missing one are deliberately not used here: the
+// address book they consult first is written by peer exchange, which accepts an
+// arbitrary node ID at an arbitrary address from any connected peer, so its
+// answer may name a node that does not own the address — good enough to dial,
+// since a wrong node ID fails the handshake, but not to reserve a slot for. The
+// other resolver opens a connection per lookup, which this function must not do:
+// it runs on every committed block.
+func (vc *ValidatorConnExecutor) quorumNeighbourNodeIDs() ([]types.NodeID, error) {
+	me, ok := vc.me()
+	if !ok {
+		return nil, fmt.Errorf("current node is not member of active validator set")
+	}
+
+	selector := selectpeers.NewDIP6ValidatorSelector(vc.quorumHash)
+	members := vc.validatorSetMembers.values()
+	outbound, err := selector.SelectValidators(members, me)
+	if err != nil {
+		return nil, err
+	}
+	inbound, err := selector.SelectInboundValidators(members, me)
+	if err != nil {
+		return nil, err
+	}
+
+	neighbours := append(outbound, inbound...)
+	nodeIDs := make([]types.NodeID, 0, len(neighbours))
+	for _, validator := range neighbours {
+		if nodeID := validator.NodeAddress.NodeID; nodeID != "" {
+			nodeIDs = append(nodeIDs, nodeID)
+		}
+	}
+	return nodeIDs, nil
+}
+
 // ensureValidatorsHaveNodeIDs iterates through all `validators` and determines their Node IDs where validtes.
 // Returns a slice that contains only validators with valid node ID.
 // Validators where node ID lookup failed are skipped (no error reported).
@@ -387,9 +427,25 @@ func (vc *ValidatorConnExecutor) updateConnections() error {
 	// We only do something if we are part of new ValidatorSet
 	if !vc.isValidator() {
 		vc.logger.Debug("not a member of active ValidatorSet")
-		// We need to disconnect connected validators. It needs to be done explicitly
-		// because they are marked as persistent and will never disconnect themselves.
+		// Outside the quorum this node reserves no connection slots, and it has
+		// to drop the validators it connected to explicitly, because they are
+		// marked as persistent and will never disconnect themselves.
+		vc.reserveSlots(nil)
 		return vc.disconnectValidators(validatorMap{})
+	}
+
+	// Reserve a connection slot for every member of the current quorum we have to
+	// stay connected to. The members we dial are filtered out of the dial list
+	// below once connected, and the members that dial us are never in it at all,
+	// so neither would be covered by a reservation made at dial time. This runs
+	// before dialing so that a slot can be claimed even when every one is taken.
+	reserved, err := vc.quorumNeighbourNodeIDs()
+	if err != nil {
+		// Leave the previous reservations in place: replacing them with an empty
+		// set would strip every quorum member of its slot.
+		vc.logger.Error("cannot determine quorum members to reserve slots for", "error", err)
+	} else {
+		vc.reserveSlots(reserved)
 	}
 
 	// Find new newValidators
@@ -398,7 +454,9 @@ func (vc *ValidatorConnExecutor) updateConnections() error {
 		vc.logger.Error("cannot determine list of validators to connect", "error", err)
 		// no return, as we still need to disconnect unused validators
 	}
-	// Disconnect existing validators unless they are selected to be connected again
+	// Disconnect existing validators unless they are selected to be connected again.
+	// A member that moved to the half of the overlay that dials us is dropped here
+	// and reconnects inwards, where the slot reserved above readmits it.
 	if err := vc.disconnectValidators(newValidators); err != nil {
 		return fmt.Errorf("cannot disconnect unused validators: %w", err)
 	}
@@ -412,6 +470,21 @@ func (vc *ValidatorConnExecutor) updateConnections() error {
 	}
 	vc.logger.Debug("connected to Validators", "validators", newValidators.String())
 	return nil
+}
+
+// reserveSlots asks the p2p layer to keep a connection slot for each of the
+// provided validators, replacing any slots reserved for a previous quorum.
+//
+// The reservation is keyed on node ID, which is authenticated during the
+// handshake, so it holds no matter which side opened the connection and cannot
+// be claimed by a node that does not hold the corresponding private key. Only
+// node IDs that are themselves bound to the address the chain published for the
+// validator are passed in; see resolveNodeID.
+func (vc *ValidatorConnExecutor) reserveSlots(nodeIDs []types.NodeID) {
+	if err := vc.dialer.SetProtectedPeers(nodeIDs); err != nil {
+		// Non-fatal: connections still work, they are just displaceable.
+		vc.logger.Error("cannot reserve connection slots for validators", "error", err)
+	}
 }
 
 // filterValidators returns new validatorMap that contains only validators to which we can connect

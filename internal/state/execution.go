@@ -578,7 +578,7 @@ func (blockExec *BlockExecutor) ApplyBlock(
 // ExtendVote gets vote-extensions from ABCI and updates vote.VoteExtensions with this value
 func (blockExec *BlockExecutor) ExtendVote(ctx context.Context, vote *types.Vote) {
 	resp, err := blockExec.appClient.ExtendVote(ctx, &abci.RequestExtendVote{
-		Hash:   vote.BlockID.Hash,
+		Hash:   bytes.Clone(vote.BlockID.Hash),
 		Height: vote.Height,
 		Round:  vote.Round,
 	})
@@ -601,11 +601,15 @@ func (blockExec *BlockExecutor) VerifyVoteExtension(ctx context.Context, vote *t
 		extensions = vote.VoteExtensions.ToExtendProto()
 	}
 
+	// The byte fields are copied rather than shared. An application reached
+	// through the in-process client gets the request struct itself, so anything
+	// it writes through these slices would land in the vote — a vote that is on
+	// its way to being stored, and whose signatures have already been checked.
 	resp, err := blockExec.appClient.VerifyVoteExtension(ctx, &abci.RequestVerifyVoteExtension{
-		Hash:               vote.BlockID.Hash,
+		Hash:               bytes.Clone(vote.BlockID.Hash),
 		Height:             vote.Height,
 		Round:              vote.Round,
-		ValidatorProTxHash: vote.ValidatorProTxHash,
+		ValidatorProTxHash: bytes.Clone(vote.ValidatorProTxHash),
 		VoteExtensions:     extensions,
 	})
 	if err != nil {

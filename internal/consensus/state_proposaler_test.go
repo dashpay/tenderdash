@@ -174,7 +174,7 @@ func (suite *ProposalerTestSuite) TestSet() {
 	}
 	for i, tc := range testCases {
 		suite.Run(fmt.Sprintf("%d", i), func() {
-			err := suite.proposer.Set(&tc.proposal, tc.receivedAt, &tc.rs)
+			err := suite.proposer.Set(context.Background(), &tc.proposal, tc.receivedAt, &tc.rs)
 			tmrequire.Error(suite.T(), tc.wantErr, err)
 			suite.Require().Equal(tc.wantProposal, tc.rs.Proposal)
 			suite.Require().Equal(tc.wantReceiveTime, tc.rs.ProposalReceiveTime)
@@ -252,7 +252,7 @@ func (suite *ProposalerTestSuite) TestDecide() {
 			err := suite.proposer.Create(ctx, tc.height, tc.round, &tc.rs)
 			tmrequire.Error(suite.T(), tc.wantErr, err)
 			if tc.wantProposal == nil {
-				suite.Require().Len(suite.msgInfoQueue.sender.peerQueue.ch, 0)
+				suite.Require().Zero(suite.msgInfoQueue.lanes.buffered())
 				suite.Require().Len(suite.msgInfoQueue.sender.internalQueue.ch, 0)
 				suite.Require().Len(suite.msgInfoQueue.reader.outCh, 0)
 				return
@@ -368,10 +368,48 @@ func (suite *ProposalerTestSuite) TestVerifyProposal() {
 	}
 	for i, tc := range testCases {
 		suite.Run(fmt.Sprintf("test-case #%d", i), func() {
-			err := suite.proposer.verifyProposal(tc.proposal, &tc.rs)
+			err := suite.proposer.verifyProposal(context.Background(), tc.proposal, &tc.rs)
 			tmrequire.Error(suite.T(), tc.wantErr, err)
 		})
 	}
+}
+
+// TestVerifyProposal_ForgedSignatureMovesCounter pins the operator-visible half
+// of the proposal-verification defence: a proposal from the round's real
+// proposer whose signature does not verify increments ProposalVerifyFailures and
+// does not crash the process. This is the counter a flood is watched by, and it
+// is the path an external flood struggles to reach - a proposal that misses the
+// live height/round or carries a stale core-chain-locked height is dropped by a
+// cheaper gate first - so it is pinned here where the message reaches the check
+// deterministically.
+func (suite *ProposalerTestSuite) TestVerifyProposal_ForgedSignatureMovesCounter() {
+	ctx := context.Background()
+	state := suite.committedState
+	blockID := suite.blockH100R0.BlockID(nil)
+
+	// A proposal for the round's real proposer, at the current height/round and
+	// core height, so it clears every gate ahead of the signature check; the
+	// signature itself is forged, so the check is what rejects it.
+	proposal := types.NewProposal(100, state.LastCoreChainLockedBlockHeight, 0, 0, blockID, suite.blockH100R0.Header.Time)
+	proposal.Signature = make([]byte, 96)
+
+	counter := &recordingCounter{}
+	metrics := NopMetrics()
+	metrics.ProposalVerifyFailures = counter
+	proposer := *suite.proposer
+	proposer.metrics = metrics
+
+	rs := cstypes.RoundState{
+		Validators:       suite.mockValSet,
+		ProposerSelector: suite.proposerSelector,
+		Height:           proposal.Height,
+		Round:            proposal.Round,
+	}
+
+	err := proposer.verifyProposal(ctx, proposal, &rs)
+	suite.Require().ErrorIs(err, ErrInvalidProposalSignature)
+	suite.Require().Equal(float64(1), counter.value,
+		"a proposal that fails signature verification must move ProposalVerifyFailures")
 }
 
 func (suite *ProposalerTestSuite) signProposal(ctx context.Context, proposal *types.Proposal) {

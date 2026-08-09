@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
@@ -21,8 +22,9 @@ type (
 )
 
 type AddVoteEvent struct {
-	Vote   *types.Vote
-	PeerID types.NodeID
+	Vote       *types.Vote
+	PeerID     types.NodeID
+	FromReplay bool
 }
 
 // GetType returns AddVoteType event-type
@@ -33,8 +35,10 @@ func (e *AddVoteEvent) GetType() EventType {
 // AddVoteAction is the command to add a vote to the vote-set
 // Attempt to add the vote. if its a duplicate signature, dupeout the validator
 type AddVoteAction struct {
-	prevote   AddVoteFunc
-	precommit AddVoteFunc
+	prevote            AddVoteFunc
+	precommit          AddVoteFunc
+	metrics            *Metrics
+	verificationBudget types.VerificationBudget
 }
 
 func newAddVoteAction(cs *State, ctrl *Controller, statsQueue *chanQueue[msgInfo]) *AddVoteAction {
@@ -48,6 +52,8 @@ func newAddVoteAction(cs *State, ctrl *Controller, statsQueue *chanQueue[msgInfo
 	dispatchPrecommitMw := addVoteDispatchPrecommitMw(ctrl)
 	verifyVoteExtensionMw := addVoteVerifyVoteExtensionMw(cs.privValidator, cs.blockExec, cs.metrics, cs.emitter)
 	return &AddVoteAction{
+		metrics:            cs.metrics,
+		verificationBudget: cs.verificationBudget,
 		prevote: withVoterMws(
 			addToVoteSet,
 			loggingMw,
@@ -74,20 +80,47 @@ func (c *AddVoteAction) Execute(ctx context.Context, stateEvent StateEvent) erro
 	stateData := stateEvent.StateData
 	event := stateEvent.Data.(*AddVoteEvent)
 	vote := event.Vote
+	ctx = ctxWithPeerVerificationBudget(ctx, event.PeerID, event.FromReplay, c.verificationBudget)
+	var added bool
 	var err error
 	switch vote.Type {
 	case tmproto.PrevoteType:
-		_, err = c.prevote(ctx, stateData, vote)
+		added, err = c.prevote(ctx, stateData, vote)
 	case tmproto.PrecommitType:
-		_, err = c.precommit(ctx, stateData, vote)
+		added, err = c.precommit(ctx, stateData, vote)
+	}
+	if event.PeerID != "" && !event.FromReplay {
+		if errors.Is(err, types.ErrVerificationBudgetExhausted) {
+			c.metrics.VerificationBudgetDrops.Add(1)
+		}
+		// Record the honest-service latency only for a vote that was actually
+		// accepted: the span from when the reactor queued this peer vote to now,
+		// which is when it reached the vote set.
+		if added {
+			c.metrics.PeerVoteVerifyLatencySeconds.Observe(
+				time.Since(msgInfoFromCtx(ctx).ReceiveTime).Seconds())
+		}
 	}
 	return err
 }
 
 // addVoteToVoteSetFunc adds a vote to the vote-set
 func addVoteToVoteSetFunc(metrics *Metrics, ep *EventPublisher) AddVoteFunc {
-	return func(_ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
-		added, err := stateData.Votes.AddVote(vote)
+	return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
+		var added bool
+		var err error
+		budget := verificationBudgetFromCtx(ctx)
+		switch verified, ok := voteVerificationFromCtx(ctx, vote); {
+		case ok:
+			// An earlier step verified this vote's signatures because it needed
+			// the answer before the vote could be stored. Verifying them again
+			// here would double what every accepted precommit costs this node.
+			added, err = stateData.Votes.AddVerifiedVote(vote, verified)
+		case budget != nil:
+			added, err = stateData.Votes.AddVoteWithVerificationBudget(vote, budget)
+		default:
+			added, err = stateData.Votes.AddVote(vote)
+		}
 		if !added || err != nil {
 			return added, err
 		}
@@ -258,15 +291,34 @@ func addVoteVerifyVoteExtensionMw(
 				return false, fmt.Errorf("validator index %d not found in validator set", vote.ValidatorIndex)
 			}
 			qt, qh := stateData.state.Validators.QuorumType, stateData.state.Validators.QuorumHash
-			if err := vote.VerifyExtensionSign(stateData.state.ChainID, val.PubKey, qt, qh); err != nil {
+			// Block signature first: it authenticates the vote for the cost of a
+			// single pairing, so a forged precommit cannot force one pairing per
+			// vote extension before being rejected. Extension signatures are still
+			// fully verified for an authentic vote, keeping the ABCI call below
+			// gated exactly as before.
+			//
+			// This is the only place a precommit received from a peer has its
+			// signatures checked. The evidence handed on with it is what lets the
+			// vote set store the vote without repeating the check, so an accepted
+			// precommit costs one pass over its signatures rather than two.
+			verified, err := types.VerifyVoteSignatures(
+				vote,
+				stateData.state.ChainID,
+				qt,
+				qh,
+				val.PubKey,
+				val.ProTxHash,
+				verificationBudgetFromCtx(ctx),
+			)
+			if err != nil {
 				return false, err
 			}
-			err := blockExec.VerifyVoteExtension(ctx, vote)
+			err = blockExec.VerifyVoteExtension(ctx, vote)
 			metrics.MarkVoteExtensionReceived(err == nil)
 			if err != nil {
 				return false, err
 			}
-			return next(ctx, stateData, vote)
+			return next(ctxWithVoteVerification(ctx, vote, verified), stateData, vote)
 		}
 	}
 }
@@ -357,7 +409,14 @@ func addVoteLoggingMw() AddVoteMiddlewareFunc {
 			added, err := next(ctx, stateData, vote)
 			if !added {
 				if err != nil {
-					logger.Error("vote not added", "error", err)
+					// Debug, not Error: a not-added vote is usually
+					// peer-attributable (invalid signature, unexpected step) and
+					// can be flooded by an unprivileged peer. The genuinely
+					// notable cases (non-deterministic and conflicting
+					// signatures) are still logged at Error by addVoteErrorMw.
+					// Logging here at Error let a vote flood emit an Error line
+					// per message.
+					logger.Debug("vote not added", "error", err)
 					if errors.Is(err, types.ErrVoteNonDeterministicSignature) {
 						return added, err
 					}

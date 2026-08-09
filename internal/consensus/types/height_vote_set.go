@@ -1,6 +1,7 @@
 package types
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -143,16 +144,53 @@ func (hvs *HeightVoteSet) addRound(round int32) {
 // AddVote adds a vote of a specific type to the round
 // Duplicate votes return added=false, err=nil.
 func (hvs *HeightVoteSet) AddVote(vote *types.Vote) (added bool, err error) {
+	return hvs.addVote(vote, nil, nil)
+}
+
+// AddVoteWithVerificationBudget adds a vote while charging each signature
+// verification to budget.
+func (hvs *HeightVoteSet) AddVoteWithVerificationBudget(
+	vote *types.Vote,
+	budget types.VerificationBudget,
+) (added bool, err error) {
+	return hvs.addVote(vote, budget, nil)
+}
+
+// AddVerifiedVote adds a vote whose signatures a caller has already verified,
+// on the evidence of that verification. The round's vote set decides whether
+// the evidence covers what it is about to store, and refuses the vote when it
+// does not.
+func (hvs *HeightVoteSet) AddVerifiedVote(
+	vote *types.Vote,
+	verified types.VoteVerification,
+) (added bool, err error) {
+	return hvs.addVote(vote, nil, &verified)
+}
+
+func (hvs *HeightVoteSet) addVote(
+	vote *types.Vote,
+	budget types.VerificationBudget,
+	verified *types.VoteVerification,
+) (bool, error) {
 	if !hvs.valSet.HasPublicKeys {
 		return false, nil
 	}
 	hvs.mtx.Lock()
 	defer hvs.mtx.Unlock()
 	if !types.IsVoteTypeValid(vote.Type) {
-		return
+		return false, nil
 	}
 	voteSet := hvs.getVoteSet(vote.Round, vote.Type)
 	if voteSet == nil {
+		// Entering a round costs a RoundVoteSet sized to the validator set, and
+		// the round is whatever the vote asks for. Check the identity the vote
+		// states for itself before paying that, so a claim no validator could
+		// have made buys nothing. The vote set makes the same check before it
+		// stores anything, but making it only there means the state is already
+		// allocated by the time the claim is refused.
+		if err := hvs.checkVoteClaim(vote); err != nil {
+			return false, err
+		}
 		proTxHash := vote.ValidatorProTxHash.String()
 		if rndz := hvs.peerCatchupRounds[proTxHash]; len(rndz) < 2 {
 			hvs.addRound(vote.Round)
@@ -160,12 +198,57 @@ func (hvs *HeightVoteSet) AddVote(vote *types.Vote) (added bool, err error) {
 			hvs.peerCatchupRounds[proTxHash] = append(rndz, vote.Round)
 		} else {
 			// punish peer
-			err = ErrGotVoteFromUnwantedRound
-			return
+			return false, ErrGotVoteFromUnwantedRound
 		}
 	}
-	added, err = voteSet.AddVote(vote)
-	return
+	if verified != nil {
+		return voteSet.AddVerifiedVote(vote, *verified)
+	}
+	if budget != nil {
+		return voteSet.AddVoteWithVerificationBudget(vote, budget)
+	}
+	return voteSet.AddVote(vote)
+}
+
+// checkVoteClaim reports whether the identity a vote states for itself is one
+// this height could hold: it must name a validator this height has, by an index
+// the validator set holds and a pro-tx hash that is the one held there, and it
+// must be a vote for this height at all.
+//
+// These are the checks the round's vote set runs that need no round to exist,
+// and they return the errors it returns, so a vote refused here is refused for
+// the reason it would have been refused for anyway. Everything else — the
+// duplicate check, the signature — needs the round and stays there.
+//
+// A vote that passes still proves nothing about its sender: pro-tx hashes are
+// public, so anyone can name a real validator. What it bounds is how far a name
+// goes. The catch-up allowance is two rounds per pro-tx hash, so a height admits
+// at most two attacker-chosen rounds per validator, and admitting one now costs
+// a signature verification that is charged to the sender's budget — where before
+// any 32 bytes bought two rounds and were charged nothing.
+func (hvs *HeightVoteSet) checkVoteClaim(vote *types.Vote) error {
+	if vote.ValidatorIndex < 0 {
+		return fmt.Errorf("index < 0: %w", types.ErrVoteInvalidValidatorIndex)
+	}
+	if len(vote.ValidatorProTxHash) == 0 {
+		return fmt.Errorf("empty pro_tx_hash: %w", types.ErrVoteInvalidValidatorProTxHash)
+	}
+	if vote.Height != hvs.height {
+		return fmt.Errorf("expected height %d, but got %d: %w",
+			hvs.height, vote.Height, types.ErrVoteUnexpectedStep)
+	}
+	val := hvs.valSet.GetByIndex(vote.ValidatorIndex)
+	if val == nil {
+		return fmt.Errorf("cannot find validator %d in valSet of size %d: %w",
+			vote.ValidatorIndex, hvs.valSet.Size(), types.ErrVoteInvalidValidatorIndex)
+	}
+	if !bytes.Equal(vote.ValidatorProTxHash, val.ProTxHash) {
+		return fmt.Errorf(
+			"vote.ValidatorProTxHash (%X) does not match proTxHash (%X) for vote.ValidatorIndex (%d): %w",
+			vote.ValidatorProTxHash, val.ProTxHash, vote.ValidatorIndex,
+			types.ErrVoteInvalidValidatorProTxHash)
+	}
+	return nil
 }
 
 // GetVoteSet returns the vote-set for the round and the type of vote

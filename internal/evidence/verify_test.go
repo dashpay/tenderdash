@@ -114,6 +114,8 @@ func TestVerifyDuplicateVoteEvidence(t *testing.T) {
 	stateStore.On("LoadValidators", int64(10), mock.Anything).Return(valSet, nil)
 	stateStore.On("Load").Return(state, nil)
 	blockStore := &mocks.BlockStore{}
+	blockStore.On("Base").Return(int64(1))
+	blockStore.On("Height").Return(int64(11))
 	blockStore.On("LoadBlockMeta", int64(10)).Return(&types.BlockMeta{Header: types.Header{Time: defaultEvidenceTime}})
 
 	eventBus := eventbus.NewDefault(logger)

@@ -6,9 +6,12 @@ import (
 	"runtime/debug"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	sync "github.com/sasha-s/go-deadlock"
+	"golang.org/x/time/rate"
 
 	"github.com/dashpay/tenderdash/internal/p2p"
+	"github.com/dashpay/tenderdash/internal/p2p/client"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/libs/service"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -30,9 +33,9 @@ const (
 // ConsensusParams.Evidence.MaxBytes — the same budget a proposer applies when
 // selecting evidence for a block — to every connected peer, typically
 // single-digit items in production. The receiver deduplicates silently via
-// isPending/isCommitted guards — no ACK is required. Re-sending continues until
-// evidence leaves the pending set (committed or expired) or the peer
-// disconnects.
+// the pending and committed checks on arrival — no ACK is required. Re-sending
+// continues until evidence leaves the pending set (committed or expired) or the
+// peer disconnects.
 //
 // Rationale for re-sending: syncEvidence is the only push path for evidence
 // that already exists in the pool when a peer connects. The first batch can be
@@ -103,6 +106,16 @@ type Reactor struct {
 
 	peerEvents p2p.PeerEventSubscriber
 
+	// clock is the time source the admission budgets meter against; the wall
+	// clock unless a test overrides it.
+	clock clockwork.Clock
+
+	// peerLimit bounds the verification work any single peer may cause, and
+	// nodeBudget bounds the work all of them together may cause. Both are
+	// created in OnStart, which owns the context their background work needs.
+	peerLimit  *client.RateLimit
+	nodeBudget *rate.Limiter
+
 	mtx sync.Mutex
 
 	// nextSyncID assigns each per-peer syncEvidence goroutine a unique,
@@ -110,6 +123,17 @@ type Reactor struct {
 	nextSyncID uint64
 
 	peerRoutines map[types.NodeID]peerSyncState
+}
+
+// ReactorOption overrides a default of a Reactor.
+type ReactorOption func(*Reactor)
+
+// WithAdmissionClock sets the time source the evidence admission budgets meter
+// against. The default is the wall clock; a test injects a fake clock to
+// advance time explicitly, which is the only way to assert how fast a budget
+// refills rather than merely that it drains.
+func WithAdmissionClock(clock clockwork.Clock) ReactorOption {
+	return func(r *Reactor) { r.clock = clock }
 }
 
 // NewReactor returns a reference to a new evidence reactor, which implements the
@@ -120,13 +144,18 @@ func NewReactor(
 	chCreator p2p.ChannelCreator,
 	peerEvents p2p.PeerEventSubscriber,
 	evpool *Pool,
+	opts ...ReactorOption,
 ) *Reactor {
 	r := &Reactor{
 		logger:       logger,
 		evpool:       evpool,
 		chCreator:    chCreator,
 		peerEvents:   peerEvents,
+		clock:        clockwork.NewRealClock(),
 		peerRoutines: make(map[types.NodeID]peerSyncState),
+	}
+	for _, opt := range opts {
+		opt(r)
 	}
 
 	r.BaseService = *service.NewBaseService(logger, "Evidence", r)
@@ -143,6 +172,10 @@ func (r *Reactor) OnStart(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
+
+	r.peerLimit = client.NewRateLimitWithBurst(
+		ctx, peerEvidenceRate, peerEvidenceBurst, true, r.logger, client.WithRateLimitClock(r.clock))
+	r.nodeBudget = newNodeBudget()
 
 	go r.processEvidenceCh(ctx)
 	go r.processPeerUpdates(ctx, r.peerEvents(ctx, "evidence"))
@@ -184,31 +217,47 @@ func (r *Reactor) handleEvidenceMessage(ctx context.Context, envelope *p2p.Envel
 			return err
 		}
 
-		// If the evidence is already pending or committed, we don't need to
-		// broadcast it again.
-		if !r.evpool.isPending(ev) && !r.evpool.isCommitted(ev) {
-			if err := r.evpool.AddEvidence(ctx, ev); err != nil {
-				// If we're given invalid evidence by the peer, notify the router that
-				// we should remove this peer by returning an error.
-				if _, ok := err.(*types.ErrInvalidEvidence); ok {
-					return err
-				}
-				// Any other error means we could not add the evidence to the pool —
-				// most commonly because we are behind and lack the block needed to
-				// verify it (verify() returns a plain error, NOT ErrInvalidEvidence,
-				// for a missing block so the peer is not disconnected). The evidence
-				// never entered the pending set, so isPending stays false. Falling
-				// through to broadcastEvidence here would re-gossip on every receipt
-				// without ever converging — sustained amplification across the
-				// network. Log and stop; only successfully-added evidence is broadcast.
-				logger.Error("failed to add evidence", "error", err)
-				return nil
-			}
-
-			return r.broadcastEvidence(ctx, *msg, r.evidenceCh)
+		// Bound what an inbound message can make us spend before spending any of
+		// it. A refusal is silent and non-punitive by construction. The free
+		// refusals come first because the duplicate check below hashes the whole
+		// message, which is itself work an attacker should not get for free.
+		admissionLogger := logger.With("height", ev.Height())
+		if !r.admitFree(ev, admissionLogger) {
+			return nil
 		}
-		logger.Debug("evidence already pending", "evidence", ev)
-		return nil
+
+		// If the evidence is already pending or committed, we don't need to
+		// broadcast it again. Asked as one question, because the hash both
+		// lookups are keyed on costs a marshal and a digest of the whole
+		// message and this runs before the work budget is consulted.
+		if r.evpool.alreadyHave(ev) {
+			logger.Debug("evidence already pending", "evidence", ev)
+			return nil
+		}
+
+		if !r.admitWork(ctx, envelope.From, admissionLogger) {
+			return nil
+		}
+
+		if err := r.evpool.AddEvidence(ctx, ev); err != nil {
+			// If we're given invalid evidence by the peer, notify the router that
+			// we should remove this peer by returning an error.
+			if _, ok := err.(*types.ErrInvalidEvidence); ok {
+				return err
+			}
+			// Any other error means we could not add the evidence to the pool —
+			// most commonly because we are behind and lack the block needed to
+			// verify it (verify() returns a plain error, NOT ErrInvalidEvidence,
+			// for a missing block so the peer is not disconnected). The evidence
+			// never entered the pending set, so isPending stays false. Falling
+			// through to broadcastEvidence here would re-gossip on every receipt
+			// without ever converging — sustained amplification across the
+			// network. Log and stop; only successfully-added evidence is broadcast.
+			logger.Error("failed to add evidence", "error", err)
+			return nil
+		}
+
+		return r.broadcastEvidence(ctx, *msg, r.evidenceCh)
 
 	default:
 		return fmt.Errorf("received unknown message: %T", msg)

@@ -61,6 +61,13 @@ type msgInfo struct {
 	ReceiveTime time.Time
 }
 
+// peerErrorMsg signals to the reactor that a peer should be disconnected due to an error
+type peerErrorMsg struct {
+	PeerID types.NodeID
+	Err    error
+	Fatal  bool
+}
+
 func (msgInfo) TypeTag() string { return "tendermint/wal/MsgInfo" }
 
 func (msgInfo) ValidateBasic() error { return nil }
@@ -125,8 +132,9 @@ type State struct {
 	logger log.Logger
 
 	// config details
-	config        *config.ConsensusConfig
-	privValidator privValidator
+	config             *config.ConsensusConfig
+	privValidator      privValidator
+	verificationBudget types.VerificationBudget
 
 	// store blocks and commits
 	blockStore sm.BlockStore
@@ -155,6 +163,10 @@ type State struct {
 	// information about about added votes and block parts are written on this channel
 	// so statistics can be computed by reactor
 	statsMsgQueue *chanQueue[msgInfo]
+
+	// peer errors (e.g., for invalid signatures) are queued here for the reactor
+	// to handle disconnections
+	peerErrorQueue *chanQueue[peerErrorMsg]
 
 	// we use eventBus to trigger msg broadcasts in the reactor,
 	// and to notify external subscribers, eg. through a websocket
@@ -221,6 +233,21 @@ func WithStopFunc(stopFns ...func(cs *State) bool) func(cs *State) {
 	}
 }
 
+// WithVerificationBudget replaces the peer verification budget used by the
+// consensus state.
+//
+// The budget must be able to defer a message until its whole cost is affordable,
+// not merely report affordability: the scheduler makes room for a message's whole
+// cost before dispatching it and relies on the budget to still cover that cost
+// when the staged verification draws it (see budgetCanWait). The bundled budget
+// can; a replacement that cannot is rejected by NewState with an error rather
+// than accepted and later found wanting.
+func WithVerificationBudget(budget types.VerificationBudget) func(cs *State) {
+	return func(cs *State) {
+		cs.verificationBudget = budget
+	}
+}
+
 // NewState returns a new State.
 func NewState(
 	logger log.Logger,
@@ -245,13 +272,18 @@ func NewState(
 		statsMsgQueue: &chanQueue[msgInfo]{
 			ch: make(chan msgInfo, msgQueueSize),
 		},
+		peerErrorQueue: &chanQueue[peerErrorMsg]{
+			ch: make(chan peerErrorMsg, msgQueueSize),
+		},
 		doWALCatchup: true,
 		wal:          nilWAL{},
 		evpool:       evpool,
 		emitter:      eventemitter.New(eventemitter.WithLogger(logger)),
 		metrics:      NopMetrics(),
 		onStopCh:     make(chan *cstypes.RoundState),
-		msgInfoQueue: newMsgInfoQueue(),
+		verificationBudget: newVerificationBudget(
+			cfg.VerificationRateLimit,
+		),
 	}
 
 	// NOTE: we do not call scheduleRound0 yet, we do that upon Start()
@@ -259,6 +291,21 @@ func NewState(
 	for _, option := range options {
 		option(cs)
 	}
+
+	// A budget the scheduler cannot wait on would silently give up whole-message
+	// atomicity (see budgetCanWait); reject it here rather than let the scheduler
+	// run without the guarantee it exists to provide.
+	if !budgetCanWait(cs.verificationBudget) {
+		return nil, errors.New("verification budget cannot defer a message until it is affordable")
+	}
+
+	// Built after the options, since the peer scheduler waits on whichever
+	// verification budget and reports to whichever metrics the node ends up with.
+	cs.msgInfoQueue = newMsgInfoQueue(
+		withLaneBudget(cs.verificationBudget),
+		withLaneLogger(cs.logger),
+		withLaneMetrics(cs.metrics),
+	)
 
 	cs.stateDataStore = NewStateDataStore(cs.metrics, logger, cfg, cs.emitter)
 	wal := &wrapWAL{getter: func() WALWriteFlusher { return cs.wal }}
@@ -289,7 +336,11 @@ func NewState(
 	for _, sub := range subs {
 		sub.Subscribe(cs.emitter)
 	}
-	cs.msgDispatcher = newMsgInfoDispatcher(cs.ctrl, propler, wal, cs.logger, cs.msgMiddlewares...)
+	// Appended last, and therefore outermost: a message the verification budget
+	// cannot cover must cost nothing at all, in particular no WAL record.
+	cs.msgMiddlewares = append(cs.msgMiddlewares,
+		verificationBudgetMiddleware(cs.verificationBudget, cs.metrics, cs.logger))
+	cs.msgDispatcher = newMsgInfoDispatcher(cs.ctrl, propler, wal, cs.logger, cs.verificationBudget, cs.msgMiddlewares...)
 
 	// this is not ideal, but it lets the consensus tests start
 	// node-fragments gracefully while letting the nodes
@@ -700,7 +751,19 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 		case mi := <-cs.msgInfoQueue.read():
 			stateData := cs.stateDataStore.Get()
 			err := cs.msgDispatcher.dispatch(ctx, &stateData, mi)
+			if mi.PeerID != "" {
+				// The peer scheduler makes room in the verification budget for a
+				// message before handing it over, which is only sound if what it
+				// reads from the budget includes everything already dispatched.
+				// Reporting here rather than deeper in the dispatch covers the
+				// paths that never reach a handler: a scheduler left waiting for
+				// a message that will never settle stops serving peers entirely.
+				cs.msgInfoQueue.settlePeerMsg()
+			}
 			if err != nil {
+				// Leaving without this would strand the queue's reader
+				// goroutines: nothing else ever tells them to stop.
+				onExit(cs)
 				return
 			}
 			err = stateData.Save()

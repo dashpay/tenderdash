@@ -82,6 +82,8 @@ type Testnet struct {
 	Nodes                  []*Node
 	KeyType                string
 	Evidence               int
+	EvidenceAgeHeight      int64
+	EvidenceAgeTime        time.Duration
 	LogLevel               string
 	TxSize                 int
 	ABCIProtocol           Protocol
@@ -203,6 +205,8 @@ func LoadTestnet(file string) (*Testnet, error) {
 		ChainLockUpdates:          map[int64]int64{},
 		Nodes:                     []*Node{},
 		Evidence:                  manifest.Evidence,
+		EvidenceAgeHeight:         EvidenceAgeHeight,
+		EvidenceAgeTime:           EvidenceAgeTime,
 		KeyType:                   bls12381.KeyType,
 		LogLevel:                  manifest.LogLevel,
 		TxSize:                    manifest.TxSize,
@@ -230,6 +234,12 @@ func LoadTestnet(file string) (*Testnet, error) {
 	}
 	if manifest.InitialHeight > 0 {
 		testnet.InitialHeight = manifest.InitialHeight
+	}
+	if manifest.EvidenceAgeHeight > 0 {
+		testnet.EvidenceAgeHeight = manifest.EvidenceAgeHeight
+	}
+	if manifest.EvidenceAgeTime > 0 {
+		testnet.EvidenceAgeTime = manifest.EvidenceAgeTime
 	}
 	if testnet.ABCIProtocol == "" {
 		testnet.ABCIProtocol = ProtocolBuiltin
@@ -555,9 +565,9 @@ func (n Node) Validate(testnet Testnet) error {
 	if n.StateSync != StateSyncDisabled && n.StartAt == 0 {
 		return errors.New("state synced nodes cannot start at the initial height")
 	}
-	if n.RetainBlocks != 0 && n.RetainBlocks < uint64(EvidenceAgeHeight) {
+	if n.RetainBlocks != 0 && n.RetainBlocks < uint64(n.Testnet.EvidenceAgeHeight) {
 		return fmt.Errorf("retain_blocks must be greater or equal to max evidence age (%d)",
-			EvidenceAgeHeight)
+			n.Testnet.EvidenceAgeHeight)
 	}
 	if n.PersistInterval == 0 && n.RetainBlocks > 0 {
 		return errors.New("persist_interval=0 requires retain_blocks=0")

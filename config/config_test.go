@@ -1,6 +1,7 @@
 package config
 
 import (
+	"math"
 	"bytes"
 	"os"
 	"reflect"
@@ -315,4 +316,41 @@ func TestLoadNodeKeyID(t *testing.T) {
 			assert.Error(t, err)
 		})
 	}
+}
+
+func TestConsensusConfig_PeerVoteRateLimitValidation(t *testing.T) {
+	cfg := DefaultConsensusConfig()
+	require.NoError(t, cfg.ValidateBasic(), "default must be valid")
+
+	cfg.PeerVoteRateLimit = 0
+	require.NoError(t, cfg.ValidateBasic(), "0 (disabled) is valid")
+
+	for _, bad := range []float64{-1, math.NaN(), math.Inf(1), math.Inf(-1)} {
+		cfg.PeerVoteRateLimit = bad
+		require.Error(t, cfg.ValidateBasic(), "peer-vote-rate-limit=%v must be rejected", bad)
+	}
+}
+
+func TestConsensusConfig_VerificationRateLimitValidation(t *testing.T) {
+	cfg := DefaultConsensusConfig()
+	require.Equal(t, 300.0, cfg.VerificationRateLimit)
+	require.NoError(t, cfg.ValidateBasic(), "default must be valid")
+
+	cfg.VerificationRateLimit = 0
+	require.NoError(t, cfg.ValidateBasic(), "0 (disabled) is valid")
+
+	for _, bad := range []float64{-1, math.NaN(), math.Inf(1), math.Inf(-1)} {
+		cfg.VerificationRateLimit = bad
+		require.Error(t, cfg.ValidateBasic(), "verification-rate-limit=%v must be rejected", bad)
+	}
+
+	// A rate that cannot refill the most expensive message within a second
+	// leaves every one of them waiting, which stalls the vote path instead of
+	// bounding it.
+	for _, tooSlow := range []float64{0.5, 1, MinVerificationRateLimit - 1} {
+		cfg.VerificationRateLimit = tooSlow
+		require.Error(t, cfg.ValidateBasic(), "verification-rate-limit=%v must be rejected", tooSlow)
+	}
+	cfg.VerificationRateLimit = MinVerificationRateLimit
+	require.NoError(t, cfg.ValidateBasic())
 }
