@@ -9,6 +9,7 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
+	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/fortytw2/leaktest"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -20,12 +21,32 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
+// outOfRangeQuorumType is a quorum type outside the uint8 range BuildSignHash
+// requires and outside every DIP-0006 type; a genuine light block never carries it.
+// ValidatorSet.ValidateBasic refuses it, so a response carrying it cannot be decoded
+// into a light block at all.
+const outOfRangeQuorumType = btcjson.LLMQType(300)
+
+// forgeThresholdBlockSignature corrupts the recovered threshold block signature. The
+// header chain and ValidateBasic still pass, so only VerifyCommit rejects the result
+// - which puts the refusal in the verify loop, one stage later than a block that
+// cannot be decoded.
+func forgeThresholdBlockSignature(lb *tmproto.LightBlock) {
+	sig := lb.SignedHeader.Commit.ThresholdBlockSignature
+	forged := make([]byte, len(sig))
+	copy(forged, sig)
+	forged[0] ^= 0xFF
+	lb.SignedHeader.Commit.ThresholdBlockSignature = forged
+}
+
 // adversarialResponder answers light block requests per peer: peers in forging
-// answer at once with a forged threshold block signature (the header chain and
-// ValidateBasic still pass, only VerifyCommit rejects it), every other peer
-// answers after honestDelay. The delay is what lets a forging peer pipeline
-// several responses into the queue before the serialized verify loop judges its
-// first one.
+// answer at once with a tampered block, every other peer answers after honestDelay.
+// The delay is what lets a forging peer pipeline several responses into the queue
+// before the serialized verify loop judges its first one.
+//
+// tamper defaults to forgeThresholdBlockSignature. Which tamper is used decides
+// where the block is refused, and so which of the reactor's two refusal paths the
+// scenario exercises.
 //
 // When answerNil is set, the delayed answer is "I don't have that block", which
 // drops the peer from the dispatch pool without any rejection being reported for
@@ -33,6 +54,7 @@ import (
 type adversarialResponder struct {
 	chain       map[int64]*types.LightBlock
 	forging     map[types.NodeID]struct{}
+	tamper      func(*tmproto.LightBlock)
 	honestDelay time.Duration
 	answerNil   bool
 	stopHeight  uint64
@@ -85,11 +107,11 @@ func (a adversarialResponder) run(
 				answer(envelope.To, lb, a.honestDelay)
 				continue
 			}
-			sig := lb.SignedHeader.Commit.ThresholdBlockSignature
-			forged := make([]byte, len(sig))
-			copy(forged, sig)
-			forged[0] ^= 0xFF
-			lb.SignedHeader.Commit.ThresholdBlockSignature = forged
+			tamper := a.tamper
+			if tamper == nil {
+				tamper = forgeThresholdBlockSignature
+			}
+			tamper(lb)
 			answer(envelope.To, lb, 0)
 		}
 	}
@@ -100,6 +122,7 @@ func (a adversarialResponder) run(
 type adversarialRun struct {
 	peerIDs     []string
 	forging     map[types.NodeID]struct{}
+	tamper      func(*tmproto.LightBlock)
 	honestDelay time.Duration
 	answerNil   bool
 	// responseTimeout must exceed honestDelay, otherwise honest answers arrive
@@ -144,6 +167,7 @@ func (run adversarialRun) exec(ctx context.Context, t *testing.T) (*reactorTestS
 	responder := adversarialResponder{
 		chain:       chain,
 		forging:     run.forging,
+		tamper:      run.tamper,
 		honestDelay: run.honestDelay,
 		answerNil:   run.answerNil,
 		stopHeight:  uint64(stopHeight),
@@ -294,6 +318,64 @@ func TestReactor_Backfill_FailsFastWhenNoPeerCanServe(t *testing.T) {
 		"the run must fail fast rather than block until the context expires")
 	require.Nil(t, rts.blockStore.LoadBlockMeta(startHeight),
 		"no height may be persisted from a peer whose commit failed verification")
+}
+
+// TestReactor_Backfill_RecoversWhenOnePeerSendsOutOfRangeQuorumType is the recovery
+// half of TestReactor_Backfill_RejectsOutOfRangeQuorumType: peers that answer with a
+// quorum type this node cannot decode, and one honest peer that can serve every
+// height.
+//
+// A response nothing can decode is refused before the reactor holds a light block, so
+// it is caught by the fetch loop, whereas the swarm in
+// TestReactor_Backfill_SurvivesSybilSwarm is caught by the verify loop. The
+// requirement either way is the same: the refusal must cost the peer that sent it and
+// nothing else. Charging it to the retry budget instead - which is what happens when
+// an undecodable answer is left to time out and read as a slow peer - drains a budget
+// belonging to every peer, and the run hard-fails over this height span while the
+// honest peer is still serving.
+//
+// The honest peer is deliberately the slower one. It has to be: an honest peer that
+// answers instantly finishes the range before a shared budget could be drained, and
+// the test would pass whether or not the refusals were charged to it.
+func TestReactor_Backfill_RecoversWhenOnePeerSendsOutOfRangeQuorumType(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
+	const (
+		startHeight  int64 = 60
+		stopHeight   int64 = 11
+		maliciousQty       = 3
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	t.Cleanup(leaktest.CheckTimeout(t, 1*time.Minute))
+
+	peerIDs := genPeerIDs(maliciousQty + 1)
+	forging := make(map[types.NodeID]struct{}, maliciousQty)
+	for _, peer := range peerIDs[:maliciousQty] {
+		forging[types.NodeID(peer)] = struct{}{}
+	}
+
+	rts, _, err := adversarialRun{
+		peerIDs: peerIDs,
+		forging: forging,
+		tamper: func(lb *tmproto.LightBlock) {
+			lb.ValidatorSet.QuorumType = int32(outOfRangeQuorumType)
+		},
+		honestDelay:     100 * time.Millisecond,
+		responseTimeout: 200 * time.Millisecond,
+		startHeight:     startHeight,
+		stopHeight:      stopHeight,
+	}.exec(ctx, t)
+
+	require.NoError(t, err,
+		"peers sending an undecodable quorum type must be withdrawn, not charged to the budget the honest peer needs")
+	for height := stopHeight; height <= startHeight; height++ {
+		require.NotNil(t, rts.blockStore.LoadBlockMeta(height),
+			"every height must be backfilled from the honest peer, height %d", height)
+	}
 }
 
 // TestReactor_Backfill_RejectsUnboundedVoteExtensions covers the cost of commit

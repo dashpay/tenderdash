@@ -1208,12 +1208,21 @@ func TestReactor_Backfill_RejectsTamperedCommit(t *testing.T) {
 }
 
 // TestReactor_Backfill_RejectsOutOfRangeQuorumType asserts that a peer-supplied
-// QuorumType outside the valid range is rejected at ingress rather than panicking.
+// QuorumType outside the valid range is rejected rather than panicking, and that the
+// run reports what was rejected.
+//
 // ValidatorSet.Hash() covers only ThresholdPublicKey and QuorumHash, so a flipped
-// QuorumType leaves the header's ValidatorsHash intact and sails through
-// ValidateBasic; the pre-VerifyCommit range check is the only thing standing between
-// the field and VerifyCommit's BLS sign-hash path, which panics (MustConvertUint8)
-// on any value that does not fit a uint8.
+// QuorumType leaves the header's ValidatorsHash intact and no part of the header
+// chain notices; a range check is all that stands between the field and
+// VerifyCommit's BLS sign-hash path, which panics (MustConvertUint8) on any value
+// that does not fit a uint8. The check that actually fires is the one inside the
+// ValidatorSet.ValidateBasic that decoding the response runs, so the block is refused
+// before the reactor is ever handed one.
+//
+// Every peer here serves the same tampered height, which makes this the half of the
+// behavior where nobody can supply it: each peer is withdrawn for sending it and the
+// run must end naming that refusal rather than a retry budget it happened to exhaust.
+// TestReactor_Backfill_RecoversWhenOnePeerSendsOutOfRangeQuorumType is the other half.
 func TestReactor_Backfill_RejectsOutOfRangeQuorumType(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode")
@@ -1222,14 +1231,12 @@ func TestReactor_Backfill_RejectsOutOfRangeQuorumType(t *testing.T) {
 	defer cancel()
 
 	blockStore, tamperedHeight, err := backfillTamperedBlock(ctx, t, func(lb *types.LightBlock) {
-		// 300 is out of the uint8 range that BuildSignHash requires and out of every
-		// DIP-0006 quorum type; a genuine light block never carries it.
-		lb.ValidatorSet.QuorumType = btcjson.LLMQType(300)
+		lb.ValidatorSet.QuorumType = outOfRangeQuorumType
 	})
 
 	require.Error(t, err, "an out-of-range quorum type must abort backfill, not crash the process")
 	require.ErrorContains(t, err, "unsupported quorum type",
-		"the rejection must name the pre-VerifyCommit range check, not any commit rejection")
+		"the failure must name the quorum type a peer sent, not a retry budget shared with honest peers")
 	require.Nil(t, blockStore.LoadBlockMeta(tamperedHeight),
 		"a block with an out-of-range quorum type must never reach the block store")
 }

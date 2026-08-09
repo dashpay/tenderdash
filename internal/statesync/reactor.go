@@ -544,13 +544,41 @@ func (r *Reactor) backfill(
 	ctxWithCancel, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Peer-dispatch gate for this run: it quarantines peers that supply
-	// unverifiable commits and reports when no peer is left to serve.
+	// Peer-dispatch gate for this run: it quarantines peers that supply light
+	// blocks this node cannot accept and reports when no peer is left to serve.
 	dispatch := newBackfillDispatch(r.peers)
 	failIfStalled := func() {
 		if reason := dispatch.stalled(); reason != nil {
 			queue.fail(reason)
 		}
+	}
+
+	// withdrawPeer retires a peer that supplied a light block this node refuses, and
+	// reschedules the height for somebody else. What a peer sends is its own choice,
+	// so none of the work is charged to the retry budget: that budget bounds transient
+	// network failure on behalf of every peer, and one of them must not be able to
+	// spend the share belonging to honest ones. Fetching runs ahead of the serialized
+	// verify loop, so whatever else the peer already supplied is dropped with it.
+	//
+	// The reason is remembered as the run's failure cause, which is what a run that
+	// turns out to have had no other peer able to serve reports instead of a bare
+	// retry-budget message. Reporting the peer is fatal: refusal here means the
+	// response broke a rule that holds for every light block, not that this node
+	// happened to be unlucky.
+	//
+	// It returns the error from reporting the peer; each caller resolves that in its
+	// own control flow.
+	withdrawPeer := func(peer types.NodeID, height int64, reason error) error {
+		dispatch.quarantine(peer, reason)
+		queue.discardPeer(peer)
+		queue.requeue(height)
+		err := r.sendBlockError(ctx, p2p.PeerError{
+			NodeID: peer,
+			Err:    reason,
+			Fatal:  true,
+		})
+		failIfStalled()
+		return err
 	}
 
 	// fetch light blocks across four workers. The aim with deploying concurrent
@@ -596,6 +624,22 @@ func (r *Reactor) backfill(
 						lb, err := r.dispatcher.LightBlock(subCtx, height, peer)
 						subCtxCancel()
 
+						if errors.Is(err, errMalformedLightBlock) {
+							// The peer answered, and what it answered with is not a light
+							// block this node can accept. That is the peer's doing, so it is
+							// withdrawn rather than retried against: reading it as a slow
+							// peer instead would charge the shared budget, hand the peer
+							// straight back to the pool and leave the run reporting the
+							// network for what one peer chose to send.
+							r.logger.Info("backfill: received a light block that could not be decoded",
+								"height", height, "peer", peer, "error", err)
+							if serr := withdrawPeer(peer, height, err); serr != nil {
+								r.logger.Error("backfill: failed to report peer supplying a malformed light block",
+									"height", height, "error", serr)
+								return true
+							}
+							return false
+						}
 						if err != nil {
 							queue.retry(height)
 							if errors.Is(err, errNoConnectedPeers) {
@@ -699,10 +743,15 @@ func (r *Reactor) backfill(
 			// order and multiplicity are not.
 			//
 			// Both checks must precede VerifyCommit, which is where the peer-supplied
-			// values become expensive or unsafe: ValidateBasic never bounds the
-			// QuorumType, and the BLS sign-hash path (MustConvertUint8) panics on any
-			// value outside a uint8; nor does it bound the vote-extension list, one BLS
-			// pairing of work apiece.
+			// values become expensive or unsafe: the BLS sign-hash path
+			// (MustConvertUint8) panics on a QuorumType outside a uint8, and the
+			// vote-extension list costs one BLS pairing an entry.
+			//
+			// The vote-extension bound has no other enforcer, so it fires here for
+			// real. The quorum type is already bounded by the ValidatorSet.ValidateBasic
+			// that decoding the response runs, which is the gate a peer actually meets;
+			// it is repeated here so that anything reaching this loop by another route
+			// still cannot carry a value the sign-hash path would panic on.
 			var rejectErr error
 			if qerr := resp.block.ValidatorSet.QuorumType.Validate(); qerr != nil {
 				rejectErr = fmt.Errorf("received light block with invalid commit -- unsupported quorum type: %w", qerr)
@@ -716,27 +765,15 @@ func (r *Reactor) backfill(
 			if rejectErr != nil {
 				r.logger.Info("backfill: received light block with an unverifiable commit",
 					"height", resp.block.Height, "error", rejectErr)
-				// Fatal, unlike the transient failures above: an unverifiable commit is
-				// unambiguous evidence of a bad peer. Evict it locally so the fetch loop
-				// stops re-dispatching to it this run (the router's own eviction is
-				// asynchronous and lags), then report it fatally to sever the connection.
-				// Fetching runs ahead of this loop, so whatever else the peer already
-				// supplied is dropped with it. None of that work is charged to the retry
-				// budget: it bounds transient network failure, and one peer must not be
-				// able to spend the share belonging to honest ones.
-				dispatch.quarantine(resp.peer, rejectErr)
-				queue.discardPeer(resp.peer)
-				if serr := r.sendBlockError(ctx, p2p.PeerError{
-					NodeID: resp.peer,
-					Err:    rejectErr,
-					Fatal:  true,
-				}); serr != nil {
+				// Unlike the transient failures above, an unverifiable commit is
+				// unambiguous evidence of a bad peer, so the peer is withdrawn from the
+				// run. Evicting it locally matters because the router's own eviction is
+				// asynchronous and lags behind the fetch loop.
+				if serr := withdrawPeer(resp.peer, resp.block.Height, rejectErr); serr != nil {
 					r.logger.Error("backfill: failed to report peer supplying an unverifiable commit",
 						"height", resp.block.Height, "error", serr)
 					return fmt.Errorf("backfill aborted: failed to report peer supplying an unverifiable commit: %w", serr)
 				}
-				queue.requeue(resp.block.Height)
-				failIfStalled()
 				continue
 			}
 
