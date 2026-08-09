@@ -1241,6 +1241,87 @@ func TestReactor_Backfill_RejectsOutOfRangeQuorumType(t *testing.T) {
 		"a block with an out-of-range quorum type must never reach the block store")
 }
 
+// recordPeerErrors makes a run report its peer errors into the given slice instead of
+// onto the channel, so a test can assert who was blamed and how hard.
+func recordPeerErrors(mtx *sync.Mutex, reported *[]p2p.PeerError) func(*reactorTestSuite) {
+	return func(rts *reactorTestSuite) {
+		rts.reactor.sendBlockError = func(_ context.Context, pe p2p.PeerError) error {
+			mtx.Lock()
+			defer mtx.Unlock()
+			*reported = append(*reported, pe)
+			return nil
+		}
+	}
+}
+
+// TestReactor_Backfill_ReportsRefusalsBySeverity pins which refusals disconnect a peer
+// and which only score it down, because the two are not interchangeable: Fatal severs
+// the connection for consensus, mempool and evidence as well, not just for backfill.
+//
+// A commit that fails verification is forged, and no build produces one honestly, so
+// that peer is disconnected. A light block that fails to decode is a weaker claim than
+// it looks: decoding enforces rules relative to the build doing it - Version.Block
+// must equal this build's version.BlockProtocol exactly, and a vote-extension type
+// this build cannot convert is refused - so an honest peer on a neighboring release
+// fails here too. A rolling upgrade puts such peers on the network by construction,
+// and disconnecting them all would be a worse failure than the mis-attribution this
+// refusal path exists to fix.
+func TestReactor_Backfill_ReportsRefusalsBySeverity(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
+	for _, tc := range []struct {
+		name      string
+		tamper    func(*types.LightBlock)
+		wantIn    string
+		wantFatal bool
+		why       string
+	}{
+		{
+			name:      "undecodable light block",
+			tamper:    func(lb *types.LightBlock) { lb.ValidatorSet.QuorumType = outOfRangeQuorumType },
+			wantIn:    "unsupported quorum type",
+			wantFatal: false,
+			why:       "a response this build cannot decode must not disconnect a peer another build could satisfy",
+		},
+		{
+			name: "unverifiable commit",
+			tamper: func(lb *types.LightBlock) {
+				forged := make([]byte, len(lb.Commit.ThresholdBlockSignature))
+				copy(forged, lb.Commit.ThresholdBlockSignature)
+				forged[0] ^= 0xFF
+				lb.Commit.ThresholdBlockSignature = forged
+			},
+			wantIn:    "invalid commit",
+			wantFatal: true,
+			why:       "a forged commit is proof of a faulty peer, and must cost it the connection",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			var (
+				mtx      sync.Mutex
+				reported []p2p.PeerError
+			)
+			_, _, err := backfillTamperedBlock(ctx, t, tc.tamper, recordPeerErrors(&mtx, &reported))
+			require.Error(t, err)
+
+			mtx.Lock()
+			defer mtx.Unlock()
+			require.NotEmpty(t, reported, "the peer that supplied the block must be reported")
+			for _, pe := range reported {
+				require.NotEmpty(t, pe.NodeID, "a report must name the peer it blames")
+				require.ErrorContains(t, pe.Err, tc.wantIn,
+					"a report must carry the reason the block was refused")
+				require.Equal(t, tc.wantFatal, pe.Fatal, tc.why)
+			}
+		})
+	}
+}
+
 // handleMaliciousLightBlockRequests answers requests destined for maliciousPeer with
 // a light block whose recovered threshold block signature has been forged (the header
 // chain and ValidateBasic still pass, only VerifyCommit rejects it) and serves every

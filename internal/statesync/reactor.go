@@ -469,6 +469,30 @@ func (r *Reactor) Backfill(ctx context.Context, state sm.State) error {
 	)
 }
 
+// peerSeverity says whether withdrawing a peer from a backfill run should also
+// disconnect it. Disconnection is not this reactor's alone to spend: it severs the
+// connection for consensus, mempool and evidence too, so it is reserved for a peer
+// this node can show is faulty rather than merely incompatible with it.
+type peerSeverity bool
+
+const (
+	// disconnectPeer is for a response that no build of this software could have
+	// produced honestly, so nothing is lost by ending the connection.
+	disconnectPeer peerSeverity = true
+
+	// penalizePeer is for a response this build cannot use, which is not the same
+	// claim: light blocks are refused during decoding by rules that are relative to
+	// the build doing the decoding, not fixed by the wire format. Header.ValidateBasic
+	// requires Version.Block to equal this build's version.BlockProtocol exactly, a
+	// constant that has been bumped several times, and Commit.ValidateBasic refuses
+	// any vote-extension type this build has no conversion for, which the type's own
+	// rollback note calls out as a consequence of adding one. Either would make an
+	// otherwise honest peer on a neighboring release undecodable here, and a rolling
+	// upgrade puts such peers on the network by construction. Score the peer down and
+	// keep the connection; withdrawing it from the run is what protects the run.
+	penalizePeer peerSeverity = false
+)
+
 // maxThresholdVoteExtensions bounds the peer-supplied vote-extension list that
 // VerifyCommit walks, spending one BLS pairing (~3ms) per entry and never short-
 // circuiting. A genuine commit carries one extension per threshold-recoverable
@@ -562,20 +586,21 @@ func (r *Reactor) backfill(
 	//
 	// The reason is remembered as the run's failure cause, which is what a run that
 	// turns out to have had no other peer able to serve reports instead of a bare
-	// retry-budget message. Reporting the peer is fatal: refusal here means the
-	// response broke a rule that holds for every light block, not that this node
-	// happened to be unlucky.
+	// retry-budget message.
+	//
+	// Severity decides only whether the peer is also disconnected; withdrawal from
+	// the run happens either way, and that is what keeps the run healthy.
 	//
 	// It returns the error from reporting the peer; each caller resolves that in its
 	// own control flow.
-	withdrawPeer := func(peer types.NodeID, height int64, reason error) error {
+	withdrawPeer := func(peer types.NodeID, height int64, reason error, severity peerSeverity) error {
 		dispatch.quarantine(peer, reason)
 		queue.discardPeer(peer)
 		queue.requeue(height)
 		err := r.sendBlockError(ctx, p2p.PeerError{
 			NodeID: peer,
 			Err:    reason,
-			Fatal:  true,
+			Fatal:  bool(severity),
 		})
 		failIfStalled()
 		return err
@@ -631,9 +656,13 @@ func (r *Reactor) backfill(
 							// peer instead would charge the shared budget, hand the peer
 							// straight back to the pool and leave the run reporting the
 							// network for what one peer chose to send.
+							//
+							// Withdrawn, but not disconnected: decoding refuses some
+							// responses for reasons that hold only against this build, so a
+							// peer failing here has not been shown to be faulty.
 							r.logger.Info("backfill: received a light block that could not be decoded",
 								"height", height, "peer", peer, "error", err)
-							if serr := withdrawPeer(peer, height, err); serr != nil {
+							if serr := withdrawPeer(peer, height, err, penalizePeer); serr != nil {
 								r.logger.Error("backfill: failed to report peer supplying a malformed light block",
 									"height", height, "error", serr)
 								return true
@@ -766,10 +795,10 @@ func (r *Reactor) backfill(
 				r.logger.Info("backfill: received light block with an unverifiable commit",
 					"height", resp.block.Height, "error", rejectErr)
 				// Unlike the transient failures above, an unverifiable commit is
-				// unambiguous evidence of a bad peer, so the peer is withdrawn from the
-				// run. Evicting it locally matters because the router's own eviction is
-				// asynchronous and lags behind the fetch loop.
-				if serr := withdrawPeer(resp.peer, resp.block.Height, rejectErr); serr != nil {
+				// unambiguous evidence of a bad peer, so the peer is withdrawn and
+				// disconnected. Evicting it locally as well matters because the router's
+				// own eviction is asynchronous and lags behind the fetch loop.
+				if serr := withdrawPeer(resp.peer, resp.block.Height, rejectErr, disconnectPeer); serr != nil {
 					r.logger.Error("backfill: failed to report peer supplying an unverifiable commit",
 						"height", resp.block.Height, "error", serr)
 					return fmt.Errorf("backfill aborted: failed to report peer supplying an unverifiable commit: %w", serr)
