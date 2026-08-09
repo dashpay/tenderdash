@@ -62,7 +62,11 @@ func RequireReceiveUnordered(ctx context.Context, t *testing.T, channel p2p.Chan
 	var actual []*p2p.Envelope
 	iter := channel.Receive(ctx)
 	for iter.Next(ctx) && len(actual) < len(expect) {
-		actual = append(actual, iter.Envelope())
+		e := iter.Envelope()
+		// The connection generation is stamped per connection and so is not fixed
+		// across runs; it is not part of the message contract this asserts.
+		e.ConnID = 0
+		actual = append(actual, e)
 	}
 	require.ElementsMatch(t, expect, actual, "len=%d", len(actual))
 }

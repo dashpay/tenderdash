@@ -17,4 +17,11 @@ const (
 type Metrics struct {
 	// Number of pending evidence in the evidence pool.
 	NumEvidence metrics.Gauge
+
+	// Number of inbound evidence messages refused before verification, by
+	// reason. Evidence is a safety mechanism, so refusing it silently is the
+	// wrong default: this is how an operator sees a flood being shed, and how
+	// they would notice a limit tuned so tightly that genuine evidence is
+	// struggling to get through.
+	DroppedEvidence metrics.Counter `metrics_labels:"reason"`
 }

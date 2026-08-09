@@ -54,6 +54,34 @@ func TestVoteSet_AddVote_Good(t *testing.T) {
 	assert.False(t, ok || !blockID.IsNil(), "there should be no 2/3 majority")
 }
 
+func TestVoteSet_AddVoteWithVerificationBudget_DenialIsNotInvalidSignature(t *testing.T) {
+	ctx := context.Background()
+	const (
+		height = int64(1)
+		round  = int32(0)
+	)
+	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 1)
+	proTxHash, err := privValidators[0].GetProTxHash(ctx)
+	require.NoError(t, err)
+	vote := &Vote{
+		ValidatorProTxHash: proTxHash,
+		ValidatorIndex:     0,
+		Height:             height,
+		Round:              round,
+		Type:               tmproto.PrevoteType,
+	}
+	budget := &recordingVerificationBudget{decisions: []bool{false}}
+
+	added, err := voteSet.AddVoteWithVerificationBudget(vote, budget)
+
+	require.False(t, added)
+	require.ErrorIs(t, err, ErrVerificationBudgetExhausted)
+	require.NotErrorIs(t, err, ErrVoteInvalidSignature)
+	require.Equal(t, ErrVerificationBudgetExhausted, err,
+		"local overload must be returned directly rather than classified as an invalid vote signature")
+	require.Equal(t, []int{1}, budget.costs)
+}
+
 func TestVoteSet_AddVote_Bad(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

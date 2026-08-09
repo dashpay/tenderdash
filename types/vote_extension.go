@@ -144,8 +144,11 @@ func (e VoteExtensions) ToExtendProto() []*abci.ExtendVoteExtension {
 	for _, ext := range e {
 		pb := ext.ToProto()
 		eve := &abci.ExtendVoteExtension{
-			Type:      pb.Type,
-			Extension: pb.Extension,
+			Type: pb.Type,
+			// Copied, not shared: this crosses into the application, and an
+			// in-process application writing through the slice would be writing
+			// into the vote the extension came from.
+			Extension: bytes.Clone(pb.Extension),
 		}
 
 		if pb.XSignRequestId != nil {

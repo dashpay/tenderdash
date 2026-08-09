@@ -574,6 +574,7 @@ type makeStateArgs struct {
 	logger          log.Logger
 	validators      int
 	application     abci.Application
+	stateOpts       []StateOption
 }
 
 func makeState(ctx context.Context, t *testing.T, args makeStateArgs) (*State, []*validatorStub) {
@@ -614,7 +615,7 @@ func makeState(ctx context.Context, t *testing.T, args makeStateArgs) (*State, [
 
 	vss := make([]*validatorStub, validators)
 
-	cs := newState(ctx, t, args.logger, state, privVals[0], app)
+	cs := newState(ctx, t, args.logger, state, privVals[0], app, args.stateOpts...)
 	stateData := cs.GetStateData()
 
 	for i := 0; i < validators; i++ {

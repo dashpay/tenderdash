@@ -37,6 +37,14 @@ type Envelope struct {
 	Message    proto.Message // message payload
 	ChannelID  ChannelID
 	Attributes map[string]string
+	// ConnID is the generation of the peer connection that delivered this
+	// inbound envelope, stamped by the router as it is received and before any
+	// reconnect can advance it. It is local metadata, never serialized: it lets a
+	// consumer tell a message a live connection produced from one an ended
+	// connection left buffered, which a reconnect under the same NodeID would
+	// otherwise let inherit the new connection's standing. Zero on outbound
+	// envelopes and on any path that does not pass through the router's receive.
+	ConnID uint64
 }
 
 const (

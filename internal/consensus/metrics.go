@@ -112,6 +112,37 @@ type Metrics struct {
 	//metrics:Number of vote extensions received labeled by application response status.
 	VoteExtensionReceiveCount metrics.Counter `metrics_labels:"status"`
 
+	// VerificationBudgetDrops is the number of peer Vote and Commit messages
+	// dropped because the signature-verification budget was exhausted.
+	//metrics:Number of peer Vote and Commit messages dropped because the signature-verification budget was exhausted.
+	VerificationBudgetDrops metrics.Counter
+
+	// PeerLaneDrops is the number of queued peer messages dropped because the
+	// sending peer had more waiting than the node buffers for it, or because the
+	// peer disconnected before they were served. These are local shed decisions
+	// and never count against the peer.
+	//metrics:Number of queued peer consensus messages dropped by the per-peer scheduler.
+	PeerLaneDrops metrics.Counter
+
+	// BlockPartProofDrops is the number of peer block parts dropped without
+	// verifying their proof, because the sending peer had already spent its
+	// allowance on proofs that did not check out. A local shed decision that
+	// never counts against the peer.
+	//metrics:Number of peer block parts dropped before proof verification because the sender's invalid-proof allowance was spent.
+	BlockPartProofDrops metrics.Counter
+
+	// StateChannelDrops is the number of State- and VoteSetBits-channel messages
+	// dropped because the sender, or the node as a whole, was over its ceiling.
+	// A local shed decision that never counts against the peer.
+	//metrics:Number of State and VoteSetBits channel messages dropped over the per-peer or node-wide ceiling.
+	StateChannelDrops metrics.Counter
+
+	// ProposalVerifyFailures is the number of peer proposals whose signature did
+	// not verify. A flood makes this the only signal that they are arriving,
+	// since the rejection itself is logged at debug.
+	//metrics:Number of peer proposals whose signature failed verification.
+	ProposalVerifyFailures metrics.Counter
+
 	// ProposalReceiveCount is the total number of proposals received by this node
 	// since process start.
 	// The metric is annotated by the status of the proposal from the application,
@@ -135,6 +166,41 @@ type Metrics struct {
 	// in.
 	//metrics:Number of votes received by the node since process start that correspond to earlier heights and rounds than this node is currently in.
 	LateVotes metrics.Counter `metrics_labels:"vote_type"`
+
+	// PeerVoteVerifyLatencySeconds is the time an accepted peer vote spent
+	// between the reactor queueing it and the vote set accepting it, covering the
+	// wait in its per-peer lane, the wait for signature-verification budget, and
+	// the signature check itself. It is the honest-service latency signal: when
+	// the throttle is shedding attack traffic the votes it does accept are added
+	// promptly, and when it is starving honest peers those same accepted votes
+	// take longer. Only votes received from a peer are recorded; this node's own
+	// votes and votes replayed from the write-ahead log are not.
+	//metrics:Seconds an accepted peer vote spent from being queued by the reactor to being added to the vote set.
+	PeerVoteVerifyLatencySeconds metrics.Histogram `metrics_bucketsizes:"0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5"`
+
+	// VerificationBudgetSaturation is how full the node-wide signature
+	// verification budget is when a peer message is checked against it: 1.0 when
+	// the token bucket is untouched and the throttle is shedding nothing, falling
+	// toward 0.0 as the budget drains and messages begin to wait or be dropped
+	// for want of it. A value resting near 1.0 means the node is not
+	// verification-bound; a value pinned near 0.0 means it is. It stays at 1.0
+	// when signature-verification rate limiting is disabled.
+	//metrics:Fraction of the node-wide verification budget still available when a peer message is checked, from 1.0 full and idle to 0.0 drained and under pressure.
+	VerificationBudgetSaturation metrics.Gauge
+
+	// PeerLaneActiveCount is how many per-peer lanes currently hold queued
+	// messages and take turns in the scheduler rotation. It rises with the number
+	// of peers sending faster than the node serves them, and an attacker cycling
+	// through fresh node identities shows up here as lanes that keep appearing.
+	//metrics:Number of per-peer lanes currently holding queued messages and taking turns in the scheduler rotation.
+	PeerLaneActiveCount metrics.Gauge
+
+	// PeerLaneMaxDepth is the largest number of messages queued in any single
+	// peer lane, sampled as lanes are filled and served. A lane approaching its
+	// capacity is a peer sending as fast as the node can accept, which is where
+	// fairness pressure is felt first.
+	//metrics:Largest number of messages queued in any single peer lane.
+	PeerLaneMaxDepth metrics.Gauge
 }
 
 // RecordConsMetrics uses for recording the block related metrics during fast-sync.

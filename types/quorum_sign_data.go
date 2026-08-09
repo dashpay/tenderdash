@@ -6,7 +6,6 @@ import (
 
 	bls "github.com/dashpay/bls-signatures/go-bindings"
 	"github.com/dashpay/dashd-go/btcjson"
-	"github.com/hashicorp/go-multierror"
 	"github.com/rs/zerolog"
 
 	"github.com/dashpay/tenderdash/crypto"
@@ -46,16 +45,42 @@ func (q QuorumSignData) SignWithPrivkey(key crypto.PrivKey) (QuorumSigns, error)
 // Verify verifies a block and threshold vote extensions quorum signatures.
 // It needs quorum to be reached so that we have enough signatures to verify.
 func (q QuorumSignData) Verify(pubKey crypto.PubKey, signatures QuorumSigns) error {
-	var err error
-	if err1 := q.VerifyBlock(pubKey, signatures); err1 != nil {
-		err = multierror.Append(err, err1)
-	}
+	return q.verify(pubKey, signatures, nil)
+}
 
-	if err1 := q.VerifyVoteExtensions(pubKey, signatures); err1 != nil {
-		err = multierror.Append(err, err1)
-	}
+// VerifyWithBudget verifies block and vote-extension signatures after acquiring
+// permits for the work at each verification stage.
+func (q QuorumSignData) VerifyWithBudget(
+	pubKey crypto.PubKey,
+	signatures QuorumSigns,
+	budget VerificationBudget,
+) error {
+	return q.verify(pubKey, signatures, budget)
+}
 
-	return err
+func (q QuorumSignData) verify(
+	pubKey crypto.PubKey,
+	signatures QuorumSigns,
+	budget VerificationBudget,
+) error {
+	if budget != nil && !budget.Allow(1) {
+		return ErrVerificationBudgetExhausted
+	}
+	// Verify the single block signature first and stop if it fails. Vote-extension
+	// verification costs one BLS pairing per extension, so authenticating the block
+	// signature up front bounds the work an unauthenticated sender can force to a
+	// single pairing. The set of accepted inputs is unchanged; only the work done
+	// before rejecting a forged message differs.
+	if err := q.VerifyBlock(pubKey, signatures); err != nil {
+		return err
+	}
+	if err := q.validateVoteExtensionCount(signatures); err != nil {
+		return err
+	}
+	if cost := len(q.VoteExtensionSignItems); budget != nil && cost > 0 && !budget.Allow(cost) {
+		return ErrVerificationBudgetExhausted
+	}
+	return q.VerifyVoteExtensions(pubKey, signatures)
 }
 
 // VerifyBlock verifies block signature
@@ -69,26 +94,49 @@ func (q QuorumSignData) VerifyBlock(pubKey crypto.PubKey, signatures QuorumSigns
 
 // VerifyVoteExtensions verifies threshold vote extensions signatures
 func (q QuorumSignData) VerifyVoteExtensions(pubKey crypto.PubKey, signatures QuorumSigns) error {
-	if len(q.VoteExtensionSignItems) != len(signatures.VoteExtensionSignatures) {
-		return fmt.Errorf("count of vote extension signatures (%d) doesn't match recoverable vote extensions (%d)",
-			len(signatures.VoteExtensionSignatures), len(q.VoteExtensionSignItems),
-		)
+	if err := q.validateVoteExtensionCount(signatures); err != nil {
+		return err
 	}
 
-	var err error
+	// Return on the first invalid extension. Each check is one BLS pairing, so
+	// stopping early bounds the work a sender with an invalid signature can force.
+	// The error deliberately omits the extension bytes, hashes and signature: it
+	// is logged once per rejected peer message and its contents are attacker-
+	// controlled, so echoing them back turns verification into a log-amplification
+	// vector.
 	for i, signItem := range q.VoteExtensionSignItems {
 		if !signItem.VerifySignature(pubKey, signatures.VoteExtensionSignatures[i]) {
-			err = multierror.Append(err, fmt.Errorf("vote-extension %d signature is invalid: pubkey %X, raw msg: %X, sigHash: %X, signature %X",
-				i,
-				pubKey.Bytes(),
-				signItem.Msg,
-				signItem.MsgHash,
-				signatures.VoteExtensionSignatures[i],
-			))
+			return fmt.Errorf("vote-extension %d signature is invalid", i)
 		}
 	}
 
-	return err
+	return nil
+}
+
+func (q QuorumSignData) validateVoteExtensionCount(signatures QuorumSigns) error {
+	if len(q.VoteExtensionSignItems) != len(signatures.VoteExtensionSignatures) {
+		return ErrVoteExtensionCountMismatch{
+			Extensions: len(q.VoteExtensionSignItems),
+			Signatures: len(signatures.VoteExtensionSignatures),
+		}
+	}
+	return nil
+}
+
+// ErrVoteExtensionCountMismatch is returned when the number of vote-extension
+// signatures does not match the number of threshold-recoverable vote extensions
+// derived from a vote or commit. An honest peer running a different
+// vote-extension configuration reaches this, so it is an application/version
+// disagreement rather than a forged signature: commit verification must not
+// treat it as evictable cryptographic misbehaviour.
+type ErrVoteExtensionCountMismatch struct {
+	Extensions int
+	Signatures int
+}
+
+func (e ErrVoteExtensionCountMismatch) Error() string {
+	return fmt.Sprintf("count of vote extension signatures (%d) doesn't match recoverable vote extensions (%d)",
+		e.Signatures, e.Extensions)
 }
 
 // MakeQuorumSignsWithVoteSet creates and returns QuorumSignData struct built with a vote-set and an added vote
@@ -99,6 +147,42 @@ func MakeQuorumSignsWithVoteSet(voteSet *VoteSet, vote *types.Vote) (QuorumSignD
 		voteSet.valSet.QuorumHash,
 		vote,
 	)
+}
+
+// MaxVoteExtensions bounds the number of vote-extensions accepted in a single
+// vote or commit. Each threshold-recoverable extension costs one BLS signature
+// verification, so without a bound an unprivileged peer could pack ~10^4
+// extensions into a single ~1 MB message and force that many verifications on
+// the consensus goroutine.
+//
+// Dash Platform's ExtendVote returns at most
+// withdrawal_transactions_per_block_limit threshold-recoverable extensions,
+// currently 4. This cap keeps generous headroom (8x) for a future protocol
+// increase of that limit while still bounding the per-message verification
+// work. If that limit is ever raised above this value, raise this constant in
+// the same coordinated release.
+const MaxVoteExtensions = 32
+
+// makeVerifyQuorumSigns builds sign data for verifying a vote or commit received
+// from a peer. Unlike MakeQuorumSigns it rejects a message that carries more
+// vote-extensions than any legitimate participant produces (MaxVoteExtensions),
+// bounding the BLS verification work a single message can force.
+//
+// The cap lives here, on the verification path, and deliberately NOT in
+// MakeQuorumSigns: MakeQuorumSigns is also how a validator builds sign data for
+// its OWN votes when signing, and a node must always be able to sign whatever
+// extension count the application produces. Enforcing the anti-DoS bound on the
+// signing path would let the cap halt the validator instead of an attacker.
+func makeVerifyQuorumSigns(
+	chainID string,
+	quorumType btcjson.LLMQType,
+	quorumHash crypto.QuorumHash,
+	protoVote *types.Vote,
+) (QuorumSignData, error) {
+	if n := len(protoVote.GetVoteExtensions()); n > MaxVoteExtensions {
+		return QuorumSignData{}, fmt.Errorf("too many vote extensions: %d (max %d)", n, MaxVoteExtensions)
+	}
+	return MakeQuorumSigns(chainID, quorumType, quorumHash, protoVote)
 }
 
 // MakeQuorumSigns builds signing data for block, state and vote-extensions

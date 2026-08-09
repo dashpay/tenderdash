@@ -73,19 +73,28 @@ func (m *NewRoundStepMessage) ValidateBasic() error {
 	return nil
 }
 
+// ErrInvalidNewRoundStepHeight is a round-step announcement whose height and
+// last-commit round cannot both be true of this chain.
+//
+// ValidateBasic cannot catch these, because what makes them wrong is the chain's
+// initial height rather than the message alone — so a sender is free to produce
+// one, and every rejection has to be as cheap for this node as it was for the
+// sender.
+var ErrInvalidNewRoundStepHeight = errors.New("invalid height for round step")
+
 // ValidateHeight validates the height given the chain's initial height.
 func (m *NewRoundStepMessage) ValidateHeight(initialHeight int64) error {
 	if m.Height < initialHeight {
-		return fmt.Errorf("invalid Height %v (lower than initial height %v)",
-			m.Height, initialHeight)
+		return fmt.Errorf("%w: %v is lower than initial height %v",
+			ErrInvalidNewRoundStepHeight, m.Height, initialHeight)
 	}
 	if m.Height == initialHeight && m.LastCommitRound != -1 {
-		return fmt.Errorf("invalid LastCommitRound %v (must be -1 for initial height %v)",
-			m.LastCommitRound, initialHeight)
+		return fmt.Errorf("%w: LastCommitRound %v must be -1 for initial height %v",
+			ErrInvalidNewRoundStepHeight, m.LastCommitRound, initialHeight)
 	}
 	if m.Height > initialHeight && m.LastCommitRound < 0 {
-		return fmt.Errorf("LastCommitRound can only be negative for initial height %v",
-			initialHeight)
+		return fmt.Errorf("%w: LastCommitRound can only be negative for initial height %v",
+			ErrInvalidNewRoundStepHeight, initialHeight)
 	}
 	return nil
 }

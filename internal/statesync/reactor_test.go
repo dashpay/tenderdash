@@ -1365,6 +1365,107 @@ func TestReactor_Backfill_ReportsRefusalsBySeverity(t *testing.T) {
 	}
 }
 
+// TestReactor_Backfill_RejectsMalformedVoteExtensions covers the vote-extension
+// bounds on the backfill path, which no other caller reaches: the list a peer
+// attaches to a backfilled commit is walked by VerifyCommit at one BLS pairing per
+// entry, and its length, multiplicity and member types are authenticated by nothing
+// upstream - not the header chain, which does not cover the list, and not
+// ValidateBasic, which does not measure it.
+//
+// Each case must be refused with the error that names its own bound and must leave
+// the block unstored. The process surviving the run is itself the assertion that the
+// refusal is a rejection and not a panic: the checks guard a sign-hash path that
+// panics on a value it cannot convert, and both the fetch and verify sides run in
+// goroutines that would take the test binary down with them.
+func TestReactor_Backfill_RejectsMalformedVoteExtensions(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
+	genuineExtension := func(c *types.Commit) *tmproto.VoteExtension {
+		require.NotEmpty(t, c.ThresholdVoteExtensions,
+			"the fixture commit must carry an extension to clone")
+		return c.ThresholdVoteExtensions[0]
+	}
+
+	for _, tc := range []struct {
+		name   string
+		wantIn string
+		tamper func(*types.Commit)
+	}{
+		{
+			// The list's multiplicity is not authenticated, so a genuine entry can be
+			// repeated: every copy verifies against the one signature it was cloned
+			// from, buying verification work the sender is never charged for.
+			name:   "duplicate threshold vote extension",
+			wantIn: "duplicate threshold vote extension",
+			tamper: func(c *types.Commit) {
+				c.ThresholdVoteExtensions = append(c.ThresholdVoteExtensions, genuineExtension(c))
+			},
+		},
+		{
+			// The length bound is checked before the duplicate scan, so an oversized
+			// list of identical entries must be refused for its length.
+			name:   "too many threshold vote extensions",
+			wantIn: "too many threshold vote extensions",
+			tamper: func(c *types.Commit) {
+				extension := genuineExtension(c)
+				for len(c.ThresholdVoteExtensions) <= maxThresholdVoteExtensions {
+					c.ThresholdVoteExtensions = append(c.ThresholdVoteExtensions, extension)
+				}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			blockStore, tamperedHeight, err := backfillTamperedCommit(ctx, t, tc.tamper)
+
+			require.Error(t, err, "backfill must not complete over a commit it cannot accept")
+			require.ErrorContains(t, err, tc.wantIn,
+				"the failure must name the bound that fired, not a generic retry timeout")
+			require.Nil(t, blockStore.LoadBlockMeta(tamperedHeight),
+				"a commit refused at a vote-extension bound must never reach the block store")
+		})
+	}
+}
+
+// TestReactor_Backfill_UnknownVoteExtensionTypeAbortsUnattributed covers the third
+// vote-extension boundary on the backfill path, which fires earlier than the other
+// two: an unknown extension type fails the conversion out of proto, so the reactor
+// discards the response and the fetcher is never handed a light block at all.
+//
+// The safety property holds - the run ends in an error rather than a panic, and
+// nothing reaches the block store.
+//
+// What it cannot do is attribute the failure. A discarded response leaves the fetch
+// waiting until its own deadline, and the deadline branch reads the peer as merely
+// slow: it charges the retry budget that all peers share and marks the peer for
+// reuse. A peer serving a commit that cannot be decoded is therefore
+// indistinguishable from a slow one, and enough such answers end the backfill while
+// honest peers are still available - after which the node continues without the
+// evidence window the backfill exists to rebuild.
+func TestReactor_Backfill_UnknownVoteExtensionTypeAbortsUnattributed(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	blockStore, tamperedHeight, err := backfillTamperedCommit(ctx, t, func(c *types.Commit) {
+		require.NotEmpty(t, c.ThresholdVoteExtensions)
+		c.ThresholdVoteExtensions[0].Type = tmproto.VoteExtensionType(99)
+	})
+
+	require.Error(t, err, "an undecodable commit must abort backfill, not crash the process")
+	require.ErrorContains(t, err, "max retries",
+		"the abort is charged to the shared retry budget rather than to the peer that caused it")
+	require.Nil(t, blockStore.LoadBlockMeta(tamperedHeight),
+		"a commit that cannot be decoded must never reach the block store")
+}
+
 // handleMaliciousLightBlockRequests answers requests destined for maliciousPeer with
 // a light block whose recovered threshold block signature has been forged (the header
 // chain and ValidateBasic still pass, only VerifyCommit rejects it) and serves every

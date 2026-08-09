@@ -7,7 +7,6 @@ import (
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	sm "github.com/dashpay/tenderdash/internal/state"
-	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/libs/eventemitter"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
@@ -43,7 +42,12 @@ func NewProposaler(
 }
 
 // Set updates Proposal, ProposalReceiveTime and ProposalBlockParts in RoundState if the passed proposal met conditions
-func (p *Proposaler) Set(proposal *types.Proposal, receivedAt time.Time, rs *cstypes.RoundState) error {
+func (p *Proposaler) Set(
+	ctx context.Context,
+	proposal *types.Proposal,
+	receivedAt time.Time,
+	rs *cstypes.RoundState,
+) error {
 
 	if rs.Proposal != nil {
 		// We already have a proposal
@@ -51,7 +55,10 @@ func (p *Proposaler) Set(proposal *types.Proposal, receivedAt time.Time, rs *cst
 	}
 
 	if proposal.Height != rs.Height || proposal.Round != rs.Round {
-		p.logger.Debug("received proposal for invalid height/round, ignoring", "proposal", proposal,
+		// The proposal is attacker-controlled and unbounded in size, so it is
+		// identified rather than echoed, at any level.
+		p.logger.Debug("received proposal for invalid height/round, ignoring",
+			"proposal_height", proposal.Height, "proposal_round", proposal.Round,
 			"height", rs.Height, "round", rs.Round, "received", receivedAt)
 		return nil
 	}
@@ -66,7 +73,7 @@ func (p *Proposaler) Set(proposal *types.Proposal, receivedAt time.Time, rs *cst
 		return ErrInvalidProposalCoreHeight
 	}
 
-	err := p.verifyProposal(proposal, rs)
+	err := p.verifyProposal(ctx, proposal, rs)
 	if err != nil {
 		return err
 	}
@@ -212,21 +219,11 @@ func (p *Proposaler) sendMessages(ctx context.Context, msgs ...Message) {
 	}
 }
 
-func (p *Proposaler) verifyProposal(proposal *types.Proposal, rs *cstypes.RoundState) error {
+func (p *Proposaler) verifyProposal(ctx context.Context, proposal *types.Proposal, rs *cstypes.RoundState) error {
 	if proposal.Height != rs.Height || proposal.Round != rs.Round {
 		return fmt.Errorf("proposal for invalid height/round, proposal height %d, round %d, expected height %d, round %d",
 			proposal.Height, proposal.Round, rs.Height, rs.Round)
 	}
-
-	protoProposal := proposal.ToProto()
-	stateValSet := p.committedState.Validators
-	// Verify signature
-	proposalBlockSignID := types.ProposalBlockSignID(
-		p.committedState.ChainID,
-		protoProposal,
-		stateValSet.QuorumType,
-		stateValSet.QuorumHash,
-	)
 
 	proposer, err := rs.ProposerSelector.GetProposer(rs.Height, rs.Round)
 	if err != nil {
@@ -236,21 +233,46 @@ func (p *Proposaler) verifyProposal(proposal *types.Proposal, rs *cstypes.RoundS
 	if proposer.PubKey == nil {
 		return p.verifyProposalForNonValidatorSet(proposal, *rs)
 	}
-	// We are part of the validator set
+
+	// We are part of the validator set, so the signature is checked here — one
+	// signature verification on the consensus goroutine, plus deriving the
+	// digest it runs over. Nothing de-duplicates a proposal that fails that
+	// check: rs.Proposal is set only by one that passes, so every further copy
+	// is verified again. The permit is what bounds the work a sender can force
+	// that way, and it is taken before the digest so the derivation is inside
+	// the bound too. Refusing it is a local drop, not a verdict on the sender.
+	if budget := verificationBudgetFromCtx(ctx); budget != nil && !budget.Allow(baseMessageCost) {
+		return types.ErrVerificationBudgetExhausted
+	}
+
+	protoProposal := proposal.ToProto()
+	stateValSet := p.committedState.Validators
+	proposalBlockSignID := types.ProposalBlockSignID(
+		p.committedState.ChainID,
+		protoProposal,
+		stateValSet.QuorumType,
+		stateValSet.QuorumHash,
+	)
+
 	if proposer.PubKey.VerifySignatureDigest(proposalBlockSignID, proposal.Signature) {
 		return nil
 	}
-	p.logger.Error(
-		"error verifying signature",
+	// Anyone may send a proposal that does not verify, and the message is
+	// theirs to choose, so neither the level nor the payload of this line may
+	// scale with what they send: it identifies the round and the key the check
+	// was made against, and nothing that came off the wire. The counter is what
+	// an operator watches instead, since a proposal from the real proposer
+	// failing this check is worth knowing about and the log line is too quiet
+	// to carry that on its own.
+	p.metrics.ProposalVerifyFailures.Add(1)
+	p.logger.Debug(
+		"proposal signature verification failed",
 		"height", rs.Height,
 		"proposal_height", proposal.Height,
 		"proposal_round", proposal.Round,
-		"proposal", proposal,
 		"proposer_proTxHash", proposer.ProTxHash.ShortString(),
-		"proposer_pubkey", proposer.PubKey.HexString(),
 		"quorumType", stateValSet.QuorumType,
-		"quorumHash", stateValSet.QuorumHash,
-		"proposalSignId", tmbytes.HexBytes(proposalBlockSignID))
+		"quorumHash", stateValSet.QuorumHash)
 	return ErrInvalidProposalSignature
 }
 
@@ -271,7 +293,9 @@ func (p *Proposaler) verifyProposalForNonValidatorSet(proposal *types.Proposal, 
 				"round", proposal.Round,
 				"err", err)
 		} else {
-			p.logger.Error("proposal blockID isn't the same as the commit blockID",
+			// A mismatching block ID is free to produce, so this cannot be
+			// louder than Debug.
+			p.logger.Debug("proposal blockID isn't the same as the commit blockID",
 				"height", proposal.Height,
 				"round", proposal.Round,
 				"proposer_proTxHash", proposer.ProTxHash.ShortString())
