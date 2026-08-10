@@ -473,6 +473,16 @@ func (r *Reactor) Backfill(ctx context.Context, state sm.State) error {
 // disconnect it. Disconnection is not this reactor's alone to spend: it severs the
 // connection for consensus, mempool and evidence too, so it is reserved for a peer
 // this node can show is faulty rather than merely incompatible with it.
+//
+// The distinction is only as strong as the router honors it. A node already at its
+// peer limit disconnects on any reported error, severity or not, so on a saturated
+// node every refusal here collapses back to a disconnect.
+//
+// Either severity costs the peer the rest of the run, and a peer withdrawn without
+// being disconnected does not come back to the pool for it: re-admission happens on a
+// peer-up event, which only a reconnection produces. That is the intended outcome for
+// the run - a peer whose answers this node cannot use has nothing to offer it - and
+// the next run starts from a fresh pool.
 type peerSeverity bool
 
 const (
@@ -781,27 +791,56 @@ func (r *Reactor) backfill(
 			// that decoding the response runs, which is the gate a peer actually meets;
 			// it is repeated here so that anything reaching this loop by another route
 			// still cannot carry a value the sign-hash path would panic on.
-			var rejectErr error
+			//
+			// The three refusals below are not equally damning, so each carries its
+			// own severity rather than sharing one.
+			var (
+				rejectErr      error
+				rejectSeverity peerSeverity
+			)
 			if qerr := resp.block.ValidatorSet.QuorumType.Validate(); qerr != nil {
+				// The valid types are a property of the network, not of this build's
+				// preferences, and one outside them cannot be signed at all - the
+				// sign-hash path would panic converting it. Nothing honest emits one.
 				rejectErr = fmt.Errorf("received light block with invalid commit -- unsupported quorum type: %w", qerr)
+				rejectSeverity = disconnectPeer
 			} else if xerr := validateThresholdVoteExtensions(resp.block.Commit.ThresholdVoteExtensions); xerr != nil {
+				// maxThresholdVoteExtensions is a ceiling this build picked to bound
+				// verification work, not a rule of the protocol. A chain whose
+				// application legitimately attaches more of them puts an honest peer on
+				// the wrong side of it, so refuse the block without taking the peer's
+				// connection.
 				rejectErr = fmt.Errorf("received light block with invalid commit -- %w", xerr)
+				rejectSeverity = penalizePeer
 			} else if verr := resp.block.ValidatorSet.VerifyCommit(
 				chainID, resp.block.Commit.BlockID, resp.block.Height, resp.block.Commit,
 			); verr != nil {
+				// Unlike the refusals during decoding, this one compares nothing against
+				// a constant of this build: the threshold public key it verifies against
+				// comes from the validator set the header pins, reached over a hash chain
+				// walked from the trusted block. A signature that fails against the
+				// chain's own key is forged.
+				//
+				// The residual worry is a release that changed the sign-hash derivation,
+				// which would fail honest older commits here. That is not the rolling
+				// upgrade this severity split exists to protect: the same VerifyCommit
+				// gates every block the node applies (internal/state, internal/blocksync),
+				// so a build deriving it differently could not follow this chain at all,
+				// by backfill or by any other path.
 				rejectErr = fmt.Errorf("received light block with invalid commit: %w", verr)
+				rejectSeverity = disconnectPeer
 			}
 			if rejectErr != nil {
-				r.logger.Info("backfill: received light block with an unverifiable commit",
-					"height", resp.block.Height, "error", rejectErr)
-				// Unlike the transient failures above, an unverifiable commit is
-				// unambiguous evidence of a bad peer, so the peer is withdrawn and
-				// disconnected. Evicting it locally as well matters because the router's
-				// own eviction is asynchronous and lags behind the fetch loop.
-				if serr := withdrawPeer(resp.peer, resp.block.Height, rejectErr, disconnectPeer); serr != nil {
-					r.logger.Error("backfill: failed to report peer supplying an unverifiable commit",
+				r.logger.Info("backfill: refused the commit on a light block",
+					"height", resp.block.Height, "disconnecting", bool(rejectSeverity), "error", rejectErr)
+				// Withdrawing the peer from the run is unconditional; only whether it
+				// also loses the connection follows the cause. Evicting it locally
+				// matters either way, because the router's own eviction is asynchronous
+				// and lags behind the fetch loop.
+				if serr := withdrawPeer(resp.peer, resp.block.Height, rejectErr, rejectSeverity); serr != nil {
+					r.logger.Error("backfill: failed to report peer supplying a refused commit",
 						"height", resp.block.Height, "error", serr)
-					return fmt.Errorf("backfill aborted: failed to report peer supplying an unverifiable commit: %w", serr)
+					return fmt.Errorf("backfill aborted: failed to report peer supplying a refused commit: %w", serr)
 				}
 				continue
 			}

@@ -33,6 +33,7 @@ import (
 	ssproto "github.com/dashpay/tenderdash/proto/tendermint/statesync"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
+	"github.com/dashpay/tenderdash/version"
 )
 
 const (
@@ -1254,18 +1255,28 @@ func recordPeerErrors(mtx *sync.Mutex, reported *[]p2p.PeerError) func(*reactorT
 	}
 }
 
-// TestReactor_Backfill_ReportsRefusalsBySeverity pins which refusals disconnect a peer
-// and which only score it down, because the two are not interchangeable: Fatal severs
-// the connection for consensus, mempool and evidence as well, not just for backfill.
+// TestReactor_Backfill_ReportsRefusalsBySeverity pins which refusals cost a peer its
+// connection and which only score it down, because the two are not interchangeable:
+// Fatal severs the connection for consensus, mempool and evidence as well, not just
+// for backfill. Every case here is withdrawn from the run either way; the assertion
+// is about what else it costs.
 //
-// A commit that fails verification is forged, and no build produces one honestly, so
-// that peer is disconnected. A light block that fails to decode is a weaker claim than
-// it looks: decoding enforces rules relative to the build doing it - Version.Block
-// must equal this build's version.BlockProtocol exactly, and a vote-extension type
-// this build cannot convert is refused - so an honest peer on a neighboring release
-// fails here too. A rolling upgrade puts such peers on the network by construction,
-// and disconnecting them all would be a worse failure than the mis-attribution this
-// refusal path exists to fix.
+// The rule is whether a refusal turns on something the network fixes or on something
+// this build chose. A forged threshold signature fails against the key the chain's
+// own header pins, so no build produces one honestly. The other three rows all turn
+// on a local choice, and each is a way an honest peer on a neighboring release trips
+// this node:
+//
+//   - version skew is the case the whole classification rests on, and the reason a
+//     blanket Fatal was wrong: Header.ValidateBasic demands Version.Block equal this
+//     build's version.BlockProtocol exactly, a constant that has been bumped four
+//     times, so a rolling upgrade produces peers on both sides of it by construction;
+//   - a vote-extension list longer than maxThresholdVoteExtensions exceeds a ceiling
+//     this build picked to bound its own verification work;
+//   - an out-of-range quorum type is the one refusal during decoding that really is
+//     unambiguous, and it is here to show that it still does not disconnect: the
+//     decode boundary cannot tell it apart from the skew case above, which is exactly
+//     why no Fatal path is carved out for "obviously malicious" decode failures.
 func TestReactor_Backfill_ReportsRefusalsBySeverity(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode")
@@ -1279,23 +1290,46 @@ func TestReactor_Backfill_ReportsRefusalsBySeverity(t *testing.T) {
 		why       string
 	}{
 		{
-			name:      "undecodable light block",
+			name: "block protocol this build does not speak",
+			tamper: func(lb *types.LightBlock) {
+				lb.Version.Block = version.BlockProtocol - 1
+			},
+			wantIn:    "block protocol is incorrect",
+			wantFatal: false,
+			why:       "a peer one release behind must not be disconnected for speaking its own block protocol",
+		},
+		{
+			name:      "quorum type outside the valid range",
 			tamper:    func(lb *types.LightBlock) { lb.ValidatorSet.QuorumType = outOfRangeQuorumType },
 			wantIn:    "unsupported quorum type",
 			wantFatal: false,
-			why:       "a response this build cannot decode must not disconnect a peer another build could satisfy",
+			why:       "decoding cannot separate this from version skew, so it must not disconnect either",
 		},
 		{
-			name: "unverifiable commit",
+			name: "more vote extensions than this build accepts",
+			tamper: func(lb *types.LightBlock) {
+				require.NotEmpty(t, lb.Commit.ThresholdVoteExtensions,
+					"fixture must carry an extension to clone")
+				genuine := lb.Commit.ThresholdVoteExtensions[0]
+				for len(lb.Commit.ThresholdVoteExtensions) <= maxThresholdVoteExtensions {
+					lb.Commit.ThresholdVoteExtensions = append(lb.Commit.ThresholdVoteExtensions, genuine)
+				}
+			},
+			wantIn:    "too many threshold vote extensions",
+			wantFatal: false,
+			why:       "the bound is this build's ceiling on its own work, not a rule the peer broke",
+		},
+		{
+			name: "forged threshold block signature",
 			tamper: func(lb *types.LightBlock) {
 				forged := make([]byte, len(lb.Commit.ThresholdBlockSignature))
 				copy(forged, lb.Commit.ThresholdBlockSignature)
 				forged[0] ^= 0xFF
 				lb.Commit.ThresholdBlockSignature = forged
 			},
-			wantIn:    "invalid commit",
+			wantIn:    "invalid commit signatures",
 			wantFatal: true,
-			why:       "a forged commit is proof of a faulty peer, and must cost it the connection",
+			why:       "a signature that fails against the chain's own key is forged, and must cost the connection",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1311,11 +1345,20 @@ func TestReactor_Backfill_ReportsRefusalsBySeverity(t *testing.T) {
 
 			mtx.Lock()
 			defer mtx.Unlock()
-			require.NotEmpty(t, reported, "the peer that supplied the block must be reported")
+
+			// Only the reports for this tamper are the subject. A run also reports
+			// peers for causes of its own - a header that misses the trusted hash, a
+			// block that fails ValidateBasic - and those carry their own severity.
+			var matched []p2p.PeerError
 			for _, pe := range reported {
+				if strings.Contains(pe.Err.Error(), tc.wantIn) {
+					matched = append(matched, pe)
+				}
+			}
+			require.NotEmpty(t, matched,
+				"the peer supplying the block must be reported, naming why: got %v", reported)
+			for _, pe := range matched {
 				require.NotEmpty(t, pe.NodeID, "a report must name the peer it blames")
-				require.ErrorContains(t, pe.Err, tc.wantIn,
-					"a report must carry the reason the block was refused")
 				require.Equal(t, tc.wantFatal, pe.Fatal, tc.why)
 			}
 		})
