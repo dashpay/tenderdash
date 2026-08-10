@@ -1431,22 +1431,24 @@ func TestReactor_Backfill_RejectsMalformedVoteExtensions(t *testing.T) {
 	}
 }
 
-// TestReactor_Backfill_UnknownVoteExtensionTypeAbortsUnattributed covers the third
+// TestReactor_Backfill_AttributesUnknownVoteExtensionType covers the third
 // vote-extension boundary on the backfill path, which fires earlier than the other
-// two: an unknown extension type fails the conversion out of proto, so the reactor
-// discards the response and the fetcher is never handed a light block at all.
+// two: an unknown extension type fails the conversion out of proto, so the refusal
+// happens while the response is being decoded and the fetcher is never handed a light
+// block at all.
 //
-// The safety property holds - the run ends in an error rather than a panic, and
-// nothing reaches the block store.
+// This test previously recorded the opposite outcome as a known limitation - that the
+// run aborted on the shared retry budget and the peer that caused it went unnamed,
+// because a response refused during decoding was dropped and the fetch could only read
+// the resulting silence as a slow peer. That is no longer how the path behaves, so the
+// assertions are inverted rather than relaxed: the run must name the extension type,
+// must not blame the budget, and must report the peer that sent it.
 //
-// What it cannot do is attribute the failure. A discarded response leaves the fetch
-// waiting until its own deadline, and the deadline branch reads the peer as merely
-// slow: it charges the retry budget that all peers share and marks the peer for
-// reuse. A peer serving a commit that cannot be decoded is therefore
-// indistinguishable from a slow one, and enough such answers end the backfill while
-// honest peers are still available - after which the node continues without the
-// evidence window the backfill exists to rebuild.
-func TestReactor_Backfill_UnknownVoteExtensionTypeAbortsUnattributed(t *testing.T) {
+// The report is deliberately non-fatal. This cause is the clearest case for that: an
+// extension type undefined here is defined by whatever release introduces it, so the
+// peer failing this check is as likely to be an honest node one release ahead as a
+// malicious one, and disconnecting it would sever consensus, mempool and evidence too.
+func TestReactor_Backfill_AttributesUnknownVoteExtensionType(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode")
 	}
@@ -1454,16 +1456,40 @@ func TestReactor_Backfill_UnknownVoteExtensionTypeAbortsUnattributed(t *testing.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	blockStore, tamperedHeight, err := backfillTamperedCommit(ctx, t, func(c *types.Commit) {
-		require.NotEmpty(t, c.ThresholdVoteExtensions)
-		c.ThresholdVoteExtensions[0].Type = tmproto.VoteExtensionType(99)
-	})
+	var (
+		mtx      sync.Mutex
+		reported []p2p.PeerError
+	)
+	blockStore, tamperedHeight, err := backfillTamperedBlock(ctx, t,
+		func(lb *types.LightBlock) {
+			require.NotEmpty(t, lb.Commit.ThresholdVoteExtensions)
+			lb.Commit.ThresholdVoteExtensions[0].Type = tmproto.VoteExtensionType(99)
+		},
+		recordPeerErrors(&mtx, &reported))
 
 	require.Error(t, err, "an undecodable commit must abort backfill, not crash the process")
-	require.ErrorContains(t, err, "max retries",
-		"the abort is charged to the shared retry budget rather than to the peer that caused it")
+	require.ErrorContains(t, err, "unknown vote extension type",
+		"the failure must name the extension type that could not be decoded")
+	require.NotContains(t, err.Error(), "max retries",
+		"the abort must be charged to the peer that caused it, not to the budget every peer shares")
 	require.Nil(t, blockStore.LoadBlockMeta(tamperedHeight),
 		"a commit that cannot be decoded must never reach the block store")
+
+	mtx.Lock()
+	defer mtx.Unlock()
+	var matched []p2p.PeerError
+	for _, pe := range reported {
+		if strings.Contains(pe.Err.Error(), "unknown vote extension type") {
+			matched = append(matched, pe)
+		}
+	}
+	require.NotEmpty(t, matched,
+		"the peer that sent the undecodable commit must be reported: got %v", reported)
+	for _, pe := range matched {
+		require.NotEmpty(t, pe.NodeID, "the report must name the peer it blames")
+		require.False(t, pe.Fatal,
+			"an extension type this build does not know may simply be newer than this build")
+	}
 }
 
 // handleMaliciousLightBlockRequests answers requests destined for maliciousPeer with
