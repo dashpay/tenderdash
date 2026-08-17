@@ -565,7 +565,11 @@ func (n Node) Validate(testnet Testnet) error {
 	if n.StateSync != StateSyncDisabled && n.StartAt == 0 {
 		return errors.New("state synced nodes cannot start at the initial height")
 	}
-	if n.RetainBlocks != 0 && n.RetainBlocks < uint64(n.Testnet.EvidenceAgeHeight) {
+	// A manifest may leave the evidence age unset or negative, in which case
+	// there is no lower bound to enforce; converting it unguarded would wrap it
+	// into an enormous unsigned bound that no retain_blocks could satisfy.
+	if n.RetainBlocks != 0 && n.Testnet.EvidenceAgeHeight > 0 &&
+		n.RetainBlocks < uint64(n.Testnet.EvidenceAgeHeight) {
 		return fmt.Errorf("retain_blocks must be greater or equal to max evidence age (%d)",
 			n.Testnet.EvidenceAgeHeight)
 	}

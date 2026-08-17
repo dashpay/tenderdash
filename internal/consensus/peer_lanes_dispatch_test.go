@@ -217,7 +217,7 @@ func TestSheddingAPeerMessageNeverReportsThePeer(t *testing.T) {
 		},
 		{
 			name: "per-peer rate limit",
-			setup: func(t *testing.T, r *Reactor, _ *State, peerID types.NodeID) {
+			setup: func(_ *testing.T, r *Reactor, _ *State, peerID types.NodeID) {
 				for r.allowVoteChannelMessage(context.Background(),
 					&p2p.Envelope{From: peerID, ChannelID: p2p.ConsensusVoteChannel,
 						Message: testVoteMsg(tmproto.PrevoteType, testBlockID(), 0)}) {

@@ -80,7 +80,7 @@ func TestLoadHeightProgressUnderSustainedFlood(t *testing.T) {
 	// The other validator's prevote, arriving over its own lane like any peer's.
 	honestArrived := time.Now()
 	h.sendFromPeer(ctx, t, honestPeer, signVotes(ctx, t, tmproto.PrevoteType, chainID, blockID,
-		stateData.RoundState.AppHash, stateData.Validators.QuorumType, stateData.Validators.QuorumHash, other)...)
+		stateData.AppHash, stateData.Validators.QuorumType, stateData.Validators.QuorumHash, other)...)
 	ensurePrevote(t, voteCh, height, round)
 	prevoteLatency := time.Since(honestArrived)
 
@@ -88,7 +88,7 @@ func TestLoadHeightProgressUnderSustainedFlood(t *testing.T) {
 
 	// And its precommit, the expensive message of the round.
 	h.sendFromPeer(ctx, t, honestPeer, signVotes(ctx, t, tmproto.PrecommitType, chainID, blockID,
-		stateData.RoundState.AppHash, stateData.Validators.QuorumType, stateData.Validators.QuorumHash, other)...)
+		stateData.AppHash, stateData.Validators.QuorumType, stateData.Validators.QuorumHash, other)...)
 
 	ensureNewBlock(t, newBlockCh, height)
 	ensureNewRound(t, newRoundCh, height+1, 0)
