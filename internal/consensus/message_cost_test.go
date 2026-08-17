@@ -159,7 +159,7 @@ func TestPeerMessageCost_RejectsExcessiveExtensions(t *testing.T) {
 }
 
 // Every message type the consensus wire union can carry must have an explicit
-// price. Pricing an unrecognised type at some fallback would let a message type
+// price. Pricing an unrecognized type at some fallback would let a message type
 // added later be admitted at an invented price, so the mapping is exhaustive and
 // this test fails the moment a new type appears without one.
 func TestPeerMessageCost_PricesEveryWireMessageType(t *testing.T) {

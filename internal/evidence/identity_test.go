@@ -117,7 +117,7 @@ func TestEvidenceIdentityDistinguishesAllegations(t *testing.T) {
 // TestIdentitySetEvictsOldestFirst pins the bound and its ordering. The set
 // must not grow without limit — an unbounded memory of everything we have seen
 // is its own denial of service — and what it forgets first must be the
-// evidence closest to ageing out of the window anyway.
+// evidence closest to aging out of the window anyway.
 func TestIdentitySetEvictsOldestFirst(t *testing.T) {
 	const capacity = 16
 	set := newIdentitySet(capacity)
