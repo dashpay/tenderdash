@@ -72,7 +72,7 @@ func TestVerificationBudgetWaitReturnsOnContextCancel(t *testing.T) {
 
 	select {
 	case ok := <-admitted:
-		require.False(t, ok, "a cancelled wait must not admit the message")
+		require.False(t, ok, "a canceled wait must not admit the message")
 	case <-time.After(5 * time.Second):
 		t.Fatal("waiting for verification budget did not return after cancellation")
 	}

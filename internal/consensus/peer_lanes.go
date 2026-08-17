@@ -220,7 +220,7 @@ type peerLanes struct {
 	// serve.
 	ready chan struct{}
 
-	// settled is signalled once the consensus goroutine has finished with a
+	// settled is signaled once the consensus goroutine has finished with a
 	// message this scheduler handed it.
 	//
 	// The scheduler makes room in the verification budget for a message before
@@ -373,9 +373,9 @@ func (l *peerLanes) admit(peerID types.NodeID) uint64 {
 // round to time out and start again, so the policy that is right for the
 // time-valid majority applies to all of them.
 //
-// Neither shedding nor a cancelled context is an error. The peer that fills its
+// Neither shedding nor a canceled context is an error. The peer that fills its
 // lane is the one sending as fast as this node can accept, which is what an
-// honest peer at full stretch does, and a cancelled context means this node is
+// honest peer at full stretch does, and a canceled context means this node is
 // shutting down; since the caller turns any error into a peer error, reporting
 // either would feed the eviction machinery with exactly the peers worth keeping.
 //
@@ -479,7 +479,7 @@ func (l *peerLanes) enqueue(ctx context.Context, mi msgInfo) bool {
 // admitted only while that session is the peer's live one, so a message left in
 // flight by a connection that has since ended cannot create or revive a lane. A
 // peer message carrying no session — a path that predates sessions — keeps the
-// former behaviour and is admitted.
+// former behavior and is admitted.
 //
 // The caller must hold mtx.
 func (l *peerLanes) sessionLive(ctx context.Context, peerID types.NodeID) bool {

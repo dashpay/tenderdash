@@ -17,7 +17,7 @@ const (
 	maxTrackedIdentities = 1024
 
 	// identityEvictionDivisor sets how much of the set is discarded when it
-	// fills: evicting a slice at a time rather than a single entry amortises
+	// fills: evicting a slice at a time rather than a single entry amortizes
 	// the ordering scan over many insertions.
 	identityEvictionDivisor = 8
 )
@@ -35,7 +35,7 @@ const (
 //
 // The block IDs are ordered so the key is independent of which vote is carried
 // as A and which as B. Fields are hex-encoded and separated by a character hex
-// cannot contain, so no field can be shifted into its neighbour to make two
+// cannot contain, so no field can be shifted into its neighbor to make two
 // different accusations collide — a collision would mean holding evidence of
 // one silently suppressed the other. Within a block-ID key the components are
 // concatenated without separators, so that half of the argument rests on the

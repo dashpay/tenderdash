@@ -220,7 +220,7 @@ func TestSheddingAPeerMessageNeverReportsThePeer(t *testing.T) {
 			setup: func(t *testing.T, r *Reactor, _ *State, peerID types.NodeID) {
 				for r.allowVoteChannelMessage(context.Background(),
 					&p2p.Envelope{From: peerID, ChannelID: p2p.ConsensusVoteChannel,
-						Message: testVoteMsg(tmproto.PrevoteType, testBlockID(), 0)}) { //nolint:revive
+						Message: testVoteMsg(tmproto.PrevoteType, testBlockID(), 0)}) {
 				}
 			},
 		},

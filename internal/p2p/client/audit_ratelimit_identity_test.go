@@ -38,7 +38,7 @@ func TestAudit_RateLimitBudgetResetsPerNodeIdentity(t *testing.T) {
 	}
 
 	// One identity: drain the bucket, then get throttled. This is the
-	// behaviour the spec is relying on.
+	// behavior the spec is relying on.
 	victimBudget := func(id types.NodeID) int {
 		n := 0
 		for {

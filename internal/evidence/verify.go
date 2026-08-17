@@ -19,7 +19,7 @@ import (
 // It also reports whether the signatures were actually checked. They are not
 // when the validator set at the evidence height carries no public keys, in
 // which case the evidence is accepted on its structure alone — so a caller that
-// wants to treat acceptance as proof of misbehaviour must consult this and not
+// wants to treat acceptance as proof of misbehavior must consult this and not
 // merely the absence of an error.
 //
 // NOTE: Evidence may be provided that we do not have the block or validator

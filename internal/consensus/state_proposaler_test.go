@@ -375,7 +375,7 @@ func (suite *ProposalerTestSuite) TestVerifyProposal() {
 }
 
 // TestVerifyProposal_ForgedSignatureMovesCounter pins the operator-visible half
-// of the proposal-verification defence: a proposal from the round's real
+// of the proposal-verification defense: a proposal from the round's real
 // proposer whose signature does not verify increments ProposalVerifyFailures and
 // does not crash the process. This is the counter a flood is watched by, and it
 // is the path an external flood struggles to reach - a proposal that misses the

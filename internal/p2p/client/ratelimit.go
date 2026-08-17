@@ -183,7 +183,7 @@ func (h *RateLimit) waitN(ctx context.Context, l *limiter, nTokens int) error {
 		return nil
 	}
 	if deadline, ok := ctx.Deadline(); ok && now.Add(delay).After(deadline) {
-		// The reservation has not come due yet, so cancelling it returns every
+		// The reservation has not come due yet, so canceling it returns every
 		// token: the peer is not charged for a wait that never happened.
 		reservation.CancelAt(now)
 		return fmt.Errorf("%d tokens need %s, past the caller's deadline", nTokens, delay)

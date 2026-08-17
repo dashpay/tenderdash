@@ -53,7 +53,7 @@ type Pool struct {
 
 	// identities records which equivocations the pool already holds evidence
 	// for, keyed on what the evidence alleges rather than on its encoding, so a
-	// re-signed or otherwise re-encoded copy of evidence we have is recognised
+	// re-signed or otherwise re-encoded copy of evidence we have is recognized
 	// as the same accusation. Only accepted evidence is recorded; see
 	// identitySet.
 	identities *identitySet
@@ -162,7 +162,7 @@ func (evpool *Pool) Update(ctx context.Context, state sm.State, ev types.Evidenc
 func (evpool *Pool) AddEvidence(ctx context.Context, ev types.Evidence) error {
 	evpool.logger.Debug("attempting to add evidence", "evidence", ev)
 
-	// Both questions are asked of the same hash, and hashing means marshalling
+	// Both questions are asked of the same hash, and hashing means marshaling
 	// and digesting the whole message, so it is computed once.
 	height, hash := ev.Height(), ev.Hash()
 
@@ -353,7 +353,7 @@ func (evpool *Pool) refreshBlockRange() {
 // evidence that produced it had its signatures checked, which for a duplicate
 // vote means two valid signatures from the accused validator over two different
 // blocks in the same step. That cannot be forged, so a match means we already
-// hold — and gossip, and can propose — a proof of the same misbehaviour.
+// hold — and gossip, and can propose — a proof of the same misbehavior.
 func (evpool *Pool) hasIdentity(ev types.Evidence) bool {
 	return evpool.identities.has(ev)
 }
@@ -407,7 +407,7 @@ func (evpool *Pool) isPending(evidence types.Evidence) bool {
 // alreadyHave reports whether this evidence is pending or committed.
 //
 // It exists so that answering both questions costs one hash rather than two.
-// Hashing means marshalling the whole message and digesting it, which for
+// Hashing means marshaling the whole message and digesting it, which for
 // evidence arriving from a peer means up to the channel's size limit — work the
 // sender does not pay for, on a path that runs before the work budget is
 // consulted.

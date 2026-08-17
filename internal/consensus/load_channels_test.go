@@ -45,7 +45,7 @@ func TestLoadInvalidBlockPartProofsAreBoundedPerPeer(t *testing.T) {
 		},
 		{
 			// Every copy is a different message with a different proof, so
-			// nothing that remembers what it has already seen can recognise it.
+			// nothing that remembers what it has already seen can recognize it.
 			name: "a part mutated on every attempt",
 			part: func(n int) *types.Part {
 				part := invalidProofPart(0)

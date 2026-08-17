@@ -11,7 +11,7 @@
 // production node. Build with: go build -tags floodclient ./test/floodclient/cmd/consensus-flood
 //
 // This is an attack tool for a private, embargoed fork. Point it only at
-// networks you are authorised to test.
+// networks you are authorized to test.
 package main
 
 import (

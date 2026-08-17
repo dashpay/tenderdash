@@ -1,8 +1,8 @@
 package config
 
 import (
-	"math"
 	"bytes"
+	"math"
 	"os"
 	"reflect"
 	"testing"

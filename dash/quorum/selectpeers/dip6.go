@@ -48,7 +48,7 @@ func (s *dip6PeerSelector) SelectValidators(
 //
 // The DIP-6 overlay is directed: a member at index i connects to (i+2^k)%n, so
 // the members that connect to it are the ones at (i-2^k)%n, a different set. A
-// node that wants to hold on to its whole DIP-6 neighbourhood therefore has to
+// node that wants to hold on to its whole DIP-6 neighborhood therefore has to
 // account for both, since it only ever dials one of the two halves.
 func (s *dip6PeerSelector) SelectInboundValidators(
 	validatorSetMembers []*types.Validator,
@@ -57,7 +57,7 @@ func (s *dip6PeerSelector) SelectInboundValidators(
 	return s.selectNeighbours(validatorSetMembers, me, incoming)
 }
 
-// selectNeighbours returns the DIP-6 neighbours of `me` in one direction of the
+// selectNeighbours returns the DIP-6 neighbors of `me` in one direction of the
 // overlay.
 func (s *dip6PeerSelector) selectNeighbours(
 	validatorSetMembers []*types.Validator,

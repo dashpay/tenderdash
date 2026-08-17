@@ -990,7 +990,7 @@ func (e ErrNotEnoughVotingPowerSigned) Error() string {
 // ErrInvalidCommitSignature is returned when a commit's threshold signature does
 // not verify against the validator set's threshold public key.
 //
-// It marks the one commit failure that is unambiguous misbehaviour: a node stores
+// It marks the one commit failure that is unambiguous misbehavior: a node stores
 // a commit only after it verifies, so no honest peer can relay one whose threshold
 // signature is invalid. Callers match it with errors.As to evict the sender.
 // Failures that an honest peer CAN produce — a commit for a block we do not have,

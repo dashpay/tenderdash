@@ -212,7 +212,7 @@ func mutateSignature(t *testing.T, ev types.Evidence, i int) *tmproto.Evidence {
 }
 
 // fabricate returns evidence alleging a wholly new equivocation: both block
-// IDs are rewritten, so no de-duplication can recognise it and only the work
+// IDs are rewritten, so no de-duplication can recognize it and only the work
 // budget stands between the sender and a verification. The leading bytes keep
 // the votes in the lexicographic order ValidateBasic requires.
 func fabricate(t *testing.T, ev types.Evidence, i int) *tmproto.Evidence {
@@ -270,7 +270,7 @@ func TestByteFlipFloodDoesNotReverify(t *testing.T) {
 
 // TestPoisonedIdentityDoesNotSuppressGenuineEvidence pins the safety property
 // that dominates the design: evidence is how equivocating validators get
-// punished, so a defence that lets an attacker suppress genuine evidence is
+// punished, so a defense that lets an attacker suppress genuine evidence is
 // worse than the flood it prevents.
 //
 // The attacker knows the equivocation — it is public gossip — and sends it
@@ -300,7 +300,7 @@ func TestPoisonedIdentityDoesNotSuppressGenuineEvidence(t *testing.T) {
 // fabricated evidence; an honest peer's genuine item must still land.
 //
 // It may be refused at the node-wide ceiling on first contact — that ceiling
-// exists precisely so a synchronised burst cannot be absorbed — so the test
+// exists precisely so a synchronized burst cannot be absorbed — so the test
 // models what a real sender does: syncEvidence re-sends every pending item once
 // a second, forever. A drop must therefore be a delay, never a loss.
 func TestGenuineEvidenceAdmittedUnderFlood(t *testing.T) {
