@@ -8,12 +8,14 @@ import (
 	"io"
 	"log"
 	mrand "math/rand"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 
+	gogotypes "github.com/cosmos/gogoproto/types"
 	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/stretchr/testify/assert"
@@ -22,6 +24,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto/bls12381"
 	"github.com/dashpay/tenderdash/crypto/ed25519"
 	"github.com/dashpay/tenderdash/internal/libs/async"
+	"github.com/dashpay/tenderdash/internal/libs/protoio"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
 )
 
@@ -471,4 +474,27 @@ func BenchmarkReadSecretConnection(b *testing.B) {
 		}
 	}
 	b.StopTimer()
+}
+
+// The ephemeral-key exchange happens before any authentication exists, and
+// protoio allocates the declared length eagerly, so the read cap is the only bound
+// on what an unauthenticated peer can make us allocate. The legitimate message
+// encodes a 32-byte key in a 34-byte body.
+func TestShareEphPubKey_RejectsOversizedMessage(t *testing.T) {
+	local, remote := net.Pipe()
+	defer local.Close()
+	defer remote.Close()
+
+	go func() {
+		// Consume the ephemeral key our side sends, then reply with a message that
+		// is far larger than any legitimate one but well under the old 1 MiB cap.
+		_, _ = protoio.NewDelimitedReader(remote, 1024).ReadMsg(&gogotypes.BytesValue{})
+		_, _ = protoio.NewDelimitedWriter(remote).WriteMsg(
+			&gogotypes.BytesValue{Value: make([]byte, maxEphemeralKeyMsgSize*2)})
+	}()
+
+	var locEphPub [32]byte
+	_, err := shareEphPubKey(local, &locEphPub)
+	require.ErrorIs(t, err, protoio.ErrMsgExceedsMaxSize,
+		"an oversized ephemeral key message must be rejected before it is allocated")
 }

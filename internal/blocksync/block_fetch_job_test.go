@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/dashpay/tenderdash/internal/p2p/client"
@@ -219,6 +220,101 @@ func (suite *BlockFetchJobTestSuite) TestGeneratorNextJobWaitForPeerAndPushBackH
 	}, 10*time.Millisecond, 5*time.Millisecond)
 }
 
+// TestJobGeneratorPushBack pins the scope of the pushBack dedupe guard: a height
+// still waiting in the queue is not queued twice, while a height already handed to
+// a worker is queued again, because pushedBack stops tracking it once dispatched.
+func (suite *BlockFetchJobTestSuite) TestJobGeneratorPushBack() {
+	const height = int64(9)
+	jobGen := newJobGenerator(5, log.NewNopLogger(), suite.client, NewInMemPeerStore())
+
+	jobGen.pushBack(height)
+	jobGen.pushBack(height)
+	suite.Require().Equal([]int64{height}, jobGen.pushedBack)
+
+	// Dispatching the height empties the queue, so the guard no longer sees it.
+	suite.Require().Equal(height, jobGen.nextHeight())
+	suite.Require().Empty(jobGen.pushedBack)
+	jobGen.pushBack(height)
+	suite.Require().Equal([]int64{height}, jobGen.pushedBack)
+}
+
+// TestShouldJobBeGenerated asks the admission decision directly, one arm at a
+// time. The synchronizer tests drive it through the whole pipeline, which is
+// what makes them evidence about behavior, but it also means an arm that
+// wrongly admits shows up as job generation walking into heights nobody holds
+// and waiting there for a peer - a stall, not an answer. Here the question is
+// asked and the answer read.
+func TestShouldJobBeGenerated(t *testing.T) {
+	const applyHeight = int64(100)
+	const servedTo = applyHeight + 1000
+
+	testCases := []struct {
+		name         string
+		nextHeight   int64
+		pendingBytes int
+		pushedBack   []int64
+		peerHeight   int64
+		want         bool
+	}{
+		{
+			name:       "a peer holds the next height and nothing is held back",
+			nextHeight: applyHeight,
+			peerHeight: servedTo,
+			want:       true,
+		},
+		{
+			name:       "the next height is above every peer",
+			nextHeight: applyHeight + 1,
+			peerHeight: applyHeight,
+			want:       false,
+		},
+		{
+			name:       "one height short of the window",
+			nextHeight: applyHeight + maxOutstandingHeights - 1,
+			peerHeight: servedTo,
+			want:       true,
+		},
+		{
+			name:       "the window is full",
+			nextHeight: applyHeight + maxOutstandingHeights,
+			peerHeight: servedTo,
+			want:       false,
+		},
+		{
+			name:         "one byte short of the budget",
+			nextHeight:   applyHeight,
+			pendingBytes: maxPendingApplyBytes - 1,
+			peerHeight:   servedTo,
+			want:         true,
+		},
+		{
+			name:         "the budget is spent",
+			nextHeight:   applyHeight,
+			pendingBytes: maxPendingApplyBytes,
+			peerHeight:   servedTo,
+			want:         false,
+		},
+		{
+			// the anti-wedge property: whatever else is full, the height the
+			// backlog is waiting for can still be asked for again
+			name:         "a retry goes out past both limits",
+			nextHeight:   applyHeight + maxOutstandingHeights,
+			pendingBytes: maxPendingApplyBytes,
+			pushedBack:   []int64{applyHeight},
+			peerHeight:   servedTo,
+			want:         true,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			peerStore := NewInMemPeerStore(newPeerData("peer", 1, tc.peerHeight))
+			jobGen := newJobGenerator(tc.nextHeight, log.NewNopLogger(), nil, peerStore)
+			jobGen.pushBack(tc.pushedBack...)
+			require.Equal(t, tc.want, jobGen.shouldJobBeGenerated(applyHeight, tc.pendingBytes))
+		})
+	}
+}
+
 func (suite *BlockFetchJobTestSuite) promiseReject(err error) *promise.Promise[*bcproto.BlockResponse] {
 	return promise.New(func(_ func(data *bcproto.BlockResponse), reject func(err error)) {
 		reject(err)
@@ -239,4 +335,30 @@ func (suite *BlockFetchJobTestSuite) getBlockReturnFunc(promiseFunc *promise.Pro
 	return func(_ context.Context, _ int64, _ types.NodeID) *promise.Promise[*bcproto.BlockResponse] {
 		return promiseFunc
 	}
+}
+
+// TestJobGeneratorPushBackOrdersLowestFirst checks that re-queued heights are
+// retried lowest first, regardless of the order they were handed over in.
+//
+// Only the lowest missing height lets applyBlock make progress, and dropPeer
+// collects heights by ranging a map, so arrival order is arbitrary. Retrying in
+// that order can spend the no-progress window fetching heights that cannot be
+// applied until an earlier one lands.
+func (suite *BlockFetchJobTestSuite) TestJobGeneratorPushBackOrdersLowestFirst() {
+	jobGen := newJobGenerator(5, log.NewNopLogger(), suite.client, NewInMemPeerStore())
+
+	jobGen.pushBack(30, 10, 20)
+	suite.Require().Equal([]int64{10, 20, 30}, jobGen.pushedBack)
+
+	// a height arriving later still sorts ahead of what is already queued
+	jobGen.pushBack(5)
+	suite.Require().Equal([]int64{5, 10, 20, 30}, jobGen.pushedBack)
+
+	// and it is the one dispatched next
+	suite.Require().EqualValues(5, jobGen.nextHeight())
+	suite.Require().EqualValues(10, jobGen.nextHeight())
+
+	// duplicates are still skipped across a batch
+	jobGen.pushBack(20, 40, 20)
+	suite.Require().Equal([]int64{20, 30, 40}, jobGen.pushedBack)
 }

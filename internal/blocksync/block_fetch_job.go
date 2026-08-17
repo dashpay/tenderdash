@@ -3,6 +3,7 @@ package blocksync
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
@@ -105,10 +106,37 @@ func (p *jobGenerator) nextJob(ctx context.Context) (*workerpool.Job, error) {
 	return workerpool.NewJob(blockFetchJobHandler(p.client, peer, height)), nil
 }
 
-func (p *jobGenerator) pushBack(height int64) {
+// pushBack schedules heights to be fetched again, skipping those already queued so
+// a queued height is not fetched twice. Heights already handed to a worker are not
+// tracked here, so an in-flight height can still be queued and fetched again.
+//
+// The queue is kept sorted because nextHeight pops from the front and callers hand
+// us heights in arbitrary order - dropPeer collects them by ranging a map. Only the
+// lowest missing height unblocks applyBlock, so retrying in arrival order can spend
+// the whole no-progress window fetching heights that cannot be applied yet.
+//
+// Membership is built once per call rather than rescanning the queue per height,
+// which would be quadratic in the size of a batch.
+func (p *jobGenerator) pushBack(heights ...int64) {
+	if len(heights) == 0 {
+		return
+	}
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
-	p.pushedBack = append(p.pushedBack, height)
+
+	queued := make(map[int64]struct{}, len(p.pushedBack)+len(heights))
+	for _, height := range p.pushedBack {
+		queued[height] = struct{}{}
+	}
+	p.pushedBack = slices.Grow(p.pushedBack, len(heights))
+	for _, height := range heights {
+		if _, ok := queued[height]; ok {
+			continue
+		}
+		queued[height] = struct{}{}
+		p.pushedBack = append(p.pushedBack, height)
+	}
+	slices.Sort(p.pushedBack)
 }
 
 func (p *jobGenerator) getPeer(ctx context.Context, height int64) (PeerData, error) {
@@ -127,11 +155,39 @@ func (p *jobGenerator) getPeer(ctx context.Context, height int64) (PeerData, err
 	}
 }
 
-func (p *jobGenerator) shouldJobBeGenerated() bool {
+// shouldJobBeGenerated reports whether another height may be requested now.
+// applyHeight is the height block sync is waiting to apply and pendingBytes is
+// the size of the responses already held above it.
+//
+// Blocks are applied strictly in order, so a response that arrives before the
+// height below it has been applied is held until that one does, and nothing
+// else limits how many are held: a peer's in-flight request count is released
+// when its response arrives, not when its block is applied. While blocks are
+// being applied the whole pipeline throttles itself - the consumer applies
+// synchronously, so the result channel fills, the workers block and this loop
+// stalls - but a single missing height removes precisely that, leaving what is
+// held bounded only by how far above us peers claim to be.
+//
+// Two limits replace that. What is already held is capped by bytes, which is
+// the cost that matters. What may still be requested is capped by a window of
+// maxOutstandingHeights heights above applyHeight, because a request in flight
+// has no size to charge yet and every one of them will be held the moment the
+// height below it goes missing. The window only moves up, and addBlock rejects
+// anything below applyHeight, so nothing can be held from outside it.
+//
+// Heights queued for a retry are handed out whatever either limit says. Each
+// was inside the window when it was first requested and the window only moves
+// up, so re-issuing one cannot widen the backlog; and the lowest of them is
+// typically the very height everything else is waiting for, so holding those
+// back is what would turn a bound into a permanent stall.
+func (p *jobGenerator) shouldJobBeGenerated(applyHeight int64, pendingBytes int) bool {
 	p.mtx.RLock()
 	defer p.mtx.RUnlock()
 	if len(p.pushedBack) > 0 {
 		return true
+	}
+	if pendingBytes >= maxPendingApplyBytes || p.height-applyHeight >= maxOutstandingHeights {
+		return false
 	}
 	return p.height <= p.peerStore.MaxHeight()
 }

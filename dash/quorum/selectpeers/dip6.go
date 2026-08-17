@@ -14,6 +14,15 @@ import (
 // algorithm. For less than this number, we connect to all validators.
 const minValidators = 5
 
+// connectionDirection is the direction in which the DIP-6 overlay is walked: the
+// connections a member opens, or the ones opened to it.
+type connectionDirection int
+
+const (
+	outgoing connectionDirection = 1
+	incoming connectionDirection = -1
+)
+
 // DIP6 selector selects validators from the `validatorSetMembers`, based on algorithm
 // described in DIP-6 https://github.com/dashpay/dips/blob/master/dip-0006.md
 type dip6PeerSelector struct {
@@ -31,6 +40,29 @@ func NewDIP6ValidatorSelector(quorumHash bytes.HexBytes) ValidatorSelector {
 func (s *dip6PeerSelector) SelectValidators(
 	validatorSetMembers []*types.Validator,
 	me *types.Validator,
+) ([]*types.Validator, error) {
+	return s.selectNeighbours(validatorSetMembers, me, outgoing)
+}
+
+// SelectInboundValidators implements ValidatorSelector.
+//
+// The DIP-6 overlay is directed: a member at index i connects to (i+2^k)%n, so
+// the members that connect to it are the ones at (i-2^k)%n, a different set. A
+// node that wants to hold on to its whole DIP-6 neighborhood therefore has to
+// account for both, since it only ever dials one of the two halves.
+func (s *dip6PeerSelector) SelectInboundValidators(
+	validatorSetMembers []*types.Validator,
+	me *types.Validator,
+) ([]*types.Validator, error) {
+	return s.selectNeighbours(validatorSetMembers, me, incoming)
+}
+
+// selectNeighbours returns the DIP-6 neighbors of `me` in one direction of the
+// overlay.
+func (s *dip6PeerSelector) selectNeighbours(
+	validatorSetMembers []*types.Validator,
+	me *types.Validator,
+	direction connectionDirection,
 ) ([]*types.Validator, error) {
 	if len(validatorSetMembers) < 2 {
 		return nil, fmt.Errorf("not enough validators: got %d, need 2", len(validatorSetMembers))
@@ -61,14 +93,16 @@ func (s *dip6PeerSelector) SelectValidators(
 	}
 
 	// Calculate indexes (i+2^k)%n where k is in the range 0..floor(log2(n-1))-1
-	// and n is equal to the size of the list.
-	n := float64(sortedValidators.Len())
-	count := math.Floor(math.Log2(n-1.0)) - 1.0
+	// and n is equal to the size of the list. The inbound direction walks the
+	// same offsets backwards, which is what makes the two selections inverses.
+	n := sortedValidators.Len()
+	count := int(math.Floor(math.Log2(float64(n)-1.0))) - 1
 
-	ret := make([]*types.Validator, 0, int(count))
-	i := float64(myIndex)
-	for k := float64(0); k <= count; k++ {
-		index := int(math.Mod(i+math.Pow(2, k), n))
+	ret := make([]*types.Validator, 0, count+1)
+	for k := 0; k <= count; k++ {
+		offset := int(direction) * (1 << uint(k))
+		// Go's % keeps the sign of the dividend, so bring it back into range.
+		index := ((myIndex+offset)%n + n) % n
 		// Add addresses of masternodes at indexes calculated at previous step
 		// to the set of deterministic connections.
 		ret = append(ret, sortedValidators[index].Validator.Copy())

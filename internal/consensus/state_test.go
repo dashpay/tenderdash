@@ -2212,7 +2212,7 @@ func TestExtendVote(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	voteExtensions := types.VoteExtensionsFromProto(&tmproto.VoteExtension{
+	voteExtensions := types.MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
 		Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
 		Extension: []byte("extension"),
 	})
@@ -2371,7 +2371,7 @@ func TestVerifyVoteExtensionNotCalledOnAbsentPrecommit(t *testing.T) {
 	config := configSetup(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	voteExtensions := types.VoteExtensionsFromProto(&tmproto.VoteExtension{
+	voteExtensions := types.MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
 		Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
 		Extension: []byte("extension"),
 	})
@@ -2469,7 +2469,7 @@ func TestPrepareProposalReceivesVoteExtensions(t *testing.T) {
 
 	config := configSetup(t)
 
-	voteExtensions := types.VoteExtensionsFromProto(
+	voteExtensions := types.MustVoteExtensionsFromProto(t,
 		&tmproto.VoteExtension{
 			Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
 			Extension: crypto.Checksum([]byte("extension-raw")),

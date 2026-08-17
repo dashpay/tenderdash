@@ -27,6 +27,7 @@ type HistoryEvent struct {
 type DashDialer struct {
 	mux            sync.Mutex
 	ConnectedPeers map[types.NodeID]bool
+	ProtectedPeers map[types.NodeID]bool
 	HistoryChan    chan HistoryEvent
 }
 
@@ -35,6 +36,7 @@ type DashDialer struct {
 func NewDashDialer() *DashDialer {
 	isw := &DashDialer{
 		ConnectedPeers: map[types.NodeID]bool{},
+		ProtectedPeers: map[types.NodeID]bool{},
 		HistoryChan:    make(chan HistoryEvent, 1000),
 	}
 	return isw
@@ -51,6 +53,33 @@ func (sw *DashDialer) ConnectAsync(addr p2p.NodeAddress) error {
 
 	sw.history(OpDial, string(id))
 	return nil
+}
+
+// SetProtectedPeers implements p2p.DashDialer.
+// It records the node IDs whose connection slot is currently reserved.
+func (sw *DashDialer) SetProtectedPeers(nodeIDs []types.NodeID) error {
+	protected := make(map[types.NodeID]bool, len(nodeIDs))
+	for _, id := range nodeIDs {
+		protected[id] = true
+	}
+
+	sw.mux.Lock()
+	sw.ProtectedPeers = protected
+	sw.mux.Unlock()
+
+	return nil
+}
+
+// ProtectedPeerIDs returns the node IDs whose connection slot is currently reserved.
+func (sw *DashDialer) ProtectedPeerIDs() []types.NodeID {
+	sw.mux.Lock()
+	defer sw.mux.Unlock()
+
+	ids := make([]types.NodeID, 0, len(sw.ProtectedPeers))
+	for id := range sw.ProtectedPeers {
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 // IsDialingOrConnected implements p2p.DashDialer.

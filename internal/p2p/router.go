@@ -370,17 +370,17 @@ func (r *Router) routeChannel(
 			}
 
 		case peerError := <-errCh:
-			maxPeerCapacity := r.peerManager.HasMaxPeerCapacity()
+			disconnect := r.peerManager.ShouldDisconnectOnError(peerError.NodeID, peerError.Fatal)
 			r.logger.Error("peer error",
 				"peer", peerError.NodeID,
 				"err", peerError.Err,
-				"disconnecting", peerError.Fatal || maxPeerCapacity,
+				"disconnecting", disconnect,
 			)
 
-			if peerError.Fatal || maxPeerCapacity {
-				// if the error is fatal or all peer
-				// slots are in use, we can error
-				// (disconnect) from the peer.
+			if disconnect {
+				// The error is fatal, or all peer slots
+				// are in use and this peer is one we may
+				// shed to relieve the pressure.
 				r.peerManager.Errored(peerError.NodeID, peerError.Err)
 			} else {
 				// this just decrements the peer
@@ -702,7 +702,11 @@ func (r *Router) handshakePeer(
 // they are closed elsewhere it will cause this method to shut down and return.
 func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connection, channels ChannelIDSet) {
 	r.metrics.PeersConnected.Add(1)
-	r.peerManager.Ready(ctx, peerID, channels)
+	// The generation minted for this connection is captured here, once, and
+	// stamped on every envelope it delivers, so an envelope carries the identity
+	// of the connection that produced it even after a reconnect under the same
+	// NodeID has advanced the peer's live generation.
+	connID := r.peerManager.Ready(ctx, peerID, channels)
 
 	// we use context to manage the lifecycle of the peer
 	// note that original ctx will be used in cleanup
@@ -731,7 +735,7 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 
 	go func() {
 		select {
-		case errCh <- r.receivePeer(ioCtx, peerID, conn):
+		case errCh <- r.receivePeer(ioCtx, peerID, conn, connID):
 		case <-ioCtx.Done():
 		}
 		wg.Done()
@@ -800,7 +804,7 @@ FOR:
 
 // receivePeer receives inbound messages from a peer, deserializes them and
 // passes them on to the appropriate channel.
-func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Connection) error {
+func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Connection, connID uint64) error {
 	timeout := time.NewTimer(0)
 	defer timeout.Stop()
 
@@ -829,11 +833,16 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 		}
 		envelope, err := EnvelopeFromProto(protoEnvelope)
 		if err != nil {
-			r.logger.Error("message decoding failed, dropping message", "peer", peerID, "err", err)
+			// A policy rejection of a peer-supplied value, not an unexpected decode
+			// failure: any peer can trigger it on demand, so it must not be Error.
+			r.logger.Debug("envelope rejected, dropping message", "peer", peerID, "err", err)
 			continue
 		}
 		envelope.From = peerID
 		envelope.ChannelID = chID
+		// Stamp the connection generation before the envelope enters the shared
+		// per-channel queue, where it loses all connection identity but its NodeID.
+		envelope.ConnID = connID
 
 		// stop previous timeout counter and drain the timeout channel
 		timeout.Stop()
@@ -849,10 +858,13 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 
 		select {
 		case queue.enqueue() <- envelope:
+			// len(bz) is the exact wire size we just read. Deriving it with
+			// proto.Size means walking the whole decoded message again, which for a
+			// block-sized message is a full extra pass on the receive hot path.
 			r.metrics.PeerReceiveBytesTotal.With(
 				"chID", fmt.Sprint(chID),
 				"peer_id", string(peerID),
-				"message_type", r.lc.ValueToMetricLabel(envelope.Message)).Add(float64(proto.Size(&protoEnvelope)))
+				"message_type", r.lc.ValueToMetricLabel(envelope.Message)).Add(float64(len(bz)))
 			r.metrics.RouterChannelQueueSend.Observe(time.Since(start).Seconds())
 			// r.logger.Debug("received message", "peer", peerID, "msg", msg)
 

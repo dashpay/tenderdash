@@ -21,8 +21,13 @@ var configTemplate *template.Template
 
 func init() {
 	var err error
+	// The rate-limit guidance quotes the cost of the most expensive message and
+	// the smallest rate that can carry it, which are the same number. Reading it
+	// from the constant the node validates against keeps the file operators are
+	// handed from telling them something the node disagrees with.
 	tmpl := template.New("configFileTemplate").Funcs(template.FuncMap{
-		"StringsJoin": strings.Join,
+		"StringsJoin":              strings.Join,
+		"MinVerificationRateLimit": func() int { return MinVerificationRateLimit },
 	})
 	if configTemplate, err = tmpl.Parse(defaultConfigTemplate); err != nil {
 		panic(err)
@@ -545,15 +550,39 @@ create-empty-blocks-interval = "{{ .Consensus.CreateEmptyBlocksInterval }}"
 peer-gossip-sleep-duration = "{{ .Consensus.PeerGossipSleepDuration }}"
 peer-query-maj23-sleep-duration = "{{ .Consensus.PeerQueryMaj23SleepDuration }}"
 
+# Per-second token budget for a single peer on the vote channel (votes and
+# commits). Tokens are charged by verification cost: a prevote costs one, while
+# a precommit carrying the maximum vote extensions costs {{ MinVerificationRateLimit }}, because that is how
+# many signature verifications it forces. Messages over the budget are dropped
+# before verification, bounding the CPU a single peer can force. It is a
+# per-peer allowance and says nothing about what the peers can force between
+# them; the node-wide bound is verification-rate-limit. 0 disables it.
+peer-vote-rate-limit = {{ .Consensus.PeerVoteRateLimit }}
+
+# Maximum BLS signature-verification work accepted from all peers per second,
+# covering votes, commits and proposals. Block and threshold signatures cost one
+# token, and vote extensions cost one token each. A message waits for the budget to cover its whole cost before it is
+# verified, so a rate that cannot refill the most expensive message within a
+# second is refused: the value must be 0 (disabled) or at least {{ MinVerificationRateLimit }}.
+verification-rate-limit = {{ .Consensus.VerificationRateLimit }}
+
+# Per-second token budget for a single peer on the data channel (proposals and
+# block parts). Tokens are charged by verification cost: a proposal costs more
+# than a block part because it forces a BLS verification. This leaves block-part
+# gossip (including catch-up) generous headroom while keeping what one peer can
+# spend on proposals low. What the peers can force between them is bounded by
+# verification-rate-limit, which proposals are also charged against. 0 disables
+# it.
+peer-data-rate-limit = {{ .Consensus.PeerDataRateLimit }}
+
 ### Unsafe Timeout Overrides ###
 
 # These fields provide temporary overrides for the Timeout consensus parameters.
 # Use of these parameters is strongly discouraged. Using these parameters may have serious
 # liveness implications for the validator and for the chain.
 #
-# These fields will be removed from the configuration file in the v0.37 release of Tendermint.
-# For additional information, see ADR-74:
-# https://github.com/tendermint/tendermint/blob/master/docs/architecture/adr-074-timeout-params.md
+# Because they make a single node disagree with the rest of the network about
+# timing, they are not intended for normal operation.
 
 # This field provides an unsafe override of the Propose timeout consensus parameter.
 # This field configures how long the consensus engine will wait for a proposal block before prevoting nil.
@@ -575,19 +604,6 @@ peer-query-maj23-sleep-duration = "{{ .Consensus.PeerQueryMaj23SleepDuration }}"
 # This field configures how much the vote timeout increases with each round.
 # If this field is set to a value greater than 0, it will take effect.
 # unsafe-vote-timeout-delta-override = {{ .Consensus.UnsafeVoteTimeoutDeltaOverride }}
-
-# This field provides an unsafe override of the Commit timeout consensus parameter.
-# This field configures how long the consensus engine will wait after receiving
-# +2/3 precommits before beginning the next height.
-# If this field is set to a value greater than 0, it will take effect.
-# unsafe-commit-timeout-override = {{ .Consensus.UnsafeCommitTimeoutOverride }}
-
-# This field provides an unsafe override of the BypassCommitTimeout consensus parameter.
-# This field configures if the consensus engine will wait for the full Commit timeout
-# before proceeding to the next height.
-# If this field is set to true, the consensus engine will proceed to the next height
-# as soon as the node has gathered votes from all of the validators on the network.
-# unsafe-bypass-commit-timeout-override =
 
 #######################################################
 ###   Transaction Indexer Configuration Options     ###

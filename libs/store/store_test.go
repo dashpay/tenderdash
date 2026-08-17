@@ -1,6 +1,7 @@
 package store
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -57,5 +58,51 @@ func TestInMemStore(t *testing.T) {
 		val, ok := store.Get(pairs[2].key)
 		require.True(t, ok)
 		require.Equal(t, pairs[2].val+1, val)
+	}
+	// Upsert test
+	{
+		add := func(n int) UpdateFunc[string, int] {
+			return func(_ string, it *int) { *it += n }
+		}
+		// absent: the initial value is inserted and then updated
+		store.Upsert("key4", 10, add(1))
+		val, ok := store.Get("key4")
+		require.True(t, ok)
+		require.Equal(t, 11, val)
+		// present: the initial value is ignored and the stored one updated
+		store.Upsert("key4", 100, add(1))
+		val, ok = store.Get("key4")
+		require.True(t, ok)
+		require.Equal(t, 12, val)
+	}
+}
+
+// TestInMemStoreUpsertIsAtomic checks that concurrent upserts of a key that starts
+// out absent all see each other's writes. Callers reach for Upsert precisely
+// because a Get followed by a Put loses whatever landed in between, so the lookup
+// and the write have to happen under one lock.
+func TestInMemStoreUpsertIsAtomic(t *testing.T) {
+	const (
+		writers = 8
+		trials  = 200
+	)
+	for trial := 0; trial < trials; trial++ {
+		store := NewInMemStore[string, int]()
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		wg.Add(writers)
+		for i := 0; i < writers; i++ {
+			go func() {
+				defer wg.Done()
+				<-start
+				store.Upsert("key", 0, func(_ string, it *int) { *it++ })
+			}()
+		}
+		close(start)
+		wg.Wait()
+
+		val, ok := store.Get("key")
+		require.True(t, ok)
+		require.Equal(t, writers, val, "an upsert overwrote a concurrent one (trial %d)", trial)
 	}
 }

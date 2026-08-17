@@ -83,6 +83,12 @@ type PeerUpdate struct {
 	Channels ChannelIDSet
 	// ProTxHash is accessible only for validator
 	ProTxHash types.ProTxHash
+	// ConnID is the generation of the connection this update reports, set on a
+	// PeerStatusUp so a subscriber can match the connection against the envelopes
+	// it delivered (see Envelope.ConnID). It is monotonic across a peer's
+	// connections, so a reconnect under the same NodeID reports a strictly larger
+	// generation than the one it replaced. Zero on non-Up updates.
+	ConnID uint64
 }
 
 // SetProTxHash copies `proTxHash` into `PeerUpdate.ProTxHash`
@@ -330,15 +336,20 @@ type PeerManager struct {
 	evictWaker *tmsync.Waker // wakes up EvictNext() on relevant peer changes
 	logger     log.Logger
 
-	mtx           sync.Mutex
-	store         *peerStore
-	subscriptions map[*PeerUpdates]*PeerUpdates            // keyed by struct identity (address)
-	dialing       map[types.NodeID]bool                    // peers being dialed (DialNext → Dialed/DialFail)
-	upgrading     map[types.NodeID]types.NodeID            // peers claimed for upgrade (DialNext → Dialed/DialFail)
-	connected     map[types.NodeID]peerConnectionDirection // connected peers (Dialed/Accepted → Disconnected)
-	ready         map[types.NodeID]bool                    // ready peers (Ready → Disconnected)
-	evict         map[types.NodeID]bool                    // peers scheduled for eviction (Connected → EvictNext)
-	evicting      map[types.NodeID]bool                    // peers being evicted (EvictNext → Disconnected)
+	mtx            sync.Mutex
+	store          *peerStore
+	protectedPeers map[types.NodeID]bool                    // peers whose connection slot is reserved
+	subscriptions  map[*PeerUpdates]*PeerUpdates            // keyed by struct identity (address)
+	dialing        map[types.NodeID]bool                    // peers being dialed (DialNext → Dialed/DialFail)
+	upgrading      map[types.NodeID]types.NodeID            // peers claimed for upgrade (DialNext → Dialed/DialFail)
+	connected      map[types.NodeID]peerConnectionDirection // connected peers (Dialed/Accepted → Disconnected)
+	ready          map[types.NodeID]bool                    // ready peers (Ready → Disconnected)
+	evict          map[types.NodeID]bool                    // peers scheduled for eviction (Connected → EvictNext)
+	evicting       map[types.NodeID]bool                    // peers being evicted (EvictNext → Disconnected)
+	// connIDCounter mints a monotonic generation for each connection as it is
+	// readied, so a reconnect under the same NodeID is told apart from the
+	// connection it replaced (see PeerUpdate.ConnID / Envelope.ConnID).
+	connIDCounter uint64
 }
 
 // NewPeerManager creates a new peer manager.
@@ -366,7 +377,9 @@ func NewPeerManager(_ctx context.Context, selfID types.NodeID, peerDB dbm.DB, op
 		logger:     log.NewNopLogger(),
 		metrics:    NopMetrics(),
 
-		store:         store,
+		store:          store,
+		protectedPeers: map[types.NodeID]bool{},
+
 		dialing:       map[types.NodeID]bool{},
 		upgrading:     map[types.NodeID]types.NodeID{},
 		connected:     map[types.NodeID]peerConnectionDirection{},
@@ -436,8 +449,166 @@ func (m *PeerManager) configurePeers() error {
 // configurePeer configures a peer with ephemeral runtime configuration.
 func (m *PeerManager) configurePeer(peer peerInfo) peerInfo {
 	peer.Persistent = m.options.isPersistent(peer.ID)
+	peer.Protected = m.protectedPeers[peer.ID]
 	peer.FixedScore = m.options.PeerScores[peer.ID]
 	return peer
+}
+
+// SetProtectedPeers replaces the set of peers whose connection slot is reserved.
+//
+// A reserved slot cannot be taken from its holder to make room for another peer,
+// and cannot be lost to error scoring. The set is meant to carry the members of
+// the currently active validator quorum, which this node must stay connected to
+// for consensus to make progress even while every other slot is contested.
+//
+// Reservations are keyed on node ID, which the handshake authenticates against
+// the peer's public key, and they are deliberately not written to the peer
+// store: a peer that leaves the quorum loses its reservation at the next call,
+// and a restart re-derives the set from the quorum then in force rather than
+// reviving a stale one.
+func (m *PeerManager) SetProtectedPeers(peerIDs []types.NodeID) error {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+
+	var errs []error
+	protected := make(map[types.NodeID]bool, len(peerIDs))
+	for _, id := range peerIDs {
+		if err := id.Validate(); err != nil {
+			// Skip just this one; one malformed ID must not cost the whole
+			// quorum its reservations.
+			errs = append(errs, fmt.Errorf("invalid protected peer ID %q: %w", id, err))
+			continue
+		}
+		if id == m.selfID {
+			continue
+		}
+		protected[id] = true
+	}
+
+	// Reservations must stay a minority of the connection slots, counting the
+	// configured persistent peers that already hold one. If every connected peer
+	// held a slot, no arrival could ever find a peer to upgrade from and the node
+	// would stop accepting connections altogether. A peer that is both persistent
+	// and in the quorum holds one slot, not two, so it is counted once.
+	//
+	// A set that would breach the budget is cut down to what fits rather than
+	// dropped whole. Dropping it turns every reservation off — over a
+	// configuration that is otherwise legal, since the budget shrinks with each
+	// persistent peer an operator adds — which is the outcome this protection
+	// exists to prevent. What could not be reserved is reported: only an operator
+	// can make room for it.
+	//
+	// The previous quorum's reservations are replaced either way. Leaving them in
+	// force would hold slots for validators that have rotated out, which is
+	// exactly the stale protection that keeping reservations out of the peer
+	// store avoids.
+	if m.options.MaxConnected > 0 && len(protected) > 0 {
+		reservable := int(m.options.MaxConnected)/2 - m.persistentOutside(protected)
+		if reservable < 0 {
+			reservable = 0
+		}
+		if dropped := m.trimProtected(protected, peerIDs, reservable); dropped > 0 {
+			errs = append(errs, fmt.Errorf(
+				"cannot reserve %d connection slots, at most %d of %d may be reserved; %d left unreserved",
+				len(protected)+dropped, reservable, m.options.MaxConnected, dropped))
+		}
+	}
+
+	// Only peers that gained or lost their reservation need reconfiguring.
+	changed := make([]types.NodeID, 0, len(protected)+len(m.protectedPeers))
+	for id := range m.protectedPeers {
+		if !protected[id] {
+			changed = append(changed, id)
+		}
+	}
+	for id := range protected {
+		if !m.protectedPeers[id] {
+			changed = append(changed, id)
+		}
+	}
+	m.protectedPeers = protected
+
+	// Reconfigure through a copy from the store rather than in place: the store
+	// detects a rank change by comparing the stored peer against the one handed
+	// back, so mutating the stored value directly would leave the ranking stale.
+	for _, id := range changed {
+		peer, ok := m.store.Get(id)
+		if !ok {
+			// Not known yet. newPeerInfo() applies the reservation if and when
+			// the peer connects.
+			continue
+		}
+		if err := m.store.Set(m.configurePeer(peer)); err != nil {
+			errs = append(errs, fmt.Errorf("cannot update protected peer %q: %w", id, err))
+		}
+	}
+
+	// A peer that just lost its reservation may now be evictable, and one that
+	// just gained it may now be dialable.
+	m.evictWaker.Wake()
+	m.dialWaker.Wake()
+
+	return errors.Join(errs...)
+}
+
+// persistentOutside counts the configured persistent peers that are not in the
+// given set. Those inside it are already accounted for by the set itself: a peer
+// that is both persistent and in the quorum occupies one connection slot.
+func (m *PeerManager) persistentOutside(protected map[types.NodeID]bool) int {
+	outside := 0
+	for _, id := range m.options.PersistentPeers {
+		if !protected[id] {
+			outside++
+		}
+	}
+	return outside
+}
+
+// trimProtected cuts the set down to at most keep entries, preferring the order
+// in which the caller offered them, and reports how many it removed.
+//
+// Configured persistent peers are kept first, because they hold their slot
+// whether or not they are reserved: taking the reservation away frees nothing
+// and only makes the remaining budget smaller. Everything after that follows the
+// caller's order, which is how the quorum's overlay is derived and therefore
+// something no single member decides. Ordering by node ID instead would let a
+// member choose where it lands, since a node ID is a hash of a key its owner
+// picks and grinding a low one is seconds of work — the members with the lowest
+// IDs would keep their reservations and the rest would lose them.
+//
+// Whether a member is already connected is deliberately not consulted. The set
+// is replaced only when the validator set changes, so at a rotation the members
+// reported connected are the ones on their way out and the ones a reservation
+// would help most have not been reached yet.
+//
+// The caller must hold the mutex lock.
+func (m *PeerManager) trimProtected(protected map[types.NodeID]bool, order []types.NodeID, keep int) int {
+	if len(protected) <= keep {
+		return 0
+	}
+
+	rank := make(map[types.NodeID]int, len(order))
+	for i, id := range order {
+		if _, seen := rank[id]; !seen {
+			rank[id] = i
+		}
+	}
+	candidates := make([]types.NodeID, 0, len(protected))
+	for id := range protected {
+		candidates = append(candidates, id)
+	}
+	sort.SliceStable(candidates, func(i, j int) bool {
+		iFree, jFree := m.options.isPersistent(candidates[i]), m.options.isPersistent(candidates[j])
+		if iFree != jFree {
+			return iFree
+		}
+		return rank[candidates[i]] < rank[candidates[j]]
+	})
+
+	for _, id := range candidates[keep:] {
+		delete(protected, id)
+	}
+	return len(candidates) - keep
 }
 
 // newPeerInfo creates a peerInfo for a new peer.
@@ -524,7 +695,6 @@ func (m *PeerManager) Add(address NodeAddress) (bool, error) {
 	if peer.Inactive {
 		return false, nil
 	}
-
 	// else add the new address
 	peer.AddressInfo[address] = &peerAddressInfo{Address: address}
 	if err := m.store.Set(peer); err != nil {
@@ -551,11 +721,26 @@ func (m *PeerManager) PeerRatio() float64 {
 	return float64(m.store.Size()) / float64(m.options.MaxPeers)
 }
 
-func (m *PeerManager) HasMaxPeerCapacity() bool {
+// ShouldDisconnectOnError reports whether an error reported against a peer
+// should disconnect it.
+//
+// A fatal error always does: it is a statement about that peer alone. A
+// non-fatal one only does when every connection slot is in use, where dropping
+// the peer that just misbehaved is how the pressure is relieved — but a peer
+// holding a reserved slot is never the one to drop, because a reservation
+// exists precisely so that connection pressure cannot take the slot.
+func (m *PeerManager) ShouldDisconnectOnError(peerID types.NodeID, fatal bool) bool {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 
-	return len(m.connected) >= int(m.options.MaxConnected)
+	if fatal {
+		return true
+	}
+	if len(m.connected) < int(m.options.MaxConnected) {
+		return false
+	}
+	peer, ok := m.store.Get(peerID)
+	return !ok || !peer.hasReservedSlot()
 }
 
 func (m *PeerManager) HasDialedMaxPeers() bool {
@@ -624,7 +809,7 @@ func (m *PeerManager) TryDialNext() NodeAddress {
 		}
 
 		for _, addressInfo := range peer.AddressInfo {
-			delay := m.retryDelay(addressInfo.DialFailures, peer.Persistent)
+			delay := m.retryDelay(addressInfo.DialFailures, peer.hasReservedSlot())
 			if time.Since(addressInfo.LastDialFailure) < delay {
 				m.logger.Trace("not dialing peer due to retry delay", "peer", peer, "delay", delay, "last_failure", addressInfo.LastDialFailure)
 				continue
@@ -693,7 +878,7 @@ func (m *PeerManager) DialFailed(ctx context.Context, address NodeAddress) error
 		return err
 	}
 
-	delay := m.retryDelay(addressInfo.DialFailures, peer.Persistent)
+	delay := m.retryDelay(addressInfo.DialFailures, peer.hasReservedSlot())
 	m.scheduleDial(ctx, delay)
 
 	return nil
@@ -864,16 +1049,24 @@ func (m *PeerManager) Accepted(peerID types.NodeID, peerOpts ...func(*peerInfo))
 // channels set here are passed in the peer update broadcast to
 // reactors, which can then mediate their own behavior based on the
 // capability of the peers.
-func (m *PeerManager) Ready(ctx context.Context, peerID types.NodeID, channels ChannelIDSet) {
+// Ready marks a connected peer as ready and broadcasts PeerStatusUp. It returns
+// the monotonic generation minted for this connection, which the router stamps
+// on every envelope the connection delivers so a consumer can match an inbound
+// message to the connection that produced it. A peer that is not connected
+// mints nothing and returns zero.
+func (m *PeerManager) Ready(ctx context.Context, peerID types.NodeID, channels ChannelIDSet) uint64 {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 
 	if m.isConnected(peerID) {
 		m.ready[peerID] = true
+		m.connIDCounter++
+		connID := m.connIDCounter
 		pu := PeerUpdate{
 			NodeID:   peerID,
 			Status:   PeerStatusUp,
 			Channels: channels,
+			ConnID:   connID,
 		}
 		peer, ok := m.store.Get(peerID)
 		if ok && len(peer.ProTxHash) > 0 {
@@ -889,7 +1082,9 @@ func (m *PeerManager) Ready(ctx context.Context, peerID types.NodeID, channels C
 			// too (see ErrBroadcastDeadlock).
 			m.logger.Debug("ready broadcast skipped", "peer", peerID, "error", err)
 		}
+		return connID
 	}
+	return 0
 }
 
 // EvictNext returns the next peer to evict (i.e. disconnect). If no evictable
@@ -1236,9 +1431,20 @@ func (m *PeerManager) processPeerEvent(ctx context.Context, pu PeerUpdate) {
 		peer = peerInfo{}
 	}
 
+	// A peer holding a reserved slot ranks by the reservation while it holds, but
+	// the reservation ends when the quorum rotates and what the peer has banked
+	// is what it is worth from that moment on. Clean service is therefore
+	// recorded like anyone else's — without it, an hour of faultless work leaves
+	// the peer at its starting score and makes it the lowest-ranked connected
+	// peer at the exact moment its replacements may not be connected yet.
+	//
+	// Punishment is not recorded, because it would take effect at that same
+	// moment: a reserved peer must not be able to score its way out of a slot it
+	// is entitled to, and errors reported while it holds one say nothing about
+	// what it is worth afterwards.
 	switch pu.Status {
 	case PeerStatusBad:
-		if peer.MutableScore == math.MinInt16 {
+		if peer.hasReservedSlot() || peer.MutableScore == math.MinInt16 {
 			return
 		}
 		peer.MutableScore--
@@ -1574,6 +1780,11 @@ type peerInfo struct {
 
 	// These fields are ephemeral, i.e. not persisted to the database.
 	Persistent bool
+	// Protected marks a peer holding a reserved connection slot: a member of the
+	// currently active validator quorum. Unlike Persistent, which comes from
+	// static configuration, it is derived from the quorum in force and so is
+	// recomputed on every quorum change rather than stored.
+	Protected  bool
 	Height     int64
 	FixedScore PeerScore // mainly for tests
 
@@ -1680,13 +1891,20 @@ func (p *peerInfo) LastDialed() (time.Time, bool) {
 	return last, success
 }
 
+// hasReservedSlot reports whether the peer holds its connection slot
+// unconditionally, rather than having to out-rank the peers competing for it.
+// Configured persistent peers and members of the active validator quorum do.
+func (p *peerInfo) hasReservedSlot() bool {
+	return p.Persistent || p.Protected
+}
+
 // Score calculates a score for the peer. Higher-scored peers will be
 // preferred over lower scores.
 func (p *peerInfo) Score() PeerScore {
 	if p.FixedScore > 0 {
 		return p.FixedScore
 	}
-	if p.Persistent {
+	if p.hasReservedSlot() {
 		return PeerScorePersistent
 	}
 
@@ -1744,6 +1962,9 @@ func (p *peerInfo) MarshalZerologObject(e *zerolog.Event) {
 	e.Time("last_disconnected", p.LastDisconnected)
 	if p.Persistent {
 		e.Bool("persistent", p.Persistent)
+	}
+	if p.Protected {
+		e.Bool("protected", p.Protected)
 	}
 	e.Int64("height", p.Height)
 	if p.FixedScore != 0 {
@@ -1908,7 +2129,7 @@ func evictPeerAfterTimeout(m *PeerManager, peerID types.NodeID, direction peerCo
 		time.AfterFunc(timeout, func() {
 			olderThan := time.Now().Add(-timeout)
 			p, connType := m.getPeer(peerID)
-			if !p.IsZero() && connType == direction && !p.Persistent && p.LastConnected.Before(olderThan) {
+			if !p.IsZero() && connType == direction && !p.hasReservedSlot() && p.LastConnected.Before(olderThan) {
 				m.EvictPeer(peerID)
 			}
 		})

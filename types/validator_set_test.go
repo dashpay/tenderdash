@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"sort"
 	"strconv"
@@ -209,6 +210,7 @@ func TestValidatorSetValidateBasic(t *testing.T) {
 			vals: ValidatorSet{
 				Validators:         []*Validator{val},
 				ThresholdPublicKey: val.PubKey,
+				QuorumType:         btcjson.LLMQType_SINGLE_NODE,
 				QuorumHash:         crypto.RandQuorumHash(),
 				HasPublicKeys:      true,
 			},
@@ -262,6 +264,7 @@ func TestValidatorSetValidateBasic(t *testing.T) {
 			vals: ValidatorSet{
 				Validators:         []*Validator{val},
 				ThresholdPublicKey: val.PubKey,
+				QuorumType:         btcjson.LLMQType_SINGLE_NODE,
 				QuorumHash:         crypto.RandQuorumHash(),
 				HasPublicKeys:      true,
 			},
@@ -1186,4 +1189,129 @@ func BenchmarkValidatorSet_VerifyCommit_Ed25519(b *testing.B) {
 			}
 		})
 	}
+}
+
+// A peer supplies QuorumType on the statesync LightBlock path. It is not covered
+// by ValidatorSet.Hash(), which hashes only ThresholdPublicKey and QuorumHash, so
+// tampering with it survives every integrity check and reaches
+// tmmath.MustConvertUint8 in sign-hash construction, which panics. Only the quorum
+// types the rest of the codebase already validates against are accepted.
+func TestValidatorSetFromProto_QuorumTypeUnsupported(t *testing.T) {
+	testCases := []struct {
+		name       string
+		quorumType int32
+		wantErr    bool
+	}{
+		{"max int32", math.MaxInt32, true},
+		{"one above uint8", math.MaxUint8 + 1, true},
+		{"negative", -1, true},
+		{"min int32", math.MinInt32, true},
+		{"unset", 0, true},
+		{"in uint8 range but not a known type", math.MaxUint8, true},
+		{"llmq test platform", int32(btcjson.LLMQType_TEST_PLATFORM), false},
+		{"llmq single node", int32(btcjson.LLMQType_SINGLE_NODE), false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			vs, _ := RandValidatorSet(3)
+			pb, err := vs.ToProto()
+			require.NoError(t, err)
+			pb.QuorumType = tc.quorumType
+
+			var got *ValidatorSet
+			require.NotPanics(t, func() {
+				got, err = ValidatorSetFromProto(pb)
+			}, "converting a peer-supplied validator set must never panic")
+
+			if tc.wantErr {
+				require.Error(t, err, "quorum type %d is not a supported LLMQ type and must be rejected", tc.quorumType)
+				assert.ErrorContains(t, err, "quorumType")
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, got)
+			assert.Equal(t, btcjson.LLMQType(tc.quorumType), got.QuorumType)
+		})
+	}
+}
+
+// The light client's HTTP provider builds a validator set with NewValidatorSet and
+// validates it with ValidateBasic, never touching the proto path, so the quorum
+// type bound has to live in ValidateBasic to cover that entry point too.
+func TestValidatorSet_ValidateBasic_QuorumTypeUnsupported(t *testing.T) {
+	vs, _ := RandValidatorSet(3)
+	require.NoError(t, vs.ValidateBasic())
+
+	unsupported := NewValidatorSet(vs.Validators, vs.ThresholdPublicKey, btcjson.LLMQType(math.MaxUint8),
+		vs.QuorumHash, vs.HasPublicKeys, nil)
+	require.Error(t, unsupported.ValidateBasic(),
+		"a validator set built outside the proto path must still have its quorum type checked")
+}
+
+// TestVerifyCommitInvalidSignatureIsTyped pins WHICH VerifyCommit failure is
+// reported as ErrInvalidCommitSignature. Only a failed threshold-signature check
+// earns that type: it is the one failure no honest node can produce, since a
+// commit is stored only after it verifies. Wrong block ID and wrong quorum hash
+// are reachable by an honest relayer or a forked peer, so they must stay
+// untyped — callers evict peers on the typed error alone.
+func TestVerifyCommitInvalidSignatureIsTyped(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const (
+		chainID = "test_chain_id"
+		height  = int64(3)
+	)
+	blockID := makeBlockIDRandom()
+
+	voteSet, valSet, privVals := randVoteSet(ctx, t, height, 0, tmproto.PrecommitType, 4)
+	commit, err := makeCommit(ctx, blockID, height, 0, voteSet, privVals)
+	require.NoError(t, err)
+	require.NoError(t, valSet.VerifyCommit(chainID, blockID, height, commit),
+		"the generated commit must verify, otherwise the negative cases prove nothing")
+
+	// copyCommit returns a shallow copy with an independent block signature, so a
+	// case can corrupt the signature without disturbing the shared valid commit.
+	copyCommit := func(c *Commit) *Commit {
+		cp := *c
+		cp.ThresholdBlockSignature = append([]byte(nil), c.ThresholdBlockSignature...)
+		return &cp
+	}
+
+	t.Run("bad threshold signature is typed", func(t *testing.T) {
+		bad := copyCommit(commit)
+		// Flip a bit rather than replacing the signature, so the failure is the
+		// verification itself and not a malformed-length rejection.
+		bad.ThresholdBlockSignature[0] ^= 0xFF
+
+		err := valSet.VerifyCommit(chainID, blockID, height, bad)
+		require.Error(t, err)
+		assert.ErrorAs(t, err, &ErrInvalidCommitSignature{},
+			"a failed threshold-signature check must be typed so peers can be evicted")
+	})
+
+	t.Run("wrong block ID is not typed", func(t *testing.T) {
+		err := valSet.VerifyCommit(chainID, makeBlockIDRandom(), height, commit)
+		require.Error(t, err)
+		assert.NotErrorAs(t, err, &ErrInvalidCommitSignature{},
+			"an honest peer relaying a commit for a block we do not have must not be evicted")
+	})
+
+	t.Run("wrong quorum hash is not typed", func(t *testing.T) {
+		bad := copyCommit(commit)
+		bad.QuorumHash = crypto.RandQuorumHash()
+
+		err := valSet.VerifyCommit(chainID, blockID, height, bad)
+		require.Error(t, err)
+		assert.NotErrorAs(t, err, &ErrInvalidCommitSignature{},
+			"a quorum-hash disagreement is a fork/config mismatch, not forgery")
+	})
+
+	t.Run("wrong height is not typed", func(t *testing.T) {
+		err := valSet.VerifyCommit(chainID, blockID, height+1, commit)
+		require.Error(t, err)
+		assert.NotErrorAs(t, err, &ErrInvalidCommitSignature{},
+			"a stale or ahead commit is normal catch-up traffic")
+	})
 }

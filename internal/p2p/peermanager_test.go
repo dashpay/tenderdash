@@ -1404,11 +1404,12 @@ func TestPeerManager_Ready(t *testing.T) {
 	require.Equal(t, p2p.PeerStatusDown, peerManager.Status(a.NodeID))
 
 	// Marking a as ready should transition it to PeerStatusUp and send an update.
-	peerManager.Ready(ctx, a.NodeID, nil)
+	connID := peerManager.Ready(ctx, a.NodeID, nil)
 	require.Equal(t, p2p.PeerStatusUp, peerManager.Status(a.NodeID))
 	require.Equal(t, p2p.PeerUpdate{
 		NodeID: a.NodeID,
 		Status: p2p.PeerStatusUp,
+		ConnID: connID,
 	}, <-sub.Updates())
 
 	// Marking an unconnected peer as ready should do nothing.
@@ -1654,12 +1655,13 @@ func TestPeerManager_Disconnected(t *testing.T) {
 	_, err = peerManager.Add(a)
 	require.NoError(t, err)
 	require.NoError(t, peerManager.Accepted(a.NodeID))
-	peerManager.Ready(ctx, a.NodeID, nil)
+	connID := peerManager.Ready(ctx, a.NodeID, nil)
 	require.Equal(t, p2p.PeerStatusUp, peerManager.Status(a.NodeID))
 	require.NotEmpty(t, sub.Updates())
 	require.Equal(t, p2p.PeerUpdate{
 		NodeID: a.NodeID,
 		Status: p2p.PeerStatusUp,
+		ConnID: connID,
 	}, <-sub.Updates())
 
 	peerManager.Disconnected(ctx, a.NodeID)
@@ -1785,9 +1787,9 @@ func TestPeerManager_Subscribe(t *testing.T) {
 	require.NoError(t, peerManager.Accepted(a.NodeID))
 	require.Empty(t, sub.Updates())
 
-	peerManager.Ready(ctx, a.NodeID, nil)
+	connID := peerManager.Ready(ctx, a.NodeID, nil)
 	require.NotEmpty(t, sub.Updates())
-	require.Equal(t, p2p.PeerUpdate{NodeID: a.NodeID, Status: p2p.PeerStatusUp}, <-sub.Updates())
+	require.Equal(t, p2p.PeerUpdate{NodeID: a.NodeID, Status: p2p.PeerStatusUp, ConnID: connID}, <-sub.Updates())
 
 	peerManager.Disconnected(ctx, a.NodeID)
 	require.NotEmpty(t, sub.Updates())
@@ -1801,9 +1803,9 @@ func TestPeerManager_Subscribe(t *testing.T) {
 	require.NoError(t, peerManager.Dialed(a))
 	require.Empty(t, sub.Updates())
 
-	peerManager.Ready(ctx, a.NodeID, nil)
+	connID = peerManager.Ready(ctx, a.NodeID, nil)
 	require.NotEmpty(t, sub.Updates())
-	require.Equal(t, p2p.PeerUpdate{NodeID: a.NodeID, Status: p2p.PeerStatusUp}, <-sub.Updates())
+	require.Equal(t, p2p.PeerUpdate{NodeID: a.NodeID, Status: p2p.PeerStatusUp, ConnID: connID}, <-sub.Updates())
 
 	peerManager.Errored(a.NodeID, errors.New("foo"))
 	require.Empty(t, sub.Updates())
@@ -1842,9 +1844,9 @@ func TestPeerManager_Subscribe_Close(t *testing.T) {
 	require.NoError(t, peerManager.Accepted(a.NodeID))
 	require.Empty(t, sub.Updates())
 
-	peerManager.Ready(ctx, a.NodeID, nil)
+	connID := peerManager.Ready(ctx, a.NodeID, nil)
 	require.NotEmpty(t, sub.Updates())
-	require.Equal(t, p2p.PeerUpdate{NodeID: a.NodeID, Status: p2p.PeerStatusUp}, <-sub.Updates())
+	require.Equal(t, p2p.PeerUpdate{NodeID: a.NodeID, Status: p2p.PeerStatusUp, ConnID: connID}, <-sub.Updates())
 
 	// Closing the subscription should not send us the disconnected update.
 	cancel()
@@ -1876,9 +1878,9 @@ func TestPeerManager_Subscribe_Broadcast(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, added)
 	require.NoError(t, peerManager.Accepted(a.NodeID))
-	peerManager.Ready(ctx, a.NodeID, nil)
+	connID := peerManager.Ready(ctx, a.NodeID, nil)
 
-	expectUp := p2p.PeerUpdate{NodeID: a.NodeID, Status: p2p.PeerStatusUp}
+	expectUp := p2p.PeerUpdate{NodeID: a.NodeID, Status: p2p.PeerStatusUp, ConnID: connID}
 	require.NotEmpty(t, s1)
 	require.Equal(t, expectUp, <-s1.Updates())
 	require.NotEmpty(t, s2)

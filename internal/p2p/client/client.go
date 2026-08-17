@@ -100,12 +100,39 @@ type (
 		chanIDResolver func(msg proto.Message) p2p.ChannelID
 		// rateLimit represents a rate limiter for the channel; can be nil
 		rateLimit map[p2p.ChannelID]*RateLimit
+		// tombstoneMtx guards tombstones
+		tombstoneMtx sync.Mutex
+		// tombstones lists retired request IDs in the order they were retired.
+		// Every tombstone is given the same lifetime, so that order is also expiry
+		// order and the entry due to expire first is always at the front. Forgetting
+		// them is therefore a pop of the front prefix - one push and one pop per
+		// request, O(1) amortized - rather than a scan of the whole map per request.
+		tombstones []retiredRequest
 	}
 	// OptionFunc is a client optional function, it is used to override the default parameters in a Client
 	OptionFunc func(c *Client)
 	result     struct {
 		Value any
 		Err   error
+	}
+	// tombstone replaces the response channel of a request that timed out. Keeping
+	// the request ID, rather than dropping it, is what lets resolveMessage tell a
+	// late answer to a request we really made from a response quoting an ID we
+	// never issued: the first is ordinary slowness, the second is unsolicited
+	// traffic.
+	//
+	// It carries its own deadline so that resolveMessage can enforce the lifetime
+	// on lookup. Sweeping reclaims memory, but correctness must not wait for it:
+	// an idle client sweeps nothing, and a tombstone that outlives its window
+	// would go on shielding a peer indefinitely.
+	tombstone struct {
+		expiresAt time.Time
+	}
+	// retiredRequest indexes one tombstone by the moment it stops being worth
+	// remembering.
+	retiredRequest struct {
+		id        string
+		expiresAt time.Time
 	}
 )
 
@@ -167,7 +194,7 @@ func (c *Client) GetBlock(ctx context.Context, height int64, peerID types.NodeID
 	if err != nil {
 		return nil, err
 	}
-	return newPromise[*bcproto.BlockResponse](ctx, peerID, reqID, respCh, c), nil
+	return newPromise[*bcproto.BlockResponse](ctx, reqID, respCh, c), nil
 }
 
 // GetChunk requests a chunk from a peer and returns promise.Promise which resolve the result
@@ -184,7 +211,7 @@ func (c *Client) GetChunk(
 	if err != nil {
 		return nil, err
 	}
-	return newPromise[*statesync.ChunkResponse](ctx, peerID, reqID, respCh, c), nil
+	return newPromise[*statesync.ChunkResponse](ctx, reqID, respCh, c), nil
 }
 
 // GetSnapshots requests snapshots from a peer
@@ -208,7 +235,7 @@ func (c *Client) GetParams(
 	if err != nil {
 		return nil, err
 	}
-	return newPromise[*statesync.ParamsResponse](ctx, peerID, reqID, respCh, c), nil
+	return newPromise[*statesync.ParamsResponse](ctx, reqID, respCh, c), nil
 }
 
 // GetLightBlock returns a promise.Promise which resolve the result if response received in time otherwise reject
@@ -223,7 +250,7 @@ func (c *Client) GetLightBlock(
 	if err != nil {
 		return nil, err
 	}
-	return newPromise[*statesync.LightBlockResponse](ctx, peerID, reqID, respCh, c), nil
+	return newPromise[*statesync.LightBlockResponse](ctx, reqID, respCh, c), nil
 }
 
 // GetSyncStatus requests a block synchronization status from all connected peers
@@ -344,18 +371,55 @@ func (c *Client) resolve(ctx context.Context, envelope *p2p.Envelope) error {
 	return c.resolveMessage(ctx, respID, result{Value: envelope.Message})
 }
 
-func (c *Client) resolveMessage(ctx context.Context, respID string, res result) error {
+func (c *Client) resolveMessage(_ctx context.Context, respID string, res result) error {
 	val, ok := c.pending.Load(respID)
 	if !ok {
 		return fmt.Errorf("pending response %s not found", respID)
 	}
-	respCh := val.(chan result)
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case respCh <- res:
+	switch v := val.(type) {
+	case chan result:
+		// The send must never block. Once the buffer holds an answer to this request
+		// the promise takes that one, so anything further is a duplicate; and if the
+		// promise has already settled, nothing will ever drain the buffer at all.
+		// Waiting there would park the consumer goroutine - and with it every message
+		// it carries - for as long as the node runs. A receiver never waits on a
+		// channel whose buffer is non-empty, so a full buffer means nobody is owed
+		// this value and dropping it loses nothing.
+		//
+		// There is deliberately no context arm here. With a default the select cannot
+		// block, so there is nothing left to cancel, and an arm on an already-canceled
+		// context would instead win a coin flip against delivering the response.
+		select {
+		case v <- res:
+		default:
+			c.logger.Debug("discarding a duplicate response", "response_id", respID)
+		}
+		return nil
+	case tombstone:
+		// Expiry is inclusive of the deadline, matching expireTombstones. If the two
+		// disagreed, a response landing exactly on it would be shielded or reported
+		// depending only on which path happened to run first.
+		if !v.expiresAt.After(c.clock.Now()) {
+			// Older than we promise to remember. An answer this late is indistinguishable
+			// from one we never asked for, so it stops being shielded here.
+			break
+		}
+		// We did issue this request, but stopped waiting for it. The peer is late,
+		// which is not an offense, so the response is discarded and no error is
+		// returned - an error here would make iter report the peer, which can evict
+		// it outright and bypass the caller's own failure policy.
+		c.logger.Debug("discarding a response for a timed-out request", "response_id", respID)
+		return nil
+	default:
+		// Only a channel or a tombstone is ever stored, so reaching here means the
+		// map grew a third value type. That is our bug, not the peer's: log it rather
+		// than returning an error, which iter would turn into a PeerError against
+		// whoever happened to answer.
+		c.logger.Error("pending response has an unexpected type",
+			"response_id", respID, "type", fmt.Sprintf("%T", val))
+		return nil
 	}
-	return nil
+	return fmt.Errorf("pending response %s not found", respID)
 }
 
 func (c *Client) sendWithResponse(ctx context.Context, reqID string, peerID types.NodeID, msg proto.Message) (chan result, error) {
@@ -377,18 +441,76 @@ func (c *Client) sendWithResponse(ctx context.Context, reqID string, peerID type
 }
 
 func (c *Client) addPending(reqID string) chan result {
+	// Issuance and retirement are both opportunistic sweep points: they are the
+	// moments the map changes, and sweeping there keeps Client free of a background
+	// goroutine that shutdown would have to join. Neither is guaranteed to run - an
+	// idle client sweeps nothing - so the lifetime itself is enforced at lookup in
+	// resolveMessage, and sweeping only reclaims the memory. What we retain is tied
+	// to the requests we issue; a peer cannot inflate it.
+	c.expireTombstones()
 	respCh := make(chan result, 1)
 	c.pending.Store(reqID, respCh)
 	return respCh
 }
 
-func (c *Client) removePending(reqID string) {
-	val, loaded := c.pending.LoadAndDelete(reqID)
-	if !loaded {
+// retirePending drops a settled request from the pending map.
+//
+// A request that ended without an answer - it timed out, or the caller gave up -
+// leaves a tombstone behind, so a peer that answers afterwards is recognized as
+// late rather than as sending a response we never asked for. Both endings are
+// ours, not the peer's, and reporting a peer for answering a question we stopped
+// waiting on is the very fault this path exists to avoid.
+//
+// An answered request is forgotten immediately. A second response to a request
+// the peer has already answered takes two answers to one question, which is
+// misbehavior and fair to attribute. Keeping those IDs as well would tie what we
+// retain to total throughput - a busy node completing thousands of requests a
+// second would hold every one of their IDs for the whole window - whereas
+// timeouts and cancellations are both capped by how many requests can be
+// outstanding at once, so retention follows concurrency instead.
+//
+// The response channel is deliberately not closed in either case. Its only reader
+// is the promise executor, which has already returned by the time this deferred
+// call runs, so a close would signal nobody - while a resolver that loaded the
+// channel a moment earlier would panic sending into it, on a path with no panic
+// recovery above it. Leaving it open costs nothing, because resolveMessage never
+// blocks on it: a late send either fills the one-slot buffer nobody reads or is
+// dropped, and the channel becomes garbage as soon as it leaves the map.
+func (c *Client) retirePending(reqID string, answered bool) {
+	// Reclaim on retirement as well as on issuance. A node that stops making
+	// requests would otherwise never run a sweep again and would hold its final
+	// window of tombstones for as long as it lives.
+	c.expireTombstones()
+	if answered {
+		c.pending.Delete(reqID)
 		return
 	}
-	respCh := val.(chan result)
-	close(respCh)
+	c.tombstoneMtx.Lock()
+	defer c.tombstoneMtx.Unlock()
+	// Read the clock under the lock so the list stays sorted by expiry: concurrent
+	// retirements would otherwise append in a different order than they timestamped.
+	// Two request timeouts is long enough to still recognize a peer that answers
+	// just after we gave up, and short enough to bound what we hold on to.
+	expiresAt := c.clock.Now().Add(2 * c.reqTimeout)
+	c.pending.Store(reqID, tombstone{expiresAt: expiresAt})
+	c.tombstones = append(c.tombstones, retiredRequest{id: reqID, expiresAt: expiresAt})
+}
+
+// expireTombstones forgets retired request IDs whose lifetime has run out. A
+// response later than that is indistinguishable from one we never asked for, so
+// reporting the peer for it is fair.
+func (c *Client) expireTombstones() {
+	now := c.clock.Now()
+	c.tombstoneMtx.Lock()
+	defer c.tombstoneMtx.Unlock()
+	expired := 0
+	for expired < len(c.tombstones) && !c.tombstones[expired].expiresAt.After(now) {
+		// Compare before deleting so only a tombstone is ever removed, never a live
+		// request that somehow shares the ID.
+		c.pending.CompareAndDelete(c.tombstones[expired].id, tombstone{expiresAt: c.tombstones[expired].expiresAt})
+		expired++
+	}
+	c.tombstones = c.tombstones[expired:]
 }
 
 func (c *Client) timeout() <-chan time.Time {
@@ -397,28 +519,35 @@ func (c *Client) timeout() <-chan time.Time {
 
 func newPromise[T proto.Message](
 	ctx context.Context,
-	peerID types.NodeID,
 	reqID string,
 	respCh chan result,
 	client *Client,
 ) *promise.Promise[T] {
 	return promise.New(func(resolve func(data T), reject func(err error)) {
-		defer client.removePending(reqID)
+		// Every ending except an answer leaves the request ID recognizable for a
+		// while; see retirePending. The flag defaults to the cautious case, so a
+		// branch added here cannot silently start reporting peers.
+		answered := false
+		defer func() { client.retirePending(reqID, answered) }()
 		select {
 		case <-ctx.Done():
 			reject(fmt.Errorf("cannot complete a promise: %w", ctx.Err()))
 			return
 		case res := <-respCh:
+			answered = true
 			if res.Err != nil {
 				reject(res.Err)
 				return
 			}
 			resolve(res.Value.(T))
 		case <-client.timeout():
-			_ = client.Send(ctx, p2p.PeerError{
-				NodeID: peerID,
-				Err:    ErrPeerNotResponded,
-			})
+			// Reject and let the caller decide what a timeout is worth. Reporting
+			// the peer here evicts it on a single slow request, which is a poor
+			// signal: peers answer requests one at a time, so a busy peer times
+			// out long before it is unhealthy, and evicting it also fails every
+			// other request already in flight to it. Callers that want to act on
+			// repeated timeouts can count them, and a genuinely dead connection
+			// is still caught by the transport's ping/pong.
 			reject(ErrPeerNotResponded)
 		}
 	})

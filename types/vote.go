@@ -95,6 +95,10 @@ func VoteFromProto(pv *tmproto.Vote) (*Vote, error) {
 	if err != nil {
 		return nil, err
 	}
+	extensions, err := VoteExtensionsFromProto(pv.VoteExtensions...)
+	if err != nil {
+		return nil, err
+	}
 	return &Vote{
 		Type:               pv.Type,
 		Height:             pv.Height,
@@ -103,7 +107,7 @@ func VoteFromProto(pv *tmproto.Vote) (*Vote, error) {
 		ValidatorProTxHash: pv.ValidatorProTxHash,
 		ValidatorIndex:     pv.ValidatorIndex,
 		BlockSignature:     pv.BlockSignature,
-		VoteExtensions:     VoteExtensionsFromProto(pv.VoteExtensions...),
+		VoteExtensions:     extensions,
 	}, nil
 }
 
@@ -182,16 +186,64 @@ func (vote *Vote) Verify(
 	pubKey crypto.PubKey,
 	proTxHash ProTxHash,
 ) error {
-	quorumSignData, err := MakeQuorumSigns(chainID, quorumType, quorumHash, vote.ToProto())
+	return vote.verify(chainID, quorumType, quorumHash, pubKey, proTxHash, nil)
+}
+
+// VerifyWithBudget verifies a vote after acquiring permits immediately before
+// each signature-verification stage.
+func (vote *Vote) VerifyWithBudget(
+	chainID string,
+	quorumType btcjson.LLMQType,
+	quorumHash crypto.QuorumHash,
+	pubKey crypto.PubKey,
+	proTxHash ProTxHash,
+	budget VerificationBudget,
+) error {
+	return vote.verify(chainID, quorumType, quorumHash, pubKey, proTxHash, budget)
+}
+
+func (vote *Vote) verify(
+	chainID string,
+	quorumType btcjson.LLMQType,
+	quorumHash crypto.QuorumHash,
+	pubKey crypto.PubKey,
+	proTxHash ProTxHash,
+	budget VerificationBudget,
+) error {
+	_, _, err := vote.verifyReportingSigns(chainID, quorumType, quorumHash, pubKey, proTxHash, budget)
+	return err
+}
+
+// verifyReportingSigns verifies the vote and, on success, reports the digests
+// that were checked and the signatures they were checked against. A caller that
+// has to establish later that a vote still holds the content this verification
+// covered can compare those rather than repeat the verification.
+func (vote *Vote) verifyReportingSigns(
+	chainID string,
+	quorumType btcjson.LLMQType,
+	quorumHash crypto.QuorumHash,
+	pubKey crypto.PubKey,
+	proTxHash ProTxHash,
+	budget VerificationBudget,
+) (QuorumSignData, QuorumSigns, error) {
+	quorumSignData, err := makeVerifyQuorumSigns(chainID, quorumType, quorumHash, vote.ToProto())
 	if err != nil {
-		return err
+		return QuorumSignData{}, QuorumSigns{}, err
 	}
 	err = vote.verifyBasic(proTxHash, pubKey)
 	if err != nil {
-		return err
+		return QuorumSignData{}, QuorumSigns{}, err
 	}
-
-	return quorumSignData.Verify(pubKey, vote.makeQuorumSigns())
+	signs := vote.makeQuorumSigns()
+	if budget != nil {
+		err = quorumSignData.VerifyWithBudget(pubKey, signs, budget)
+	} else {
+		err = quorumSignData.Verify(pubKey, signs)
+	}
+	if err != nil {
+		return QuorumSignData{}, QuorumSigns{}, err
+	}
+	return quorumSignData, signs, nil
 }
 
 func (vote *Vote) verifyBasic(proTxHash ProTxHash, pubKey crypto.PubKey) error {
@@ -220,12 +272,66 @@ func (vote *Vote) VerifyExtensionSign(chainID string, pubKey crypto.PubKey, quor
 	if vote.Type != tmproto.PrecommitType || vote.BlockID.IsNil() {
 		return nil
 	}
-	quorumSignData, err := MakeQuorumSigns(chainID, quorumType, quorumHash, vote.ToProto())
+	quorumSignData, err := makeVerifyQuorumSigns(chainID, quorumType, quorumHash, vote.ToProto())
 	if err != nil {
 		return err
 	}
 
 	return quorumSignData.VerifyVoteExtensions(pubKey, vote.makeQuorumSigns())
+}
+
+// VerifyBlockAndExtensionSigns checks the block signature and, only if it is
+// valid, the vote-extension signatures.
+//
+// The order is security-relevant, not cosmetic. Extension verification costs one
+// BLS pairing per threshold-recoverable extension, so checking extensions first
+// lets a peer that cannot produce a valid block signature still force a pairing
+// for every extension before being rejected. Authenticating the one block
+// signature first rejects such a vote for the cost of a single pairing.
+//
+// The set of votes this accepts is identical to verifying both unconditionally;
+// only the work performed before rejecting differs. Like VerifyExtensionSign it
+// is a no-op for anything that is not a precommit for a non-nil block.
+func (vote *Vote) VerifyBlockAndExtensionSigns(
+	chainID string,
+	pubKey crypto.PubKey,
+	quorumType btcjson.LLMQType,
+	quorumHash crypto.QuorumHash,
+) error {
+	return vote.verifyBlockAndExtensionSigns(chainID, pubKey, quorumType, quorumHash, nil)
+}
+
+// VerifyBlockAndExtensionSignsWithBudget is the budgeted form of
+// VerifyBlockAndExtensionSigns.
+func (vote *Vote) VerifyBlockAndExtensionSignsWithBudget(
+	chainID string,
+	pubKey crypto.PubKey,
+	quorumType btcjson.LLMQType,
+	quorumHash crypto.QuorumHash,
+	budget VerificationBudget,
+) error {
+	return vote.verifyBlockAndExtensionSigns(chainID, pubKey, quorumType, quorumHash, budget)
+}
+
+func (vote *Vote) verifyBlockAndExtensionSigns(
+	chainID string,
+	pubKey crypto.PubKey,
+	quorumType btcjson.LLMQType,
+	quorumHash crypto.QuorumHash,
+	budget VerificationBudget,
+) error {
+	if vote.Type != tmproto.PrecommitType || vote.BlockID.IsNil() {
+		return nil
+	}
+	quorumSignData, err := makeVerifyQuorumSigns(chainID, quorumType, quorumHash, vote.ToProto())
+	if err != nil {
+		return err
+	}
+	signs := vote.makeQuorumSigns()
+	if budget != nil {
+		return quorumSignData.VerifyWithBudget(pubKey, signs, budget)
+	}
+	return quorumSignData.Verify(pubKey, signs)
 }
 
 func (vote *Vote) makeQuorumSigns() QuorumSigns {

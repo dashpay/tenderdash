@@ -408,10 +408,15 @@ func (s *StateData) updateLockedBlock() {
 	s.LockedBlockParts = s.ProposalBlockParts
 }
 
-func (s *StateData) verifyCommit(commit *types.Commit, peerID types.NodeID, ignoreProposalBlock bool) (verified bool, err error) {
+func (s *StateData) verifyCommit(
+	commit *types.Commit,
+	peerID types.NodeID,
+	ignoreProposalBlock bool,
+	budget types.VerificationBudget,
+) (verified bool, err error) {
 	// Lets first do some basic commit validation before more complicated commit verification
 	if err := commit.ValidateBasic(); err != nil {
-		return false, fmt.Errorf("error validating commit: %v", err)
+		return false, fmt.Errorf("error validating commit: %w", err)
 	}
 
 	rs := s.RoundState
@@ -454,7 +459,7 @@ func (s *StateData) verifyCommit(commit *types.Commit, peerID types.NodeID, igno
 
 		// We need to verify that it was properly signed
 		// This generally proves that the commit is correct
-		if err := s.Validators.VerifyCommit(s.state.ChainID, commit.BlockID, s.Height, commit); err != nil {
+		if err := s.verifyCommitSignatures(commit.BlockID, commit, budget); err != nil {
 			return false, fmt.Errorf("error verifying commit: %w", err)
 		}
 
@@ -476,11 +481,22 @@ func (s *StateData) verifyCommit(commit *types.Commit, peerID types.NodeID, igno
 	}
 
 	// Lets verify that the threshold signature matches the current validator set
-	if err := s.Validators.VerifyCommit(s.state.ChainID, rs.Proposal.BlockID, s.Height, commit); err != nil {
+	if err := s.verifyCommitSignatures(rs.Proposal.BlockID, commit, budget); err != nil {
 		return false, fmt.Errorf("error verifying commit: %w", err)
 	}
 
 	return true, nil
+}
+
+func (s *StateData) verifyCommitSignatures(
+	blockID types.BlockID,
+	commit *types.Commit,
+	budget types.VerificationBudget,
+) error {
+	if budget != nil {
+		return s.Validators.VerifyCommitWithBudget(s.state.ChainID, blockID, s.Height, commit, budget)
+	}
+	return s.Validators.VerifyCommit(s.state.ChainID, blockID, s.Height, commit)
 }
 
 func (s *StateData) isLockedBlockEqual(blockID types.BlockID) bool {

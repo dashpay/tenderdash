@@ -20,7 +20,7 @@ import (
 
 var stamp = time.Date(2019, 10, 13, 16, 14, 44, 0, time.UTC)
 
-func exampleVote() *types.Vote {
+func exampleVote(t *testing.T) *types.Vote {
 
 	ts := uint64(time.Date(2022, 3, 4, 5, 6, 7, 8, time.UTC).UnixMilli())
 
@@ -44,7 +44,7 @@ func exampleVote() *types.Vote {
 		},
 		ValidatorProTxHash: crypto.ProTxHashFromSeedBytes([]byte("validator_pro_tx_hash")),
 		ValidatorIndex:     56789,
-		VoteExtensions: types.VoteExtensionsFromProto(&tmproto.VoteExtension{
+		VoteExtensions: types.MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
 			Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
 			Extension: []byte("extension"),
 		}),
@@ -76,7 +76,7 @@ func TestPrivvalVectors(t *testing.T) {
 	require.NoError(t, err)
 
 	// Generate a simple vote
-	vote := exampleVote()
+	vote := exampleVote(t)
 	votepb := vote.ToProto()
 
 	// Generate a simple proposal

@@ -120,19 +120,227 @@ func (suite *ChannelTestSuite) TestGetBlockTimeout() {
 		On("Send", mock.Anything, mock.MatchedBy(envelopeArg)).
 		Once().
 		Return(nil)
-	suite.p2pChannel.
-		On("SendError", mock.Anything, mock.Anything).
-		Once().
-		Return(nil)
 	p, err := suite.client.GetBlock(ctx, suite.height, suite.peerID)
 	// need to wait for the goroutine is started
 	time.Sleep(time.Millisecond)
 	suite.fakeClock.Advance(peerTimeout)
 	suite.Require().NoError(err)
 	_, err = p.Await()
+	// A timeout rejects the promise and leaves the peer alone; deciding whether
+	// the peer is at fault belongs to the caller. The channel mock has no
+	// SendError expectation, so reporting the peer here would fail this test.
 	tmrequire.Error(suite.T(), ErrPeerNotResponded.Error(), err)
 	err = suite.client.resolve(ctx, newEnvelope(reqID, suite.peerID, suite.response))
 	tmrequire.Error(suite.T(), "cannot resolve a result", err)
+}
+
+// A resolver loads a pending channel from the map and may be descheduled before
+// it sends. If retiring the request closed that channel, the resolver's send
+// would panic and take the whole process down, because the resolve path runs
+// outside the consumer's panic recovery. This reproduces that window with the
+// deschedule made explicit.
+func (suite *ChannelTestSuite) TestRetirePendingKeepsChannelSendable() {
+	for _, answered := range []bool{false, true} {
+		reqID := uuid.NewString()
+		respCh := suite.client.addPending(reqID)
+		suite.client.retirePending(reqID, answered)
+		suite.Require().NotPanics(func() {
+			respCh <- result{Value: suite.response}
+		}, "answered=%v", answered)
+	}
+}
+
+// A peer that answers a request we have already given up on is slow, not
+// dishonest. resolve must report no error for it, because iter turns any error
+// from resolve into a PeerError that can evict the peer outright - bypassing the
+// caller's own failure-counting policy.
+func (suite *ChannelTestSuite) TestLateResponseAfterTimeoutIsNotAnError() {
+	ctx := context.Background()
+	var reqID string
+	envelopeArg := func(envelope p2p.Envelope) bool {
+		var ok bool
+		reqID, ok = envelope.Attributes[RequestIDAttribute]
+		return ok
+	}
+	suite.p2pChannel.
+		On("Send", mock.Anything, mock.MatchedBy(envelopeArg)).
+		Once().
+		Return(nil)
+	p, err := suite.client.GetBlock(ctx, suite.height, suite.peerID)
+	suite.Require().NoError(err)
+	// wait for the promise goroutine to arm its timeout before moving the clock
+	suite.Require().NoError(suite.fakeClock.BlockUntilContext(ctx, 1))
+	suite.fakeClock.Advance(peerTimeout)
+	_, err = p.Await()
+	tmrequire.Error(suite.T(), ErrPeerNotResponded.Error(), err)
+
+	envelope := newEnvelope(uuid.NewString(), suite.peerID, suite.response)
+	envelope.AddAttribute(ResponseIDAttribute, reqID)
+	suite.Require().NoError(suite.client.resolve(ctx, envelope))
+}
+
+// Silencing late responses must not silence fabricated ones: a response quoting
+// an ID we never issued is unsolicited traffic and stays attributable.
+func (suite *ChannelTestSuite) TestUnsolicitedResponseIDIsAnError() {
+	ctx := context.Background()
+	neverIssued := uuid.NewString()
+	envelope := newEnvelope(uuid.NewString(), suite.peerID, suite.response)
+	envelope.AddAttribute(ResponseIDAttribute, neverIssued)
+	err := suite.client.resolve(ctx, envelope)
+	suite.Require().Error(err)
+	suite.Require().Contains(err.Error(), neverIssued)
+}
+
+// Retention has to track how many requests are in flight, not how many have ever
+// been issued. Requests that succeed or are abandoned vastly outnumber those that
+// time out, so remembering them too would tie memory to throughput: a node doing
+// thousands of requests a second would hold every ID for the whole window.
+func (suite *ChannelTestSuite) TestRetentionTracksInFlightNotThroughput() {
+	ctx := context.Background()
+	const requests = 200
+	var reqID string
+	envelopeArg := func(envelope p2p.Envelope) bool {
+		var ok bool
+		reqID, ok = envelope.Attributes[RequestIDAttribute]
+		return ok
+	}
+	suite.p2pChannel.
+		On("Send", mock.Anything, mock.MatchedBy(envelopeArg)).
+		Times(requests).
+		Return(nil)
+	// Drive real promises to completion rather than calling retirePending directly,
+	// so this pins how newPromise classifies an outcome, not just what the map does
+	// once told.
+	for i := 0; i < requests; i++ {
+		p, err := suite.client.GetBlock(ctx, suite.height, suite.peerID)
+		suite.Require().NoError(err)
+		envelope := newEnvelope(uuid.NewString(), suite.peerID, suite.response)
+		envelope.AddAttribute(ResponseIDAttribute, reqID)
+		suite.Require().NoError(suite.client.resolve(ctx, envelope))
+		_, err = p.Await()
+		suite.Require().NoError(err)
+	}
+	suite.Require().Equal(0, suite.pendingLen(), "answered requests must leave nothing behind")
+	suite.Require().Empty(suite.client.tombstones)
+}
+
+// Canceling is our decision, not the peer's. A peer that answers a request we
+// abandoned behaved correctly and must not be reported for it - the same reason
+// a timed-out request is remembered.
+func (suite *ChannelTestSuite) TestCancelledRequestDoesNotReportALateResponse() {
+	ctx, cancel := context.WithCancel(context.Background())
+	var reqID string
+	envelopeArg := func(envelope p2p.Envelope) bool {
+		var ok bool
+		reqID, ok = envelope.Attributes[RequestIDAttribute]
+		return ok
+	}
+	suite.p2pChannel.
+		On("Send", mock.Anything, mock.MatchedBy(envelopeArg)).
+		Once().
+		Return(nil)
+	p, err := suite.client.GetBlock(ctx, suite.height, suite.peerID)
+	suite.Require().NoError(err)
+	cancel()
+	_, err = p.Await()
+	suite.Require().Error(err)
+
+	envelope := newEnvelope(uuid.NewString(), suite.peerID, suite.response)
+	envelope.AddAttribute(ResponseIDAttribute, reqID)
+	// No SendError is expected on the channel mock, so reporting the peer fails here.
+	suite.Require().NoError(suite.client.resolve(context.Background(), envelope))
+	suite.Require().Equal(1, suite.pendingLen(), "a canceled request must stay recognizable")
+}
+
+// A response landing exactly on the deadline must be judged the same way by both
+// the lookup and the sweep, or it is shielded or reported purely on which ran
+// first.
+func (suite *ChannelTestSuite) TestTombstoneLifetimeBoundaryIsInclusive() {
+	ctx := context.Background()
+	reqID := uuid.NewString()
+	suite.client.addPending(reqID)
+	suite.client.retirePending(reqID, false)
+
+	suite.fakeClock.Advance(2*peerTimeout - time.Nanosecond)
+	suite.Require().NoError(suite.client.resolveMessage(ctx, reqID, result{Value: suite.response}),
+		"one tick before the deadline the peer is still covered")
+
+	suite.fakeClock.Advance(time.Nanosecond)
+	suite.Require().Error(suite.client.resolveMessage(ctx, reqID, result{Value: suite.response}),
+		"at the deadline the lookup must stop covering the peer")
+	suite.client.expireTombstones()
+	suite.Require().Equal(0, suite.pendingLen(), "the sweep must expire at the same instant")
+}
+
+// The lifetime must hold on a client that has gone quiet. Sweeping is driven by
+// activity, so a node that stops issuing requests runs no sweep at all; if the
+// window were enforced only by sweeping, the last timed-out IDs would shield
+// their peers forever. Nothing here issues a request after the timeout.
+func (suite *ChannelTestSuite) TestTimedOutRequestStopsShieldingPeerWhenIdle() {
+	ctx := context.Background()
+	reqID := uuid.NewString()
+	suite.client.addPending(reqID)
+	suite.client.retirePending(reqID, false)
+
+	// Inside the window the peer is merely late, and is not reported.
+	suite.Require().NoError(suite.client.resolveMessage(ctx, reqID, result{Value: suite.response}))
+
+	suite.fakeClock.Advance(2*peerTimeout + time.Second)
+	err := suite.client.resolveMessage(ctx, reqID, result{Value: suite.response})
+	suite.Require().Error(err)
+	suite.Require().Contains(err.Error(), reqID)
+}
+
+// Retirement must reclaim as well, so the memory a burst leaves behind does not
+// wait on a request that may never come.
+func (suite *ChannelTestSuite) TestRetirementReclaimsExpiredTombstones() {
+	const requests = 100
+	for i := 0; i < requests; i++ {
+		reqID := uuid.NewString()
+		suite.client.addPending(reqID)
+		suite.client.retirePending(reqID, false)
+	}
+	suite.Require().Equal(requests, suite.pendingLen())
+
+	suite.fakeClock.Advance(2*peerTimeout + time.Second)
+	// A retirement alone must clear the lot. addPending is deliberately not called
+	// here - it sweeps too, and would mask whether the retirement path does.
+	suite.client.retirePending(uuid.NewString(), true)
+	suite.Require().Equal(0, suite.pendingLen())
+	suite.Require().Empty(suite.client.tombstones)
+}
+
+// A second response for a request whose promise has already settled must not
+// park the resolver. The one-slot buffer still holds the first response and
+// nothing will ever drain it, so a blocking send never returns: the consumer
+// goroutine that carries every blocksync message would stop dead until the node
+// shuts down.
+func (suite *ChannelTestSuite) TestDuplicateResponseDoesNotBlockResolver() {
+	ctx := context.Background()
+	reqID := uuid.NewString()
+	respCh := suite.client.addPending(reqID)
+	// Fill the buffer. With no promise waiting, this response is never read.
+	suite.Require().NoError(suite.client.resolveMessage(ctx, reqID, result{Value: suite.response}))
+
+	done := make(chan error, 1)
+	go func() {
+		done <- suite.client.resolveMessage(ctx, reqID, result{Value: suite.response})
+	}()
+	select {
+	case err := <-done:
+		suite.Require().NoError(err)
+	case <-time.After(2 * time.Second):
+		suite.Require().Fail("resolveMessage blocked on a response buffer nobody reads")
+	}
+	// The first response must survive. Dropping both would also not block, and
+	// would lose the answer a waiting promise is about to read.
+	select {
+	case res := <-respCh:
+		suite.Require().Equal(result{Value: suite.response}, res)
+	default:
+		suite.Require().Fail("the first response was dropped along with the duplicate")
+	}
+	suite.Require().Empty(respCh)
 }
 
 func (suite *ChannelTestSuite) TestGetSyncStatus() {
@@ -328,4 +536,13 @@ func newEnvelope(reqID string, peerID types.NodeID, resp *bcproto.BlockResponse)
 		From:    peerID,
 		Message: resp,
 	}
+}
+
+func (suite *ChannelTestSuite) pendingLen() int {
+	n := 0
+	suite.client.pending.Range(func(_, _ any) bool {
+		n++
+		return true
+	})
+	return n
 }

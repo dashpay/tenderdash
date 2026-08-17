@@ -27,8 +27,6 @@ The genesis file is the starting point of a chain. An application will populate 
         - `propose_delta`: How much the propose timeout increase with each round.
         - `vote`: How long the consensus engine will wait after receiving +2/3 votes in a round.
         - `vote_delta`: How much the vote timeout increases with each round.
-        - `commit`: How long the consensus engine will wait after receiving +2/3 precommits before beginning the next height.
-        - `bypass_commit_timeout`: Configures if the consensus engine will wait for the full commit timeout before proceeding to the next height. If this field is set to true, the conesnsus engine will proceed to the next height as soon as the node has gathered votes from all of the validators on the network.
 - `validators`
     - This is an array of validators. This validator set is used as the starting validator set of the chain. This field can be empty, if the application sets the validator set in `InitChain`.
 - `app_hash`: The applications state root hash. This field does not need to be populated at the start of the chain, the application may provide the needed information via `Initchain`.

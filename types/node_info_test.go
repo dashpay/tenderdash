@@ -3,6 +3,7 @@ package types
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -51,6 +52,14 @@ func TestNodeInfoValidate(t *testing.T) {
 
 		{"Invalid NetAddress", func(ni *NodeInfo) { ni.ListenAddr = "not-an-address" }, true},
 		{"Good NetAddress", func(ni *NodeInfo) { ni.ListenAddr = "0.0.0.0:26656" }, false},
+		{"Empty host NetAddress", func(ni *NodeInfo) { ni.ListenAddr = ":26656" }, true},
+		{"Invalid hostname NetAddress", func(ni *NodeInfo) { ni.ListenAddr = "not a hostname:26656" }, true},
+		{"Missing port NetAddress", func(ni *NodeInfo) { ni.ListenAddr = "127.0.0.1" }, true},
+		{"Port out of range NetAddress", func(ni *NodeInfo) { ni.ListenAddr = "127.0.0.1:70000" }, true},
+
+		// The node ID check must survive the listen address no longer being validated
+		// through ParseAddressString.
+		{"Malformed NodeID", func(ni *NodeInfo) { ni.NodeID = "not-a-hex-node-id" }, true},
 
 		{"Non-ASCII Version", func(ni *NodeInfo) { ni.Version = nonASCII }, true},
 		{"Empty tab Version", func(ni *NodeInfo) { ni.Version = emptyTab }, true},
@@ -246,6 +255,11 @@ func TestParseAddressString(t *testing.T) {
 		{"node id delimiter 1", "@", "", false},
 		{"node id delimiter 2", " @", "", false},
 		{"node id delimiter 3", " @ ", "", false},
+
+		// ParseAddressString must apply the same host syntax rules as
+		// validateAddressString, which is the other consumer of splitAddressString.
+		{"invalid hostname", "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef@not a hostname:8080", "", false},
+		{"hostname with underscore", "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef@not_a_hostname:8080", "", false},
 	}
 
 	for _, tc := range testCases {
@@ -261,4 +275,27 @@ func TestParseAddressString(t *testing.T) {
 			}
 		})
 	}
+}
+
+// NodeInfo.ListenAddr arrives from an unauthenticated peer during the handshake,
+// and NodeInfo.Validate runs after conn.Handshake returns, so HandshakeTimeout does
+// not cover it. Validating the host must therefore never perform a DNS lookup.
+func TestNodeInfoValidate_ListenAddrHostnameIsNotResolved(t *testing.T) {
+	ni := testNodeInfo(t, testNodeID(), "host")
+	// A syntactically valid name under the reserved .invalid TLD. If validation
+	// still resolves, this blocks on DNS instead of returning promptly.
+	ni.ListenAddr = "some-node.invalid:26656"
+
+	start := time.Now()
+	err := ni.Validate()
+	require.NoError(t, err, "a syntactically valid hostname must be accepted without resolution")
+	require.Less(t, time.Since(start), time.Second, "validating a listen address must not perform a DNS lookup")
+}
+
+// ParseAddressString returned (nil, nil) for an address with an empty host, so
+// every caller that dereferenced the result crashed instead of seeing an error.
+func TestParseAddressString_EmptyHostReturnsError(t *testing.T) {
+	na, err := ParseAddressString("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef@:26656")
+	require.Error(t, err, "an empty host must be an error, not a nil NetAddress with a nil error")
+	require.Nil(t, na)
 }

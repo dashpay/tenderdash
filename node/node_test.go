@@ -965,3 +965,13 @@ func loadStatefromGenesis(_ctx context.Context, t *testing.T) sm.State {
 
 	return state
 }
+
+func TestGetRouterConfigWiresMaxIncomingConnectionAttempts(t *testing.T) {
+	cfg := config.TestConfig()
+	cfg.P2P.MaxIncomingConnectionAttempts = 7
+
+	opts, err := getRouterConfig(cfg, nil)
+	require.NoError(t, err)
+	require.Equal(t, uint(7), opts.MaxIncomingConnectionAttempts,
+		"config max-incoming-connection-attempts must flow into RouterOptions")
+}

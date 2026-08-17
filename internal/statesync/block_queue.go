@@ -35,6 +35,11 @@ type blockQueue struct {
 	retries    int
 	maxRetries int
 
+	// terminalErr records a definitive failure reason (e.g. an unverifiable
+	// commit that exhausted every usable peer) so error() can surface it in
+	// preference to the generic retry-budget message.
+	terminalErr error
+
 	// store inbound blocks and serve them to a verifying thread via a channel
 	pending  map[int64]lightBlockResponse
 	verifyCh chan lightBlockResponse
@@ -174,10 +179,8 @@ func (q *blockQueue) retry(height int64) {
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
 
-	select {
-	case <-q.doneCh:
+	if q._closed() {
 		return
-	default:
 	}
 
 	// we don't need to retry if this is below the terminal height
@@ -191,12 +194,64 @@ func (q *blockQueue) retry(height int64) {
 		return
 	}
 
+	q._requeue(height)
+}
+
+// requeue schedules a height to be fetched again without charging the retry
+// budget. The budget bounds transient network failure; work attributed to a peer
+// that has been evicted for supplying an unverifiable commit must not consume the
+// share that belongs to honest peers.
+func (q *blockQueue) requeue(height int64) {
+	q.mtx.Lock()
+	defer q.mtx.Unlock()
+
+	if q._closed() {
+		return
+	}
+	q._requeue(height)
+}
+
+// discardPeer drops every fetched-but-unverified response supplied by peer and
+// schedules those heights to be fetched again. Fetching runs ahead of the
+// serialized verify loop, so by the time one forged commit is caught the same
+// peer may already have several more queued behind it.
+func (q *blockQueue) discardPeer(peer types.NodeID) {
+	q.mtx.Lock()
+	defer q.mtx.Unlock()
+
+	if q._closed() {
+		return
+	}
+	for height, resp := range q.pending {
+		if resp.peer == peer {
+			delete(q.pending, height)
+			q._requeue(height)
+		}
+	}
+}
+
+// CONTRACT: must have a write lock.
+func (q *blockQueue) _requeue(height int64) {
+	if q.terminal != nil && height < q.terminal.Height {
+		return
+	}
 	if len(q.waiters) > 0 {
 		q.waiters[0] <- height
 		close(q.waiters[0])
 		q.waiters = q.waiters[1:]
 	} else {
 		heap.Push(q.failed, height)
+	}
+}
+
+// _closed reports whether the queue has already terminated.
+// CONTRACT: must have a write lock.
+func (q *blockQueue) _closed() bool {
+	select {
+	case <-q.doneCh:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -211,9 +266,32 @@ func (q *blockQueue) success() {
 	q.verifyHeight--
 }
 
+// fail terminates the queue with a definitive error. It is used when backfill
+// can make no further progress - e.g. every peer able to serve a height has been
+// quarantined for supplying an unverifiable commit - so the run ends promptly
+// with the underlying reason instead of blocking until the context is canceled.
+func (q *blockQueue) fail(err error) {
+	q.mtx.Lock()
+	defer q.mtx.Unlock()
+
+	select {
+	case <-q.doneCh:
+		return
+	default:
+	}
+
+	if q.terminalErr == nil {
+		q.terminalErr = err
+	}
+	q._closeChannels()
+}
+
 func (q *blockQueue) error() error {
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
+	if q.terminalErr != nil {
+		return q.terminalErr
+	}
 	if q.retries >= q.maxRetries {
 		return fmt.Errorf("max retries to fetch valid blocks exceeded (%d); "+
 			"target height: %d, height reached: %d", q.maxRetries, q.stopHeight, q.verifyHeight)
@@ -228,23 +306,16 @@ func (q *blockQueue) close() {
 	q._closeChannels()
 }
 
+// Termination is idempotent: retry, success, fail and close all reach here, from
+// the verify loop and from fetcher goroutines, so a second call must be a no-op
+// rather than a close-of-closed-channel panic. Waiters and the verify channel are
+// left alone; every consumer of theirs selects on done() as well.
 // CONTRACT: must have a write lock. Use close instead
 func (q *blockQueue) _closeChannels() {
-	close(q.doneCh)
-
-	// wait for the channel to be drained
-	select {
-	case <-q.doneCh:
+	if q._closed() {
 		return
-	default:
 	}
-
-	for _, ch := range q.waiters {
-		close(ch)
-	}
-	if q.verifyCh != nil {
-		close(q.verifyCh)
-	}
+	close(q.doneCh)
 }
 
 // A max-heap of ints.

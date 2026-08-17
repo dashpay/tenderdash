@@ -36,7 +36,7 @@ func TestBlock_Header(t *testing.T) {
 			}
 			// the first blocks after state sync come from the backfill process
 			// and are therefore not complete
-			if node.StateSync != e2e.StateSyncDisabled && block.Header.Height <= first+e2e.EvidenceAgeHeight+1 {
+			if node.StateSync != e2e.StateSyncDisabled && block.Height <= first+node.Testnet.EvidenceAgeHeight+1 {
 				continue
 			}
 			if block.Header.Height > last {
@@ -89,7 +89,7 @@ func TestBlock_Range(t *testing.T) {
 		}
 
 		for h := first; h <= last; h++ {
-			if node.StateSync != e2e.StateSyncDisabled && h <= first+e2e.EvidenceAgeHeight+1 {
+			if node.StateSync != e2e.StateSyncDisabled && h <= first+node.Testnet.EvidenceAgeHeight+1 {
 				continue
 			}
 			resp, err := client.Block(ctx, &(h))

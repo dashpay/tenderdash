@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -1087,6 +1088,14 @@ func (cfg *StateSyncConfig) ValidateBasic() error {
 //-----------------------------------------------------------------------------
 // ConsensusConfig
 
+// MinVerificationRateLimit is the smallest usable non-zero VerificationRateLimit.
+// The most expensive message the protocol permits carries the maximum vote
+// extensions, costing one verification for its block signature and one for each
+// extension; a budget that cannot refill that much work within a second leaves
+// such a message waiting seconds to minutes, which stalls the vote path rather
+// than shedding load. 0 still disables the limit entirely.
+const MinVerificationRateLimit = 1 + types.MaxVoteExtensions
+
 // ConsensusConfig defines the configuration for the Tendermint consensus service,
 // including timeouts and details about the WAL and the block structure.
 type ConsensusConfig struct {
@@ -1108,14 +1117,55 @@ type ConsensusConfig struct {
 	PeerGossipSleepDuration     time.Duration `mapstructure:"peer-gossip-sleep-duration"`
 	PeerQueryMaj23SleepDuration time.Duration `mapstructure:"peer-query-maj23-sleep-duration"`
 
+	// PeerVoteRateLimit bounds the per-second token budget a single peer may
+	// spend on the vote channel (votes and commits). Tokens are charged by
+	// verification work, not message count: a prevote costs one, while a
+	// precommit carrying the maximum vote extensions costs 33, because that is
+	// how many signature verifications it forces. Messages over the budget are
+	// dropped before verification. It is a per-peer allowance and says nothing
+	// about what the peers can force between them; the node-wide bound is
+	// VerificationRateLimit. 0 disables the limit.
+	PeerVoteRateLimit float64 `mapstructure:"peer-vote-rate-limit"`
+
+	// VerificationRateLimit bounds BLS signature verification work for peer
+	// Vote, Commit and Proposal messages, in verification operations per second.
+	// Block signatures cost one token, and vote extensions cost one token each.
+	// A message waits for the budget to cover its whole cost before it is
+	// verified, so the limit must be at least MinVerificationRateLimit. 0
+	// disables the limit.
+	VerificationRateLimit float64 `mapstructure:"verification-rate-limit"`
+
+	// PeerDataRateLimit bounds the per-second token budget a single peer may
+	// spend on the data channel (proposals and block parts). Tokens are charged
+	// by verification cost, not message count: a proposal costs
+	// proposalTokenCost tokens because it forces a BLS verification, while a
+	// block part costs one. Block-part gossip is therefore left generous
+	// headroom while what one peer can spend on proposals stays low. Like the
+	// vote channel's, this is a per-peer allowance; what the peers can force
+	// between them is bounded by VerificationRateLimit, which proposals are also
+	// charged against. 0 disables the limit.
+	PeerDataRateLimit float64 `mapstructure:"peer-data-rate-limit"`
+
 	DoubleSignCheckHeight int64 `mapstructure:"double-sign-check-height"`
 
 	DeprecatedQuorumType btcjson.LLMQType `mapstructure:"quorum-type"`
 
-	// TODO: The following fields are all temporary overrides that should exist only
-	// for the duration of the v0.36 release. The below fields should be completely
-	// removed in the v0.37 release of Tendermint.
-	// See: https://github.com/tendermint/tendermint/issues/8188
+	// These two overrode the Commit and BypassCommitTimeout consensus
+	// parameters, which no longer exist. They are decoded only so that an
+	// operator who still sets them is told they stopped working, instead of
+	// having the value silently ignored.
+	//
+	// Each is reported on the same condition that used to make it take effect:
+	// a non-zero duration, and a bypass value that was written at all. So a
+	// commit-timeout override of "0s" is not reported, matching the fact that
+	// it never overrode anything either.
+	DeprecatedUnsafeCommitTimeoutOverride       time.Duration `mapstructure:"unsafe-commit-timeout-override"`
+	DeprecatedUnsafeBypassCommitTimeoutOverride *bool         `mapstructure:"unsafe-bypass-commit-timeout-override"`
+
+	// The following fields let a single node override the Timeout consensus
+	// parameters it received. They exist as an escape hatch for timing trouble,
+	// and make that node disagree with the rest of the network about timing,
+	// so they are not intended for normal operation.
 
 	// UnsafeProposeTimeoutOverride provides an unsafe override of the Propose
 	// timeout consensus parameter. It configures how long the consensus engine
@@ -1133,17 +1183,6 @@ type ConsensusConfig struct {
 	// timeout consensus parameter. It configures how much the vote timeout
 	// increases with each round.
 	UnsafeVoteTimeoutDeltaOverride time.Duration `mapstructure:"unsafe-vote-timeout-delta-override"`
-	// UnsafeCommitTimeoutOverride provides an unsafe override of the Commit timeout
-	// consensus parameter. It configures how long the consensus engine will wait
-	// after receiving +2/3 precommits before beginning the next height.
-	UnsafeCommitTimeoutOverride time.Duration `mapstructure:"unsafe-commit-timeout-override"`
-
-	// UnsafeBypassCommitTimeoutOverride provides an unsafe override of the
-	// BypassCommitTimeout consensus parameter. It configures if the consensus
-	// engine will wait for the full Commit timeout before proceeding to the next height.
-	// If it is set to true, the consensus engine will proceed to the next height
-	// as soon as the node has gathered votes from all of the validators on the network.
-	UnsafeBypassCommitTimeoutOverride *bool `mapstructure:"unsafe-bypass-commit-timeout-override"`
 }
 
 // DefaultConsensusConfig returns a default configuration for the consensus service
@@ -1157,6 +1196,22 @@ func DefaultConsensusConfig() *ConsensusConfig {
 		PeerQueryMaj23SleepDuration: 2000 * time.Millisecond,
 		DoubleSignCheckHeight:       int64(0),
 		DontAutoPropose:             false,
+		// Denominated in verification work. A Dash-realistic precommit (four
+		// vote extensions) costs 10, so this admits ~60 of them per second from
+		// one peer — well above the 10-20 vote-channel messages/s an honest peer
+		// gossips. Provisional: the value must be confirmed against catch-up
+		// bursts on a busy testnet.
+		PeerVoteRateLimit: 600,
+		// Offline measurements put the single consensus verifier near 370
+		// operations/s. Keep headroom for consensus transitions and other work.
+		VerificationRateLimit: 300,
+		// The honest data-channel rate is one message per gossip tick per peer
+		// (the gossiper sends at most one part or proposal per iteration), i.e.
+		// 10/s at the 100ms default and 200/s at the 5ms used by test configs.
+		// 500 leaves room for both while still bounding what one peer can send;
+		// proposals are charged proposalTokenCost tokens each, so a single peer
+		// buys far fewer of them than of block parts.
+		PeerDataRateLimit: 500,
 	}
 }
 
@@ -1202,9 +1257,6 @@ func (cfg *ConsensusConfig) ValidateBasic() error {
 	if cfg.UnsafeVoteTimeoutDeltaOverride < 0 {
 		return errors.New("unsafe-vote-timeout-delta-override can't be negative")
 	}
-	if cfg.UnsafeCommitTimeoutOverride < 0 {
-		return errors.New("unsafe-commit-timeout-override can't be negative")
-	}
 	if cfg.CreateEmptyBlocksInterval < 0 {
 		return errors.New("create-empty-blocks-interval can't be negative")
 	}
@@ -1217,20 +1269,40 @@ func (cfg *ConsensusConfig) ValidateBasic() error {
 	if cfg.DoubleSignCheckHeight < 0 {
 		return errors.New("double-sign-check-height can't be negative")
 	}
+	if math.IsNaN(cfg.PeerVoteRateLimit) || math.IsInf(cfg.PeerVoteRateLimit, 0) || cfg.PeerVoteRateLimit < 0 {
+		return errors.New("peer-vote-rate-limit must be a finite, non-negative number")
+	}
+	if math.IsNaN(cfg.VerificationRateLimit) || math.IsInf(cfg.VerificationRateLimit, 0) || cfg.VerificationRateLimit < 0 {
+		return errors.New("verification-rate-limit must be a finite, non-negative number")
+	}
+	if cfg.VerificationRateLimit > 0 && cfg.VerificationRateLimit < MinVerificationRateLimit {
+		return fmt.Errorf("verification-rate-limit must be 0 or at least %d", MinVerificationRateLimit)
+	}
+	if math.IsNaN(cfg.PeerDataRateLimit) || math.IsInf(cfg.PeerDataRateLimit, 0) || cfg.PeerDataRateLimit < 0 {
+		return errors.New("peer-data-rate-limit must be a finite, non-negative number")
+	}
 	return nil
 }
 
 func (cfg *ConsensusConfig) DeprecatedFieldWarning() error {
 	var fields []string
 
+	// Each entry says where the setting went, because "removed" alone sends an
+	// operator looking for a replacement that may not exist.
 	if cfg.DeprecatedQuorumType != 0 {
-		fields = append(fields, "quorum-type")
+		fields = append(fields, "quorum-type (moved to the genesis document)")
+	}
+	if cfg.DeprecatedUnsafeCommitTimeoutOverride != 0 {
+		fields = append(fields, "unsafe-commit-timeout-override (the consensus "+
+			"parameter it overrode no longer exists, there is no replacement)")
+	}
+	if cfg.DeprecatedUnsafeBypassCommitTimeoutOverride != nil {
+		fields = append(fields, "unsafe-bypass-commit-timeout-override (the consensus "+
+			"parameter it overrode no longer exists, there is no replacement)")
 	}
 	if len(fields) != 0 {
 		return fmt.Errorf("the following deprecated fields were set in the "+
-			"configuration file: %s. These fields were removed. "+
-			"Timeout configuration has been moved to the ConsensusParams. "+
-			"quorum-type has been moved to genesis document. ",
+			"configuration file and are ignored: %s",
 			strings.Join(fields, ", "))
 	}
 	return nil

@@ -25,6 +25,7 @@ import (
 	"github.com/dashpay/tenderdash/libs/service"
 	"github.com/dashpay/tenderdash/light/provider"
 	ssproto "github.com/dashpay/tenderdash/proto/tendermint/statesync"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -468,6 +469,87 @@ func (r *Reactor) Backfill(ctx context.Context, state sm.State) error {
 	)
 }
 
+// peerSeverity says whether withdrawing a peer from a backfill run should also
+// disconnect it. Disconnection is not this reactor's alone to spend: it severs the
+// connection for consensus, mempool and evidence too, so it is reserved for a peer
+// this node can show is faulty rather than merely incompatible with it.
+//
+// The distinction is only as strong as the router honors it. A node already at its
+// peer limit disconnects on any reported error, severity or not, so on a saturated
+// node every refusal here collapses back to a disconnect.
+//
+// Either severity costs the peer the rest of the run, and a peer withdrawn without
+// being disconnected does not come back to the pool for it: re-admission happens on a
+// peer-up event, which only a reconnection produces. That is the intended outcome for
+// the run - a peer whose answers this node cannot use has nothing to offer it - and
+// the next run starts from a fresh pool.
+type peerSeverity bool
+
+const (
+	// disconnectPeer is for a response that no build of this software could have
+	// produced honestly, so nothing is lost by ending the connection.
+	disconnectPeer peerSeverity = true
+
+	// penalizePeer is for a response this build cannot use, which is not the same
+	// claim: light blocks are refused during decoding by rules that are relative to
+	// the build doing the decoding, not fixed by the wire format. Header.ValidateBasic
+	// requires Version.Block to equal this build's version.BlockProtocol exactly, a
+	// constant that has been bumped several times, and Commit.ValidateBasic refuses
+	// any vote-extension type this build has no conversion for, which the type's own
+	// rollback note calls out as a consequence of adding one. Either would make an
+	// otherwise honest peer on a neighboring release undecodable here, and a rolling
+	// upgrade puts such peers on the network by construction. Score the peer down and
+	// keep the connection; withdrawing it from the run is what protects the run.
+	penalizePeer peerSeverity = false
+)
+
+// maxThresholdVoteExtensions bounds the peer-supplied vote-extension list that
+// VerifyCommit walks, spending one BLS pairing (~3ms) per entry and never short-
+// circuiting. A genuine commit carries one extension per threshold-recoverable
+// request - an application-fixed handful - whereas the 10MB LightBlockChannel
+// message limit alone would otherwise buy tens of thousands of them, minutes of
+// single-threaded CPU, for one response.
+const maxThresholdVoteExtensions = 256
+
+// validateThresholdVoteExtensions rejects a peer-supplied extension list that
+// exceeds the bound or repeats an entry. Repetition is the sharper of the two:
+// the list's multiplicity is not authenticated, so a commit whose genuine
+// extensions are duplicated verifies successfully, buying verification work the
+// sender is never punished for.
+func validateThresholdVoteExtensions(extensions tmproto.VoteExtensions) error {
+	if len(extensions) > maxThresholdVoteExtensions {
+		return fmt.Errorf("too many threshold vote extensions: %d, at most %d are accepted",
+			len(extensions), maxThresholdVoteExtensions)
+	}
+	seen := make(map[string]struct{}, len(extensions))
+	for i, extension := range extensions {
+		key := thresholdVoteExtensionKey(extension)
+		if _, duplicate := seen[key]; duplicate {
+			return fmt.Errorf("duplicate threshold vote extension at index %d", i)
+		}
+		seen[key] = struct{}{}
+	}
+	return nil
+}
+
+// thresholdVoteExtensionKey identifies an extension by the fields its signature
+// actually covers, so that entries verifying against the same signature collide
+// here rather than being treated as distinct.
+//
+// Only THRESHOLD_RECOVER_RAW carries the request ID into its sign hash; for the
+// other types it is dropped during canonicalization. Keying on it unconditionally
+// would let one genuine extension be repeated under distinct request IDs, each
+// copy still verifying against the single signature it was cloned from.
+//
+// The signature is deliberately excluded: an entry repeated under a different
+// signature fails verification anyway, and is punished there.
+func thresholdVoteExtensionKey(extension *tmproto.VoteExtension) string {
+	if extension.Type == tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW {
+		return fmt.Sprintf("%d|%x|%x", extension.Type, extension.GetSignRequestId(), extension.Extension)
+	}
+	return fmt.Sprintf("%d|%x", extension.Type, extension.Extension)
+}
+
 func (r *Reactor) backfill(
 	ctx context.Context,
 	chainID string,
@@ -496,6 +578,44 @@ func (r *Reactor) backfill(
 	ctxWithCancel, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	// Peer-dispatch gate for this run: it quarantines peers that supply light
+	// blocks this node cannot accept and reports when no peer is left to serve.
+	dispatch := newBackfillDispatch(r.peers)
+	failIfStalled := func() {
+		if reason := dispatch.stalled(); reason != nil {
+			queue.fail(reason)
+		}
+	}
+
+	// withdrawPeer retires a peer that supplied a light block this node refuses, and
+	// reschedules the height for somebody else. What a peer sends is its own choice,
+	// so none of the work is charged to the retry budget: that budget bounds transient
+	// network failure on behalf of every peer, and one of them must not be able to
+	// spend the share belonging to honest ones. Fetching runs ahead of the serialized
+	// verify loop, so whatever else the peer already supplied is dropped with it.
+	//
+	// The reason is remembered as the run's failure cause, which is what a run that
+	// turns out to have had no other peer able to serve reports instead of a bare
+	// retry-budget message.
+	//
+	// Severity decides only whether the peer is also disconnected; withdrawal from
+	// the run happens either way, and that is what keeps the run healthy.
+	//
+	// It returns the error from reporting the peer; each caller resolves that in its
+	// own control flow.
+	withdrawPeer := func(peer types.NodeID, height int64, reason error, severity peerSeverity) error {
+		dispatch.quarantine(peer, reason)
+		queue.discardPeer(peer)
+		queue.requeue(height)
+		err := r.sendBlockError(ctx, p2p.PeerError{
+			NodeID: peer,
+			Err:    reason,
+			Fatal:  bool(severity),
+		})
+		failIfStalled()
+		return err
+	}
+
 	// fetch light blocks across four workers. The aim with deploying concurrent
 	// workers is to equate the network messaging time with the verification
 	// time. Ideally we want the verification process to never have to be
@@ -505,77 +625,119 @@ func (r *Reactor) backfill(
 		go func() {
 			for {
 				select {
-				case <-ctx.Done():
+				case <-ctxWithCancel.Done():
 					return
 				case height := <-queue.nextHeight():
 					// pop the next peer of the list to send a request to
-					peer := r.peers.Pop(ctx)
+					peer := r.peers.Pop(ctxWithCancel)
 					if peer == "" {
 						// a peer can be empty only if context is done
 						return
 					}
-					r.logger.Debug("fetching next block", "height", height, "peer", peer)
-					// request the light block with a timeout
-					subCtx, subCtxCancel := context.WithTimeout(ctxWithCancel, lightBlockResponseTimeout)
-					lb, err := r.dispatcher.LightBlock(subCtx, height, peer)
-					subCtxCancel()
+					if !dispatch.acquire(peer) {
+						// The peer supplied an unverifiable commit earlier in this run.
+						// Drop it rather than dispatch to it; no fetch was attempted, so
+						// the retry budget shared with honest peers is not charged.
+						queue.requeue(height)
+						failIfStalled()
+						continue
+					}
 
-					if err != nil {
-						queue.retry(height)
-						if errors.Is(err, errNoConnectedPeers) {
-							r.logger.Info("backfill: no connected peers to fetch light blocks from; sleeping...",
-								"sleepTime", sleepTime)
-							time.Sleep(sleepTime)
-						} else if errors.Is(err, context.DeadlineExceeded) {
-							// we don't punish the peer as it might just have not responded in time
-							// In future, we might want to consider a backoff strategy
-							r.logger.Debug("backfill: peer didn't respond on time",
+					// stop reports whether the fetcher goroutine should exit.
+					stop := func() bool {
+						// reusePeer stays false for a peer that answered with nothing or
+						// failed: only a peer that served a block is offered again.
+						reusePeer := false
+						defer func() {
+							dispatch.release(peer, reusePeer)
+							failIfStalled()
+						}()
+
+						r.logger.Debug("fetching next block", "height", height, "peer", peer)
+						// request the light block with a timeout
+						subCtx, subCtxCancel := context.WithTimeout(ctxWithCancel, lightBlockResponseTimeout)
+						lb, err := r.dispatcher.LightBlock(subCtx, height, peer)
+						subCtxCancel()
+
+						if errors.Is(err, errMalformedLightBlock) {
+							// The peer answered, and what it answered with is not a light
+							// block this node can accept. That is the peer's doing, so it is
+							// withdrawn rather than retried against: reading it as a slow
+							// peer instead would charge the shared budget, hand the peer
+							// straight back to the pool and leave the run reporting the
+							// network for what one peer chose to send.
+							//
+							// Withdrawn, but not disconnected: decoding refuses some
+							// responses for reasons that hold only against this build, so a
+							// peer failing here has not been shown to be faulty.
+							r.logger.Info("backfill: received a light block that could not be decoded",
 								"height", height, "peer", peer, "error", err)
-							r.peers.Append(peer)
-						} else {
-							r.logger.Info("backfill: error fetching light block",
+							if serr := withdrawPeer(peer, height, err, penalizePeer); serr != nil {
+								r.logger.Error("backfill: failed to report peer supplying a malformed light block",
+									"height", height, "error", serr)
+								return true
+							}
+							return false
+						}
+						if err != nil {
+							queue.retry(height)
+							if errors.Is(err, errNoConnectedPeers) {
+								r.logger.Info("backfill: no connected peers to fetch light blocks from; sleeping...",
+									"sleepTime", sleepTime)
+								time.Sleep(sleepTime)
+							} else if errors.Is(err, context.DeadlineExceeded) {
+								// we don't punish the peer as it might just have not responded in time
+								// In future, we might want to consider a backoff strategy
+								r.logger.Debug("backfill: peer didn't respond on time",
+									"height", height, "peer", peer, "error", err)
+								reusePeer = true
+							} else {
+								r.logger.Info("backfill: error fetching light block",
+									"height", height,
+									"error", err)
+							}
+							return false
+						}
+						if lb == nil {
+							r.logger.Info("backfill: peer didn't have block, fetching from another peer", "height", height, "peers_outstanding", r.peers.Len())
+							queue.retry(height)
+							// As we are fetching blocks backwards, if this node doesn't have the block it likely doesn't
+							// have any prior ones, thus we remove it from the peer list.
+							return false
+						}
+						// the peer returned a value, so it is worth using again - unless it
+						// is quarantined by the time this fetch releases it
+						reusePeer = true
+
+						// run a validate basic. This checks the validator set and commit
+						// hashes line up
+						err = lb.ValidateBasic(chainID)
+						if err != nil || lb.Height != height {
+							r.logger.Info("backfill: fetched light block failed validate basic, reporting peer...",
 								"height", height,
 								"error", err)
+							queue.retry(height)
+							if serr := r.sendBlockError(ctx, p2p.PeerError{
+								NodeID: peer,
+								Err:    fmt.Errorf("received invalid light block: %w", err),
+							}); serr != nil {
+								r.logger.Error("backfill: failed to send block error", "error", serr)
+								return true
+							}
+							return false
 						}
-						continue
-					}
-					if lb == nil {
-						r.logger.Info("backfill: peer didn't have block, fetching from another peer", "height", height, "peers_outstanding", r.peers.Len())
-						queue.retry(height)
-						// As we are fetching blocks backwards, if this node doesn't have the block it likely doesn't
-						// have any prior ones, thus we remove it from the peer list.
-						continue
-					}
-					// once the peer has returned a value, add it back to the peer list to be used again
-					r.peers.Append(peer)
-					if errors.Is(err, context.Canceled) {
+
+						// add block to queue to be verified
+						queue.add(lightBlockResponse{
+							block: lb,
+							peer:  peer,
+						})
+						r.logger.Debug("backfill: added light block to processing queue", "height", height)
+						return false
+					}()
+					if stop {
 						return
 					}
-
-					// run a validate basic. This checks the validator set and commit
-					// hashes line up
-					err = lb.ValidateBasic(chainID)
-					if err != nil || lb.Height != height {
-						r.logger.Info("backfill: fetched light block failed validate basic, removing peer...",
-							"height", height,
-							"error", err)
-						queue.retry(height)
-						if serr := r.sendBlockError(ctx, p2p.PeerError{
-							NodeID: peer,
-							Err:    fmt.Errorf("received invalid light block: %w", err),
-						}); serr != nil {
-							r.logger.Error("backfill: failed to send block error", "error", serr)
-							return
-						}
-						continue
-					}
-
-					// add block to queue to be verified
-					queue.add(lightBlockResponse{
-						block: lb,
-						peer:  peer,
-					})
-					r.logger.Debug("backfill: added light block to processing queue", "height", height)
 
 				case <-queue.done():
 					return
@@ -589,12 +751,15 @@ func (r *Reactor) backfill(
 		select {
 		case <-ctx.Done():
 			queue.close()
-			return nil
+			// Not nil: a run that stopped with heights left unfilled must not be
+			// reported to the caller as a completed backfill.
+			return fmt.Errorf("backfill interrupted: %w", ctx.Err())
 		case resp := <-queue.verifyNext():
-			// validate the header hash. We take the last block id of the
-			// previous header (i.e. one height above) as the trusted hash which
-			// we equate to. ValidatorsHash and CommitHash have already been
-			// checked in the `ValidateBasic`
+			// validate the header hash. We take the last block id of the previous
+			// header (i.e. one height above) as the trusted hash which we equate to.
+			// ValidateBasic has already cross-checked the validator set hash against
+			// the header's ValidatorsHash and tied Commit.BlockID.Hash to Header.Hash();
+			// it authenticates neither the commit signature nor the vote extensions.
 			if w, g := trustedBlockID.Hash, resp.block.Hash(); !bytes.Equal(w, g) {
 				r.logger.Info("received invalid light block. header hash doesn't match trusted LastBlockID",
 					"trustedHash", w, "receivedHash", g, "height", resp.block.Height)
@@ -602,9 +767,81 @@ func (r *Reactor) backfill(
 					NodeID: resp.peer,
 					Err:    fmt.Errorf("received invalid light block. Expected hash %v, got: %v", w, g),
 				}); err != nil {
-					return nil
+					r.logger.Error("backfill: failed to report peer supplying a mismatched header",
+						"height", resp.block.Height, "error", err)
+					return fmt.Errorf("backfill aborted: failed to report peer supplying a mismatched header: %w", err)
 				}
 				queue.retry(resp.block.Height)
+				continue
+			}
+
+			// Authenticate the commit itself: neither the header hash chain nor
+			// ValidateBasic covers the threshold signature or the vote extensions. Pass
+			// the commit's own BlockID, as light.Client does (light/client.go). Each
+			// extension present has its content authenticated; the list's completeness,
+			// order and multiplicity are not.
+			//
+			// Both checks must precede VerifyCommit, which is where the peer-supplied
+			// values become expensive or unsafe: the BLS sign-hash path
+			// (MustConvertUint8) panics on a QuorumType outside a uint8, and the
+			// vote-extension list costs one BLS pairing an entry.
+			//
+			// The vote-extension bound has no other enforcer, so it fires here for
+			// real. The quorum type is already bounded by the ValidatorSet.ValidateBasic
+			// that decoding the response runs, which is the gate a peer actually meets;
+			// it is repeated here so that anything reaching this loop by another route
+			// still cannot carry a value the sign-hash path would panic on.
+			//
+			// The three refusals below are not equally damning, so each carries its
+			// own severity rather than sharing one.
+			var (
+				rejectErr      error
+				rejectSeverity peerSeverity
+			)
+			if qerr := resp.block.ValidatorSet.QuorumType.Validate(); qerr != nil {
+				// The valid types are a property of the network, not of this build's
+				// preferences, and one outside them cannot be signed at all - the
+				// sign-hash path would panic converting it. Nothing honest emits one.
+				rejectErr = fmt.Errorf("received light block with invalid commit -- unsupported quorum type: %w", qerr)
+				rejectSeverity = disconnectPeer
+			} else if xerr := validateThresholdVoteExtensions(resp.block.Commit.ThresholdVoteExtensions); xerr != nil {
+				// maxThresholdVoteExtensions is a ceiling this build picked to bound
+				// verification work, not a rule of the protocol. A chain whose
+				// application legitimately attaches more of them puts an honest peer on
+				// the wrong side of it, so refuse the block without taking the peer's
+				// connection.
+				rejectErr = fmt.Errorf("received light block with invalid commit -- %w", xerr)
+				rejectSeverity = penalizePeer
+			} else if verr := resp.block.ValidatorSet.VerifyCommit(
+				chainID, resp.block.Commit.BlockID, resp.block.Height, resp.block.Commit,
+			); verr != nil {
+				// Unlike the refusals during decoding, this one compares nothing against
+				// a constant of this build: the threshold public key it verifies against
+				// comes from the validator set the header pins, reached over a hash chain
+				// walked from the trusted block. A signature that fails against the
+				// chain's own key is forged.
+				//
+				// The residual worry is a release that changed the sign-hash derivation,
+				// which would fail honest older commits here. That is not the rolling
+				// upgrade this severity split exists to protect: the same VerifyCommit
+				// gates every block the node applies (internal/state, internal/blocksync),
+				// so a build deriving it differently could not follow this chain at all,
+				// by backfill or by any other path.
+				rejectErr = fmt.Errorf("received light block with invalid commit: %w", verr)
+				rejectSeverity = disconnectPeer
+			}
+			if rejectErr != nil {
+				r.logger.Info("backfill: refused the commit on a light block",
+					"height", resp.block.Height, "disconnecting", bool(rejectSeverity), "error", rejectErr)
+				// Withdrawing the peer from the run is unconditional; only whether it
+				// also loses the connection follows the cause. Evicting it locally
+				// matters either way, because the router's own eviction is asynchronous
+				// and lags behind the fetch loop.
+				if serr := withdrawPeer(resp.peer, resp.block.Height, rejectErr, rejectSeverity); serr != nil {
+					r.logger.Error("backfill: failed to report peer supplying a refused commit",
+						"height", resp.block.Height, "error", serr)
+					return fmt.Errorf("backfill aborted: failed to report peer supplying a refused commit: %w", serr)
+				}
 				continue
 			}
 
@@ -614,6 +851,10 @@ func (r *Reactor) backfill(
 			}
 
 			// check if there has been a change in the validator set
+			//
+			// ValidatorsHash covers only the threshold public key and the quorum hash,
+			// so the member list, proposer index and VotingPowerThreshold persisted here
+			// are not authenticated by the header chain.
 			if lastValidatorSet != nil && !bytes.Equal(resp.block.Header.ValidatorsHash, resp.block.Header.NextValidatorsHash) {
 				// save all the heights that the last validator set was the same
 				if err := r.stateStore.SaveValidatorSets(resp.block.Height+1, lastChangeHeight, lastValidatorSet); err != nil {
@@ -1116,6 +1357,10 @@ func (r *Reactor) recentSnapshots(ctx context.Context, n uint32) ([]*snapshot, e
 
 // fetchLightBlock works out whether the node has a light block at a particular
 // height and if so returns it so it can be gossiped to peers
+//
+// INTENTIONAL(no-read-side-reverification): pre-upgrade backfilled data isn't
+// re-verified on read — mainnet data is healthy pre-upgrade, and on-disk tampering
+// risk is low relative to key compromise, so read-side hardening is out of scope here.
 func (r *Reactor) fetchLightBlock(height uint64) (*types.LightBlock, error) {
 	h := tmmath.MustConvertInt64(height)
 

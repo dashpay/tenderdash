@@ -377,6 +377,10 @@ func TestConsMsgsVectors(t *testing.T) {
 	}
 	pbProposal := proposal.ToProto()
 
+	extensions := types.MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
+		Type:      tmproto.VoteExtensionType_DEFAULT,
+		Extension: []byte("extension"),
+	})
 	v := &types.Vote{
 		ValidatorProTxHash: []byte("add_more_exclamation"),
 		ValidatorIndex:     1,
@@ -384,10 +388,7 @@ func TestConsMsgsVectors(t *testing.T) {
 		Round:              0,
 		Type:               tmproto.PrecommitType,
 		BlockID:            bi,
-		VoteExtensions: types.VoteExtensionsFromProto(&tmproto.VoteExtension{
-			Type:      tmproto.VoteExtensionType_DEFAULT,
-			Extension: []byte("extension"),
-		}),
+		VoteExtensions:     extensions,
 	}
 
 	vpb := v.ToProto()
@@ -504,6 +505,9 @@ func TestVoteSetBitsMessageValidateBasic(t *testing.T) {
 	}{
 		{func(_msg *VoteSetBitsMessage) {}, ""},
 		{func(msg *VoteSetBitsMessage) { msg.Height = -1 }, "negative Height"},
+		// A negative Round matches the freshly-initialized sentinel rounds in
+		// PeerState, letting a peer overwrite our view of its bit arrays.
+		{func(msg *VoteSetBitsMessage) { msg.Round = -1 }, "negative Round"},
 		{func(msg *VoteSetBitsMessage) { msg.Type = 0x03 }, "invalid Type"},
 		{func(msg *VoteSetBitsMessage) {
 			msg.BlockID = types.BlockID{

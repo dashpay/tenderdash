@@ -488,7 +488,15 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	block *types.Block,
 	commit *types.Commit,
 ) (State, error) {
-	// validate the block if we haven't already
+	// This is the only ValidateBlockWithRoundState on the ApplyBlock path, so it
+	// must not be removed: ApplyBlock deliberately calls ProcessProposal with
+	// verify=false and relies on this call instead. The consensus path validates
+	// separately before calling in, via blockExecutor.mustValidate.
+	//
+	// It is not a gate on the block reaching the application or the stores. By
+	// the time block sync gets here the block has already been delivered to the
+	// app by ProcessProposal and written by blockApplier.Apply; what this guards
+	// is the state and ABCI responses written below.
 	if err := blockExec.ValidateBlockWithRoundState(ctx, state, uncommittedState, block); err != nil {
 		return state, ErrInvalidBlock{err}
 	}
@@ -556,7 +564,11 @@ func (blockExec *BlockExecutor) ApplyBlock(
 	block *types.Block,
 	commit *types.Commit,
 ) (State, error) {
-	uncommittedState, err := blockExec.ProcessProposal(ctx, block, commit.Round, state, true)
+	// verify is false because FinalizeBlock below runs ValidateBlockWithRoundState
+	// with the same arguments and wraps failures in the same ErrInvalidBlock.
+	// Verifying here as well would validate every block twice, and each pass costs
+	// a threshold signature verification of block.LastCommit.
+	uncommittedState, err := blockExec.ProcessProposal(ctx, block, commit.Round, state, false)
 	if err != nil {
 		return state, err
 	}
@@ -566,14 +578,21 @@ func (blockExec *BlockExecutor) ApplyBlock(
 // ExtendVote gets vote-extensions from ABCI and updates vote.VoteExtensions with this value
 func (blockExec *BlockExecutor) ExtendVote(ctx context.Context, vote *types.Vote) {
 	resp, err := blockExec.appClient.ExtendVote(ctx, &abci.RequestExtendVote{
-		Hash:   vote.BlockID.Hash,
+		Hash:   bytes.Clone(vote.BlockID.Hash),
 		Height: vote.Height,
 		Round:  vote.Round,
 	})
 	if err != nil {
 		panic(fmt.Errorf("ExtendVote call failed: %w", err))
 	}
-	vote.VoteExtensions = types.NewVoteExtensionsFromABCIExtended(resp.VoteExtensions)
+	// INTENTIONAL(abci-panic-on-unknown-extension-type): ABCI app/tenderdash type-set mismatch
+	// is treated as a local bug, not a network fault — panic gives the strongest signal so the
+	// app/tenderdash mismatch is caught immediately rather than silently degrading consensus.
+	extensions, err := types.NewVoteExtensionsFromABCIExtended(resp.VoteExtensions)
+	if err != nil {
+		panic(fmt.Errorf("ExtendVote returned an invalid vote extension: %w", err))
+	}
+	vote.VoteExtensions = extensions
 }
 
 func (blockExec *BlockExecutor) VerifyVoteExtension(ctx context.Context, vote *types.Vote) error {
@@ -582,11 +601,15 @@ func (blockExec *BlockExecutor) VerifyVoteExtension(ctx context.Context, vote *t
 		extensions = vote.VoteExtensions.ToExtendProto()
 	}
 
+	// The byte fields are copied rather than shared. An application reached
+	// through the in-process client gets the request struct itself, so anything
+	// it writes through these slices would land in the vote — a vote that is on
+	// its way to being stored, and whose signatures have already been checked.
 	resp, err := blockExec.appClient.VerifyVoteExtension(ctx, &abci.RequestVerifyVoteExtension{
-		Hash:               vote.BlockID.Hash,
+		Hash:               bytes.Clone(vote.BlockID.Hash),
 		Height:             vote.Height,
 		Round:              vote.Round,
-		ValidatorProTxHash: vote.ValidatorProTxHash,
+		ValidatorProTxHash: bytes.Clone(vote.ValidatorProTxHash),
 		VoteExtensions:     extensions,
 	})
 	if err != nil {

@@ -1,7 +1,9 @@
 package statesync
 
 import (
+	"container/heap"
 	"context"
+	"errors"
 	"math/rand"
 	"testing"
 	"time"
@@ -299,6 +301,49 @@ loop:
 			queue.success()
 		}
 	}
+}
+
+// TestBlockQueueTerminationIsIdempotent asserts that the queue survives being
+// terminated twice. fail() and close() are reached from different goroutines -
+// the verify loop closes on context cancellation while a rejection can terminate
+// the queue at the same moment - so a second termination must be a no-op rather
+// than a close-of-closed-channel panic.
+func TestBlockQueueTerminationIsIdempotent(t *testing.T) {
+	reason := errors.New("every usable peer was quarantined")
+	queue := newBlockQueue(startHeight, stopHeight, 1, stopTime, 1)
+
+	queue.fail(reason)
+	require.NotPanics(t, queue.close, "close after a terminal failure must be a no-op")
+	require.NotPanics(t, queue.close, "close must stay a no-op however often it is called")
+	require.NotPanics(t, func() { queue.fail(errors.New("later reason")) })
+
+	require.ErrorIs(t, queue.error(), reason, "the first failure reason must survive later terminations")
+}
+
+// TestBlockQueueDiscardPeer asserts that responses already supplied by a peer can
+// be dropped and their heights re-queued without charging the retry budget, which
+// is what keeps a peer that pipelines several bad blocks from spending the budget
+// shared with honest peers.
+func TestBlockQueueDiscardPeer(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	badPeer, err := types.NewNodeID("0011223344556677889900112233445566778899")
+	require.NoError(t, err)
+	goodPeer, err := types.NewNodeID("1122334455667788990011223344556677889900")
+	require.NoError(t, err)
+
+	queue := newBlockQueue(startHeight, stopHeight, 1, stopTime, 1)
+	// verifyHeight sits at startHeight, so responses below it stay pending.
+	queue.add(mockLBResp(ctx, t, badPeer, startHeight-1, endTime))
+	queue.add(mockLBResp(ctx, t, goodPeer, startHeight-2, endTime))
+
+	queue.discardPeer(badPeer)
+
+	require.NotContains(t, queue.pending, startHeight-1, "the evicted peer's response must be dropped")
+	require.Contains(t, queue.pending, startHeight-2, "other peers' responses must be untouched")
+	require.Zero(t, queue.retries, "re-queueing an evicted peer's work must not charge the retry budget")
+	require.Equal(t, startHeight-1, heap.Pop(queue.failed), "the dropped height must be re-queued for another peer")
 }
 
 func mockLBResp(ctx context.Context, t *testing.T, peer types.NodeID, height int64, time time.Time) lightBlockResponse {

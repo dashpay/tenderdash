@@ -280,7 +280,14 @@ func (c *Client) initializeAtHeight(ctx context.Context, height int64) error {
 	}
 
 	// 3) Ensure that the commit is valid based on validator set we got back.
-	// Todo: we will want to remove validator sets entirely from light blocks and just have quorum hashes
+	//
+	// The quorum type is checked first because ValidateBasic never bounds it and the
+	// BLS sign-hash path reached by VerifyCommit converts it to a uint8, panicking on
+	// any value outside that range. The provider supplying this light block is not
+	// trusted, so an out-of-range value must be an error rather than a crash.
+	if err := l.ValidatorSet.QuorumType.Validate(); err != nil {
+		return fmt.Errorf("invalid commit: unsupported quorum type: %w", err)
+	}
 	err = l.ValidatorSet.VerifyCommit(c.chainID, l.Commit.BlockID, l.Height, l.Commit)
 	if err != nil {
 		return fmt.Errorf("invalid commit: %w", err)
@@ -519,7 +526,11 @@ func (c *Client) verifyBlockSignatureWithDashCore(_ctx context.Context, newLight
 	quorumHash := newLightBlock.ValidatorSet.QuorumHash
 	quorumType := newLightBlock.ValidatorSet.QuorumType
 
-	protoVote := newLightBlock.Commit.GetCanonicalVote().ToProto()
+	canonVote, err := newLightBlock.Commit.GetCanonicalVote()
+	if err != nil {
+		return err
+	}
+	protoVote := canonVote.ToProto()
 	blockSignBytes, err := protoVote.SignBytes(c.chainID)
 	if err != nil {
 		return err

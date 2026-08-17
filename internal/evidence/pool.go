@@ -51,6 +51,20 @@ type Pool struct {
 	blockStore BlockStore
 	stateDB    sm.Store
 
+	// identities records which equivocations the pool already holds evidence
+	// for, keyed on what the evidence alleges rather than on its encoding, so a
+	// re-signed or otherwise re-encoded copy of evidence we have is recognized
+	// as the same accusation. Only accepted evidence is recorded; see
+	// identitySet.
+	identities *identitySet
+
+	// blockBase and blockTop cache the heights the block store can serve.
+	// Asking the store costs an iterator per call, which is more than the single
+	// point lookup the answer is meant to save, so the bounds are read once per
+	// block instead of once per message.
+	blockBase atomic.Int64
+	blockTop  atomic.Int64
+
 	mtx sync.Mutex
 	// latest state
 	state     sm.State
@@ -80,6 +94,7 @@ func NewPool(logger log.Logger, evidenceDB dbm.DB, stateStore sm.Store, blockSto
 		logger:          logger,
 		evidenceStore:   evidenceDB,
 		evidenceList:    clist.New(),
+		identities:      newIdentitySet(maxTrackedIdentities),
 		consensusBuffer: make([]duplicateVoteSet, 0),
 		Metrics:         metrics,
 		eventBus:        eventBus,
@@ -133,6 +148,8 @@ func (evpool *Pool) Update(ctx context.Context, state sm.State, ev types.Evidenc
 	// move committed evidence out from the pending pool and into the committed pool
 	evpool.markEvidenceAsCommitted(ev, state.LastBlockHeight)
 
+	evpool.refreshBlockRange()
+
 	// Prune pending evidence when it has expired. This also updates when the next
 	// evidence will expire.
 	if evpool.Size() > 0 && state.LastBlockHeight > evpool.pruningHeight &&
@@ -145,14 +162,18 @@ func (evpool *Pool) Update(ctx context.Context, state sm.State, ev types.Evidenc
 func (evpool *Pool) AddEvidence(ctx context.Context, ev types.Evidence) error {
 	evpool.logger.Debug("attempting to add evidence", "evidence", ev)
 
+	// Both questions are asked of the same hash, and hashing means marshaling
+	// and digesting the whole message, so it is computed once.
+	height, hash := ev.Height(), ev.Hash()
+
 	// We have already verified this piece of evidence - no need to do it again
-	if evpool.isPending(ev) {
+	if evpool.isPendingHash(height, hash) {
 		evpool.logger.Debug("evidence already pending; ignoring", "evidence", ev)
 		return nil
 	}
 
 	// check that the evidence isn't already committed
-	if evpool.isCommitted(ev) {
+	if evpool.isCommittedHash(height, hash) {
 		// This can happen if the peer that sent us the evidence is behind so we
 		// shouldn't punish the peer.
 		evpool.logger.Debug("evidence was already committed; ignoring", "evidence", ev)
@@ -160,7 +181,8 @@ func (evpool *Pool) AddEvidence(ctx context.Context, ev types.Evidence) error {
 	}
 
 	// 1) Verify against state.
-	if err := evpool.verify(ctx, ev); err != nil {
+	verified, err := evpool.verify(ctx, ev)
+	if err != nil {
 		return err
 	}
 
@@ -169,7 +191,11 @@ func (evpool *Pool) AddEvidence(ctx context.Context, ev types.Evidence) error {
 		return fmt.Errorf("failed to add evidence to pending list: %w", err)
 	}
 
-	// 3) Add evidence to clist.
+	// 3) Remember the equivocation, but only now that it is stored and only if
+	// its signatures were actually checked.
+	evpool.rememberIdentity(ev, verified)
+
+	// 4) Add evidence to clist.
 	evpool.evidenceList.PushBack(ev)
 
 	evpool.logger.Info("verified new evidence of byzantine behavior", "evidence", ev)
@@ -210,7 +236,7 @@ func (evpool *Pool) CheckEvidence(ctx context.Context, evList types.EvidenceList
 				return &types.ErrInvalidEvidence{Evidence: ev, Reason: errors.New("evidence was already committed")}
 			}
 
-			err := evpool.verify(ctx, ev)
+			verified, err := evpool.verify(ctx, ev)
 			if err != nil {
 				return err
 			}
@@ -219,6 +245,8 @@ func (evpool *Pool) CheckEvidence(ctx context.Context, evList types.EvidenceList
 				// Something went wrong with adding the evidence but we already know it is valid
 				// hence we log an error and continue
 				evpool.logger.Error("failed to add evidence to pending list", "err", err, "evidence", ev)
+			} else {
+				evpool.rememberIdentity(ev, verified)
 			}
 
 			evpool.logger.Info("check evidence: verified evidence of byzantine behavior", "evidence", ev)
@@ -268,6 +296,7 @@ func (evpool *Pool) Start(state sm.State) error {
 
 	// If pending evidence already in db, in event of prior failure, then check
 	// for expiration, update the size and load it back to the evidenceList.
+	evpool.refreshBlockRange()
 	evpool.pruningHeight, evpool.pruningTime = evpool.removeExpiredPendingEvidence()
 	evList, _, err := evpool.listEvidence(prefixPending, -1)
 	if err != nil {
@@ -282,6 +311,71 @@ func (evpool *Pool) Start(state sm.State) error {
 	}
 
 	return nil
+}
+
+// hasBlockFor reports whether the block store can serve the block the evidence
+// at this height would be verified against. Outside that range verification
+// cannot succeed, so there is nothing to gain from attempting it.
+//
+// The block store, not the pool's own last-block height, is the authority: a
+// block is saved before the state update that advances the pool, and a node
+// restoring from a state-sync snapshot keeps its pre-sync height for as long as
+// the restore takes. Asking the store directly closes both windows, and it also
+// covers heights below the pruning base, which no height ceiling can see.
+//
+// This refuses nothing that verification could have accepted only because Base
+// and Height are the lowest and highest block meta the store actually holds —
+// so a height with a meta always falls inside them. A store that ever reported
+// those bounds independently of the metas would break that.
+func (evpool *Pool) hasBlockFor(height int64) bool {
+	return height > 0 &&
+		height >= evpool.blockBase.Load() &&
+		height <= evpool.blockTop.Load()
+}
+
+// refreshBlockRange re-reads the heights the block store can serve. It is called
+// once per block, not once per message: each read builds a database iterator,
+// which is more work than the block-meta lookup hasBlockFor exists to avoid.
+//
+// Being a block behind is harmless in both directions. Too low a ceiling refuses
+// evidence for a height we have just reached, and senders re-offer every pending
+// item once a second, so it is a delay. Too high a one admits evidence whose
+// lookup then misses, which the work budget has already paid for.
+func (evpool *Pool) refreshBlockRange() {
+	evpool.blockBase.Store(evpool.blockStore.Base())
+	evpool.blockTop.Store(evpool.blockStore.Height())
+}
+
+// hasIdentity reports whether the pool already holds evidence of the very same
+// equivocation this evidence alleges, however differently it is encoded.
+//
+// Answering yes is safe to act on: an identity is recorded only when the
+// evidence that produced it had its signatures checked, which for a duplicate
+// vote means two valid signatures from the accused validator over two different
+// blocks in the same step. That cannot be forged, so a match means we already
+// hold — and gossip, and can propose — a proof of the same misbehavior.
+func (evpool *Pool) hasIdentity(ev types.Evidence) bool {
+	return evpool.identities.has(ev)
+}
+
+// rememberIdentity records the equivocation this evidence alleges, so a
+// re-encoded copy of it can be refused without repeating the work.
+//
+// It deliberately refuses to remember evidence whose signatures were not
+// checked. Verification is skipped when the validator set at the evidence
+// height carries no public keys — a real situation for a node that joined the
+// quorum recently — and such evidence is stored anyway. Remembering it would
+// hand an attacker an evidence-suppression tool: the equivocations a validator
+// commits are public, so a forged copy of one could claim the identity and the
+// genuine proof would be refused ever after. Forgetting is the safe direction:
+// the worst it costs is a repeated verification.
+func (evpool *Pool) rememberIdentity(ev types.Evidence, verified bool) {
+	if !verified {
+		evpool.logger.Debug("not remembering evidence whose signatures could not be checked",
+			"evidence", ev)
+		return
+	}
+	evpool.identities.add(ev)
 }
 
 func (evpool *Pool) Close() error {
@@ -302,18 +396,40 @@ func (evpool *Pool) isExpired(height int64, time time.Time) bool {
 
 // IsCommitted returns true if we have already seen this exact evidence and it is already marked as committed.
 func (evpool *Pool) isCommitted(evidence types.Evidence) bool {
-	key := keyCommitted(evidence)
-	ok, err := evpool.evidenceStore.Has(key)
+	return evpool.isCommittedHash(evidence.Height(), evidence.Hash())
+}
+
+// IsPending checks whether the evidence is already pending. DB errors are passed to the logger.
+func (evpool *Pool) isPending(evidence types.Evidence) bool {
+	return evpool.isPendingHash(evidence.Height(), evidence.Hash())
+}
+
+// alreadyHave reports whether this evidence is pending or committed.
+//
+// It exists so that answering both questions costs one hash rather than two.
+// Hashing means marshaling the whole message and digesting it, which for
+// evidence arriving from a peer means up to the channel's size limit — work the
+// sender does not pay for, on a path that runs before the work budget is
+// consulted.
+func (evpool *Pool) alreadyHave(evidence types.Evidence) bool {
+	height, hash := evidence.Height(), evidence.Hash()
+	return evpool.isPendingHash(height, hash) || evpool.isCommittedHash(height, hash)
+}
+
+// isCommittedHash reports whether evidence with this hash has been committed.
+// DB errors are passed to the logger.
+func (evpool *Pool) isCommittedHash(height int64, hash []byte) bool {
+	ok, err := evpool.evidenceStore.Has(keyCommittedFor(height, hash))
 	if err != nil {
 		evpool.logger.Error("failed to find committed evidence", "err", err)
 	}
 	return ok
 }
 
-// IsPending checks whether the evidence is already pending. DB errors are passed to the logger.
-func (evpool *Pool) isPending(evidence types.Evidence) bool {
-	key := keyPending(evidence)
-	ok, err := evpool.evidenceStore.Has(key)
+// isPendingHash reports whether evidence with this hash is already pending. DB
+// errors are passed to the logger.
+func (evpool *Pool) isPendingHash(height int64, hash []byte) bool {
+	ok, err := evpool.evidenceStore.Has(keyPendingFor(height, hash))
 	if err != nil {
 		evpool.logger.Error("failed to find pending evidence", "err", err)
 	}
@@ -625,6 +741,10 @@ func (evpool *Pool) processConsensusBuffer(ctx context.Context, state sm.State) 
 			continue
 		}
 
+		// Consensus only reports conflicting votes it has verified the
+		// signatures of, so this equivocation is as proven as a peer's would be.
+		evpool.rememberIdentity(dve, true)
+
 		evpool.evidenceList.PushBack(dve)
 
 		evpool.logger.Info("verified new evidence of byzantine behavior", "evidence", dve)
@@ -661,8 +781,11 @@ func prefixToBytes(prefix int64) []byte {
 }
 
 func keyCommitted(evidence types.Evidence) []byte {
-	height := evidence.Height()
-	key, err := orderedcode.Append(nil, prefixCommitted, height, string(evidence.Hash()))
+	return keyCommittedFor(evidence.Height(), evidence.Hash())
+}
+
+func keyCommittedFor(height int64, hash []byte) []byte {
+	key, err := orderedcode.Append(nil, prefixCommitted, height, string(hash))
 	if err != nil {
 		panic(err)
 	}
@@ -670,8 +793,11 @@ func keyCommitted(evidence types.Evidence) []byte {
 }
 
 func keyPending(evidence types.Evidence) []byte {
-	height := evidence.Height()
-	key, err := orderedcode.Append(nil, prefixPending, height, string(evidence.Hash()))
+	return keyPendingFor(evidence.Height(), evidence.Hash())
+}
+
+func keyPendingFor(height int64, hash []byte) []byte {
+	key, err := orderedcode.Append(nil, prefixPending, height, string(hash))
 	if err != nil {
 		panic(err)
 	}

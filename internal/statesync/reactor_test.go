@@ -33,6 +33,7 @@ import (
 	ssproto "github.com/dashpay/tenderdash/proto/tendermint/statesync"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
+	"github.com/dashpay/tenderdash/version"
 )
 
 const (
@@ -740,7 +741,7 @@ func TestReactor_Backfill(t *testing.T) {
 				startHeight,
 				stopHeight,
 				1,
-				factory.MakeBlockIDWithHash(chain[startHeight].Header.Hash()),
+				factory.MakeBlockIDWithHash(chain[startHeight].Hash()),
 				stopTime,
 				10*time.Millisecond,
 				100*time.Millisecond,
@@ -754,9 +755,11 @@ func TestReactor_Backfill(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			for height := startHeight; height <= stopHeight; height++ {
+			// Backfill walks downwards, so the populated range runs from stopHeight
+			// up to startHeight.
+			for height := stopHeight; height <= startHeight; height++ {
 				blockMeta := rts.blockStore.LoadBlockMeta(height)
-				require.NotNil(t, blockMeta)
+				require.NotNil(t, blockMeta, "height %d must have been backfilled", height)
 			}
 			require.Nil(t, rts.blockStore.LoadBlockMeta(stopHeight-1))
 			require.Nil(t, rts.blockStore.LoadBlockMeta(startHeight+1))
@@ -928,7 +931,14 @@ func mockLB(ctx context.Context, t *testing.T, height int64, time time.Time, las
 		StateID: stateID.Hash(),
 	}
 	voteSet := types.NewVoteSet(factory.DefaultTestChainID, height, 0, tmproto.PrecommitType, currentVals)
-	commit, err := factory.MakeCommit(ctx, lastBlockID, height, 0, voteSet, currentVals, currentPrivVals)
+	// Sign a real THRESHOLD_RECOVER vote extension into the commit so its
+	// ThresholdVoteExtensions list is non-empty and its recovered signature
+	// verifies - required for adversarial tests that tamper with the list.
+	commit, err := factory.MakeCommit(ctx, lastBlockID, height, 0, voteSet, currentVals, currentPrivVals,
+		tmproto.VoteExtension{
+			Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+			Extension: []byte("mockLB threshold extension"),
+		})
 	require.NoError(t, err)
 	return nextVals, nextPrivVals, &types.LightBlock{
 		SignedHeader: &types.SignedHeader{
@@ -1066,4 +1076,560 @@ func genPeerIDs(num int) []string {
 		peers[i] = strconv.Itoa(i)
 	}
 	return peers
+}
+
+// backfillTamperedBlock runs backfill against a chain in which one height's light
+// block has been altered after the chain was built, and reports the resulting error
+// and the store so callers can assert whether the block was persisted. Every other
+// gate passes on such a block: the headers are untouched so the trusted hash chain
+// walks cleanly, and ValidateBasic reads nothing that a commit/quorum-type tamper
+// changes — verifying the commit against the validator set the header pins is the
+// only gate that sees the tampering at all.
+// configure, when given, adapts the reactor before the run, e.g. to make peer-error
+// reporting fail.
+func backfillTamperedBlock(
+	ctx context.Context,
+	t *testing.T,
+	tamper func(*types.LightBlock),
+	configure ...func(*reactorTestSuite),
+) (*store.BlockStore, int64, error) {
+	t.Helper()
+
+	const (
+		startHeight int64 = 20
+		stopHeight  int64 = 10
+	)
+	tamperedHeight := stopHeight + 5
+	stopTime := time.Date(2020, 1, 1, 0, 100, 0, 0, time.UTC)
+
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	t.Cleanup(leaktest.CheckTimeout(t, 1*time.Minute))
+	rts := setup(ctx, t, nil, nil, nil, 21)
+	for _, apply := range configure {
+		apply(rts)
+	}
+
+	for _, peer := range genPeerIDs(4) {
+		rts.peerUpdateCh <- p2p.PeerUpdate{
+			NodeID: types.NodeID(peer),
+			Status: p2p.PeerStatusUp,
+			Channels: p2p.ChannelIDSet{
+				SnapshotChannel:   struct{}{},
+				ChunkChannel:      struct{}{},
+				LightBlockChannel: struct{}{},
+				ParamsChannel:     struct{}{},
+			},
+		}
+	}
+	rts.stateStore.
+		On("SaveValidatorSets",
+			mock.AnythingOfType("int64"),
+			mock.AnythingOfType("int64"),
+			mock.AnythingOfType("*types.ValidatorSet")).
+		Maybe().
+		Return(nil)
+
+	chain := buildLightBlockChain(ctx, t, stopHeight-1, startHeight+1, stopTime, rts.privVal)
+	tamper(chain[tamperedHeight])
+
+	closeCh := make(chan struct{})
+	defer close(closeCh)
+	go handleLightBlockRequests(ctx, t, chain, rts.blockOutCh, rts.blockInCh, closeCh, 0, uint64(stopHeight))
+
+	err := rts.reactor.backfill(
+		ctx,
+		factory.DefaultTestChainID,
+		startHeight,
+		stopHeight,
+		1,
+		factory.MakeBlockIDWithHash(chain[startHeight].Hash()),
+		stopTime,
+		10*time.Millisecond,
+		100*time.Millisecond,
+	)
+	return rts.blockStore, tamperedHeight, err
+}
+
+// backfillTamperedCommit is backfillTamperedBlock specialized to a commit-only tamper.
+func backfillTamperedCommit(ctx context.Context, t *testing.T, tamper func(*types.Commit)) (*store.BlockStore, int64, error) {
+	t.Helper()
+	return backfillTamperedBlock(ctx, t, func(lb *types.LightBlock) { tamper(lb.Commit) })
+}
+
+// TestReactor_Backfill_RejectsTamperedCommit asserts that a commit altered after the
+// chain was built is rejected and never reaches the block store.
+func TestReactor_Backfill_RejectsTamperedCommit(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
+	for _, tc := range []struct {
+		name   string
+		tamper func(*types.Commit)
+	}{
+		{
+			// A forged signature of the correct length passes Commit.ValidateBasic, which
+			// only measures it, and Commit.Hash() is not what the header chain walks.
+			name: "forged threshold block signature",
+			tamper: func(c *types.Commit) {
+				forged := make([]byte, len(c.ThresholdBlockSignature))
+				copy(forged, c.ThresholdBlockSignature)
+				forged[0] ^= 0xFF
+				c.ThresholdBlockSignature = forged
+			},
+		},
+		{
+			// Vote extensions are covered by no hash and no ValidateBasic clause, so a peer
+			// can attach whatever it likes.
+			name: "injected unsigned vote extension",
+			tamper: func(c *types.Commit) {
+				c.ThresholdVoteExtensions = append(c.ThresholdVoteExtensions, &tmproto.VoteExtension{
+					Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+					Extension: []byte("injected by a malicious light block peer"),
+					Signature: make([]byte, types.SignatureSize),
+				})
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			blockStore, tamperedHeight, err := backfillTamperedCommit(ctx, t, tc.tamper)
+
+			require.Error(t, err, "backfill must not complete over a commit it cannot verify")
+			require.ErrorContains(t, err, "invalid commit",
+				"the failure must name the commit-verification rejection, not a generic retry timeout")
+			require.Nil(t, blockStore.LoadBlockMeta(tamperedHeight),
+				"a commit that fails verification must never reach the block store")
+		})
+	}
+}
+
+// TestReactor_Backfill_RejectsOutOfRangeQuorumType asserts that a peer-supplied
+// QuorumType outside the valid range is rejected rather than panicking, and that the
+// run reports what was rejected.
+//
+// ValidatorSet.Hash() covers only ThresholdPublicKey and QuorumHash, so a flipped
+// QuorumType leaves the header's ValidatorsHash intact and no part of the header
+// chain notices; a range check is all that stands between the field and
+// VerifyCommit's BLS sign-hash path, which panics (MustConvertUint8) on any value
+// that does not fit a uint8. The check that actually fires is the one inside the
+// ValidatorSet.ValidateBasic that decoding the response runs, so the block is refused
+// before the reactor is ever handed one.
+//
+// Every peer here serves the same tampered height, which makes this the half of the
+// behavior where nobody can supply it: each peer is withdrawn for sending it and the
+// run must end naming that refusal rather than a retry budget it happened to exhaust.
+// TestReactor_Backfill_RecoversWhenOnePeerSendsOutOfRangeQuorumType is the other half.
+func TestReactor_Backfill_RejectsOutOfRangeQuorumType(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	blockStore, tamperedHeight, err := backfillTamperedBlock(ctx, t, func(lb *types.LightBlock) {
+		lb.ValidatorSet.QuorumType = outOfRangeQuorumType
+	})
+
+	require.Error(t, err, "an out-of-range quorum type must abort backfill, not crash the process")
+	require.ErrorContains(t, err, "unsupported quorum type",
+		"the failure must name the quorum type a peer sent, not a retry budget shared with honest peers")
+	require.Nil(t, blockStore.LoadBlockMeta(tamperedHeight),
+		"a block with an out-of-range quorum type must never reach the block store")
+}
+
+// recordPeerErrors makes a run report its peer errors into the given slice instead of
+// onto the channel, so a test can assert who was blamed and how hard.
+func recordPeerErrors(mtx *sync.Mutex, reported *[]p2p.PeerError) func(*reactorTestSuite) {
+	return func(rts *reactorTestSuite) {
+		rts.reactor.sendBlockError = func(_ context.Context, pe p2p.PeerError) error {
+			mtx.Lock()
+			defer mtx.Unlock()
+			*reported = append(*reported, pe)
+			return nil
+		}
+	}
+}
+
+// TestReactor_Backfill_ReportsRefusalsBySeverity pins which refusals cost a peer its
+// connection and which only score it down, because the two are not interchangeable:
+// Fatal severs the connection for consensus, mempool and evidence as well, not just
+// for backfill. Every case here is withdrawn from the run either way; the assertion
+// is about what else it costs.
+//
+// The rule is whether a refusal turns on something the network fixes or on something
+// this build chose. A forged threshold signature fails against the key the chain's
+// own header pins, so no build produces one honestly. The other three rows all turn
+// on a local choice, and each is a way an honest peer on a neighboring release trips
+// this node:
+//
+//   - version skew is the case the whole classification rests on, and the reason a
+//     blanket Fatal was wrong: Header.ValidateBasic demands Version.Block equal this
+//     build's version.BlockProtocol exactly, a constant that has been bumped four
+//     times, so a rolling upgrade produces peers on both sides of it by construction;
+//   - a vote-extension list longer than maxThresholdVoteExtensions exceeds a ceiling
+//     this build picked to bound its own verification work;
+//   - an out-of-range quorum type is the one refusal during decoding that really is
+//     unambiguous, and it is here to show that it still does not disconnect: the
+//     decode boundary cannot tell it apart from the skew case above, which is exactly
+//     why no Fatal path is carved out for "obviously malicious" decode failures.
+func TestReactor_Backfill_ReportsRefusalsBySeverity(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
+	for _, tc := range []struct {
+		name      string
+		tamper    func(*types.LightBlock)
+		wantIn    string
+		wantFatal bool
+		why       string
+	}{
+		{
+			name: "block protocol this build does not speak",
+			tamper: func(lb *types.LightBlock) {
+				lb.Version.Block = version.BlockProtocol - 1
+			},
+			wantIn:    "block protocol is incorrect",
+			wantFatal: false,
+			why:       "a peer one release behind must not be disconnected for speaking its own block protocol",
+		},
+		{
+			name:      "quorum type outside the valid range",
+			tamper:    func(lb *types.LightBlock) { lb.ValidatorSet.QuorumType = outOfRangeQuorumType },
+			wantIn:    "unsupported quorum type",
+			wantFatal: false,
+			why:       "decoding cannot separate this from version skew, so it must not disconnect either",
+		},
+		{
+			name: "more vote extensions than this build accepts",
+			tamper: func(lb *types.LightBlock) {
+				require.NotEmpty(t, lb.Commit.ThresholdVoteExtensions,
+					"fixture must carry an extension to clone")
+				genuine := lb.Commit.ThresholdVoteExtensions[0]
+				for len(lb.Commit.ThresholdVoteExtensions) <= maxThresholdVoteExtensions {
+					lb.Commit.ThresholdVoteExtensions = append(lb.Commit.ThresholdVoteExtensions, genuine)
+				}
+			},
+			wantIn:    "too many threshold vote extensions",
+			wantFatal: false,
+			why:       "the bound is this build's ceiling on its own work, not a rule the peer broke",
+		},
+		{
+			name: "forged threshold block signature",
+			tamper: func(lb *types.LightBlock) {
+				forged := make([]byte, len(lb.Commit.ThresholdBlockSignature))
+				copy(forged, lb.Commit.ThresholdBlockSignature)
+				forged[0] ^= 0xFF
+				lb.Commit.ThresholdBlockSignature = forged
+			},
+			wantIn:    "invalid commit signatures",
+			wantFatal: true,
+			why:       "a signature that fails against the chain's own key is forged, and must cost the connection",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			var (
+				mtx      sync.Mutex
+				reported []p2p.PeerError
+			)
+			_, _, err := backfillTamperedBlock(ctx, t, tc.tamper, recordPeerErrors(&mtx, &reported))
+			require.Error(t, err)
+
+			mtx.Lock()
+			defer mtx.Unlock()
+
+			// Only the reports for this tamper are the subject. A run also reports
+			// peers for causes of its own - a header that misses the trusted hash, a
+			// block that fails ValidateBasic - and those carry their own severity.
+			var matched []p2p.PeerError
+			for _, pe := range reported {
+				if strings.Contains(pe.Err.Error(), tc.wantIn) {
+					matched = append(matched, pe)
+				}
+			}
+			require.NotEmpty(t, matched,
+				"the peer supplying the block must be reported, naming why: got %v", reported)
+			for _, pe := range matched {
+				require.NotEmpty(t, pe.NodeID, "a report must name the peer it blames")
+				require.Equal(t, tc.wantFatal, pe.Fatal, tc.why)
+			}
+		})
+	}
+}
+
+// TestReactor_Backfill_RejectsMalformedVoteExtensions covers the vote-extension
+// bounds on the backfill path, which no other caller reaches: the list a peer
+// attaches to a backfilled commit is walked by VerifyCommit at one BLS pairing per
+// entry, and its length, multiplicity and member types are authenticated by nothing
+// upstream - not the header chain, which does not cover the list, and not
+// ValidateBasic, which does not measure it.
+//
+// Each case must be refused with the error that names its own bound and must leave
+// the block unstored. The process surviving the run is itself the assertion that the
+// refusal is a rejection and not a panic: the checks guard a sign-hash path that
+// panics on a value it cannot convert, and both the fetch and verify sides run in
+// goroutines that would take the test binary down with them.
+func TestReactor_Backfill_RejectsMalformedVoteExtensions(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
+	genuineExtension := func(c *types.Commit) *tmproto.VoteExtension {
+		require.NotEmpty(t, c.ThresholdVoteExtensions,
+			"the fixture commit must carry an extension to clone")
+		return c.ThresholdVoteExtensions[0]
+	}
+
+	for _, tc := range []struct {
+		name   string
+		wantIn string
+		tamper func(*types.Commit)
+	}{
+		{
+			// The list's multiplicity is not authenticated, so a genuine entry can be
+			// repeated: every copy verifies against the one signature it was cloned
+			// from, buying verification work the sender is never charged for.
+			name:   "duplicate threshold vote extension",
+			wantIn: "duplicate threshold vote extension",
+			tamper: func(c *types.Commit) {
+				c.ThresholdVoteExtensions = append(c.ThresholdVoteExtensions, genuineExtension(c))
+			},
+		},
+		{
+			// The length bound is checked before the duplicate scan, so an oversized
+			// list of identical entries must be refused for its length.
+			name:   "too many threshold vote extensions",
+			wantIn: "too many threshold vote extensions",
+			tamper: func(c *types.Commit) {
+				extension := genuineExtension(c)
+				for len(c.ThresholdVoteExtensions) <= maxThresholdVoteExtensions {
+					c.ThresholdVoteExtensions = append(c.ThresholdVoteExtensions, extension)
+				}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			blockStore, tamperedHeight, err := backfillTamperedCommit(ctx, t, tc.tamper)
+
+			require.Error(t, err, "backfill must not complete over a commit it cannot accept")
+			require.ErrorContains(t, err, tc.wantIn,
+				"the failure must name the bound that fired, not a generic retry timeout")
+			require.Nil(t, blockStore.LoadBlockMeta(tamperedHeight),
+				"a commit refused at a vote-extension bound must never reach the block store")
+		})
+	}
+}
+
+// TestReactor_Backfill_AttributesUnknownVoteExtensionType covers the third
+// vote-extension boundary on the backfill path, which fires earlier than the other
+// two: an unknown extension type fails the conversion out of proto, so the refusal
+// happens while the response is being decoded and the fetcher is never handed a light
+// block at all.
+//
+// This test previously recorded the opposite outcome as a known limitation - that the
+// run aborted on the shared retry budget and the peer that caused it went unnamed,
+// because a response refused during decoding was dropped and the fetch could only read
+// the resulting silence as a slow peer. That is no longer how the path behaves, so the
+// assertions are inverted rather than relaxed: the run must name the extension type,
+// must not blame the budget, and must report the peer that sent it.
+//
+// The report is deliberately non-fatal. This cause is the clearest case for that: an
+// extension type undefined here is defined by whatever release introduces it, so the
+// peer failing this check is as likely to be an honest node one release ahead as a
+// malicious one, and disconnecting it would sever consensus, mempool and evidence too.
+func TestReactor_Backfill_AttributesUnknownVoteExtensionType(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var (
+		mtx      sync.Mutex
+		reported []p2p.PeerError
+	)
+	blockStore, tamperedHeight, err := backfillTamperedBlock(ctx, t,
+		func(lb *types.LightBlock) {
+			require.NotEmpty(t, lb.Commit.ThresholdVoteExtensions)
+			lb.Commit.ThresholdVoteExtensions[0].Type = tmproto.VoteExtensionType(99)
+		},
+		recordPeerErrors(&mtx, &reported))
+
+	require.Error(t, err, "an undecodable commit must abort backfill, not crash the process")
+	require.ErrorContains(t, err, "unknown vote extension type",
+		"the failure must name the extension type that could not be decoded")
+	require.NotContains(t, err.Error(), "max retries",
+		"the abort must be charged to the peer that caused it, not to the budget every peer shares")
+	require.Nil(t, blockStore.LoadBlockMeta(tamperedHeight),
+		"a commit that cannot be decoded must never reach the block store")
+
+	mtx.Lock()
+	defer mtx.Unlock()
+	var matched []p2p.PeerError
+	for _, pe := range reported {
+		if strings.Contains(pe.Err.Error(), "unknown vote extension type") {
+			matched = append(matched, pe)
+		}
+	}
+	require.NotEmpty(t, matched,
+		"the peer that sent the undecodable commit must be reported: got %v", reported)
+	for _, pe := range matched {
+		require.NotEmpty(t, pe.NodeID, "the report must name the peer it blames")
+		require.False(t, pe.Fatal,
+			"an extension type this build does not know may simply be newer than this build")
+	}
+}
+
+// handleMaliciousLightBlockRequests answers requests destined for maliciousPeer with
+// a light block whose recovered threshold block signature has been forged (the header
+// chain and ValidateBasic still pass, only VerifyCommit rejects it) and serves every
+// other peer the genuine block. Heights below stopHeight are left unanswered to induce
+// a timeout, matching handleLightBlockRequests.
+func handleMaliciousLightBlockRequests(
+	ctx context.Context,
+	t *testing.T,
+	chain map[int64]*types.LightBlock,
+	receiving chan p2p.Envelope,
+	sending chan p2p.Envelope,
+	closeCh chan struct{},
+	maliciousPeer types.NodeID,
+	stopHeight uint64,
+) {
+	t.Helper()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-closeCh:
+			return
+		case envelope := <-receiving:
+			msg, ok := envelope.Message.(*ssproto.LightBlockRequest)
+			if !ok {
+				continue
+			}
+			if msg.Height < stopHeight {
+				continue
+			}
+			lb, err := chain[int64(msg.Height)].ToProto()
+			require.NoError(t, err)
+			if envelope.To == maliciousPeer {
+				sig := lb.SignedHeader.Commit.ThresholdBlockSignature
+				forged := make([]byte, len(sig))
+				copy(forged, sig)
+				forged[0] ^= 0xFF
+				lb.SignedHeader.Commit.ThresholdBlockSignature = forged
+			}
+			sendMsgToChan(ctx, sending, newLBMessage(envelope.To, lb))
+		}
+	}
+}
+
+// TestReactor_Backfill_QuarantinesPeerSupplyingBadCommits reproduces the single
+// malicious-peer denial of service: one peer answers every request with an
+// unverifiable commit while the other is honest. Because the reactor quarantines the
+// peer after its first fatal commit rejection and stops re-dispatching to it, backfill
+// completes from the honest peer instead of exhausting the shared retry budget.
+//
+// Without the quarantine the malicious peer is re-offered to the fetch loop on every
+// round (reactor re-appends it before verification), so it keeps draining the global
+// retry budget and backfill hard-fails long before the range is filled. The height
+// span here is sized so a single peer's share of bad answers exceeds
+// maxLightBlockRequestRetries.
+func TestReactor_Backfill_QuarantinesPeerSupplyingBadCommits(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
+	const (
+		startHeight int64 = 60
+		stopHeight  int64 = 11
+	)
+	stopTime := time.Date(2020, 1, 1, 0, 100, 0, 0, time.UTC)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	t.Cleanup(leaktest.CheckTimeout(t, 1*time.Minute))
+	rts := setup(ctx, t, nil, nil, nil, uint(startHeight-stopHeight)+5)
+
+	peerIDs := genPeerIDs(2)
+	maliciousPeer := types.NodeID(peerIDs[0])
+	for _, peer := range peerIDs {
+		rts.peerUpdateCh <- p2p.PeerUpdate{
+			NodeID: types.NodeID(peer),
+			Status: p2p.PeerStatusUp,
+			Channels: p2p.ChannelIDSet{
+				SnapshotChannel:   struct{}{},
+				ChunkChannel:      struct{}{},
+				LightBlockChannel: struct{}{},
+				ParamsChannel:     struct{}{},
+			},
+		}
+	}
+	rts.stateStore.
+		On("SaveValidatorSets",
+			mock.AnythingOfType("int64"),
+			mock.AnythingOfType("int64"),
+			mock.AnythingOfType("*types.ValidatorSet")).
+		Maybe().
+		Return(nil)
+
+	chain := buildLightBlockChain(ctx, t, stopHeight-1, startHeight+1, stopTime, rts.privVal)
+
+	closeCh := make(chan struct{})
+	defer close(closeCh)
+	go handleMaliciousLightBlockRequests(ctx, t, chain, rts.blockOutCh, rts.blockInCh, closeCh, maliciousPeer, uint64(stopHeight))
+
+	err := rts.reactor.backfill(
+		ctx,
+		factory.DefaultTestChainID,
+		startHeight,
+		stopHeight,
+		1,
+		factory.MakeBlockIDWithHash(chain[startHeight].Hash()),
+		stopTime,
+		10*time.Millisecond,
+		100*time.Millisecond,
+	)
+
+	require.NoError(t, err, "a single peer feeding bad commits must not stall backfill; the honest peer should complete it")
+	for height := stopHeight; height <= startHeight; height++ {
+		require.NotNil(t, rts.blockStore.LoadBlockMeta(height),
+			"every height must be backfilled from the honest peer, height %d", height)
+	}
+}
+
+// TestReactor_Backfill_AcceptsCommitWithStrippedVoteExtensions records a known gap
+// rather than a desired behavior: VerifyCommit authenticates the content of every
+// extension that is present, but nothing binds the list itself, so removing all of
+// them still verifies. Invert both assertions once the list's completeness is
+// authenticated.
+func TestReactor_Backfill_AcceptsCommitWithStrippedVoteExtensions(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	blockStore, tamperedHeight, err := backfillTamperedCommit(ctx, t, func(c *types.Commit) {
+		require.NotEmpty(t, c.ThresholdVoteExtensions,
+			"fixture must carry a real signed vote extension, otherwise stripping it is a no-op")
+		c.ThresholdVoteExtensions = nil
+	})
+
+	require.NoError(t, err, "known gap: a commit stripped of every vote extension still verifies")
+	require.NotNil(t, blockStore.LoadBlockMeta(tamperedHeight),
+		"known gap: the stripped commit is persisted like any verified one")
 }
