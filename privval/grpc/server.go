@@ -122,6 +122,8 @@ func (ss *SignerServer) GetProTxHash(ctx context.Context, req *privvalproto.ProT
 
 // SignVote receives a vote sign requests, attempts to sign it
 // returns SignedVoteResponse on success and error on failure
+//
+//nolint:dupl // parallel to SignProposal by design: same validation order over a different request type
 func (ss *SignerServer) SignVote(ctx context.Context, req *privvalproto.SignVoteRequest) (*privvalproto.SignedVoteResponse, error) {
 	if err := ss.validateChainID(req.ChainId); err != nil {
 		return nil, err
@@ -148,6 +150,8 @@ func (ss *SignerServer) SignVote(ctx context.Context, req *privvalproto.SignVote
 
 // SignProposal receives a proposal sign requests, attempts to sign it
 // returns SignedProposalResponse on success and error on failure
+//
+//nolint:dupl // parallel to SignVote by design: same validation order over a different request type
 func (ss *SignerServer) SignProposal(ctx context.Context, req *privvalproto.SignProposalRequest) (*privvalproto.SignedProposalResponse, error) {
 	if err := ss.validateChainID(req.ChainId); err != nil {
 		return nil, err

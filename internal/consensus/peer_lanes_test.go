@@ -366,7 +366,7 @@ func messageMarshaledSize(t *testing.T, msg Message) int {
 // object cost — a vote extension's three-plus slice headers alone are ~72 bytes,
 // an aunt's header and container pointer ~32 — chosen below the scheduler's
 // production surcharge and derived independently of it, so the oracle is a
-// genuine second opinion. A queue whose retained heap, modelled this way, exceeds
+// genuine second opinion. A queue whose retained heap, modeled this way, exceeds
 // the ceiling proves the charge under-counted; a queue that stays within it
 // proves the charge covers at least this much real memory.
 const (

@@ -321,7 +321,7 @@ func (p commitUnknownExtensionProfile) Next(height int64, round int32) proto.Mes
 // commitTooManyExtensionsProfile floods commits declaring more threshold vote
 // extensions than the protocol permits, with otherwise well-formed extensions.
 // The declared count alone prices the message above the ceiling, so it is
-// refused before conversion — without penalising the sender, since an over-long
+// refused before conversion — without penalizing the sender, since an over-long
 // list is a version-skew or bug signal, not a peer offense.
 type commitTooManyExtensionsProfile struct{ quorumHash []byte }
 
@@ -368,7 +368,7 @@ func (p precommitUnknownExtensionProfile) Next(height int64, round int32) proto.
 // precommitTooManyExtensionsProfile floods precommits declaring more vote
 // extensions than the protocol permits. Like the commit variant, the declared
 // count prices the message above the ceiling and it is refused before
-// conversion, without penalising the sender.
+// conversion, without penalizing the sender.
 type precommitTooManyExtensionsProfile struct{ picker *validatorPicker }
 
 func (precommitTooManyExtensionsProfile) Name() string { return "precommit-too-many-extensions" }

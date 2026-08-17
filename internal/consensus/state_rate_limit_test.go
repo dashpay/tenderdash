@@ -257,7 +257,7 @@ func TestPlainStateMessagesAreNotSubjectToTheAggregateCeiling(t *testing.T) {
 // while the answer, being derived only from our own vote set, has not changed.
 func TestRepeatedVoteSetMaj23IsAnsweredOnlyWhenTheAnswerChanges(t *testing.T) {
 	// A frozen clock keeps this about what the answer says, not how long ago it
-	// was said; the ageing of an answer is covered on its own.
+	// was said; the aging of an answer is covered on its own.
 	ps := NewPeerState(log.NewNopLogger(), "peer", WithPeerStateClock(clockwork.NewFakeClock()))
 	blockID := types.BlockID{Hash: []byte("block")}
 
