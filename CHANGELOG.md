@@ -1,3 +1,81 @@
+## [1.7.0] - 2026-08-17
+
+### Bug Fixes
+
+- Don't punish peers for duplicate block responses (#1393)
+- Survive transient peer failures and stalls (#1396)
+- Drop the unsafe commit-timeout override knobs (#33)
+- Bound inbound peer-supplied values (#19)
+- Verify the commit before persisting a backfilled header (#31)
+- Reject unknown vote-extension types in Commit.ValidateBasic (#32)
+- Attribute a light block that will not decode to the peer that sent it
+- Do not disconnect a peer this build merely cannot decode
+- Give each commit refusal the severity its own cause earns
+- Stop killing the node on late and duplicate responses
+- Tie retained request IDs to in-flight requests, not throughput
+- Remember cancelled requests too, not just timed-out ones
+- Stop a status refresh from erasing a peer's request state
+- Give the peer store one synchronisation domain
+- Judge a stall by who holds the block, not by advertised height
+- Don't wait on a peer that can never be asked again
+- Bound the responses held waiting on a missing height
+- Bound the backlog by what it costs, not only by how many
+
+### Documentation
+
+- State the backlog ceiling as a formula, and make it true
+- Anchor the backlog ceiling on what a peer may send
+- File the upgrade notes under v1.7.0
+- Write alert labels as block mappings
+
+### Features
+
+- Bound and fairly share peer verification work (vote-flood DoS, phase 1) (#17)
+
+### Miscellaneous Tasks
+
+- Bump Go to 1.26.5 (#1395)
+
+### Performance
+
+- Remove redundant work from the block apply path (#1394)
+
+### Styling
+
+- Satisfy the lint gate on the code this branch adds
+- Clear the last findings this branch adds
+- Clear the six findings the working lint gate reports
+
+### Testing
+
+- Pin peer attribution for an undecodable commit, which #17 could not
+- Meter the data-channel limit tests against a frozen clock
+
+### Build
+
+- Bump docker/login-action from 4.2.0 to 4.4.0 (#1378)
+- Bump docker/setup-buildx-action from 4.1.0 to 4.2.0 (#1380)
+- Bump docker/build-push-action from 7.2.0 to 7.3.0 (#1379)
+- Bump google.golang.org/grpc from 1.82.0 to 1.82.1 (#1392)
+- Bump golang.org/x/sync from 0.21.0 to 0.22.0 (#1387)
+- Bump github.com/adlio/schema from 1.5.0 to 1.5.1 (#1381)
+- Bump golang.org/x/sys from 0.46.0 to 0.47.0 (#1384)
+- Bump github.com/creachadair/atomicfile from 0.4.1 to 0.4.2 (#1388)
+- Bump docker/login-action from 4.4.0 to 4.5.2 (#1400)
+- Bump actions/stale from 10 to 11 (#1401)
+- Bump golang.org/x/crypto from 0.53.0 to 0.54.0 (#1383)
+- Bump golang.org/x/net from 0.56.0 to 0.57.0 (#1385)
+- Bump github.com/prometheus/client_golang (#1398)
+- Bump github.com/bufbuild/buf from 1.71.0 to 1.72.0 (#1397)
+- Bump actions/setup-go from 6.5.0 to 7.0.0 (#1390)
+- Stamp the version the linker can actually see
+
+### Ci
+
+- Give golangci-lint the history its diff needs
+- Filter new issues against the base branch directly
+- Stop only-new-issues and --new-from-rev fighting each other
+
 ## [1.6.0] - 2026-06-26
 
 ### Bug Fixes
@@ -45,6 +123,7 @@
 - Disable CodeRabbit automatic reviews (#1345)
 - Update changelog and version to 1.6.0-dev.2 (#1361)
 - Update changelog and version to 1.6.0-dev.3 (#1372)
+- Update changelog and version to 1.6.0
 
 ### Refactor
 
@@ -103,6 +182,9 @@
 - Bump actions/checkout from 6 to 7 (#1368)
 - Bump github.com/bufbuild/buf from 1.70.0 to 1.71.0 (#1369)
 - Bump github.com/opencontainers/runc (#1371)
+- Bump golangci/golangci-lint-action from 9.2.1 to 9.3.0 (#1374)
+- Bump actions/setup-go from 6.3.0 to 6.5.0 (#1375)
+- Bump google.golang.org/grpc from 1.81.1 to 1.82.0 (#1376)
 
 ### Ci
 
