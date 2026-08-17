@@ -115,7 +115,7 @@ func (suite *ProposalerTestSuite) TestSet() {
 	ctx := context.Background()
 	blockID := suite.blockH100R0.BlockID(nil)
 	state := suite.committedState
-	proposalH100R0 := types.NewProposal(100, state.LastCoreChainLockedBlockHeight, 0, -1, blockID, suite.blockH100R0.Header.Time)
+	proposalH100R0 := types.NewProposal(100, state.LastCoreChainLockedBlockHeight, 0, -1, blockID, suite.blockH100R0.Time)
 	suite.signProposal(ctx, proposalH100R0)
 	emptyProposal := types.Proposal{}
 	receivedAt := time.Date(2023, 1, 31, 11, 0, 0, 0, time.UTC)
@@ -188,7 +188,7 @@ func (suite *ProposalerTestSuite) TestDecide() {
 	blockParts, err := suite.blockH100R0.MakePartSet(types.BlockPartSizeBytes)
 	suite.Require().NoError(err)
 	state := suite.committedState
-	proposalH100R0 := types.NewProposal(100, state.LastCoreChainLockedBlockHeight, 0, 0, blockID, suite.blockH100R0.Header.Time)
+	proposalH100R0 := types.NewProposal(100, state.LastCoreChainLockedBlockHeight, 0, 0, blockID, suite.blockH100R0.Time)
 	suite.signProposal(ctx, proposalH100R0)
 	vs, err := selectproposer.NewProposerSelector(types.ConsensusParams{}, suite.mockValSet, 100, 0, nil, nil)
 	suite.Require().NoError(err)
@@ -272,7 +272,7 @@ func (suite *ProposalerTestSuite) TestVerifyProposal() {
 	ctx := context.Background()
 	blockID := suite.blockH100R0.BlockID(nil)
 	state := suite.committedState
-	proposalH100R0 := types.NewProposal(100, state.LastCoreChainLockedBlockHeight, 0, 0, blockID, suite.blockH100R0.Header.Time)
+	proposalH100R0 := types.NewProposal(100, state.LastCoreChainLockedBlockHeight, 0, 0, blockID, suite.blockH100R0.Time)
 	suite.signProposal(ctx, proposalH100R0)
 	proposalH100R0wrongSig := *proposalH100R0
 	proposalH100R0wrongSig.Signature = make([]byte, 96)
@@ -390,7 +390,7 @@ func (suite *ProposalerTestSuite) TestVerifyProposal_ForgedSignatureMovesCounter
 	// A proposal for the round's real proposer, at the current height/round and
 	// core height, so it clears every gate ahead of the signature check; the
 	// signature itself is forged, so the check is what rejects it.
-	proposal := types.NewProposal(100, state.LastCoreChainLockedBlockHeight, 0, 0, blockID, suite.blockH100R0.Header.Time)
+	proposal := types.NewProposal(100, state.LastCoreChainLockedBlockHeight, 0, 0, blockID, suite.blockH100R0.Time)
 	proposal.Signature = make([]byte, 96)
 
 	counter := &recordingCounter{}
