@@ -108,10 +108,10 @@ func runBackfillProbe(t *testing.T, span int64) backfillProbeResult {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
+	const stopHeight int64 = 10
 	const (
-		stopHeight  int64 = 10
-		numPeers          = 4
-		numHandlers       = 4
+		numPeers    = 4
+		numHandlers = 4
 	)
 	startHeight := stopHeight + span - 1
 

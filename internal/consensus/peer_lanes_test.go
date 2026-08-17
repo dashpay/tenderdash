@@ -382,7 +382,7 @@ const (
 const oracleGoPageBytes = 8 << 10
 
 // oracleRoundedPayload rounds a marshaled payload size up to the page the Go
-// allocator would serve it from, modelling the retained heap rather than the
+// allocator would serve it from, modeling the retained heap rather than the
 // wire length. It is deliberately a different derivation from the scheduler's
 // 13/10 scaling, so the two agree only if both really bound the rounded heap.
 func oracleRoundedPayload(marshaled int) int {
@@ -730,7 +730,7 @@ func TestPeerLanesSessionGatesStaleSends(t *testing.T) {
 }
 
 // A peer message that carries no session — a path that predates connection
-// sessions, or this node's own work — keeps the former admission behaviour so
+// sessions, or this node's own work — keeps the former admission behavior so
 // the gate cannot silently drop traffic that never opted into it.
 func TestPeerLanesAdmitSessionlessSends(t *testing.T) {
 	ctx := context.Background()

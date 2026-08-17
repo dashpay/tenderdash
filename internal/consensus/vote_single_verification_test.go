@@ -213,7 +213,7 @@ func TestPeerVoteVerificationDraws(t *testing.T) {
 
 // The application is handed a vote's own bytes on the way to being asked about
 // its extensions — kvstore, e2e and every other in-process proxy app get the
-// request struct itself, with no serialisation in between — and it is handed
+// request struct itself, with no serialization in between — and it is handed
 // them after the vote's signatures have been checked but before the vote is
 // stored. A vote that comes back from that round trip must either still be the
 // vote whose signatures were checked, or not be stored at all. Anything else

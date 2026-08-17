@@ -40,7 +40,7 @@ type Profile interface {
 // signature verification at all: the vote set rejects a vote whose proTxHash
 // does not match the validator at its index BEFORE it charges the verification
 // budget (see types/vote_set.go), so a vote with a random identity is rejected
-// cheaply and never exercises the defence the flood is meant to stress. These
+// cheaply and never exercises the defense the flood is meant to stress. These
 // identities are public on a real network (they are on-chain), which is exactly
 // why the cheap-flood threat model assumes the attacker has them.
 type ForgedValidator struct {
@@ -144,7 +144,7 @@ const unknownExtensionType = tmproto.VoteExtensionType(99)
 
 // tooManyExtensions is one past the protocol maximum a legitimate participant
 // produces. A message declaring this many extensions is priced above the ceiling
-// and refused before conversion — dropped locally, the sender not penalised,
+// and refused before conversion — dropped locally, the sender not penalized,
 // because an over-long list says nothing about the sender's honesty.
 const tooManyExtensions = numExtensions + 1
 
@@ -273,7 +273,7 @@ func (p precommitInvalidExtensionProfile) Next(height int64, round int32) proto.
 // commit is not attributable to a signer — the threshold signature has no
 // individual identity — but a forged threshold signature is provably malicious,
 // so the node evicts the sender after verifying one. That is correct,
-// attributable behaviour, and unlike the vote floods it is expected to move the
+// attributable behavior, and unlike the vote floods it is expected to move the
 // peer-error path; the flood's leverage comes from rotating identities.
 type commitProfile struct{ quorumHash []byte }
 
@@ -322,7 +322,7 @@ func (p commitUnknownExtensionProfile) Next(height int64, round int32) proto.Mes
 // extensions than the protocol permits, with otherwise well-formed extensions.
 // The declared count alone prices the message above the ceiling, so it is
 // refused before conversion — without penalising the sender, since an over-long
-// list is a version-skew or bug signal, not a peer offence.
+// list is a version-skew or bug signal, not a peer offense.
 type commitTooManyExtensionsProfile struct{ quorumHash []byte }
 
 func (commitTooManyExtensionsProfile) Name() string { return "commit-too-many-extensions" }
@@ -589,7 +589,7 @@ func BuildProfiles(cfg ForgeConfig) map[string]Profile {
 var Profiles = BuildProfiles(ForgeConfig{})
 
 // MalformedProfiles names the profiles whose messages the node refuses cheaply
-// instead of carrying to the verification defence. Two declare a vote-extension
+// instead of carrying to the verification defense. Two declare a vote-extension
 // type outside the defined enum, which the conversion rejects at the decode
 // boundary; two declare more extensions than the protocol permits, which prices
 // them out before conversion. Their output is deliberately not valid-at-

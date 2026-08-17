@@ -87,7 +87,6 @@ func TestLoadHeightProgressUnderSustainedFlood(t *testing.T) {
 	ensurePrecommit(t, voteCh, height, round)
 
 	// And its precommit, the expensive message of the round.
-	honestArrived = time.Now()
 	h.sendFromPeer(ctx, t, honestPeer, signVotes(ctx, t, tmproto.PrecommitType, chainID, blockID,
 		stateData.RoundState.AppHash, stateData.Validators.QuorumType, stateData.Validators.QuorumHash, other)...)
 

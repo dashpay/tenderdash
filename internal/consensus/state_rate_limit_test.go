@@ -313,7 +313,7 @@ func TestVoteSetBitsResponseSendIsBounded(t *testing.T) {
 	assert.False(t, sent, "an undelivered answer must not be recorded as one")
 	assert.Less(t, elapsed, 5*voteSetResponseTimeout,
 		"the send must give up on its own rather than wait out the caller's context")
-	require.NoError(t, ctx.Err(), "giving up must not have cancelled the caller's context")
+	require.NoError(t, ctx.Err(), "giving up must not have canceled the caller's context")
 }
 
 // blockedChannel is a p2p.Channel whose sends never complete.

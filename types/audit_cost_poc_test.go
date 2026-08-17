@@ -69,7 +69,7 @@ func TestPoC_CommitVerificationCostScalesWithExtensionCount(t *testing.T) {
 
 // The proposed cost function nTokens = 1 + len(VoteExtensions) assumes cost is
 // linear in the *count* of extensions. It is not: a THRESHOLD_RECOVER extension
-// has no bound on its payload size, and that payload is canonicalized, marshalled
+// has no bound on its payload size, and that payload is canonicalized, marshaled
 // and SHA-256'd on the receive path. One extension with a 1 MB payload is charged
 // 2 tokens.
 func TestPoC_ExtensionPayloadSizeIsUnbounded(t *testing.T) {

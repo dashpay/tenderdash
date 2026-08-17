@@ -13,7 +13,7 @@ import (
 
 // TestHandleCommitVerifyErrorClassification pins which commit-verification
 // failures evict a peer. Only a failed threshold-signature check is unambiguous
-// misbehaviour; every other failure (wrong block ID, wrong quorum hash, a local
+// misbehavior; every other failure (wrong block ID, wrong quorum hash, a local
 // fault) is reachable by an honest relayer or a forked peer and must never cause
 // a disconnect. Replayed messages carry the original PeerID, so they are exempt
 // regardless of the error.

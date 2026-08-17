@@ -248,7 +248,7 @@ func TestNewRateLimitWithBurst_ExplicitBurstHonored(t *testing.T) {
 }
 
 // The limiter must meter time through an injectable clock, so that refill
-// behaviour can be asserted exactly instead of being inferred from sleeps. A
+// behavior can be asserted exactly instead of being inferred from sleeps. A
 // test that cannot advance time can only observe the bucket draining, never the
 // rate at which it recovers — which is the property the limit actually promises.
 func TestRateLimit_RefillsOnInjectedClock(t *testing.T) {
@@ -344,7 +344,7 @@ func TestRateLimit_WaitPathRefillsOnInjectedClock(t *testing.T) {
 	}
 }
 
-// A waiting caller must give up when its context is cancelled — a wait that
+// A waiting caller must give up when its context is canceled — a wait that
 // ignored cancellation would hold the caller through shutdown — and the tokens
 // it never spent must go back to the bucket.
 func TestRateLimit_WaitPathHonoursContextCancellation(t *testing.T) {
@@ -379,10 +379,10 @@ func TestRateLimit_WaitPathHonoursContextCancellation(t *testing.T) {
 
 	select {
 	case res := <-results:
-		require.Error(t, res.err, "a cancelled wait must report failure rather than admit the message")
+		require.Error(t, res.err, "a canceled wait must report failure rather than admit the message")
 		assert.False(t, res.allowed)
 	case <-time.After(5 * time.Second):
-		t.Fatal("a cancelled wait did not return")
+		t.Fatal("a canceled wait did not return")
 	}
 
 	// The abandoned wait must not have spent the tokens it was queued for:
@@ -397,12 +397,12 @@ func TestRateLimit_WaitPathHonoursContextCancellation(t *testing.T) {
 	case err := <-admitted:
 		require.NoError(t, err)
 	case <-time.After(5 * time.Second):
-		t.Fatal("a cancelled wait consumed tokens it never used")
+		t.Fatal("a canceled wait consumed tokens it never used")
 	}
 }
 
 // Without an explicit clock the limiter keeps metering wall-clock time, so
-// production behaviour is unchanged by the seam.
+// production behavior is unchanged by the seam.
 func TestRateLimit_DefaultsToRealClock(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -420,12 +420,12 @@ func TestNewRateLimitWithBurst_DisabledLimitKeepsZeroBurst(t *testing.T) {
 }
 
 // A caller whose own deadline is shorter than the delay the bucket asks for
-// gains nothing by waiting it out: it will be cancelled before the tokens
+// gains nothing by waiting it out: it will be canceled before the tokens
 // arrive. Deciding that up front is what keeps the caller — and, on a shared
 // channel goroutine, every message behind it — from being parked for a
 // deadline's worth of time to reach the same refusal, and it is what lets the
 // caller tell "the bucket cannot serve you in time" apart from "you were
-// cancelled".
+// canceled".
 func TestRateLimit_WaitFailsFastPastTheCallerDeadline(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

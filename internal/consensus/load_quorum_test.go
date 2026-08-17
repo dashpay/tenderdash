@@ -144,7 +144,7 @@ func TestLoadQuorumFormationUnderFlood(t *testing.T) {
 // Three shapes an unprivileged peer can produce for free — a precommit vote, a
 // proposal and a commit, none of which it can sign — all settle at one
 // verification, take one turn in the rotation, and delay an honest peer's
-// message by the same amount. A defence that closed one of them would leave the
+// message by the same amount. A defense that closed one of them would leave the
 // other two open at the same price.
 //
 // What one message costs is not what a campaign costs, and the two answers

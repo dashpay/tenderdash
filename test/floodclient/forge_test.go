@@ -27,7 +27,7 @@ func testForgeConfig() ForgeConfig {
 // TestProfiles_StructurallyValid asserts every profile emits a message that
 // passes the domain ValidateBasic for its type. This is the property the whole
 // tool depends on: a structurally-invalid message is rejected at decode, before
-// any defence, and proves nothing about the node shedding attack traffic. So
+// any defense, and proves nothing about the node shedding attack traffic. So
 // each forged message must be rejected only at or after verification — never at
 // decode. The vote/commit/proposal shapes are checked here against the public
 // types package; the consensus-only shapes (block part, state, maj23) are
@@ -81,7 +81,7 @@ func TestProfiles_StructurallyValid(t *testing.T) {
 
 // TestProfiles_MalformedRejected pins the intent of the profiles that
 // deliberately emit messages the node refuses rather than valid attack traffic
-// that reaches the verification defence. It is the counterpart of
+// that reaches the verification defense. It is the counterpart of
 // TestProfiles_StructurallyValid: those profiles must pass ValidateBasic, these
 // must not, and MalformedProfiles is the boundary between the two rosters.
 //
@@ -136,7 +136,7 @@ func TestProfiles_MalformedRejected(t *testing.T) {
 // votes to the configured validators in rotation, so a forged vote reaches the
 // node's signature verification (a vote whose proTxHash does not match its index
 // is rejected before the budget). Without this the cheap flood would exercise
-// admission and decode but never the defence it targets.
+// admission and decode but never the defense it targets.
 func TestProfiles_VoteIdentityRotation(t *testing.T) {
 	cfg := ForgeConfig{Validators: []ForgedValidator{
 		{ProTxHash: bytesOf(crypto.ProTxHashSize, 1), Index: 0},

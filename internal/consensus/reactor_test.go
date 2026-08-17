@@ -802,7 +802,7 @@ func generatePrivValUpdate(proTxHashes []crypto.ProTxHash) (*quorumData, error) 
 }
 
 // Peer updates are processed one at a time on a single goroutine, so a down must
-// finish deleting and cancelling the peer state before the next update — an up
+// finish deleting and canceling the peer state before the next update — an up
 // for a reconnecting NodeID — is handled. When the delete ran in a separate
 // goroutine, a fast reconnect could reuse a state a pending down still owned, and
 // have that down later delete or cancel the reconnection's state. Deleting

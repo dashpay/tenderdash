@@ -345,7 +345,7 @@ func TestFloodClient_ReactorShedsFloodNonPunitively(t *testing.T) {
 // profile produces a message the reactor accepts at its decode boundary
 // (MsgFromProto, which runs the message's ValidateBasic). This is the property
 // the tool depends on: a structurally-invalid message would be rejected at
-// decode, before any defence, and would prove nothing about the node shedding
+// decode, before any defense, and would prove nothing about the node shedding
 // attack traffic. So each profile must be rejected only at or after
 // verification — never at decode.
 func TestFloodProfiles_StructurallyValidAtReactorDecode(t *testing.T) {
@@ -392,7 +392,7 @@ func (tgt *floodReactorTarget) connectedPeerIDs() map[types.NodeID]struct{} {
 }
 
 // TestFloodClient_HoldsManyConnectionSlots validates the multi-identity slot
-// behaviour the flood needs to saturate a node: --identities N must open N real
+// behavior the flood needs to saturate a node: --identities N must open N real
 // connections, each a distinct node ID (IDs are free, which is the threat
 // model), and the node must admit and hold them all when it has room.
 func TestFloodClient_HoldsManyConnectionSlots(t *testing.T) {
@@ -432,7 +432,7 @@ func TestFloodClient_HoldsManyConnectionSlots(t *testing.T) {
 
 // TestFloodClient_AdmissionRejectsExcessSlots is the counterpart: at and above
 // MaxConnected+MaxConnectedUpgrade the node's admission must reject the excess.
-// That is the correct behaviour to observe under a slot flood, not a bug — the
+// That is the correct behavior to observe under a slot flood, not a bug — the
 // tool cannot hold more slots than the node offers.
 func TestFloodClient_AdmissionRejectsExcessSlots(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())

@@ -63,7 +63,7 @@ const (
 // admitFree reports whether an inbound piece of evidence is worth spending
 // anything on. It runs before the evidence is hashed for the pool's duplicate
 // check, so a flood of re-encoded copies of evidence we already hold is
-// recognised by a map lookup rather than by digesting a message that may
+// recognized by a map lookup rather than by digesting a message that may
 // approach the channel's megabyte limit.
 //
 // The checks are ordered by what they cost us: the ones that need nothing but
@@ -179,7 +179,7 @@ func allegesOneEquivocation(ev types.Evidence) bool {
 // than a vote may legitimately have.
 //
 // Nothing on the evidence path reads these extensions: the signature check
-// covers the block signature only, and the ABCI misbehaviour report does not
+// covers the block signature only, and the ABCI misbehavior report does not
 // include them. They are carried along because the evidence quotes real votes,
 // and a real vote is capped at MaxVoteExtensions — so anything above that cap
 // is pure payload, inflating a message we have to hash and store.

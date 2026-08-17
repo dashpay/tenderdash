@@ -59,7 +59,7 @@ func TestLoadEvidenceFloodAtMaxConnections(t *testing.T) {
 
 	offered := maxConnectionSlots*perPeer + 1
 	ceiling := nodeBurst / verifyCost
-	reportf(t, "%d peers offered %d unrecognisable pieces of evidence, %d reached verification "+
+	reportf(t, "%d peers offered %d unrecognizable pieces of evidence, %d reached verification "+
 		"(node-wide burst allows %d)", maxConnectionSlots, offered, verified, ceiling)
 	reportf(t, "the evidence channel admits at most %.0f BLS pairings per second node-wide, "+
 		"on top of the consensus verification budget", nodeRate)

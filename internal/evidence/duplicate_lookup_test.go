@@ -25,7 +25,7 @@ func (c *countingEvidence) Hash() []byte {
 	return c.Evidence.Hash()
 }
 
-// Hashing evidence means marshalling the whole message and digesting it, and an
+// Hashing evidence means marshaling the whole message and digesting it, and an
 // inbound message may run to the channel's megabyte limit. The duplicate check
 // on the inbound path runs before the work budget is consulted, so whatever it
 // spends is spent on a message the sender has not paid for — and asking whether
@@ -59,5 +59,5 @@ func TestAddEvidenceAsksBothLookupsWithOneHash(t *testing.T) {
 
 	require.NoError(t, pool.AddEvidence(context.Background(), ev))
 	assert.Equal(t, 1, ev.hashes,
-		"evidence we already hold must be recognised without hashing it twice")
+		"evidence we already hold must be recognized without hashing it twice")
 }

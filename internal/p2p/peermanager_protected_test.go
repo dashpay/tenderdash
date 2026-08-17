@@ -70,8 +70,8 @@ func drainEvictions(ctx context.Context, t *testing.T, m *PeerManager, protected
 //
 // The validator here reaches us *inbound* and is never dialed by this node,
 // which is the case the dial-time scoring never covered: DIP-6 is a directed
-// overlay, so roughly half of a node's quorum neighbours only ever connect
-// inwards, and after a restart every neighbour does.
+// overlay, so roughly half of a node's quorum neighbors only ever connect
+// inwards, and after a restart every neighbor does.
 func TestProtectedValidatorSurvivesFloodErrorsAndRestart(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -188,7 +188,7 @@ func TestReservedSlotIsNotShedUnderConnectionPressure(t *testing.T) {
 	require.True(t, peerManager.ShouldDisconnectOnError(sybil, false),
 		"connection pressure must still shed peers without a reserved slot")
 	require.True(t, peerManager.ShouldDisconnectOnError(validator, true),
-		"a reserved slot is not a licence to misbehave")
+		"a reserved slot is not a license to misbehave")
 }
 
 // TestReservedSlotAdmissionAtHardCeiling documents the one limit of a
@@ -210,7 +210,7 @@ func TestReservedSlotAdmissionAtHardCeiling(t *testing.T) {
 	require.NoError(t, peerManager.SetProtectedPeers([]types.NodeID{validator}))
 
 	// A flood walks the connection count all the way to the hard ceiling: each
-	// peer that reports an error drops below its neighbours and so becomes a
+	// peer that reports an error drops below its neighbors and so becomes a
 	// legal upgrade candidate for the next arrival.
 	for i := 0; i < ceiling; i++ {
 		require.NoError(t, peerManager.Accepted(floodID(t, i)))
@@ -240,7 +240,7 @@ func TestReservedSlotAdmissionAtHardCeiling(t *testing.T) {
 }
 
 // TestProtectedPeersRejectedSetIsNotKept checks what happens when a set of
-// reservations cannot be honoured: the previous set is dropped rather than left
+// reservations cannot be honored: the previous set is dropped rather than left
 // in force. Keeping it would reserve slots for a quorum that has rotated out —
 // exactly the stale protection that keeping reservations out of the peer store
 // is meant to prevent.

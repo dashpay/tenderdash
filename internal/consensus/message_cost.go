@@ -43,15 +43,15 @@ const (
 )
 
 // errTooManyVoteExtensions reports a message declaring more vote extensions
-// than any legitimate participant produces. It is not a peer offence: the
-// message is dropped locally and the sender is not penalised, so that a future
+// than any legitimate participant produces. It is not a peer offense: the
+// message is dropped locally and the sender is not penalized, so that a future
 // protocol revision — or a bug in this cost model — cannot evict honest peers.
 var errTooManyVoteExtensions = errors.New("too many vote extensions")
 
 // errUnpricedMessageType reports a message that is not part of the consensus
 // wire union and therefore has no price. Like an over-long extension list it is
-// not a peer offence: the message is dropped locally and the sender is not
-// penalised, since a version skew — or a message type added without a price —
+// not a peer offense: the message is dropped locally and the sender is not
+// penalized, since a version skew — or a message type added without a price —
 // says nothing about the sender's honesty.
 var errUnpricedMessageType = errors.New("message type has no verification cost")
 

@@ -1196,7 +1196,7 @@ func stateChannelMessageCost(msg proto.Message) int {
 // channels. It returns false for a message that should be dropped. Messages on
 // other channels are always allowed.
 //
-// Over-ceiling is a local drop and never a peer offence. The peer that reaches
+// Over-ceiling is a local drop and never a peer offense. The peer that reaches
 // its allowance under load is as likely to be an honest one gossiping hard as a
 // hostile one, and neither can be told apart from here.
 func (r *Reactor) allowStateChannelMessage(ctx context.Context, envelope *p2p.Envelope) bool {

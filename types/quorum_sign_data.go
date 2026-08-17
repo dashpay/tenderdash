@@ -128,7 +128,7 @@ func (q QuorumSignData) validateVoteExtensionCount(signatures QuorumSigns) error
 // derived from a vote or commit. An honest peer running a different
 // vote-extension configuration reaches this, so it is an application/version
 // disagreement rather than a forged signature: commit verification must not
-// treat it as evictable cryptographic misbehaviour.
+// treat it as evictable cryptographic misbehavior.
 type ErrVoteExtensionCountMismatch struct {
 	Extensions int
 	Signatures int

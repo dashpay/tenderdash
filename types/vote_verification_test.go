@@ -339,10 +339,10 @@ func TestVerificationDoesNotCoverAPrevoteGivenExtensions(t *testing.T) {
 		valSet.QuorumType, valSet.QuorumHash, val.PubKey, val.ProTxHash, nil)
 	require.NoError(t, err)
 
-	vote.VoteExtensions.Add(tmproto.VoteExtension{
+	require.NoError(t, vote.VoteExtensions.Add(tmproto.VoteExtension{
 		Type:      tmproto.VoteExtensionType_DEFAULT,
 		Extension: []byte("not allowed on a prevote"),
-	})
+	}))
 
 	require.Error(t,
 		vote.Verify(voteSet.ChainID(), valSet.QuorumType, valSet.QuorumHash, val.PubKey, val.ProTxHash),

@@ -148,7 +148,7 @@ func (ps *PeerState) SetLaneAdmission(connID, session uint64) {
 //
 // A message with no generation (connID == 0) — a path that predates ingress
 // stamping, or this node's own work — matches a peer that likewise has none,
-// preserving the former admission behaviour.
+// preserving the former admission behavior.
 func (ps *PeerState) laneSessionForConn(connID uint64) (uint64, bool) {
 	ps.mtx.RLock()
 	defer ps.mtx.RUnlock()

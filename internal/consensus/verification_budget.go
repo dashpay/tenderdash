@@ -145,7 +145,7 @@ func (b *rateVerificationBudget) allowN(now time.Time, cost int) bool {
 // the consensus goroutine, would let two messages read the same tokens and
 // spend them twice.
 //
-// The wait is bounded and honours ctx. An unbounded wait would stall consensus
+// The wait is bounded and honors ctx. An unbounded wait would stall consensus
 // behind an over-subscribed budget, and a wait that ignored cancellation would
 // keep the consensus goroutine from returning at shutdown. Both give up
 // silently: local overload is not the sender's fault.

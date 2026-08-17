@@ -107,7 +107,7 @@ func publishQuorum(
 // stay connected to — both the ones it dials and the ones that dial it.
 //
 // It calls the same selector the executor calls, so it pins that the executor
-// reserves the whole neighbourhood and nothing else, not that the selection
+// reserves the whole neighborhood and nothing else, not that the selection
 // itself is right; that is what the selector's own inverse property test covers.
 func expectedReservations(t *testing.T, validators []*types.Validator, me *types.Validator) []types.NodeID {
 	t.Helper()

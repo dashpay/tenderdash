@@ -355,9 +355,9 @@ func (vc *ValidatorConnExecutor) quorumNeighbourNodeIDs() ([]types.NodeID, error
 		return nil, err
 	}
 
-	neighbours := append(outbound, inbound...)
-	nodeIDs := make([]types.NodeID, 0, len(neighbours))
-	for _, validator := range neighbours {
+	neighbors := append(outbound, inbound...)
+	nodeIDs := make([]types.NodeID, 0, len(neighbors))
+	for _, validator := range neighbors {
 		if nodeID := validator.NodeAddress.NodeID; nodeID != "" {
 			nodeIDs = append(nodeIDs, nodeID)
 		}
