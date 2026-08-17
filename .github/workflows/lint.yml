@@ -62,6 +62,13 @@ jobs:
           # must be specified without patch version: we always use the
           # latest patch version.
           version: v2.12
-          args: --timeout 10m
+          # only-new-issues filters against a patch the action assembles itself,
+          # which it fails to do for a branch with a large diff — it then falls
+          # back to reporting every pre-existing issue in the repository. Ask
+          # the linter to do the filtering directly against the base branch,
+          # which the full-depth checkout above guarantees is present.
+          args: >-
+            --timeout 10m
+            ${{ github.event_name == 'pull_request' && format('--new-from-rev=origin/{0}', github.base_ref) || '' }}
           github-token: ${{ secrets.github_token }}
           only-new-issues: true
