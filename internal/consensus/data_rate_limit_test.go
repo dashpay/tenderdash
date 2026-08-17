@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -14,11 +15,15 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
+// The limiter meters against a frozen clock so no tokens refill while a test
+// runs. Refill is a function of elapsed wall time, which on a loaded machine
+// admits more messages than the burst alone allows and makes any assertion on
+// the number admitted depend on how fast the test happens to run.
 func newDataRateLimitedReactor(ctx context.Context, limit float64) *Reactor {
 	return &Reactor{
 		logger: log.NewNopLogger(),
 		dataRateLimit: client.NewRateLimitWithBurst(ctx, limit, dataRateBurstFor(limit),
-			true, log.NewNopLogger()),
+			true, log.NewNopLogger(), client.WithRateLimitClock(clockwork.NewFakeClock())),
 	}
 }
 
