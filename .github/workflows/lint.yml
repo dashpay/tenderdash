@@ -71,4 +71,7 @@ jobs:
             --timeout 10m
             ${{ github.event_name == 'pull_request' && format('--new-from-rev=origin/{0}', github.base_ref) || '' }}
           github-token: ${{ secrets.github_token }}
-          only-new-issues: true
+          # The action refuses --new-* args while only-new-issues is set, so the
+          # two are mutually exclusive: pull requests filter via --new-from-rev
+          # above, and pushes keep the action's own filtering.
+          only-new-issues: ${{ github.event_name != 'pull_request' }}
