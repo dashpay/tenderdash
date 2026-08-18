@@ -272,7 +272,7 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockSto
 		s.logger.Info("Updating validators", "from", s.Validators.BasicInfoString(),
 			"to", validators.BasicInfoString())
 		if validators.BelowStrictThreshold() {
-			s.logger.Warn("validator set voting threshold is below the 2/3+1 BFT safety bound; fault tolerance is reduced",
+			s.logger.Error("OVERRIDE ENABLED - NOT SAFE FOR PRODUCTION: validator set voting threshold is below the 2/3+1 BFT safety bound; fault tolerance is reduced and the chain is exposed to safety violations",
 				"quorum_type", validators.QuorumType.Name(),
 				"threshold", validators.QuorumVotingThresholdPower(),
 				"total_power", validators.TotalVotingPower(),

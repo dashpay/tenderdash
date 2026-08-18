@@ -123,6 +123,12 @@ laddr = "tcp://127.0.0.1:26657"
 # Use '["*"]' to allow any origin
 cors-allowed-origins = []
 
+# This list also governs the WebSocket origin policy of the `light` RPC proxy
+# (tenderdash light --proxy). By default (empty) the proxy accepts only
+# same-host origins and Origin-less (non-browser) clients — a zero-trust policy.
+# Add specific origins here to permit browser clients; a "*" entry allows any
+# origin and is discouraged.
+
 # A list of methods the client is allowed to use with cross-domain requests
 cors-allowed-methods = ["HEAD", "GET", "POST", ]
 

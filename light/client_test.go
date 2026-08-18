@@ -515,13 +515,12 @@ func TestClient(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 2, len(c.Witnesses()))
 
-		// A witness reporting a header that conflicts with the primary's fails the
-		// verification; the dissenting witness is kept, since the primary may be
-		// the faulty party.
+		// A single witness reporting a header that conflicts with the primary's is
+		// removed (treated as faulty), NOT fatal: the good witness corroborates the
+		// primary, so one dissenter must not break verification.
 		_, err = c.VerifyLightBlockAtHeight(ctx, 2, bTime.Add(2*time.Hour).Add(1*time.Second))
-		require.Error(t, err)
-		assert.ErrorIs(t, err, light.ErrConflictingWitnessHeader)
-		assert.Equal(t, 2, len(c.Witnesses()))
+		require.NoError(t, err)
+		assert.Equal(t, 1, len(c.Witnesses()))
 		mockFullNode.AssertExpectations(t)
 	})
 	t.Run("PrunesHeadersAndValidatorSets", func(t *testing.T) {
