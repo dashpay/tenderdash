@@ -32,10 +32,21 @@ const (
 	// consider block sync stalled after this duration of inactivity
 	syncTimeout = 60 * time.Second
 
-	// hand over to consensus after this duration of inactivity even when peers
+	// hand over to consensus after this duration of inactivity, even when peers
 	// still report higher blocks, so that a wedged synchronizer cannot keep the
-	// node out of consensus forever
+	// node out of consensus forever - but only within maxCatchupGap of the tip
 	maxSyncStall = 10 * time.Minute
+
+	// maxCatchupGap is how far behind the highest height any peer claims the node
+	// may be and still hand over to consensus on the stall backstop above.
+	//
+	// What is left after the handover is covered by consensus catch-up, which
+	// moves about one block per gossip cycle: it closes a gap of a few blocks in
+	// seconds and a gap of thousands never. Beyond this, block sync retrying an
+	// unproductive peer set is the only route to the tip that exists, and giving
+	// up on it puts a validator at heights the network committed long ago
+	// (dashpay/tenderdash#1413).
+	maxCatchupGap int64 = 10
 )
 
 type ReactorOption func(*Reactor)

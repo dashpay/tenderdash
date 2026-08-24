@@ -901,11 +901,13 @@ func makePeers(numPeers int, minHeight, maxHeight int64) map[types.NodeID]PeerDa
 
 // TestStallVerdictFor checks when a lack of progress ends block sync. Handing
 // over to consensus is effectively irreversible, so a stall must not end block
-// sync while a peer still holds the block we are waiting for.
+// sync while a peer still holds the block we are waiting for, nor while the node
+// is so far behind that consensus catch-up could never close the gap.
 func TestStallVerdictFor(t *testing.T) {
 	testCases := []struct {
 		name       string
 		servable   bool
+		behindBy   int64
 		stalledFor time.Duration
 		want       stallVerdict
 	}{
@@ -940,10 +942,18 @@ func TestStallVerdictFor(t *testing.T) {
 			want:       keepSyncing,
 		},
 		{
-			name:       "stalled past the wedge limit",
+			name:       "stalled past the wedge limit within reach of the tip",
 			servable:   true,
+			behindBy:   maxCatchupGap,
 			stalledFor: maxSyncStall + time.Second,
 			want:       stopStalledTooLong,
+		},
+		{
+			name:       "stalled past the wedge limit while far behind",
+			servable:   true,
+			behindBy:   maxCatchupGap + 1,
+			stalledFor: maxSyncStall + time.Second,
+			want:       keepSyncing,
 		},
 		{
 			name:       "the wedge limit does not override nothing to fetch",
@@ -954,7 +964,7 @@ func TestStallVerdictFor(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.want, stallVerdictFor(tc.servable, tc.stalledFor))
+			require.Equal(t, tc.want, stallVerdictFor(tc.servable, tc.behindBy, tc.stalledFor))
 		})
 	}
 }
@@ -1041,10 +1051,12 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncKeepsGoingWhileAPeerCanServeU
 // TestWaitForSyncHandsOverAfterMaxSyncStall checks the wall-clock backstop.
 // Servability is judged from what peers advertise about themselves, so a peer
 // that claims our height and never answers keeps the node in block sync
-// indefinitely unless a stall long enough to look like a wedge ends it.
+// indefinitely unless a stall long enough to look like a wedge ends it. Within
+// reach of the tip consensus catch-up can cover what is left, so the backstop
+// applies.
 func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverAfterMaxSyncStall() {
 	const height = int64(100)
-	peer := newPeerData("peer in range", 1, 1000)
+	peer := newPeerData("peer in range", 1, height+maxCatchupGap)
 	h := suite.newWaitForSyncHarness(height, peer)
 	defer h.cancel()
 
@@ -1053,6 +1065,23 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverAfterMaxSyncStall() 
 	caughtUp, ended := h.result(2 * time.Second)
 	suite.Require().True(ended, "no progress for %s did not hand over to consensus", maxSyncStall)
 	suite.Require().False(caughtUp, "handing over after a stall is not catching up")
+}
+
+// TestWaitForSyncKeepsSyncingWhileFarBehind is the counterpart: the wall-clock
+// backstop must not hand over a node that is thousands of blocks behind. It
+// would arrive in consensus as a validator at a height the network committed
+// long ago (dashpay/tenderdash#1413), and consensus catch-up moves about one
+// block per gossip cycle, so it would never reach the tip that way either.
+func (suite *SynchronizerTestSuite) TestWaitForSyncKeepsSyncingWhileFarBehind() {
+	const height = int64(100)
+	peer := newPeerData("peer far ahead", 1, height+maxCatchupGap+1)
+	h := suite.newWaitForSyncHarness(height, peer)
+	defer h.cancel()
+
+	h.clock.Advance(maxSyncStall + time.Second)
+
+	_, ended := h.result(200 * time.Millisecond)
+	suite.Require().False(ended, "block sync gave up while still %d blocks behind", maxCatchupGap+1)
 }
 
 // TestWaitForSyncStopsWhenTheOnlyPeerIsRateRejected covers the slow-peer route to
@@ -1107,8 +1136,9 @@ func (suite *SynchronizerTestSuite) TestStallSnapshotIsOneObservation() {
 		}()
 		runtime.Gosched()
 		close(ready)
-		height, stalled, servable := sync.stallSnapshot()
+		height, stalled, servable, maxPeerHeight := sync.stallSnapshot()
 		<-applied
+		suite.Require().Equal(int64(1000), maxPeerHeight, "the height the gap is measured against")
 
 		if height == startHeight {
 			suite.Require().Equal(stalledFor, stalled,
