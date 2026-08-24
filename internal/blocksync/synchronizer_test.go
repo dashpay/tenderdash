@@ -84,12 +84,7 @@ func (suite *SynchronizerTestSuite) TestBasic() {
 		On("ValidateBlock", mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
 		Return(nil)
-	suite.blockExec.
-		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Maybe().
-		Return(func(_ context.Context, state sm.State, _ types.BlockID, block *types.Block, _ *types.Commit) sm.State {
-			return state
-		}, nil)
+	expectApply(suite.blockExec, func(call *mock.Call) { call.Maybe() })
 	suite.client.
 		On("GetBlock", mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
@@ -204,7 +199,11 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResult() {
 					Once().
 					Return(nil)
 				suite.blockExec.
-					On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, respH1.Block, respH1.Commit).
+					On("ProcessProposal", mock.Anything, respH1.Block, mock.Anything, mock.Anything, false).
+					Once().
+					Return(sm.CurrentRoundState{}, nil)
+				suite.blockExec.
+					On("FinalizeBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, respH1.Block, respH1.Commit).
 					Once().
 					Return(sm.State{}, nil)
 			},
@@ -419,12 +418,7 @@ func (suite *SynchronizerTestSuite) TestConsumeDuplicateThenDrain() {
 		On("ValidateBlock", mock.Anything, mock.Anything, mock.Anything).
 		Twice().
 		Return(nil)
-	suite.blockExec.
-		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Twice().
-		Return(func(_ context.Context, state sm.State, _ types.BlockID, _ *types.Block, _ *types.Commit) sm.State {
-			return state
-		}, nil)
+	expectApply(suite.blockExec, func(call *mock.Call) { call.Twice() })
 
 	resultCh <- workerpool.Result{Value: respH1}
 	suite.Require().NoError(pool.consumeJobResult(ctx))
@@ -1209,12 +1203,7 @@ func (suite *SynchronizerTestSuite) newBacklogHarness() *backlogHarness {
 		On("ValidateBlock", mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
 		Return(nil)
-	suite.blockExec.
-		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Maybe().
-		Return(func(_ context.Context, state sm.State, _ types.BlockID, _ *types.Block, _ *types.Commit) sm.State {
-			return state
-		}, nil)
+	expectApply(suite.blockExec, func(call *mock.Call) { call.Maybe() })
 
 	jobCh := make(chan *workerpool.Job, 1)
 	resultCh := make(chan workerpool.Result, 1)
@@ -1659,12 +1648,7 @@ func (suite *SynchronizerTestSuite) TestClientTimeoutUnwedgesAFullWindow() {
 		On("ValidateBlock", mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
 		Return(nil)
-	suite.blockExec.
-		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Maybe().
-		Return(func(_ context.Context, state sm.State, _ types.BlockID, _ *types.Block, _ *types.Commit) sm.State {
-			return state
-		}, nil)
+	expectApply(suite.blockExec, func(call *mock.Call) { call.Maybe() })
 
 	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
 	pool := NewSynchronizer(blocking, blockClient, applier,
@@ -1730,4 +1714,19 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResultKeepsPeerOnTransientFail
 	}
 	suite.Require().NoError(pool.consumeJobResult(ctx))
 	suite.Require().Empty(pool.peerStore.All(), "peer must be dropped once it exceeds the threshold")
+}
+
+// expectApply sets up the pair of application calls the block applier makes for
+// every block it applies - it runs the two halves of ApplyBlock separately so
+// that the block store is advanced between them - and leaves the state
+// unchanged. expect applies the same cardinality to both.
+func expectApply(exec *mocks.Executor, expect func(*mock.Call)) {
+	expect(exec.
+		On("ProcessProposal", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(sm.CurrentRoundState{}, nil))
+	expect(exec.
+		On("FinalizeBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(func(_ context.Context, state sm.State, _ sm.CurrentRoundState, _ types.BlockID, _ *types.Block, _ *types.Commit) sm.State {
+			return state
+		}, nil))
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/state/mocks"
 	statefactory "github.com/dashpay/tenderdash/internal/state/test/factory"
 	"github.com/dashpay/tenderdash/internal/test/factory"
@@ -48,7 +49,11 @@ func TestBlockApplierApply(t *testing.T) {
 					Once().
 					Return(nil)
 				mockBlockExec.
-					On("ApplyBlock", mock.Anything, initialState, blockH1ID, blockH1, commitH1).
+					On("ProcessProposal", mock.Anything, blockH1, commitH1.Round, initialState, false).
+					Once().
+					Return(sm.CurrentRoundState{}, nil)
+				mockBlockExec.
+					On("FinalizeBlock", mock.Anything, initialState, sm.CurrentRoundState{}, blockH1ID, blockH1, commitH1).
 					Once().
 					Return(state, nil)
 			},
@@ -74,7 +79,11 @@ func TestBlockApplierApply(t *testing.T) {
 					Once().
 					Return(nil)
 				mockBlockExec.
-					On("ApplyBlock", mock.Anything, initialState, blockH1ID, blockH1, commitH1).
+					On("ProcessProposal", mock.Anything, blockH1, commitH1.Round, initialState, false).
+					Once().
+					Return(sm.CurrentRoundState{}, nil)
+				mockBlockExec.
+					On("FinalizeBlock", mock.Anything, initialState, sm.CurrentRoundState{}, blockH1ID, blockH1, commitH1).
 					Once().
 					Return(state, errors.New("eeeeeeeee"))
 			},
@@ -148,4 +157,76 @@ func TestApplyStatsSubMillisecondPreserved(t *testing.T) {
 	require.True(t, measured)
 	require.Equal(t, 300*time.Microsecond, timings.PartSet)
 	require.Zero(t, timings.PartSet.Milliseconds(), "the value this test exists to protect")
+}
+
+// TestBlockApplierDoesNotSaveBlockRejectedByApp checks that a block the
+// application refuses never reaches the block store. Persisting it leaves the
+// store a height ahead of both the state and the app, and every later start has
+// to re-process that block through an application that already rejected it once
+// - the restart-proof failure of dashpay/tenderdash#1413.
+func TestBlockApplierDoesNotSaveBlockRejectedByApp(t *testing.T) {
+	ctx := context.Background()
+	mockBlockExec := mocks.NewExecutor(t)
+	// no SaveBlock expectation: the store must not be touched at all, and the
+	// mock fails the test on any call it was not told to expect
+	mockBlockStore := mocks.NewBlockStore(t)
+	valSet, privVals := factory.MockValidatorSet()
+	initialState := fakeInitialState(valSet)
+	state := initialState.Copy()
+	blocks := statefactory.MakeBlocks(ctx, t, 2, &state, privVals, 1)
+	block, commit := blocks[0], blocks[1].LastCommit
+
+	mockBlockExec.
+		On("ValidateBlock", mock.Anything, initialState, block).
+		Once().
+		Return(nil)
+	mockBlockExec.
+		On("ProcessProposal", mock.Anything, block, commit.Round, initialState, false).
+		Once().
+		Return(sm.CurrentRoundState{}, errors.New("app rejected the block"))
+
+	applier := newBlockApplier(mockBlockExec, mockBlockStore, applierWithState(initialState))
+	require.Panics(t, func() { _ = applier.Apply(ctx, block, commit) })
+}
+
+// TestBlockApplierSavesBlockBeforeFinalize pins the order the handshake relies
+// on: the block is in the store before the application commits it. The store may
+// be one height ahead of the state - replayer.go replays that last block on the
+// next start - but a store behind the app or the state is a case it rejects
+// outright, so a crash must never be able to leave one.
+func TestBlockApplierSavesBlockBeforeFinalize(t *testing.T) {
+	ctx := context.Background()
+	mockBlockExec := mocks.NewExecutor(t)
+	mockBlockStore := mocks.NewBlockStore(t)
+	valSet, privVals := factory.MockValidatorSet()
+	initialState := fakeInitialState(valSet)
+	state := initialState.Copy()
+	blocks := statefactory.MakeBlocks(ctx, t, 2, &state, privVals, 1)
+	block, commit := blocks[0], blocks[1].LastCommit
+	blockParts, err := block.MakePartSet(types.BlockPartSizeBytes)
+	require.NoError(t, err)
+
+	var calls []string
+	mockBlockExec.
+		On("ValidateBlock", mock.Anything, initialState, block).
+		Once().
+		Return(nil)
+	mockBlockExec.
+		On("ProcessProposal", mock.Anything, block, commit.Round, initialState, false).
+		Once().
+		Run(func(mock.Arguments) { calls = append(calls, "process") }).
+		Return(sm.CurrentRoundState{}, nil)
+	mockBlockStore.
+		On("SaveBlock", block, blockParts, commit).
+		Once().
+		Run(func(mock.Arguments) { calls = append(calls, "save") })
+	mockBlockExec.
+		On("FinalizeBlock", mock.Anything, initialState, sm.CurrentRoundState{}, block.BlockID(blockParts), block, commit).
+		Once().
+		Run(func(mock.Arguments) { calls = append(calls, "finalize") }).
+		Return(state, nil)
+
+	applier := newBlockApplier(mockBlockExec, mockBlockStore, applierWithState(initialState))
+	require.NoError(t, applier.Apply(ctx, block, commit))
+	require.Equal(t, []string{"process", "save", "finalize"}, calls)
 }
