@@ -20,6 +20,8 @@ func (e *ApplyCommitEvent) GetType() EventType {
 
 type ApplyCommitAction struct {
 	logger log.Logger
+	// holds back proposals while the node catches up after a block-sync handover
+	catchup *catchupTracker
 	// store blocks and commits
 	blockStore sm.BlockStore
 	// create and execute blocks
@@ -83,6 +85,7 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 		// So, we panic here to ensure that the node will be restarted.
 		panic(fmt.Errorf("failed to finalize block %X at height %d: %w", block.Hash(), block.Height, err))
 	}
+	c.catchup.blockCommitted()
 
 	lastBlockMeta := c.blockStore.LoadBlockMeta(height - 1)
 

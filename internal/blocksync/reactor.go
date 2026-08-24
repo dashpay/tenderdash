@@ -54,7 +54,7 @@ type ReactorOption func(*Reactor)
 type consensusReactor interface {
 	// For when we switch from block sync reactor to the consensus
 	// machine.
-	SwitchToConsensus(ctx context.Context, state sm.State, skipWAL bool)
+	SwitchToConsensus(ctx context.Context, state sm.State, skipWAL bool, behind bool)
 }
 
 // Reactor handles long-term catchup syncing.
@@ -303,12 +303,18 @@ func (r *Reactor) requestRoutine(ctx context.Context, p2pClient *client.Client) 
 // NOTE: Don't sleep in the FOR_LOOP or otherwise slow it down!
 func (r *Reactor) poolRoutine(ctx context.Context, stateSynced bool) {
 	caughtUp := r.synchronizer.WaitForSync(ctx)
+	state := r.executor.State()
+	// Read before the synchronizer stops, and only as evidence that the node is
+	// behind: a peer claiming a height above ours is the one thing that says so.
+	// Where no peer claims one - a solo validator, a network with no peers at all
+	// - the node is not held back at all.
+	behind := !caughtUp && r.synchronizer.MaxPeerHeight() > state.LastBlockHeight
 	r.synchronizer.Stop()
 	r.blockSyncFlag.Store(false)
 	if r.consReactor != nil {
 		// caughtUp is what WaitForSync actually decided on, rather than a second
 		// IsCaughtUp call that races the synchronizer we just stopped
-		r.consReactor.SwitchToConsensus(ctx, r.executor.State(), caughtUp || stateSynced)
+		r.consReactor.SwitchToConsensus(ctx, state, caughtUp || stateSynced, behind)
 	}
 }
 
