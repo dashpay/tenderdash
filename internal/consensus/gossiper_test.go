@@ -549,6 +549,80 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupResendsMultiPart()
 	}
 }
 
+// TestGossipBlockPartsForCatchupBudgetsMissingParts pins the catch-up pass to
+// the number of parts the peer is actually missing rather than the size of its
+// bit-array. The peer supplies that bit-array over the wire and only its length
+// is validated, so budgeting on the length would let a peer reporting a single
+// missing part draw one resend of it per bit in the array.
+func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupBudgetsMissingParts() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const partSize = uint32(100)
+	partSet := types.NewPartSetFromData(tmrand.Bytes(int(partSize)*3), partSize)
+	suite.Require().Equal(uint32(3), partSet.Total(), "need a 3-part block for this test")
+	blockMeta := types.BlockMeta{BlockID: types.BlockID{PartSetHeader: partSet.Header()}}
+
+	// The peer reports every part but the last, so exactly one is missing.
+	peerParts := partSet.BitArray().Copy()
+	peerParts.SetIndex(2, false)
+	suite.Require().Equal(2, peerParts.CountTrueBits())
+
+	suite.ps.PRS = cstypes.PeerRoundState{
+		Height:                     999,
+		Round:                      0,
+		ProposalBlockParts:         peerParts,
+		ProposalBlockPartSetHeader: partSet.Header(),
+	}
+
+	suite.blockStore.On("LoadBlockMeta", int64(999)).Return(&blockMeta)
+	suite.blockStore.On("LoadBlockPart", int64(999), 2).Return(partSet.GetPart(2))
+
+	sends := 0
+	suite.dataCh.On("Send", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			env, ok := args.Get(1).(p2p.Envelope)
+			if !ok {
+				return
+			}
+			if _, ok := env.Message.(*tmcons.BlockPart); ok {
+				sends++
+			}
+		}).
+		Return(nil)
+
+	for range int(partSet.Total()) + 5 {
+		suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+	}
+	suite.Require().Equal(1, sends,
+		"a pass must spend one send per missing part, not one per bit-array entry")
+
+	suite.clock.Advance(catchupResendInterval)
+	suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+	suite.Require().Equal(2, sends, "the missing part is retried once the interval elapses")
+}
+
+// TestGossipBlockPartsForCatchupPeerHasEveryPart covers the peer reporting a
+// complete part set: there is nothing to send, and no pass may be opened.
+func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupPeerHasEveryPart() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	partSet := types.NewPartSetFromData(tmrand.Bytes(100), 100)
+	suite.ps.PRS = cstypes.PeerRoundState{
+		Height:                     999,
+		Round:                      0,
+		ProposalBlockParts:         partSet.BitArray(), // peer has them all
+		ProposalBlockPartSetHeader: partSet.Header(),
+	}
+
+	// Neither the block store nor the data channel may be touched; the mocks are
+	// constructed with no expectations, so any call fails the test.
+	for range 10 {
+		suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+	}
+}
+
 func (suite *GossiperSuiteTest) TestGossipCommit() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

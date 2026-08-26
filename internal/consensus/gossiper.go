@@ -232,23 +232,33 @@ func (g *msgGossiper) GossipBlockPartsForCatchup(
 
 // beginCatchupAttempt reserves a slot in the current catch-up pass, reporting
 // false while a completed pass waits out its retry interval. A pass spends one
-// send per part, so a peer that dropped them is served again every interval for
-// as long as it stays behind.
+// send per missing part, so a peer that dropped them is served again every
+// interval for as long as it stays behind.
 func (g *msgGossiper) beginCatchupAttempt(prs *cstypes.PeerRoundState) bool {
 	if prs.Height != g.catchupHeight {
 		g.catchupHeight = prs.Height
 		g.catchupAttempts = 0
 		g.catchupRetryAt = time.Time{}
 	}
-	parts := prs.ProposalBlockParts.Size()
-	if g.catchupAttempts >= parts {
+	if prs.ProposalBlockParts == nil {
+		return false
+	}
+	// The peer sends this bit-array and only its length is validated, so budget
+	// the pass on the parts it reports missing: those are what PickRandom draws
+	// from, and sizing by the whole array would buy one resend of a single
+	// missing part per entry in it.
+	missing := prs.ProposalBlockParts.Not().CountTrueBits()
+	if missing == 0 {
+		return false
+	}
+	if g.catchupAttempts >= missing {
 		if g.clock.Now().Before(g.catchupRetryAt) {
 			return false
 		}
 		g.catchupAttempts = 0
 	}
 	g.catchupAttempts++
-	if g.catchupAttempts >= parts {
+	if g.catchupAttempts >= missing {
 		g.catchupRetryAt = g.clock.Now().Add(catchupResendInterval)
 	}
 	return true
