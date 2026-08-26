@@ -5,9 +5,11 @@ package consensus
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cosmos/gogoproto/proto"
 	"github.com/hashicorp/go-multierror"
+	"github.com/jonboulle/clockwork"
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	sm "github.com/dashpay/tenderdash/internal/state"
@@ -27,12 +29,26 @@ type Gossiper interface {
 	GossipCommit(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState)
 }
 
+// catchupResendInterval bounds how often the catch-up path replays a block's
+// part set to the same lagging peer. Catch-up deliberately never marks parts as
+// delivered, so without this bound a peer we believe is behind is served on
+// every gossip tick.
+const catchupResendInterval = 500 * time.Millisecond
+
 type msgGossiper struct {
 	logger     log.Logger
 	ps         *PeerState
 	msgSender  *p2pMsgSender
 	blockStore *blockRepository
 	optimistic bool
+	clock      clockwork.Clock
+
+	// Catch-up pass accounting for the one peer this gossiper serves. Unguarded:
+	// only dataGossipHandler reaches GossipBlockPartsForCatchup, and its handler
+	// runs on a single goroutine.
+	catchupHeight   int64
+	catchupAttempts int
+	catchupRetryAt  time.Time
 }
 
 func newVoteSetMaj23(height int64, round int32, msgType tmproto.SignedMsgType, maj23 types.BlockID) *tmcons.VoteSetMaj23 {
@@ -172,6 +188,9 @@ func (g *msgGossiper) GossipBlockPartsForCatchup(
 	_ cstypes.RoundState,
 	prs *cstypes.PeerRoundState,
 ) {
+	if !g.beginCatchupAttempt(prs) {
+		return
+	}
 	index, ok := prs.ProposalBlockParts.Not().PickRandom()
 	if !ok {
 		return
@@ -202,13 +221,37 @@ func (g *msgGossiper) GossipBlockPartsForCatchup(
 	// silently drop the part. If we optimistically marked it delivered, our view
 	// of the peer would show the full part set and we would never resend it,
 	// leaving the peer wedged with a stored commit but an incomplete block (it
-	// learns the part-set header only once the catch-up commit arrives). By not
-	// marking it, we keep resending the missing part each gossip tick until the
-	// peer actually applies the block and advances its height.
+	// learns the part-set header only once the catch-up commit arrives). The part
+	// is instead replayed once per catchupResendInterval until the peer applies
+	// the block and advances its height.
 	err = g.syncProposalBlockPart(ctx, part, prs.Height, meta.Round, false)
 	if err != nil {
 		logger.Error("failed to sync proposal block part to the peer", "error", err)
 	}
+}
+
+// beginCatchupAttempt reserves a slot in the current catch-up pass, reporting
+// false while a completed pass waits out its retry interval. A pass spends one
+// send per part, so a peer that dropped them is served again every interval for
+// as long as it stays behind.
+func (g *msgGossiper) beginCatchupAttempt(prs *cstypes.PeerRoundState) bool {
+	if prs.Height != g.catchupHeight {
+		g.catchupHeight = prs.Height
+		g.catchupAttempts = 0
+		g.catchupRetryAt = time.Time{}
+	}
+	parts := prs.ProposalBlockParts.Size()
+	if g.catchupAttempts >= parts {
+		if g.clock.Now().Before(g.catchupRetryAt) {
+			return false
+		}
+		g.catchupAttempts = 0
+	}
+	g.catchupAttempts++
+	if g.catchupAttempts >= parts {
+		g.catchupRetryAt = g.clock.Now().Add(catchupResendInterval)
+	}
+	return true
 }
 
 // GossipCommit sends a commit message to the peer

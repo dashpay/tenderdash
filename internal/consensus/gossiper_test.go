@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cosmos/gogoproto/proto"
+	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
@@ -29,6 +30,7 @@ type GossiperSuiteTest struct {
 
 	ps         *PeerState
 	gossiper   *msgGossiper
+	clock      *clockwork.FakeClock
 	sender     *p2pMsgSender
 	blockStore *mocks.BlockStore
 	stateCh    *p2pmocks.Channel
@@ -68,6 +70,7 @@ func (suite *GossiperSuiteTest) SetupTest() {
 		},
 	}
 	suite.blockStore = &mocks.BlockStore{}
+	suite.clock = clockwork.NewFakeClock()
 	suite.gossiper = &msgGossiper{
 		logger:    suite.logger,
 		ps:        suite.ps,
@@ -77,6 +80,7 @@ func (suite *GossiperSuiteTest) SetupTest() {
 			logger:     suite.logger,
 		},
 		optimistic: true,
+		clock:      suite.clock,
 	}
 }
 
@@ -390,6 +394,9 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchup() {
 			if tc.mockFn != nil {
 				tc.mockFn()
 			}
+			// The cases are independent occasions at the same height; without this
+			// they share one catch-up retry interval and only the first one acts.
+			suite.clock.Advance(catchupResendInterval)
 			suite.ps.PRS = tc.prs
 			if tc.wantMsg != nil {
 				suite.dataCh.
@@ -405,12 +412,11 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchup() {
 	}
 }
 
-// TestGossipBlockPartsForCatchupResends verifies that catch-up block-part
-// gossip does NOT optimistically record the part as delivered. A lagging peer
-// may be at a step where it is not yet expecting block parts and silently drops
-// them; if we marked the part delivered we would never resend it, wedging the
-// peer with an incomplete block. The part must therefore keep being sent on
-// every tick until the peer applies the block and advances its height.
+// TestGossipBlockPartsForCatchupResends verifies the two halves of the catch-up
+// contract for a single-part block: the part is never optimistically recorded as
+// delivered (a lagging peer may silently drop it, and marking would wedge the
+// peer with an incomplete block), and it is replayed once the retry interval has
+// elapsed rather than on every gossip tick.
 func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupResends() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -432,28 +438,42 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupResends() {
 
 	suite.blockStore.On("LoadBlockMeta", int64(999)).Twice().Return(&blockMeta)
 	suite.blockStore.On("LoadBlockPart", int64(999), 0).Twice().Return(part0)
+	sends := 0
 	suite.dataCh.
 		On("Send", ctx, p2p.Envelope{
 			To:      suite.ps.peerID,
 			Message: &tmcons.BlockPart{Height: 999, Round: 0, Part: *protoPart0},
 		}).
+		Run(func(_ mock.Arguments) { sends++ }).
 		Twice().
 		Return(nil)
 
-	// First tick: send the missing part.
+	// First tick sends the missing part, completing the pass for this height.
 	suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+	suite.Require().Equal(1, sends)
 	suite.Require().False(suite.ps.PRS.ProposalBlockParts.GetIndex(0),
 		"catch-up must not optimistically mark the peer as having the part")
 
-	// Second tick: the part is still considered missing, so it is resent.
+	// Further ticks inside the retry interval must not replay the part: that is
+	// what floods a peer we only believe to be lagging.
+	for range 100 {
+		suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+	}
+	suite.Require().Equal(1, sends, "catch-up must not resend within the retry interval")
+
+	// Once the interval elapses the peer is still behind, so the part is resent.
+	suite.clock.Advance(catchupResendInterval)
 	suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+	suite.Require().Equal(2, sends, "catch-up must resend after the retry interval")
+	suite.Require().False(suite.ps.PRS.ProposalBlockParts.GetIndex(0),
+		"catch-up must not optimistically mark the peer as having the part")
 }
 
 // TestGossipBlockPartsForCatchupResendsMultiPart verifies that catch-up
 // block-part gossip iterates across ALL missing indices in a multi-part block,
-// not just a single index. With three parts all initially missing, every part
-// index must be sent to the lagging peer across repeated gossip ticks, and the
-// peer's ProposalBlockParts bit-array must never be optimistically marked.
+// not just a single index, while spending at most one part-set pass per retry
+// interval. The peer's ProposalBlockParts bit-array must never be optimistically
+// marked.
 func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupResendsMultiPart() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -472,11 +492,11 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupResendsMultiPart()
 		ProposalBlockPartSetHeader: partSet.Header(),
 	}
 
-	// Each gossip tick picks ONE random missing index via PickRandom.
-	// By the coupon-collector model, covering all 3 indices takes ~5.5 ticks on
-	// average; 90 ticks makes the probability of any single index going unseen
-	// below (2/3)^90 ≈ 10^-16 per index — negligible in practice.
-	const ticks = 90
+	// A pass spends one send per part, each picking a random missing index, so a
+	// single pass need not cover every index. By the coupon-collector model 30
+	// passes of 3 sends leave any index unseen with probability (2/3)^90 ≈
+	// 10^-16 — negligible in practice.
+	const passes = 30
 
 	suite.blockStore.On("LoadBlockMeta", int64(999)).Return(&blockMeta)
 	for i := uint32(0); i < partSet.Total(); i++ {
@@ -485,6 +505,7 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupResendsMultiPart()
 
 	// Capture which part indices the gossiper actually sends.
 	sentIndices := make(map[uint32]bool)
+	sends := 0
 	suite.dataCh.On("Send", mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
 			env, ok := args.Get(1).(p2p.Envelope)
@@ -493,18 +514,31 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupResendsMultiPart()
 			}
 			if bp, ok := env.Message.(*tmcons.BlockPart); ok {
 				sentIndices[bp.Part.Index] = true
+				sends++
 			}
 		}).
 		Return(nil)
 
-	for range ticks {
+	// One pass covers the part set; extra ticks within the interval are skipped.
+	for range int(partSet.Total()) + 5 {
 		suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
 	}
+	suite.Require().Equal(int(partSet.Total()), sends,
+		"a catch-up pass must send exactly one part per part-set entry")
+
+	for range passes - 1 {
+		suite.clock.Advance(catchupResendInterval)
+		for range int(partSet.Total()) {
+			suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+		}
+	}
+	suite.Require().Equal(passes*int(partSet.Total()), sends,
+		"each elapsed retry interval must allow exactly one further pass")
 
 	// Every part index must have been sent to the peer at least once.
 	for i := uint32(0); i < partSet.Total(); i++ {
 		suite.Assert().True(sentIndices[i],
-			"part index %d was never sent across %d gossip ticks", i, ticks)
+			"part index %d was never sent across %d catch-up passes", i, passes)
 	}
 
 	// The peer's bit-array must remain un-marked (no optimistic delivery).

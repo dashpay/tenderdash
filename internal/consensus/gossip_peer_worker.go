@@ -48,6 +48,7 @@ func newPeerGossipWorker(
 		msgSender:  msgSender,
 		logger:     logger,
 		optimistic: true,
+		clock:      clockwork.NewRealClock(),
 	}
 	return &peerGossipWorker{
 		clock:          clockwork.NewRealClock(),
