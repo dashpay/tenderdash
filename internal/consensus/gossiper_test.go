@@ -549,6 +549,86 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupResendsMultiPart()
 	}
 }
 
+// TestGossipBlockPartsForCatchupBudgetIsFixedAtPassOpen pins a pass to the
+// budget it opened with. The peer supplies the bit-array the missing count is
+// derived from and may replace it between ticks, so re-reading it to decide
+// whether the pass is spent lets the peer both dodge the retry deadline and
+// enlarge the pass: lowering the count below the sends already made opens a
+// fresh pass, and raising it afterwards steps over a deadline already set.
+func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupBudgetIsFixedAtPassOpen() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const partSize = uint32(100)
+	partSet := types.NewPartSetFromData(tmrand.Bytes(int(partSize)*3), partSize)
+	suite.Require().Equal(uint32(3), partSet.Total(), "need a 3-part block for this test")
+	blockMeta := types.BlockMeta{BlockID: types.BlockID{PartSetHeader: partSet.Header()}}
+
+	// reportMissing has the peer claim its first n parts are outstanding.
+	reportMissing := func(n int) {
+		reported := partSet.BitArray().Copy() // every bit set: peer has them all
+		for i := range n {
+			reported.SetIndex(i, false)
+		}
+		suite.Require().Equal(n, reported.Not().CountTrueBits())
+		suite.ps.PRS.ProposalBlockParts = reported
+	}
+
+	suite.ps.PRS = cstypes.PeerRoundState{
+		Height:                     999,
+		Round:                      0,
+		ProposalBlockPartSetHeader: partSet.Header(),
+	}
+	reportMissing(3)
+
+	suite.blockStore.On("LoadBlockMeta", int64(999)).Return(&blockMeta)
+	for i := range int(partSet.Total()) {
+		suite.blockStore.On("LoadBlockPart", int64(999), i).Return(partSet.GetPart(i))
+	}
+
+	sends := 0
+	suite.dataCh.On("Send", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			env, ok := args.Get(1).(p2p.Envelope)
+			if !ok {
+				return
+			}
+			if _, ok := env.Message.(*tmcons.BlockPart); ok {
+				sends++
+			}
+		}).
+		Return(nil)
+
+	tick := func() {
+		suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+	}
+
+	// Two sends against a pass opened with a budget of three.
+	tick()
+	tick()
+
+	// Drop the count to the number of sends already made. A pass whose budget is
+	// re-derived here looks spent, and reopens without a deadline to wait on.
+	reportMissing(2)
+	tick()
+	tick()
+
+	// Raise it again, stepping over any deadline the previous ticks may have set.
+	reportMissing(3)
+	tick()
+	tick()
+
+	suite.Require().Equal(3, sends,
+		"a pass must not exceed the budget it opened with, whatever the peer reports afterwards")
+
+	// The next interval opens exactly one further pass, of three sends.
+	suite.clock.Advance(catchupResendInterval)
+	for range 6 {
+		tick()
+	}
+	suite.Require().Equal(6, sends, "each elapsed interval must open exactly one further pass")
+}
+
 // TestGossipBlockPartsForCatchupBudgetsMissingParts pins the catch-up pass to
 // the number of parts the peer is actually missing rather than the size of its
 // bit-array. The peer supplies that bit-array over the wire and only its length

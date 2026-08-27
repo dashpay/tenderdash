@@ -46,9 +46,9 @@ type msgGossiper struct {
 	// Catch-up pass accounting for the one peer this gossiper serves. Unguarded:
 	// only dataGossipHandler reaches GossipBlockPartsForCatchup, and its handler
 	// runs on a single goroutine.
-	catchupHeight   int64
-	catchupAttempts int
-	catchupRetryAt  time.Time
+	catchupHeight    int64
+	catchupRemaining int
+	catchupRetryAt   time.Time
 }
 
 func newVoteSetMaj23(height int64, round int32, msgType tmproto.SignedMsgType, maj23 types.BlockID) *tmcons.VoteSetMaj23 {
@@ -230,37 +230,40 @@ func (g *msgGossiper) GossipBlockPartsForCatchup(
 	}
 }
 
-// beginCatchupAttempt reserves a slot in the current catch-up pass, reporting
-// false while a completed pass waits out its retry interval. A pass spends one
-// send per missing part, so a peer that dropped them is served again every
-// interval for as long as it stays behind.
+// beginCatchupAttempt draws a send from the current catch-up pass, reporting
+// false once the pass is spent and until its retry interval elapses. A pass is
+// worth one send per part the peer reported missing when it opened, so a peer
+// that dropped those parts is served again every interval while it stays behind.
 func (g *msgGossiper) beginCatchupAttempt(prs *cstypes.PeerRoundState) bool {
-	if prs.Height != g.catchupHeight {
-		g.catchupHeight = prs.Height
-		g.catchupAttempts = 0
-		g.catchupRetryAt = time.Time{}
-	}
 	if prs.ProposalBlockParts == nil {
 		return false
 	}
-	// The peer sends this bit-array and only its length is validated, so budget
-	// the pass on the parts it reports missing: those are what PickRandom draws
-	// from, and sizing by the whole array would buy one resend of a single
-	// missing part per entry in it.
+	// PickRandom draws from the parts the peer reports missing, so the pass is
+	// worth that many sends rather than one per entry in the bit-array.
 	missing := prs.ProposalBlockParts.Not().CountTrueBits()
 	if missing == 0 {
 		return false
 	}
-	if g.catchupAttempts >= missing {
-		if g.clock.Now().Before(g.catchupRetryAt) {
+	now := g.clock.Now()
+	// A peer only ever reports a higher height, so advancing cannot be replayed
+	// to reopen a pass, and serving a peer that just advanced is the point.
+	if prs.Height != g.catchupHeight {
+		g.catchupHeight = prs.Height
+		g.catchupRemaining = 0
+		g.catchupRetryAt = time.Time{}
+	}
+	if g.catchupRemaining <= 0 {
+		if now.Before(g.catchupRetryAt) {
 			return false
 		}
-		g.catchupAttempts = 0
+		// Budget and deadline are both fixed here, for the whole pass. The peer
+		// owns the bit-array behind missing and may replace it between ticks, so
+		// re-deriving either one mid-pass would let it reopen the pass early or
+		// widen it.
+		g.catchupRemaining = missing
+		g.catchupRetryAt = now.Add(catchupResendInterval)
 	}
-	g.catchupAttempts++
-	if g.catchupAttempts >= missing {
-		g.catchupRetryAt = g.clock.Now().Add(catchupResendInterval)
-	}
+	g.catchupRemaining--
 	return true
 }
 
