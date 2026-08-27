@@ -281,12 +281,6 @@ func (g *msgGossiper) beginCatchupAttempt(prs *cstypes.PeerRoundState) bool {
 	if prs.ProposalBlockParts == nil {
 		return false
 	}
-	// Equivalent to Not().CountTrueBits() (the parts the peer reports missing)
-	// without allocating a flipped copy of a peer-controlled bit-array to count it.
-	missing := prs.ProposalBlockParts.Size() - prs.ProposalBlockParts.CountTrueBits()
-	if missing == 0 {
-		return false
-	}
 	g.catchupMu.Lock()
 	defer g.catchupMu.Unlock()
 	now := g.clock.Now()
@@ -302,14 +296,38 @@ func (g *msgGossiper) beginCatchupAttempt(prs *cstypes.PeerRoundState) bool {
 		g.catchupHeight = prs.Height
 		g.catchupRemaining = 0
 	}
-	if g.catchupRemaining <= 0 {
-		if now.Before(g.catchupRetryAt) {
-			return false
-		}
+	noOpenPass := g.catchupRemaining <= 0
+	if noOpenPass && now.Before(g.catchupRetryAt) {
+		// Still backed off: this tick cannot send regardless of what the peer
+		// currently reports missing, so skip the bit-array scan below entirely.
+		// Most ticks land here at the production defaults (one pass's worth of
+		// backoff spans roughly catchupResendInterval / PeerGossipSleepDuration
+		// ticks), and the peer-controlled bit-array can be up to
+		// MaxBlockPartsCount bits.
+		return false
+	}
+	// PickRandom draws from the parts the peer reports missing, so the pass is
+	// worth that many sends rather than one per entry in the bit-array. Derived
+	// as size minus set bits rather than via Not().CountTrueBits(), which would
+	// allocate and copy the whole bit-array just to count it.
+	missing := prs.ProposalBlockParts.Size() - prs.ProposalBlockParts.CountTrueBits()
+	if missing == 0 {
+		return false
+	}
+	if noOpenPass {
+		// The budget is fixed here, for the whole pass. The peer owns the
+		// bit-array behind missing and may replace it between ticks, so
+		// re-deriving it to raise the budget mid-pass would let it widen the
+		// pass.
 		g.catchupRemaining = missing
 	} else {
-		// The peer's reported missing count can only shrink honestly (parts
-		// delivered elsewhere); never let it raise the budget mid-pass.
+		// The peer's reported missing count can only shrink honestly as parts
+		// are actually delivered elsewhere (e.g. via non-catch-up gossip), so
+		// clamp the remaining budget down to match; never let it raise the
+		// budget mid-pass. Without this, a peer that swaps in a bit-array with
+		// fewer unset bits mid-pass keeps the larger budget the pass opened
+		// with, and every remaining attempt draws from the now-small missing
+		// set - funding repeated duplicate sends of the few parts still unset.
 		g.catchupRemaining = min(g.catchupRemaining, missing)
 	}
 	g.catchupRemaining--
