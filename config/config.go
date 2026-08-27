@@ -1113,7 +1113,11 @@ type ConsensusConfig struct {
 	// has to be manual (useful for tests)
 	DontAutoPropose bool `mapstructure:"dont-auto-propose'"`
 
-	// Reactor sleep duration parameters
+	// Reactor sleep duration parameters. PeerGossipSleepDuration also sets the
+	// gossip tick a lagging peer's catch-up part-set replay is metered against
+	// (internal/consensus/gossiper.go's catchupResendInterval, currently a fixed
+	// 500ms): raising this past that value disables that throttle, and lowering
+	// it scales the throttle's effective suppression window down proportionally.
 	PeerGossipSleepDuration     time.Duration `mapstructure:"peer-gossip-sleep-duration"`
 	PeerQueryMaj23SleepDuration time.Duration `mapstructure:"peer-query-maj23-sleep-duration"`
 
