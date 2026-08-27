@@ -273,14 +273,31 @@ func (g *msgGossiper) beginCatchupAttempt(prs *cstypes.PeerRoundState) bool {
 		if now.Before(g.catchupRetryAt) {
 			return false
 		}
-		// Budget and deadline are both fixed here, for the whole pass. The peer
-		// owns the bit-array behind missing and may replace it between ticks, so
-		// re-deriving either one mid-pass would let it reopen the pass early or
-		// widen it.
+		// The budget is fixed here, for the whole pass. The peer owns the
+		// bit-array behind missing and may replace it between ticks, so
+		// re-deriving it to raise the budget mid-pass would let it widen the
+		// pass.
 		g.catchupRemaining = missing
-		g.catchupRetryAt = now.Add(catchupResendInterval)
+	} else if missing < g.catchupRemaining {
+		// The peer's reported missing count can only shrink honestly as parts
+		// are actually delivered elsewhere (e.g. via non-catch-up gossip), so
+		// clamp the remaining budget down to match. Without this, a peer that
+		// swaps in a bit-array with fewer unset bits mid-pass keeps the larger
+		// budget the pass opened with, and every remaining attempt draws from
+		// the now-small missing set - funding repeated duplicate sends of the
+		// few parts still unset.
+		g.catchupRemaining = missing
 	}
 	g.catchupRemaining--
+	if g.catchupRemaining <= 0 {
+		// Arm the retry deadline when the pass's last attempt is spent, not
+		// when it opened. A pass with enough missing parts to span multiple
+		// gossip ticks takes longer than catchupResendInterval to exhaust, so
+		// a deadline set at open time has already passed by the time the
+		// budget runs out - the next tick reopens immediately, leaving no
+		// quiet gap between passes.
+		g.catchupRetryAt = now.Add(catchupResendInterval)
+	}
 	return true
 }
 

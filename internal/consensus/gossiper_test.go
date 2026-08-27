@@ -683,6 +683,168 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupBudgetsMissingPart
 	suite.Require().Equal(2, sends, "the missing part is retried once the interval elapses")
 }
 
+// TestGossipBlockPartsForCatchupRetryIntervalArmsWhenPassEnds verifies the
+// pass's retry deadline is measured from its last send, not from when it
+// opened. A pass with enough missing parts to span more gossip ticks than
+// catchupResendInterval allows takes longer than the interval to exhaust; a
+// deadline armed at open time has already elapsed by then, so the next tick
+// would otherwise reopen a fresh pass immediately - leaving no quiet gap
+// between passes, which is exactly the flooding behavior this throttle
+// exists to stop.
+func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupRetryIntervalArmsWhenPassEnds() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const partSize = uint32(100)
+	const numParts = 6
+	partSet := types.NewPartSetFromData(tmrand.Bytes(int(partSize)*numParts), partSize)
+	suite.Require().Equal(uint32(numParts), partSet.Total(), "need a 6-part block for this test")
+	blockMeta := types.BlockMeta{BlockID: types.BlockID{PartSetHeader: partSet.Header()}}
+
+	suite.ps.PRS = cstypes.PeerRoundState{
+		Height:                     999,
+		Round:                      0,
+		ProposalBlockParts:         partSet.BitArray().Not(), // peer has none
+		ProposalBlockPartSetHeader: partSet.Header(),
+	}
+
+	suite.blockStore.On("LoadBlockMeta", int64(999)).Return(&blockMeta)
+	for i := uint32(0); i < partSet.Total(); i++ {
+		suite.blockStore.On("LoadBlockPart", int64(999), int(i)).Return(partSet.GetPart(int(i)))
+	}
+
+	sends := 0
+	suite.dataCh.On("Send", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			env, ok := args.Get(1).(p2p.Envelope)
+			if !ok {
+				return
+			}
+			if _, ok := env.Message.(*tmcons.BlockPart); ok {
+				sends++
+			}
+		}).
+		Return(nil)
+
+	tick := func() {
+		suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+	}
+
+	// A gossip tick every fifth of the interval: 6 missing parts therefore
+	// take longer than catchupResendInterval to exhaust the pass.
+	step := catchupResendInterval / 5
+
+	// The first 5 ticks drain 5 of the pass's 6 sends, ending at
+	// t = catchupResendInterval.
+	for range 5 {
+		tick()
+		suite.clock.Advance(step)
+	}
+	suite.Require().Equal(5, sends)
+
+	// This tick, still at t = catchupResendInterval, spends the pass's last
+	// send.
+	tick()
+	suite.Require().Equal(6, sends, "the pass's budget covers all 6 missing parts")
+
+	// A tick right after the pass's last send must NOT open a new pass: a
+	// full interval must elapse after the LAST send, not after the pass
+	// opened (which was catchupResendInterval ago by now too).
+	tick()
+	suite.Require().Equal(6, sends,
+		"no further send until a full retry interval has elapsed since the pass's last send")
+
+	// Advancing to just short of a full interval past the last send still
+	// must not reopen the pass.
+	suite.clock.Advance(catchupResendInterval - step)
+	tick()
+	suite.Require().Equal(6, sends,
+		"the retry deadline must be measured from the pass's last send, not from when it opened")
+
+	// Only once a full interval has elapsed since the last send does a fresh
+	// pass open.
+	suite.clock.Advance(step)
+	tick()
+	suite.Require().Equal(7, sends, "a fresh pass opens once the full interval has elapsed")
+}
+
+// TestGossipBlockPartsForCatchupBudgetShrinksWithReportedMissing verifies the
+// pass's remaining budget is clamped down when the peer's bit-array later
+// reports fewer parts missing than when the pass opened. Successful catch-up
+// sends never mark parts delivered locally (see
+// TestGossipBlockPartsForCatchupResends), so the peer fully controls what
+// ProposalBlockParts.Not().CountTrueBits() reports on every tick -
+// NewValidBlockMessage.ValidateBasic checks only the array's length and
+// ApplyNewValidBlockMessage installs it wholesale. A peer that opens a pass
+// reporting many parts missing and then swaps in a bit-array with only one
+// unset bit must not keep the larger original budget: every remaining
+// attempt would draw that same single index, funding repeated duplicate
+// sends of it.
+func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupBudgetShrinksWithReportedMissing() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const partSize = uint32(100)
+	const numParts = 5
+	partSet := types.NewPartSetFromData(tmrand.Bytes(int(partSize)*numParts), partSize)
+	suite.Require().Equal(uint32(numParts), partSet.Total(), "need a 5-part block for this test")
+	blockMeta := types.BlockMeta{BlockID: types.BlockID{PartSetHeader: partSet.Header()}}
+
+	suite.ps.PRS = cstypes.PeerRoundState{
+		Height:                     999,
+		Round:                      0,
+		ProposalBlockParts:         partSet.BitArray().Not(), // peer has none: 5 missing
+		ProposalBlockPartSetHeader: partSet.Header(),
+	}
+
+	suite.blockStore.On("LoadBlockMeta", int64(999)).Return(&blockMeta)
+	for i := uint32(0); i < partSet.Total(); i++ {
+		suite.blockStore.On("LoadBlockPart", int64(999), int(i)).Return(partSet.GetPart(int(i)))
+	}
+
+	sends := 0
+	suite.dataCh.On("Send", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			env, ok := args.Get(1).(p2p.Envelope)
+			if !ok {
+				return
+			}
+			if _, ok := env.Message.(*tmcons.BlockPart); ok {
+				sends++
+			}
+		}).
+		Return(nil)
+
+	tick := func() {
+		suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+	}
+
+	// The first two ticks open a 5-send pass and spend two of them.
+	tick()
+	tick()
+	suite.Require().Equal(2, sends)
+
+	// The peer now reports only one part missing, without the height
+	// changing - a bit-array the peer fully controls over the wire (see the
+	// doc comment above).
+	shrunk := partSet.BitArray().Copy() // every bit set: peer has them all
+	shrunk.SetIndex(4, false)           // except part 4
+	suite.ps.PRS.ProposalBlockParts = shrunk
+	suite.Require().Equal(1, shrunk.Not().CountTrueBits())
+
+	for range 5 {
+		tick()
+	}
+	suite.Require().Equal(3, sends,
+		"a pass must not fund more sends than the peer's currently-reported missing count once it shrinks")
+
+	// The next interval opens a fresh pass, budgeted on what the peer reports
+	// at that point (still 1 missing).
+	suite.clock.Advance(catchupResendInterval)
+	tick()
+	suite.Require().Equal(4, sends)
+}
+
 // TestGossipBlockPartsForCatchupMismatchedHeaderEndsPass covers a pass that can
 // never produce a send. The peer supplies both the part-set header and the size
 // of the missing bit-array, and only their encoding is validated, so a pass
