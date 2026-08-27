@@ -369,7 +369,7 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchup() {
 				suite.blockStore.On("Base").Once().Return(int64(1))
 				suite.blockStore.On("Height").Once().Return(int64(1000))
 			},
-			wantLog: `couldn't find a block meta`,
+			wantLog: `failed to load block meta`,
 		},
 		{
 			prs: cstypes.PeerRoundState{Height: 999, ProposalBlockParts: partSet1.BitArray().Not()},
@@ -387,7 +387,7 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchup() {
 				suite.blockStore.On("LoadBlockMeta", int64(999)).Once().Return(&blockMeta)
 				suite.blockStore.On("LoadBlockPart", int64(999), 0).Once().Return(nil)
 			},
-			wantLog: `couldn't find a block part`,
+			wantLog: `failed to load block part`,
 		},
 	}
 	for i, tc := range testCases {
@@ -550,19 +550,22 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupResendsMultiPart()
 	}
 }
 
-// TestGossipBlockPartsForCatchupBudgetIsFixedAtPassOpen pins a pass to the
-// budget it opened with. The peer supplies the bit-array the missing count is
-// derived from and may replace it between ticks, so re-reading it to decide
-// whether the pass is spent lets the peer both dodge the retry deadline and
-// enlarge the pass: lowering the count below the sends already made opens a
-// fresh pass, and raising it afterwards steps over a deadline already set.
-func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupBudgetIsFixedAtPassOpen() {
+// TestGossipBlockPartsForCatchupBudgetIsNeverRaisedMidPass pins a pass's
+// budget as an upper bound fixed at open: it may be clamped down when the
+// peer's reported missing count drops (see
+// TestGossipBlockPartsForCatchupBudgetShrinksWithReportedMissing) but never
+// raised back up once clamped. The peer supplies the bit-array the missing
+// count is derived from and may replace it between ticks, so if raising the
+// count mid-pass were honored, a peer could both recover budget the clamp had
+// taken away and step over the deadline the clamp-triggered exhaustion armed.
+func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupBudgetIsNeverRaisedMidPass() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	const partSize = uint32(100)
-	partSet := types.NewPartSetFromData(tmrand.Bytes(int(partSize)*3), partSize)
-	suite.Require().Equal(uint32(3), partSet.Total(), "need a 3-part block for this test")
+	const numParts = 5
+	partSet := types.NewPartSetFromData(tmrand.Bytes(int(partSize)*numParts), partSize)
+	suite.Require().Equal(uint32(numParts), partSet.Total(), "need headroom above the clamped-down budget")
 	blockMeta := types.BlockMeta{BlockID: types.BlockID{PartSetHeader: partSet.Header()}}
 
 	// reportMissing has the peer claim its first n parts are outstanding.
@@ -580,7 +583,7 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupBudgetIsFixedAtPas
 		Round:                      0,
 		ProposalBlockPartSetHeader: partSet.Header(),
 	}
-	reportMissing(3)
+	reportMissing(numParts)
 
 	suite.blockStore.On("LoadBlockMeta", int64(999)).Return(&blockMeta)
 	for i := range int(partSet.Total()) {
@@ -604,30 +607,30 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupBudgetIsFixedAtPas
 		suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
 	}
 
-	// Two sends against a pass opened with a budget of three.
+	// Open a 5-send pass and spend two of them, leaving 3 in the budget.
 	tick()
 	tick()
 
-	// Drop the count to the number of sends already made. A pass whose budget is
-	// re-derived here looks spent, and reopens without a deadline to wait on.
-	reportMissing(2)
+	// Drop hard, to fewer than the 3 remaining: a genuine clamp, not a no-op.
+	// The pass now has only 1 slot left instead of 3, so it exhausts (and arms
+	// the deadline) on the very next tick.
+	reportMissing(1)
 	tick()
-	tick()
+	suite.Require().Equal(3, sends, "the clamp must actually shrink the remaining budget, ending the pass early")
 
-	// Raise it again, stepping over any deadline the previous ticks may have set.
-	reportMissing(3)
+	// Raise it back to the original count, at the same clock instant the
+	// deadline was just armed at.
+	reportMissing(numParts)
 	tick()
 	tick()
-
 	suite.Require().Equal(3, sends,
-		"a pass must not exceed the budget it opened with, whatever the peer reports afterwards")
+		"raising the reported count after the clamp ended the pass must not reopen it before the deadline")
 
-	// The next interval opens exactly one further pass, of three sends.
+	// Only once the interval elapses does a fresh pass open, budgeted on
+	// whatever the peer currently reports -- all 5 parts once again.
 	suite.clock.Advance(catchupResendInterval)
-	for range 6 {
-		tick()
-	}
-	suite.Require().Equal(6, sends, "each elapsed interval must open exactly one further pass")
+	tick()
+	suite.Require().Equal(4, sends, "the next pass opens fresh, unrelated to the one the clamp cut short")
 }
 
 // TestGossipBlockPartsForCatchupBudgetsMissingParts pins the catch-up pass to
@@ -766,6 +769,70 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupRetryIntervalArmsW
 	suite.clock.Advance(step)
 	tick()
 	suite.Require().Equal(7, sends, "a fresh pass opens once the full interval has elapsed")
+}
+
+// TestGossipBlockPartsForCatchupHeightAdvanceInterruptingPassIsThrottled is a
+// regression test for a defect where a height change interrupting a pass
+// BEFORE it exhausted its own budget left catchupRetryAt unarmed (only
+// exhaustion or a failed send armed it). A peer that advances its reported
+// height every tick -- legitimate and monotonic, no protocol violation -- then
+// forced a fresh full-budget pass on every single tick, forever, whenever the
+// block at each claimed height took more than one tick to exhaust (i.e. any
+// block with more than one missing part, the common case). The clock is never
+// advanced across the first block of ticks below: a working throttle must
+// still bound the send rate even though the peer supplies a "new" pass at
+// every step.
+func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupHeightAdvanceInterruptingPassIsThrottled() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const partSize = uint32(100)
+	const numParts = 3
+	const numHeights = 20
+
+	sends := 0
+	suite.dataCh.On("Send", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			env, ok := args.Get(1).(p2p.Envelope)
+			if !ok {
+				return
+			}
+			if _, ok := env.Message.(*tmcons.BlockPart); ok {
+				sends++
+			}
+		}).
+		Return(nil)
+
+	tick := func(height int64) {
+		partSet := types.NewPartSetFromData(tmrand.Bytes(int(partSize)*numParts), partSize)
+		suite.Require().Equal(uint32(numParts), partSet.Total())
+		blockMeta := types.BlockMeta{BlockID: types.BlockID{PartSetHeader: partSet.Header()}}
+		suite.blockStore.On("LoadBlockMeta", height).Return(&blockMeta)
+		for i := uint32(0); i < partSet.Total(); i++ {
+			suite.blockStore.On("LoadBlockPart", height, int(i)).Return(partSet.GetPart(int(i)))
+		}
+		suite.ps.PRS = cstypes.PeerRoundState{
+			Height:                     height,
+			Round:                      0,
+			ProposalBlockParts:         partSet.BitArray().Not(), // peer has none
+			ProposalBlockPartSetHeader: partSet.Header(),
+		}
+		suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+	}
+
+	// The peer advances its reported height on every tick, at the same clock
+	// instant, before any pass at a prior height could exhaust its 3-send
+	// budget. A throttle that only arms its deadline on exhaustion or failure
+	// never gets a chance to arm it here.
+	for h := int64(1); h <= numHeights; h++ {
+		tick(h)
+	}
+	suite.Require().Equal(1, sends,
+		"an unexhausted pass interrupted by a height change must still throttle to one pass per interval")
+
+	suite.clock.Advance(catchupResendInterval)
+	tick(numHeights + 1)
+	suite.Require().Equal(2, sends, "a fresh pass opens once the interval has elapsed since the interrupted pass")
 }
 
 // TestGossipBlockPartsForCatchupBudgetShrinksWithReportedMissing verifies the
@@ -1011,10 +1078,11 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupPeerHasEveryPart()
 	}
 
 	// Neither the block store nor the data channel may be touched; the mocks are
-	// constructed with no expectations, so any call fails the test.
+	// constructed with no expectations, so any call fails the test too.
 	for range 10 {
 		suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
 	}
+	suite.dataCh.AssertNotCalled(suite.T(), "Send", mock.Anything, mock.Anything)
 }
 
 func (suite *GossiperSuiteTest) TestGossipCommit() {
