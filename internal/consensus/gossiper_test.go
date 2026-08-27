@@ -889,6 +889,52 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupMismatchedHeaderEn
 	suite.Require().Equal(2, metaReads, "each elapsed interval allows exactly one further attempt")
 }
 
+// TestGossipBlockPartsForCatchupSendFailureEndsPass is a regression test for a
+// defect where syncProposalBlockPart unconditionally returned nil regardless of
+// the underlying send's real result, so sendCatchupBlockPart always reported
+// success: a send that never reached the peer was indistinguishable from one
+// that did, and the pass kept spending its budget one failed attempt per tick
+// instead of ending on the first one -- exactly the spin endCatchupPass exists
+// to prevent. Uses a multi-part block so the budget itself (rather than
+// endCatchupPass) is never the thing limiting attempts.
+func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupSendFailureEndsPass() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const partSize = uint32(100)
+	partSet := types.NewPartSetFromData(tmrand.Bytes(int(partSize)*5), partSize)
+	suite.Require().Equal(uint32(5), partSet.Total(), "need multiple missing parts so the budget isn't the limiting factor")
+	blockMeta := types.BlockMeta{BlockID: types.BlockID{PartSetHeader: partSet.Header()}}
+
+	suite.ps.PRS = cstypes.PeerRoundState{
+		Height:                     999,
+		Round:                      0,
+		ProposalBlockParts:         partSet.BitArray().Not(), // peer has none
+		ProposalBlockPartSetHeader: partSet.Header(),
+	}
+
+	suite.blockStore.On("LoadBlockMeta", int64(999)).Return(&blockMeta)
+	partReads := 0
+	suite.blockStore.On("LoadBlockPart", int64(999), mock.Anything).
+		Run(func(_ mock.Arguments) { partReads++ }).
+		Return(partSet.GetPart(0))
+
+	// Every send fails to reach the peer.
+	suite.dataCh.On("Send", mock.Anything, mock.Anything).Return(fmt.Errorf("simulated send failure"))
+
+	for range 50 {
+		suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+	}
+	suite.Require().Equal(1, partReads,
+		"a send that never reaches the peer must end the pass on the first attempt, not spend the whole budget")
+
+	suite.clock.Advance(catchupResendInterval)
+	for range 50 {
+		suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+	}
+	suite.Require().Equal(2, partReads, "each elapsed interval allows exactly one further attempt")
+}
+
 // TestGossipBlockPartsForCatchupMalformedHeaderDoesNotFundSends pins the budget
 // to a pass that got as far as sending. A pass is deliberately not re-derived
 // from the peer's bit-array once open, so a budget opened against an unusable

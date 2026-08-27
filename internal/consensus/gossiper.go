@@ -408,11 +408,7 @@ func (g *msgGossiper) syncProposalBlockPart(ctx context.Context, part *types.Par
 		syncFunc = updatePeerProposalBlockPart(g.ps, height, round, int(part.Index))
 	}
 	logger.Debug("syncing proposal block part")
-	err = g.sync(ctx, protoBlockPart, syncFunc)
-	if err != nil {
-		logger.Error("failed to sync proposal block part to the peer", "error", err)
-	}
-	return nil
+	return g.sync(ctx, protoBlockPart, syncFunc)
 }
 
 func (g *msgGossiper) sync(ctx context.Context, protoMsg proto.Message, syncFunc func() error) error {
