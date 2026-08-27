@@ -256,8 +256,11 @@ func (g *msgGossiper) beginCatchupAttempt(prs *cstypes.PeerRoundState) bool {
 		return false
 	}
 	// PickRandom draws from the parts the peer reports missing, so the pass is
-	// worth that many sends rather than one per entry in the bit-array.
-	missing := prs.ProposalBlockParts.Not().CountTrueBits()
+	// worth that many sends rather than one per entry in the bit-array. Derived
+	// as size minus set bits rather than via Not().CountTrueBits(), which would
+	// allocate and copy the whole (peer-controlled, up to MaxBlockPartsCount)
+	// bit-array on every gossip tick just to count it.
+	missing := prs.ProposalBlockParts.Size() - prs.ProposalBlockParts.CountTrueBits()
 	if missing == 0 {
 		return false
 	}
