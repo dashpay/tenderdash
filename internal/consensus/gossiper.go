@@ -24,22 +24,31 @@ import (
 type Gossiper interface {
 	GossipProposal(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState)
 	GossipProposalBlockParts(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState)
-	// GossipBlockPartsForCatchup is rate-limited (catchupResendInterval) and
-	// returns immediately on most calls. The limit is per gossip worker, not per
-	// peer: a peer that reconnects gets a fresh worker and a fresh pass. Must be
-	// called from a single goroutine per Gossiper instance.
+	// GossipBlockPartsForCatchup sends at most one part per call and enforces a
+	// quiet gap of catchupResendInterval between full-part-set replays — it does
+	// NOT bound the send rate to one per interval for a multi-part block, which
+	// spends several ticks before that gap applies (see catchupResendInterval).
+	// The limit is per gossip worker, not per peer: a peer that reconnects gets a
+	// fresh worker and a fresh pass. Must be called from a single goroutine per
+	// Gossiper instance — its internal locking guards field visibility only, not
+	// the check-then-send sequence a second caller would race.
 	GossipBlockPartsForCatchup(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState)
 	GossipVote(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState)
 	GossipVoteSetMaj23(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState)
 	GossipCommit(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState)
 }
 
-// catchupResendInterval bounds how often the catch-up path replays a block's
-// part set to the same lagging peer. Catch-up deliberately never marks parts as
-// delivered, so without this bound a peer we believe is behind is served on
-// every gossip tick. A pass suppresses roughly catchupResendInterval /
-// PeerGossipSleepDuration ticks — five at their production defaults — and does
-// nothing at all if the gossip cadence is configured slower than this interval.
+// catchupResendInterval is the quiet gap enforced once a catch-up pass ends —
+// by exhausting its budget, failing a send, or being interrupted by a height
+// change — before a fresh pass may open. Catch-up deliberately never marks
+// parts as delivered, so without this gap a peer we believe is behind would be
+// served on every gossip tick. The gap is between passes, not between sends
+// within one: a pass spends one send per gossip tick for as many ticks as the
+// peer reports parts missing, so it bounds full-part-set replays to roughly
+// one per (missing_parts * PeerGossipSleepDuration + catchupResendInterval),
+// not to a flat one per catchupResendInterval — see peer-gossip-sleep-duration
+// in config/config.go for the cadence this scales with. It also does nothing
+// at all if that cadence is configured slower than this interval.
 const catchupResendInterval = 500 * time.Millisecond
 
 type msgGossiper struct {
@@ -50,11 +59,17 @@ type msgGossiper struct {
 	optimistic bool
 	clock      clockwork.Clock
 
-	// Catch-up pass accounting for the one peer this gossiper serves. Guarded by
-	// catchupMu rather than relying on dataGossipHandler being the only caller
-	// today: the same *msgGossiper is shared across three concurrent handler
-	// goroutines (see reactor.go), and nothing stops a future one from also
-	// calling GossipBlockPartsForCatchup.
+	// Catch-up pass accounting for the one peer this gossiper serves, touched
+	// only from GossipBlockPartsForCatchup (see its single-goroutine-caller
+	// requirement on the Gossiper interface). catchupMu guards the fields
+	// themselves against a hypothetical second caller, but not the
+	// draw-then-send-then-settle sequence across them — that still requires the
+	// single-caller invariant to hold.
+	//
+	// Governing invariant: catchupRemaining > 0 means a pass is currently open,
+	// which means catchupRetryAt is already in the past; catchupRetryAt is only
+	// ever in the future while catchupRemaining <= 0. Every write to either
+	// field must preserve this together.
 	catchupMu        sync.Mutex
 	catchupHeight    int64
 	catchupRemaining int
@@ -210,9 +225,12 @@ func (g *msgGossiper) GossipBlockPartsForCatchup(
 	}
 }
 
-// sendCatchupBlockPart sends the peer one part of its incomplete block, drawn at
-// random from the parts it reports missing, and reports whether the part
-// reached the peer.
+// sendCatchupBlockPart sends the peer one part of its incomplete block, drawn
+// at random from the parts it reports missing, and reports whether the part
+// was handed to the p2p channel. A false result means either the send could
+// not be enqueued (in practice, only on reactor shutdown — see
+// internal/p2p/channel.go) or the block-store inputs were unusable; it is not
+// a delivery acknowledgement from the peer.
 func (g *msgGossiper) sendCatchupBlockPart(ctx context.Context, prs *cstypes.PeerRoundState) bool {
 	logger := g.logger.With([]any{
 		"height", prs.Height,
@@ -220,15 +238,12 @@ func (g *msgGossiper) sendCatchupBlockPart(ctx context.Context, prs *cstypes.Pee
 	})
 	index, ok := prs.ProposalBlockParts.Not().PickRandom()
 	if !ok {
-		// Defensive only: prs is a fresh deep copy for this tick
-		// (PeerState.GetRoundState), so nothing can mutate ProposalBlockParts
-		// between beginCatchupAttempt's missing-count check and this draw. Kept
-		// in case a future caller passes a stale snapshot.
+		// Defensive: prs is a per-tick deep copy, so the draw cannot come up empty.
 		return false
 	}
+	logger = logger.With("part_index", index)
 	meta, err := g.blockStore.loadMeta(prs.Height)
 	if err != nil {
-		logger.Error("couldn't find a block meta", "error", err)
 		return false
 	}
 	err = g.ensurePeerPartSetHeader(meta.BlockID.PartSetHeader, prs.ProposalBlockPartSetHeader)
@@ -238,7 +253,6 @@ func (g *msgGossiper) sendCatchupBlockPart(ctx context.Context, prs *cstypes.Pee
 	}
 	part, err := g.blockStore.loadPart(prs.Height, index)
 	if err != nil {
-		logger.Error("couldn't find a block part", "part_index", index, "error", err)
 		return false
 	}
 	// Catch-up gossip: do NOT optimistically record the part as delivered.
@@ -248,11 +262,11 @@ func (g *msgGossiper) sendCatchupBlockPart(ctx context.Context, prs *cstypes.Pee
 	// silently drop the part. If we optimistically marked it delivered, our view
 	// of the peer would show the full part set and we would never resend it,
 	// leaving the peer wedged with a stored commit but an incomplete block (it
-	// learns the part-set header only once the catch-up commit arrives). The part
-	// is instead replayed once per catchupResendInterval until the peer applies
-	// the block and advances its height.
+	// learns the part-set header only once the catch-up commit arrives). The
+	// part is instead replayed every pass until the peer applies the block and
+	// advances its height.
 	if err := g.syncProposalBlockPart(ctx, part, prs.Height, meta.Round, false); err != nil {
-		logger.Error("failed to sync proposal block part to the peer", "error", err)
+		logger.Error("failed to send catch-up block part to the peer", "error", err)
 		return false
 	}
 	return true
@@ -267,11 +281,8 @@ func (g *msgGossiper) beginCatchupAttempt(prs *cstypes.PeerRoundState) bool {
 	if prs.ProposalBlockParts == nil {
 		return false
 	}
-	// PickRandom draws from the parts the peer reports missing, so the pass is
-	// worth that many sends rather than one per entry in the bit-array. Derived
-	// as size minus set bits rather than via Not().CountTrueBits(), which would
-	// allocate and copy the whole (peer-controlled, up to MaxBlockPartsCount)
-	// bit-array on every gossip tick just to count it.
+	// Equivalent to Not().CountTrueBits() (the parts the peer reports missing)
+	// without allocating a flipped copy of a peer-controlled bit-array to count it.
 	missing := prs.ProposalBlockParts.Size() - prs.ProposalBlockParts.CountTrueBits()
 	if missing == 0 {
 		return false
@@ -280,10 +291,14 @@ func (g *msgGossiper) beginCatchupAttempt(prs *cstypes.PeerRoundState) bool {
 	defer g.catchupMu.Unlock()
 	now := g.clock.Now()
 	if prs.Height != g.catchupHeight {
-		// A peer only ever reports a higher height, so this cannot be replayed to
-		// reopen a pass. catchupRetryAt is intentionally left untouched: an
-		// advancing peer still waits out any pass already in flight rather than
-		// getting a free bypass of the interval on every height step.
+		// A peer only ever reports a higher height, so this cannot be replayed
+		// to reopen a pass — but it can interrupt one before it exhausts its own
+		// budget, which (per the invariant above) means catchupRetryAt was never
+		// armed for it. Arm it here too, or a peer advancing its height every
+		// tick gets a fresh full-budget pass every tick forever.
+		if g.catchupRemaining > 0 {
+			g.catchupRetryAt = now.Add(catchupResendInterval)
+		}
 		g.catchupHeight = prs.Height
 		g.catchupRemaining = 0
 	}
@@ -291,38 +306,25 @@ func (g *msgGossiper) beginCatchupAttempt(prs *cstypes.PeerRoundState) bool {
 		if now.Before(g.catchupRetryAt) {
 			return false
 		}
-		// The budget is fixed here, for the whole pass. The peer owns the
-		// bit-array behind missing and may replace it between ticks, so
-		// re-deriving it to raise the budget mid-pass would let it widen the
-		// pass.
 		g.catchupRemaining = missing
-	} else if missing < g.catchupRemaining {
-		// The peer's reported missing count can only shrink honestly as parts
-		// are actually delivered elsewhere (e.g. via non-catch-up gossip), so
-		// clamp the remaining budget down to match. Without this, a peer that
-		// swaps in a bit-array with fewer unset bits mid-pass keeps the larger
-		// budget the pass opened with, and every remaining attempt draws from
-		// the now-small missing set - funding repeated duplicate sends of the
-		// few parts still unset.
-		g.catchupRemaining = missing
+	} else {
+		// The peer's reported missing count can only shrink honestly (parts
+		// delivered elsewhere); never let it raise the budget mid-pass.
+		g.catchupRemaining = min(g.catchupRemaining, missing)
 	}
 	g.catchupRemaining--
 	if g.catchupRemaining <= 0 {
-		// Arm the retry deadline when the pass's last attempt is spent, not
-		// when it opened. A pass with enough missing parts to span multiple
-		// gossip ticks takes longer than catchupResendInterval to exhaust, so
-		// a deadline set at open time has already passed by the time the
-		// budget runs out - the next tick reopens immediately, leaving no
-		// quiet gap between passes.
+		// Arm the deadline as the pass closes, not as it opens: a multi-part
+		// pass spans more ticks than the interval, so a deadline set at open
+		// would already have elapsed by the time the budget runs out.
 		g.catchupRetryAt = now.Add(catchupResendInterval)
 	}
 	return true
 }
 
 // endCatchupPass abandons the rest of the current pass and starts its retry
-// interval now. Without it a pass that cannot send costs a block-store read and
-// an error log on every gossip tick until its budget runs out, by which point
-// the deadline armed when it opened has long expired.
+// interval now. Without it a pass that cannot send costs a block-store read
+// and an error log on every gossip tick until its budget runs out.
 func (g *msgGossiper) endCatchupPass() {
 	g.catchupMu.Lock()
 	defer g.catchupMu.Unlock()
