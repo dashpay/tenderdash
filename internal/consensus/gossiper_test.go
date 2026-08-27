@@ -18,6 +18,7 @@ import (
 	p2pmocks "github.com/dashpay/tenderdash/internal/p2p/mocks"
 	"github.com/dashpay/tenderdash/internal/state/mocks"
 	"github.com/dashpay/tenderdash/internal/test/factory"
+	"github.com/dashpay/tenderdash/libs/bits"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
 	tmcons "github.com/dashpay/tenderdash/proto/tendermint/consensus"
@@ -680,6 +681,111 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupBudgetsMissingPart
 	suite.clock.Advance(catchupResendInterval)
 	suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
 	suite.Require().Equal(2, sends, "the missing part is retried once the interval elapses")
+}
+
+// TestGossipBlockPartsForCatchupMismatchedHeaderEndsPass covers a pass that can
+// never produce a send. The peer supplies both the part-set header and the size
+// of the missing bit-array, and only their encoding is validated, so a pass
+// opened on a maximum-size array with a header matching no stored block would
+// otherwise charge a block-store read and an error log to every gossip tick for
+// the whole budget - and, its deadline having been armed when the pass opened,
+// reopen immediately afterwards.
+func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupMismatchedHeaderEndsPass() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stored := types.NewPartSetFromData(tmrand.Bytes(100), 100)
+	blockMeta := types.BlockMeta{BlockID: types.BlockID{PartSetHeader: stored.Header()}}
+
+	// Largest pass the peer can ask for: every bit of a maximum-length array
+	// reported missing, under a header no stored block can match.
+	bogus := types.NewPartSetFromData(tmrand.Bytes(100), 100)
+	suite.Require().False(bogus.Header().Equals(stored.Header()))
+	suite.ps.PRS = cstypes.PeerRoundState{
+		Height:                     999,
+		Round:                      0,
+		ProposalBlockParts:         bits.NewBitArray(int(types.MaxBlockPartsCount)),
+		ProposalBlockPartSetHeader: bogus.Header(),
+	}
+
+	// The data channel has no expectations: a mismatched header must send nothing.
+	metaReads := 0
+	suite.blockStore.On("LoadBlockMeta", int64(999)).
+		Run(func(_ mock.Arguments) { metaReads++ }).
+		Return(&blockMeta)
+
+	for range 50 {
+		suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+	}
+	suite.Require().Equal(1, metaReads,
+		"a pass that cannot send must cost one attempt per interval, not one per tick")
+
+	suite.clock.Advance(catchupResendInterval)
+	for range 50 {
+		suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+	}
+	suite.Require().Equal(2, metaReads, "each elapsed interval allows exactly one further attempt")
+}
+
+// TestGossipBlockPartsForCatchupMalformedHeaderDoesNotFundSends pins the budget
+// to a pass that got as far as sending. A pass is deliberately not re-derived
+// from the peer's bit-array once open, so a budget opened against an unusable
+// header would otherwise stay spendable when the peer replaces its state, at the
+// same height, with the stored block's real header and a single missing part:
+// the whole inflated budget then lands as duplicate sends of that one part.
+func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupMalformedHeaderDoesNotFundSends() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	partSet := types.NewPartSetFromData(tmrand.Bytes(100), 100)
+	suite.Require().Equal(uint32(1), partSet.Total())
+	blockMeta := types.BlockMeta{BlockID: types.BlockID{PartSetHeader: partSet.Header()}}
+
+	bogus := types.NewPartSetFromData(tmrand.Bytes(100), 100)
+	suite.Require().False(bogus.Header().Equals(partSet.Header()))
+
+	// Open the largest pass available, under a header that cannot match.
+	suite.ps.PRS = cstypes.PeerRoundState{
+		Height:                     999,
+		Round:                      0,
+		ProposalBlockParts:         bits.NewBitArray(int(types.MaxBlockPartsCount)),
+		ProposalBlockPartSetHeader: bogus.Header(),
+	}
+
+	suite.blockStore.On("LoadBlockMeta", int64(999)).Return(&blockMeta)
+	suite.blockStore.On("LoadBlockPart", int64(999), 0).Return(partSet.GetPart(0))
+
+	sends := 0
+	suite.dataCh.On("Send", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			env, ok := args.Get(1).(p2p.Envelope)
+			if !ok {
+				return
+			}
+			if _, ok := env.Message.(*tmcons.BlockPart); ok {
+				sends++
+			}
+		}).
+		Return(nil)
+
+	suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+
+	// Same height, now with the real header and one part outstanding.
+	suite.ps.PRS.ProposalBlockPartSetHeader = partSet.Header()
+	suite.ps.PRS.ProposalBlockParts = partSet.BitArray().Not()
+
+	for range 50 {
+		suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+	}
+	suite.Require().Equal(0, sends,
+		"a budget opened against an unusable header must not fund sends after the peer swaps it out")
+
+	// The next interval opens a fresh pass, budgeted on what the peer now reports.
+	suite.clock.Advance(catchupResendInterval)
+	for range 50 {
+		suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+	}
+	suite.Require().Equal(1, sends, "the fresh pass is worth the single part the peer now reports missing")
 }
 
 // TestGossipBlockPartsForCatchupPeerHasEveryPart covers the peer reporting a

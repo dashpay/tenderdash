@@ -4,6 +4,7 @@ package consensus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -191,28 +192,41 @@ func (g *msgGossiper) GossipBlockPartsForCatchup(
 	if !g.beginCatchupAttempt(prs) {
 		return
 	}
-	index, ok := prs.ProposalBlockParts.Not().PickRandom()
-	if !ok {
-		return
+	if err := g.sendCatchupBlockPart(ctx, prs); err != nil {
+		// The peer controls both the budget a pass opens with and the inputs that
+		// fail here, so a pass that cannot produce a send is abandoned rather than
+		// charged one slot per tick.
+		g.endCatchupPass()
 	}
+}
+
+// sendCatchupBlockPart sends the peer one part of its incomplete block, drawn at
+// random from the parts it reports missing. A non-nil error reports only that no
+// part reached the peer; the caller is not expected to inspect it.
+func (g *msgGossiper) sendCatchupBlockPart(ctx context.Context, prs *cstypes.PeerRoundState) error {
 	logger := g.logger.With([]any{
 		"height", prs.Height,
 		"round", prs.Round,
 	})
+	index, ok := prs.ProposalBlockParts.Not().PickRandom()
+	if !ok {
+		// The peer replaced its bit-array since the pass drew a budget from it.
+		return errors.New("peer reports no missing block part")
+	}
 	meta, err := g.blockStore.loadMeta(prs.Height)
 	if err != nil {
 		logger.Error("couldn't find a block meta", "error", err)
-		return
+		return err
 	}
 	err = g.ensurePeerPartSetHeader(meta.BlockID.PartSetHeader, prs.ProposalBlockPartSetHeader)
 	if err != nil {
 		logger.Error("block and peer part-set headers do not match", "error", err)
-		return
+		return err
 	}
 	part, err := g.blockStore.loadPart(prs.Height, index)
 	if err != nil {
 		logger.Error("couldn't find a block part", "part_index", index, "error", err)
-		return
+		return err
 	}
 	// Catch-up gossip: do NOT optimistically record the part as delivered.
 	//
@@ -227,13 +241,16 @@ func (g *msgGossiper) GossipBlockPartsForCatchup(
 	err = g.syncProposalBlockPart(ctx, part, prs.Height, meta.Round, false)
 	if err != nil {
 		logger.Error("failed to sync proposal block part to the peer", "error", err)
+		return err
 	}
+	return nil
 }
 
 // beginCatchupAttempt draws a send from the current catch-up pass, reporting
 // false once the pass is spent and until its retry interval elapses. A pass is
-// worth one send per part the peer reported missing when it opened, so a peer
-// that dropped those parts is served again every interval while it stays behind.
+// worth at most one send per part the peer reported missing when it opened, so a
+// peer that dropped those parts is served again every interval while it stays
+// behind. Any attempt that fails ends the pass early, via endCatchupPass.
 func (g *msgGossiper) beginCatchupAttempt(prs *cstypes.PeerRoundState) bool {
 	if prs.ProposalBlockParts == nil {
 		return false
@@ -265,6 +282,15 @@ func (g *msgGossiper) beginCatchupAttempt(prs *cstypes.PeerRoundState) bool {
 	}
 	g.catchupRemaining--
 	return true
+}
+
+// endCatchupPass abandons the rest of the current pass and starts its retry
+// interval now. Without it a pass that cannot send costs a block-store read and
+// an error log on every gossip tick until its budget runs out, by which point
+// the deadline armed when it opened has long expired.
+func (g *msgGossiper) endCatchupPass() {
+	g.catchupRemaining = 0
+	g.catchupRetryAt = g.clock.Now().Add(catchupResendInterval)
 }
 
 // GossipCommit sends a commit message to the peer
