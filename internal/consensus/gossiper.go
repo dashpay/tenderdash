@@ -217,12 +217,24 @@ func (g *msgGossiper) GossipBlockPartsForCatchup(
 	if !g.beginCatchupAttempt(prs) {
 		return
 	}
-	if !g.sendCatchupBlockPart(ctx, prs) {
-		// The peer controls both the budget a pass opens with and the inputs that
-		// fail here, so a pass that cannot produce a send is abandoned rather than
-		// charged one slot per tick.
-		g.endCatchupPass()
-	}
+	sent := false
+	defer func() {
+		if !sent {
+			// The peer controls both the budget a pass opens with and the
+			// inputs that fail here, so a pass that cannot produce a send is
+			// abandoned rather than charged one slot per tick. A defer, not a
+			// plain if-check on sendCatchupBlockPart's return: its block-store
+			// reads deliberately panic on a decode or read failure (see
+			// blockRepository.loadMeta/loadPart), and runGossipHandler recovers
+			// that panic per tick and keeps ticking - a defer is the only way
+			// this still runs on that path, so a peer that can trigger such a
+			// panic doesn't get a full-stack log and a wasted budget slot on
+			// every tick for the rest of the pass, but exactly one before the
+			// pass ends like any other failed attempt.
+			g.endCatchupPass()
+		}
+	}()
+	sent = g.sendCatchupBlockPart(ctx, prs)
 }
 
 // sendCatchupBlockPart sends the peer one part of its incomplete block, drawn

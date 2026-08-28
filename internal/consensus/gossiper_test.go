@@ -1075,6 +1075,63 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupSendFailureEndsPas
 	suite.Require().Equal(2, partReads, "each elapsed interval allows exactly one further attempt")
 }
 
+// TestGossipBlockPartsForCatchupPanicEndsPass is a regression test for a
+// defect where a panic out of sendCatchupBlockPart's block-store reads left
+// the pass open. LoadBlockMeta and LoadBlockPart panic deliberately on a
+// decode or read failure (see internal/store/store.go), and
+// peerGossipWorker.runGossipHandler recovers that per gossip tick and keeps
+// ticking - GossipBlockPartsForCatchup's own endCatchupPass call used to run
+// only on a normal false return, which a panic's unwind skips entirely,
+// leaving the remaining budget spendable. A peer that can trigger the panic
+// (any store corruption or read failure at a height it names) would then get
+// a fresh attempt - and a fresh panic, and a fresh full-stack log - on every
+// tick for the rest of the pass instead of ending on the first one, same as
+// TestGossipBlockPartsForCatchupSendFailureEndsPass covers for a normal
+// failure. The test recovers the panic itself, standing in for
+// runGossipHandler; that recovery is not itself under test here.
+func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupPanicEndsPass() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const partSize = uint32(100)
+	partSet := types.NewPartSetFromData(tmrand.Bytes(int(partSize)*5), partSize)
+	suite.Require().Equal(uint32(5), partSet.Total(), "need multiple missing parts so the budget isn't the limiting factor")
+
+	suite.ps.PRS = cstypes.PeerRoundState{
+		Height:                     999,
+		Round:                      0,
+		ProposalBlockParts:         partSet.BitArray().Not(), // peer has none
+		ProposalBlockPartSetHeader: partSet.Header(),
+	}
+
+	metaReads := 0
+	suite.blockStore.On("LoadBlockMeta", int64(999)).
+		Run(func(_ mock.Arguments) {
+			metaReads++
+			panic("simulated block-store decode failure")
+		}).
+		Return((*types.BlockMeta)(nil))
+
+	tick := func() {
+		func() {
+			defer func() { _ = recover() }() // stands in for runGossipHandler's recover
+			suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+		}()
+	}
+
+	for range 50 {
+		tick()
+	}
+	suite.Require().Equal(1, metaReads,
+		"a panicking attempt must end the pass just like a normal failed one, not retry every tick for the rest of the budget")
+
+	suite.clock.Advance(catchupResendInterval)
+	for range 50 {
+		tick()
+	}
+	suite.Require().Equal(2, metaReads, "each elapsed interval allows exactly one further attempt")
+}
+
 // TestGossipBlockPartsForCatchupMalformedHeaderDoesNotFundSends pins the budget
 // to a pass that got as far as sending. A pass is deliberately not re-derived
 // from the peer's bit-array once open, so a budget opened against an unusable
