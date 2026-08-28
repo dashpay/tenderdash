@@ -312,6 +312,17 @@ func (g *msgGossiper) beginCatchupAttempt(prs *cstypes.PeerRoundState) bool {
 	// allocate and copy the whole bit-array just to count it.
 	missing := prs.ProposalBlockParts.Size() - prs.ProposalBlockParts.CountTrueBits()
 	if missing == 0 {
+		if !noOpenPass {
+			// The peer now reports a complete part set while a pass was still
+			// open (budget not yet exhausted). Close it here instead of leaving
+			// catchupRemaining pinned above zero: left open, noOpenPass stays
+			// false on every later tick regardless of how much time passes, so
+			// a peer that later reports parts missing again would resume
+			// sending immediately - the backoff check above only ever runs
+			// when no pass is open.
+			g.catchupRemaining = 0
+			g.catchupRetryAt = now.Add(catchupResendInterval)
+		}
 		return false
 	}
 	if noOpenPass {

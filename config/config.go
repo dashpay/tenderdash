@@ -1116,8 +1116,11 @@ type ConsensusConfig struct {
 	// Reactor sleep duration parameters. PeerGossipSleepDuration also sets the
 	// gossip tick a lagging peer's catch-up part-set replay is metered against
 	// (internal/consensus/gossiper.go's catchupResendInterval, currently a fixed
-	// 500ms): raising this past that value disables that throttle, and lowering
-	// it scales the throttle's effective suppression window down proportionally.
+	// 500ms quiet gap between passes that does NOT scale with this value):
+	// raising this past that value disables the throttle entirely, since every
+	// tick then already exceeds the gap it is meant to enforce. Lowering it
+	// does not shrink the gap — it only fits more ticks (and so more sends of
+	// a multi-part block) into that same fixed window before it applies.
 	PeerGossipSleepDuration     time.Duration `mapstructure:"peer-gossip-sleep-duration"`
 	PeerQueryMaj23SleepDuration time.Duration `mapstructure:"peer-query-maj23-sleep-duration"`
 

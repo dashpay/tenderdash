@@ -912,6 +912,76 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupBudgetShrinksWithR
 	suite.Require().Equal(4, sends)
 }
 
+// TestGossipBlockPartsForCatchupCompleteReportMidPassClosesIt verifies that a
+// peer reporting a complete part set while a pass is still open (budget not
+// yet exhausted) closes the pass and arms the retry deadline, rather than
+// leaving it open indefinitely. Left open, a peer can freeze catchupRemaining
+// above zero by reporting a complete set whenever it likes, then resume
+// sending on the very next tick it reports parts missing again - the backoff
+// check only runs while no pass is open, so an open-but-frozen pass skips it
+// entirely and never honors the retry interval.
+func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupCompleteReportMidPassClosesIt() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const partSize = uint32(100)
+	const numParts = 3
+	partSet := types.NewPartSetFromData(tmrand.Bytes(int(partSize)*numParts), partSize)
+	suite.Require().Equal(uint32(numParts), partSet.Total(), "need a 3-part block for this test")
+	blockMeta := types.BlockMeta{BlockID: types.BlockID{PartSetHeader: partSet.Header()}}
+
+	suite.ps.PRS = cstypes.PeerRoundState{
+		Height:                     999,
+		Round:                      0,
+		ProposalBlockParts:         partSet.BitArray().Not(), // peer has none: 3 missing
+		ProposalBlockPartSetHeader: partSet.Header(),
+	}
+
+	suite.blockStore.On("LoadBlockMeta", int64(999)).Return(&blockMeta)
+	for i := uint32(0); i < partSet.Total(); i++ {
+		suite.blockStore.On("LoadBlockPart", int64(999), int(i)).Return(partSet.GetPart(int(i)))
+	}
+
+	sends := 0
+	suite.dataCh.On("Send", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			env, ok := args.Get(1).(p2p.Envelope)
+			if !ok {
+				return
+			}
+			if _, ok := env.Message.(*tmcons.BlockPart); ok {
+				sends++
+			}
+		}).
+		Return(nil)
+
+	tick := func() {
+		suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+	}
+
+	// Open a 3-send pass and spend one of them.
+	tick()
+	suite.Require().Equal(1, sends)
+
+	// The peer now reports a complete part set, without the height changing -
+	// a bit-array the peer fully controls over the wire.
+	suite.ps.PRS.ProposalBlockParts = partSet.BitArray() // every bit set: peer has them all
+	tick()
+	suite.Require().Equal(1, sends, "a complete report must not itself send")
+
+	// The peer reports one part missing again, immediately (same simulated
+	// instant - the clock has not advanced at all since the pass opened).
+	suite.ps.PRS.ProposalBlockParts = partSet.BitArray().Not()
+	tick()
+	suite.Require().Equal(1, sends,
+		"a pass closed by a complete report must honor the retry interval before sending again")
+
+	// Only once the interval has elapsed does a fresh pass open.
+	suite.clock.Advance(catchupResendInterval)
+	tick()
+	suite.Require().Equal(2, sends, "a fresh pass opens once the retry interval has elapsed")
+}
+
 // TestGossipBlockPartsForCatchupMismatchedHeaderEndsPass covers a pass that can
 // never produce a send. The peer supplies both the part-set header and the size
 // of the missing bit-array, and only their encoding is validated, so a pass
