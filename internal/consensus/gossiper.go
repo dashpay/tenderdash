@@ -70,10 +70,21 @@ type msgGossiper struct {
 	// which means catchupRetryAt is already in the past; catchupRetryAt is only
 	// ever in the future while catchupRemaining <= 0. Every write to either
 	// field must preserve this together.
-	catchupMu        sync.Mutex
-	catchupHeight    int64
-	catchupRemaining int
-	catchupRetryAt   time.Time
+	//
+	// catchupRetrySticky distinguishes why catchupRetryAt is currently armed,
+	// for the height-change branch: true means the pass that armed it did NOT
+	// finish rendering service (interrupted before exhausting its own budget,
+	// or ended by endCatchupPass) and the deadline must survive a height
+	// change - including a chain of several in a row, none of which get a
+	// chance to open a pass while it's still pending. false means the pass
+	// closed because it had genuinely nothing left to do (spent its own
+	// budget in full, or the peer reported complete) and a peer that then
+	// reports a new height owes nothing carried over from it.
+	catchupMu          sync.Mutex
+	catchupHeight      int64
+	catchupRemaining   int
+	catchupRetryAt     time.Time
+	catchupRetrySticky bool
 }
 
 func newVoteSetMaj23(height int64, round int32, msgType tmproto.SignedMsgType, maj23 types.BlockID) *tmcons.VoteSetMaj23 {
@@ -298,12 +309,54 @@ func (g *msgGossiper) beginCatchupAttempt(prs *cstypes.PeerRoundState) bool {
 	now := g.clock.Now()
 	if prs.Height != g.catchupHeight {
 		// A peer only ever reports a higher height, so this cannot be replayed
-		// to reopen a pass — but it can interrupt one before it exhausts its own
-		// budget, which (per the invariant above) means catchupRetryAt was never
-		// armed for it. Arm it here too, or a peer advancing its height every
-		// tick gets a fresh full-budget pass every tick forever.
-		if g.catchupRemaining > 0 {
+		// to reopen a pass.
+		switch {
+		case g.catchupRemaining > 0:
+			// It can, though, interrupt a pass before that pass exhausts its own
+			// budget, which (per the invariant above) means catchupRetryAt was
+			// never armed for it. Arm it here too, or a peer advancing its height
+			// every tick gets a fresh full-budget pass every tick forever. Marked
+			// sticky: unrendered service, must survive further height changes too.
 			g.catchupRetryAt = now.Add(catchupResendInterval)
+			g.catchupRetrySticky = true
+		case g.catchupRetrySticky && now.Before(g.catchupRetryAt):
+			// No pass is open, but the currently-armed deadline is sticky and
+			// hasn't elapsed - it may belong to THIS height change (a pass just
+			// interrupted above), or it may be inherited from an earlier one in
+			// a rapid chain that got no chance to open a pass at all before
+			// advancing again. Leave it untouched either way: a peer hopping
+			// through several heights before the deadline elapses must not be
+			// able to shorten or clear it by hopping through one more.
+		default:
+			// No pass is open, and any armed deadline is either non-sticky
+			// (the previous height's pass closed because it genuinely had
+			// nothing left to do: spent its own budget in full, or the peer
+			// reported complete) or has already elapsed. Clear it: a peer that
+			// isn't replaying anything and owes nothing from before is served
+			// immediately at the new height, matching how catch-up behaves
+			// everywhere upstream of this PR (no per-height throttle at all).
+			//
+			// This does reopen a bounded gap for the non-sticky case: a peer
+			// can open a pass, let it close cleanly (one real send, e.g. by
+			// reporting a single missing part), then immediately claim a new
+			// height and repeat, getting one send per gossip tick indefinitely
+			// instead of one pass per interval. Bounded to that - at most 1
+			// send/PeerGossipSleepDuration tick (10/s, ~640KB/s of block parts
+			// at production defaults) - because CompareHRS enforces monotonic
+			// height only (no replay or ping-ponging) and
+			// ensurePeerPartSetHeader requires the real, currently-stored
+			// PartSetHeader for each claimed height (a mismatch ends the pass
+			// via endCatchupPass, which is sticky, costing the peer a full
+			// interval rather than a send). So sustaining this requires
+			// marching forward through genuine, still-retained history, capped
+			// by blockStoreBase - no worse than the pre-#1365 catch-up rate
+			// this codebase already tolerated in production. Accepted as
+			// strictly cheaper than taxing every honestly-advancing lagging
+			// peer by up to 500ms per height; closing it for real needs a
+			// verified-progress-gated redesign, tracked as follow-up rather
+			// than done here.
+			g.catchupRetryAt = time.Time{}
+			g.catchupRetrySticky = false
 		}
 		g.catchupHeight = prs.Height
 		g.catchupRemaining = 0
@@ -344,6 +397,9 @@ func (g *msgGossiper) beginCatchupAttempt(prs *cstypes.PeerRoundState) bool {
 			// negligible against block time.
 			g.catchupRemaining = 0
 			g.catchupRetryAt = now.Add(catchupResendInterval)
+			// Non-sticky: the peer reporting complete is exactly the "nothing
+			// left to do" case the height-change branch grants amnesty for.
+			g.catchupRetrySticky = false
 		}
 		return false
 	}
@@ -367,20 +423,28 @@ func (g *msgGossiper) beginCatchupAttempt(prs *cstypes.PeerRoundState) bool {
 	if g.catchupRemaining <= 0 {
 		// Arm the deadline as the pass closes, not as it opens: a multi-part
 		// pass spans more ticks than the interval, so a deadline set at open
-		// would already have elapsed by the time the budget runs out.
+		// would already have elapsed by the time the budget runs out. Spending
+		// the budget down to zero this way is genuine completion (every part
+		// the peer reported missing at open got a send), so non-sticky.
 		g.catchupRetryAt = now.Add(catchupResendInterval)
+		g.catchupRetrySticky = false
 	}
 	return true
 }
 
 // endCatchupPass abandons the rest of the current pass and starts its retry
 // interval now. Without it a pass that cannot send costs a block-store read
-// and an error log on every gossip tick until its budget runs out.
+// and an error log on every gossip tick until its budget runs out. Marked
+// sticky: ending here means an attempt failed to render service (as opposed
+// to a pass that closed because it had nothing left to do), so the deadline
+// must survive a height change - a peer cannot dodge it by claiming a new
+// height right after triggering the failure.
 func (g *msgGossiper) endCatchupPass() {
 	g.catchupMu.Lock()
 	defer g.catchupMu.Unlock()
 	g.catchupRemaining = 0
 	g.catchupRetryAt = g.clock.Now().Add(catchupResendInterval)
+	g.catchupRetrySticky = true
 }
 
 // GossipCommit sends a commit message to the peer

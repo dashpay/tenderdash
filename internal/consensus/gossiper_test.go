@@ -782,6 +782,16 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupRetryIntervalArmsW
 // advanced across the first block of ticks below: a working throttle must
 // still bound the send rate even though the peer supplies a "new" pass at
 // every step.
+//
+// Also pins a narrower defect the fix for the above introduced and this test
+// caught directly: naively granting a new height amnesty from the previous
+// height's deadline whenever catchupRemaining == 0 is wrong when that 0 came
+// from an INTERMEDIATE height that never got a chance to open a pass at all
+// (still serving an earlier interruption's penalty) rather than from a pass
+// that genuinely finished. Every height below except the first is exactly
+// that intermediate case, so a version of the fix that doesn't track WHY
+// catchupRetryAt is armed (see catchupRetrySticky) turns this test's 1 send
+// into a fresh send roughly every other height.
 func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupHeightAdvanceInterruptingPassIsThrottled() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -833,6 +843,72 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupHeightAdvanceInter
 	suite.clock.Advance(catchupResendInterval)
 	tick(numHeights + 1)
 	suite.Require().Equal(2, sends, "a fresh pass opens once the interval has elapsed since the interrupted pass")
+}
+
+// TestGossipBlockPartsForCatchupCleanHeightAdvanceIsNotThrottled is a
+// regression test for a defect where a pass that closed CLEANLY (its own
+// budget exhausted, catchupRemaining == 0) at the old height left
+// catchupRetryAt armed against that old height, and a peer that then
+// genuinely advanced past it inherited that leftover deadline: the new
+// height's first pass would wait out up to catchupResendInterval for no
+// reason, even though the peer isn't replaying anything and holds no
+// interrupted budget. Catch-up is the only path offered to a peer at a
+// different height than ours, so this taxes every honestly-advancing lagging
+// peer, once per height. Contrast with
+// TestGossipBlockPartsForCatchupHeightAdvanceInterruptingPassIsThrottled,
+// which pins that an height change interrupting an UNEXHAUSTED pass must
+// still throttle - that case is intentionally unchanged here.
+func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupCleanHeightAdvanceIsNotThrottled() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sends := 0
+	suite.dataCh.On("Send", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			env, ok := args.Get(1).(p2p.Envelope)
+			if !ok {
+				return
+			}
+			if _, ok := env.Message.(*tmcons.BlockPart); ok {
+				sends++
+			}
+		}).
+		Return(nil)
+
+	// Height 999: a single-part block, so one tick both opens AND fully
+	// exhausts the pass's budget - it closes cleanly, not by interruption.
+	onePart := types.NewPartSetFromData(tmrand.Bytes(100), 100)
+	suite.Require().Equal(uint32(1), onePart.Total())
+	onePartMeta := types.BlockMeta{BlockID: types.BlockID{PartSetHeader: onePart.Header()}}
+	suite.blockStore.On("LoadBlockMeta", int64(999)).Return(&onePartMeta)
+	suite.blockStore.On("LoadBlockPart", int64(999), 0).Return(onePart.GetPart(0))
+	suite.ps.PRS = cstypes.PeerRoundState{
+		Height:                     999,
+		Round:                      0,
+		ProposalBlockParts:         onePart.BitArray().Not(),
+		ProposalBlockPartSetHeader: onePart.Header(),
+	}
+	suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+	suite.Require().Equal(1, sends, "the single-part pass must close on its own budget, not by interruption")
+
+	// The peer genuinely advances to height 1000, on the very same simulated
+	// instant - no time has passed since the height-999 pass closed.
+	threeParts := types.NewPartSetFromData(tmrand.Bytes(300), 100)
+	suite.Require().Equal(uint32(3), threeParts.Total())
+	threePartsMeta := types.BlockMeta{BlockID: types.BlockID{PartSetHeader: threeParts.Header()}}
+	suite.blockStore.On("LoadBlockMeta", int64(1000)).Return(&threePartsMeta)
+	for i := uint32(0); i < threeParts.Total(); i++ {
+		suite.blockStore.On("LoadBlockPart", int64(1000), int(i)).Return(threeParts.GetPart(int(i)))
+	}
+	suite.ps.PRS = cstypes.PeerRoundState{
+		Height:                     1000,
+		Round:                      0,
+		ProposalBlockParts:         threeParts.BitArray().Not(),
+		ProposalBlockPartSetHeader: threeParts.Header(),
+	}
+	suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+	suite.Require().Equal(2, sends,
+		"a cleanly-closed pass at the old height must not throttle the new height's first pass")
 }
 
 // TestGossipBlockPartsForCatchupBudgetShrinksWithReportedMissing verifies the
