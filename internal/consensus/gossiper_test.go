@@ -915,11 +915,14 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupBudgetShrinksWithR
 // TestGossipBlockPartsForCatchupCompleteReportMidPassClosesIt verifies that a
 // peer reporting a complete part set while a pass is still open (budget not
 // yet exhausted) closes the pass and arms the retry deadline, rather than
-// leaving it open indefinitely. Left open, a peer can freeze catchupRemaining
-// above zero by reporting a complete set whenever it likes, then resume
-// sending on the very next tick it reports parts missing again - the backoff
-// check only runs while no pass is open, so an open-but-frozen pass skips it
-// entirely and never honors the retry interval.
+// leaving it open indefinitely. This is not about exceeding the pass's
+// budget - catchupRemaining only ever counts down, so total sends per pass
+// are the same either way. It's about what an indefinitely-open pass costs:
+// the bit-array scan above runs on every tick instead of being skipped by
+// backoff (see TestGossipBlockPartsForCatchupRetryIntervalArmsWhenPassEnds'
+// sibling optimization), and the next report of missing parts resumes
+// sending on the very same tick instead of after a fresh
+// catchupResendInterval, which this test pins.
 func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupCompleteReportMidPassClosesIt() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

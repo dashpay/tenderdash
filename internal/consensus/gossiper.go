@@ -314,12 +314,22 @@ func (g *msgGossiper) beginCatchupAttempt(prs *cstypes.PeerRoundState) bool {
 	if missing == 0 {
 		if !noOpenPass {
 			// The peer now reports a complete part set while a pass was still
-			// open (budget not yet exhausted). Close it here instead of leaving
-			// catchupRemaining pinned above zero: left open, noOpenPass stays
-			// false on every later tick regardless of how much time passes, so
-			// a peer that later reports parts missing again would resume
-			// sending immediately - the backoff check above only ever runs
-			// when no pass is open.
+			// open (budget not yet exhausted). This does NOT let the peer send
+			// more than the budget fixed at pass open — catchupRemaining only
+			// ever counts down, never up, so total sends per pass are unaffected
+			// either way. Left open regardless, though, noOpenPass stays false on
+			// every later tick no matter how much time passes, which costs two
+			// things: the backoff-skip check above never re-engages, so the
+			// bit-array scan above runs on every tick for as long as the peer
+			// holds the pass open this way (the CPU cost the backoff-skip check
+			// exists to bound); and the next report of missing parts resumes
+			// sending on that same tick rather than after a fresh
+			// catchupResendInterval. Close the pass here to bound both. This
+			// does mean a peer that legitimately completes its part set and
+			// later falls behind again waits out one interval before catch-up
+			// resumes - accepted deliberately: a peer that just reported a
+			// complete set is by definition not starving, and the wait is
+			// negligible against block time.
 			g.catchupRemaining = 0
 			g.catchupRetryAt = now.Add(catchupResendInterval)
 		}
