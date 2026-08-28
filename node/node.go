@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -205,18 +206,19 @@ func makeNode(
 		// Special handling on non-Validator nodes
 		logger.Info("this node is NOT a validator")
 
-		if cfg.PrivValidator.CoreRPCHost != "" {
-			dashCoreRPCClient, err = DefaultDashCoreRPCClient(cfg, logger.With("module", core.ModuleName))
-			if err != nil {
-				return nil, fmt.Errorf("failed to create Dash Core RPC client: %w", err)
-			}
-		} else {
-			llmqType := genDoc.QuorumType
-			if err := llmqType.Validate(); err != nil {
-				return nil, fmt.Errorf("invalid genesis quorum type %d: %w", llmqType, err)
-			}
-			// This is used for light client verification only
-			dashCoreRPCClient = core.NewMockClient(cfg.ChainID(), llmqType, privValidator, false)
+		// Full nodes still need a Dash Core RPC connection: light client
+		// verification (used by state sync and evidence handling) checks quorum
+		// threshold signatures via Dash Core. Without core-rpc-host the only
+		// fallback would be a mock client backed by a local private validator,
+		// which a full node does not have.
+		if cfg.PrivValidator.CoreRPCHost == "" {
+			return nil, errors.New("a full node requires a Dash Core RPC connection for light client " +
+				"verification: set core-rpc-host in the [priv-validator] section of config.toml " +
+				"(and core-rpc-username/core-rpc-password as needed)")
+		}
+		dashCoreRPCClient, err = DefaultDashCoreRPCClient(cfg, logger.With("module", core.ModuleName))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Dash Core RPC client: %w", err)
 		}
 	}
 
