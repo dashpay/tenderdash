@@ -31,6 +31,7 @@ import (
 
 var (
 	_ service.Service = (*Reactor)(nil)
+	_ Metricer        = (*Reactor)(nil)
 )
 
 const (
@@ -131,8 +132,19 @@ type Reactor struct {
 
 	eventBus           *eventbus.EventBus
 	metrics            *Metrics
-	backfillBlockTotal int64
-	backfilledBlocks   int64
+	backfillBlockTotal int64 // guarded by mtx
+	backfilledBlocks   int64 // guarded by mtx
+
+	// Final metrics of the most recent sync, captured (under mtx) by
+	// syncComplete before the syncer is dropped, so that the /status RPC keeps
+	// reporting them for the life of the process. They are not persisted across
+	// restarts: that would need a state-store change, which is left as a design
+	// decision for maintainers.
+	lastTotalSnapshots      int64
+	lastChunkProcessAvgTime time.Duration
+	lastSnapshotHeight      int64
+	lastSnapshotChunksCount int64
+	lastSnapshotChunksTotal int64
 
 	dashCoreClient dashcore.Client
 
@@ -427,6 +439,15 @@ func (r *Reactor) startStateProvider(ctx context.Context) error {
 func (r *Reactor) syncComplete() {
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
+	// snapshot the sync's final metrics before dropping the syncer, so the
+	// Metricer getters keep reporting them after the sync finishes
+	if r.syncer != nil {
+		r.lastTotalSnapshots = r.syncer.TotalSnapshots()
+		r.lastChunkProcessAvgTime = time.Duration(r.syncer.AvgChunkTime())
+		r.lastSnapshotHeight = r.syncer.LastSyncedSnapshotHeight()
+		r.lastSnapshotChunksCount = r.syncer.SnapshotChunksCount()
+		r.lastSnapshotChunksTotal = r.syncer.SnapshotChunksTotal()
+	}
 	// reset syncing objects at the close of Sync
 	r.syncer = nil
 	r.stateProvider = nil
@@ -565,8 +586,11 @@ func (r *Reactor) backfill(
 		"stopTime", stopTime,
 		"trustedBlockID", trustedBlockID)
 
+	r.mtx.Lock()
 	r.backfillBlockTotal = startHeight - stopHeight + 1
-	r.metrics.BackFillBlocksTotal.Set(float64(r.backfillBlockTotal))
+	backfillBlockTotal := r.backfillBlockTotal
+	r.mtx.Unlock()
+	r.metrics.BackFillBlocksTotal.Set(float64(backfillBlockTotal))
 
 	var (
 		lastValidatorSet *types.ValidatorSet
@@ -871,15 +895,18 @@ func (r *Reactor) backfill(
 
 			lastValidatorSet = resp.block.ValidatorSet
 
+			r.mtx.Lock()
 			r.backfilledBlocks++
-			r.metrics.BackFilledBlocks.Add(1)
-
 			// The block height might be less than the stopHeight because of the stopTime condition
 			// hasn't been fulfilled.
 			if resp.block.Height < stopHeight {
 				r.backfillBlockTotal++
-				r.metrics.BackFillBlocksTotal.Set(float64(r.backfillBlockTotal))
 			}
+			backfillBlockTotal := r.backfillBlockTotal
+			r.mtx.Unlock()
+
+			r.metrics.BackFilledBlocks.Add(1)
+			r.metrics.BackFillBlocksTotal.Set(float64(backfillBlockTotal))
 
 		case <-queue.done():
 			if err := queue.error(); err != nil {
@@ -1419,14 +1446,17 @@ func (r *Reactor) waitForEnoughPeers(ctx context.Context, numPeers int) error {
 	return nil
 }
 
+// The Metricer getters below read the live syncer while a sync is in progress
+// and the values snapshotted by syncComplete afterwards.
+
 func (r *Reactor) TotalSnapshots() int64 {
 	r.mtx.RLock()
 	defer r.mtx.RUnlock()
 
 	if r.syncer != nil && r.syncer.snapshots != nil {
-		return int64(len(r.syncer.snapshots.snapshots))
+		return r.syncer.TotalSnapshots()
 	}
-	return 0
+	return r.lastTotalSnapshots
 }
 
 func (r *Reactor) ChunkProcessAvgTime() time.Duration {
@@ -1434,9 +1464,9 @@ func (r *Reactor) ChunkProcessAvgTime() time.Duration {
 	defer r.mtx.RUnlock()
 
 	if r.syncer != nil {
-		return time.Duration(r.syncer.avgChunkTime)
+		return time.Duration(r.syncer.AvgChunkTime())
 	}
-	return time.Duration(0)
+	return r.lastChunkProcessAvgTime
 }
 
 func (r *Reactor) SnapshotHeight() int64 {
@@ -1444,9 +1474,29 @@ func (r *Reactor) SnapshotHeight() int64 {
 	defer r.mtx.RUnlock()
 
 	if r.syncer != nil {
-		return r.syncer.lastSyncedSnapshotHeight
+		return r.syncer.LastSyncedSnapshotHeight()
 	}
-	return 0
+	return r.lastSnapshotHeight
+}
+
+func (r *Reactor) SnapshotChunksCount() int64 {
+	r.mtx.RLock()
+	defer r.mtx.RUnlock()
+
+	if r.syncer != nil {
+		return r.syncer.SnapshotChunksCount()
+	}
+	return r.lastSnapshotChunksCount
+}
+
+func (r *Reactor) SnapshotChunksTotal() int64 {
+	r.mtx.RLock()
+	defer r.mtx.RUnlock()
+
+	if r.syncer != nil {
+		return r.syncer.SnapshotChunksTotal()
+	}
+	return r.lastSnapshotChunksTotal
 }
 
 func (r *Reactor) BackFilledBlocks() int64 {

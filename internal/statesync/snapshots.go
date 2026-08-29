@@ -124,6 +124,13 @@ func (p *snapshotPool) Add(peerID types.NodeID, snapshot *snapshot) (bool, error
 	return true, nil
 }
 
+// Len returns the number of snapshots currently in the pool.
+func (p *snapshotPool) Len() int {
+	p.Lock()
+	defer p.Unlock()
+	return len(p.snapshots)
+}
+
 // Best returns the "best" currently known snapshot, if any.
 func (p *snapshotPool) Best() *snapshot {
 	ranked := p.Ranked()
