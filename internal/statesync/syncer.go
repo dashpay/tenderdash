@@ -520,6 +520,8 @@ func (s *syncer) releaseChunkQueue() {
 }
 
 // TotalSnapshots returns the number of snapshots discovered so far.
+// s.snapshots is set once at construction and never reassigned, so reading the
+// pointer without s.mtx is safe; the pool itself locks internally.
 func (s *syncer) TotalSnapshots() int64 {
 	return int64(s.snapshots.Len())
 }
