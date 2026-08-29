@@ -285,6 +285,16 @@ func TestReactor_Sync(t *testing.T) {
 	// Run state sync
 	_, err := rts.reactor.Sync(ctx)
 	require.NoError(t, err)
+
+	// The sync metrics must survive the completed sync (the syncer is dropped
+	// by syncComplete, but its final values are snapshotted first), so /status
+	// keeps reporting them for the life of the process.
+	require.Nil(t, rts.reactor.getSyncer())
+	require.Equal(t, int64(1), rts.reactor.TotalSnapshots())
+	require.Equal(t, int64(snapshotHeight), rts.reactor.SnapshotHeight())
+	require.Equal(t, int64(1), rts.reactor.SnapshotChunksCount())
+	require.Equal(t, int64(1), rts.reactor.SnapshotChunksTotal())
+	require.Greater(t, rts.reactor.ChunkProcessAvgTime(), time.Duration(0))
 }
 
 func TestReactor_ChunkRequest_InvalidRequest(t *testing.T) {
