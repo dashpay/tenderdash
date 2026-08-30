@@ -30,13 +30,6 @@ func TestReactorMetricer(t *testing.T) {
 	// build a live syncer with two discovered snapshots and a chunk queue
 	// holding three known chunks, one of which has been processed
 	snap := &snapshot{Height: 7, Version: 1, Hash: []byte{0x01}}
-	pool := newSnapshotPool()
-	added, err := pool.Add(types.NodeID("aa"), snap)
-	require.NoError(t, err)
-	require.True(t, added)
-	added, err = pool.Add(types.NodeID("aa"), &snapshot{Height: 8, Version: 1, Hash: []byte{0x02}})
-	require.NoError(t, err)
-	require.True(t, added)
 
 	queue, err := newChunkQueue(snap, t.TempDir(), 4)
 	require.NoError(t, err)
@@ -47,7 +40,7 @@ func TestReactorMetricer(t *testing.T) {
 	dequeued, err := queue.Dequeue()
 	require.NoError(t, err)
 	require.Equal(t, chunkIDs[0], []byte(dequeued))
-	added, err = queue.Add(&chunk{Height: 7, Version: 1, ID: chunkIDs[0], Chunk: []byte("data")})
+	added, err := queue.Add(&chunk{Height: 7, Version: 1, ID: chunkIDs[0], Chunk: []byte("data")})
 	require.NoError(t, err)
 	require.True(t, added)
 	_, err = queue.Next()
@@ -55,12 +48,27 @@ func TestReactorMetricer(t *testing.T) {
 
 	s := &syncer{
 		logger:                   log.NewTestingLogger(t),
-		snapshots:                pool,
+		snapshots:                newSnapshotPool(),
 		chunkQueue:               queue,
+		metrics:                  NopMetrics(),
 		avgChunkTime:             int64(5 * time.Second),
 		lastSyncedSnapshotHeight: 7,
 	}
 	r.syncer = s
+
+	// discover the snapshots through the syncer, so the cumulative counter
+	// backing TotalSnapshots is incremented
+	added, err = s.AddSnapshot(types.NodeID("aa"), snap)
+	require.NoError(t, err)
+	require.True(t, added)
+	added, err = s.AddSnapshot(types.NodeID("aa"), &snapshot{Height: 8, Version: 1, Hash: []byte{0x02}})
+	require.NoError(t, err)
+	require.True(t, added)
+
+	// a duplicate must not bump the counter
+	added, err = s.AddSnapshot(types.NodeID("bb"), snap)
+	require.NoError(t, err)
+	require.False(t, added)
 
 	// during the sync: values come from the live syncer
 	require.Equal(t, int64(2), m.TotalSnapshots())
@@ -68,6 +76,14 @@ func TestReactorMetricer(t *testing.T) {
 	require.Equal(t, int64(7), m.SnapshotHeight())
 	require.Equal(t, int64(1), m.SnapshotChunksCount())
 	require.Equal(t, int64(3), m.SnapshotChunksTotal())
+
+	// TotalSnapshots is cumulative: peers disconnecting (e.g. during the
+	// backfill that follows the restore) empty the pool but must not zero the
+	// metric that syncComplete is about to snapshot
+	s.RemovePeer(types.NodeID("aa"))
+	s.RemovePeer(types.NodeID("bb"))
+	require.Zero(t, s.snapshots.Len())
+	require.Equal(t, int64(2), m.TotalSnapshots())
 
 	// the syncer records the queue's final counts when dropping it
 	s.releaseChunkQueue()

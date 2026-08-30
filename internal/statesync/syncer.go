@@ -78,10 +78,14 @@ type syncer struct {
 	chunkQueue *chunkQueue
 	metrics    *Metrics
 
-	// avgChunkTime and lastSyncedSnapshotHeight are written by the sync
-	// goroutine and read by the RPC metrics getters; access them atomically.
+	// avgChunkTime, lastSyncedSnapshotHeight and totalSnapshots are written by
+	// the sync goroutines and read by the RPC metrics getters; access them
+	// atomically. totalSnapshots counts every snapshot ever discovered: unlike
+	// the pool size it never decreases, so the metric survives snapshot
+	// rejections and peer disconnects after the restore completes.
 	avgChunkTime             int64
 	lastSyncedSnapshotHeight int64
+	totalSnapshots           int64
 	processingSnapshot       *snapshot
 
 	// last observed chunk counts, retained after the chunk queue is dropped at
@@ -127,6 +131,7 @@ func (s *syncer) AddSnapshot(peerID types.NodeID, snapshot *snapshot) (bool, err
 		return false, err
 	}
 	if added {
+		atomic.AddInt64(&s.totalSnapshots, 1)
 		s.metrics.TotalSnapshots.Add(1)
 		s.logger.Info("Discovered new snapshot",
 			"height", snapshot.Height,
@@ -519,11 +524,12 @@ func (s *syncer) releaseChunkQueue() {
 	s.chunkQueue = nil
 }
 
-// TotalSnapshots returns the number of snapshots discovered so far.
-// s.snapshots is set once at construction and never reassigned, so reading the
-// pointer without s.mtx is safe; the pool itself locks internally.
+// TotalSnapshots returns the cumulative number of snapshots discovered so far.
+// It deliberately does not report the pool size: the pool shrinks as snapshots
+// are rejected or peers disconnect, which would zero the /status metrics if a
+// peer left between the restore finishing and the sync completing.
 func (s *syncer) TotalSnapshots() int64 {
-	return int64(s.snapshots.Len())
+	return atomic.LoadInt64(&s.totalSnapshots)
 }
 
 // AvgChunkTime returns the average chunk processing time, in nanoseconds.
