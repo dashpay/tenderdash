@@ -127,6 +127,17 @@ func makeNode(
 	dbProvider config.DBProvider,
 	logger log.Logger,
 ) (service.Service, error) {
+	// Full nodes need a Dash Core RPC connection: the state sync light client
+	// providers verify quorum threshold signatures via Dash Core. Without
+	// core-rpc-host the only fallback would be a mock client backed by a local
+	// private validator, which a full node does not have. Validate this up
+	// front, before any resources (databases, event sinks) are opened.
+	if cfg.Mode == config.ModeFull && cfg.PrivValidator.CoreRPCHost == "" {
+		return nil, errors.New("a full node requires a Dash Core RPC connection for light client " +
+			"verification: set core-rpc-host in the [priv-validator] section of config.toml " +
+			"(and core-rpc-username/core-rpc-password as needed)")
+	}
+
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithCancel(ctx)
 
@@ -206,16 +217,8 @@ func makeNode(
 		// Special handling on non-Validator nodes
 		logger.Info("this node is NOT a validator")
 
-		// Full nodes still need a Dash Core RPC connection: light client
-		// verification (used by state sync and evidence handling) checks quorum
-		// threshold signatures via Dash Core. Without core-rpc-host the only
-		// fallback would be a mock client backed by a local private validator,
-		// which a full node does not have.
-		if cfg.PrivValidator.CoreRPCHost == "" {
-			return nil, errors.New("a full node requires a Dash Core RPC connection for light client " +
-				"verification: set core-rpc-host in the [priv-validator] section of config.toml " +
-				"(and core-rpc-username/core-rpc-password as needed)")
-		}
+		// core-rpc-host is validated at the top of makeNode; the client feeds
+		// the state sync light client providers.
 		dashCoreRPCClient, err = DefaultDashCoreRPCClient(cfg, logger.With("module", core.ModuleName))
 		if err != nil {
 			return nil, fmt.Errorf("failed to create Dash Core RPC client: %w", err)
