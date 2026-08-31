@@ -8,8 +8,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
+	"github.com/dashpay/dashd-go/btcjson"
 	abciclient "github.com/dashpay/tenderdash/abci/client"
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"
@@ -50,6 +52,11 @@ type Executor interface {
 	) (CurrentRoundState, error)
 
 	ValidateBlock(ctx context.Context, state State, block *types.Block) error
+
+	// NoteVerifiedCommit records a commit the caller has just verified against
+	// state.Validators, so the executor can skip verifying it a second time when
+	// it reappears as the next block's LastCommit.
+	NoteVerifiedCommit(state State, blockID types.BlockID, commit *types.Commit)
 
 	ValidateBlockWithRoundState(
 		ctx context.Context,
@@ -108,6 +115,22 @@ type BlockExecutor struct {
 	// detect non-deterministic prepare proposal responses
 	lastRequestPrepareProposalHash  []byte
 	lastResponsePrepareProposalHash []byte
+
+	// the commit most recently verified by a caller, so validateBlock can skip
+	// re-verifying it when it comes back as the next block's LastCommit
+	verifiedCommit atomic.Pointer[verifiedCommit]
+}
+
+// verifiedCommit pins every input ValidatorSet.verifyCommit reads, so a match
+// means a repeat verification would be handed identical arguments.
+type verifiedCommit struct {
+	chainID      string
+	height       int64
+	blockID      types.BlockID
+	quorumType   btcjson.LLMQType
+	quorumHash   crypto.QuorumHash
+	thresholdKey crypto.PubKey
+	commit       []byte
 }
 
 // BlockExecWithLogger is an option function to set a logger to BlockExecutor
@@ -408,7 +431,7 @@ func (blockExec *BlockExecutor) ValidateBlock(ctx context.Context, state State, 
 		return nil
 	}
 
-	err := validateBlock(state, block)
+	err := validateBlock(state, block, blockExec.lastCommitAlreadyVerified(state, block))
 	if err != nil {
 		return err
 	}
@@ -420,6 +443,60 @@ func (blockExec *BlockExecutor) ValidateBlock(ctx context.Context, state State, 
 
 	blockExec.cache[hash.String()] = struct{}{}
 	return nil
+}
+
+// NoteVerifiedCommit records a successful VerifyCommit so the identical
+// verification can be skipped when that commit reappears as the next block's
+// LastCommit. Only the most recent one is kept: block sync applies blocks in
+// order, so it is the only one that can match.
+func (blockExec *BlockExecutor) NoteVerifiedCommit(state State, blockID types.BlockID, commit *types.Commit) {
+	if commit == nil || state.Validators == nil {
+		return
+	}
+	encoded, err := commit.ToProto().Marshal()
+	if err != nil {
+		blockExec.verifiedCommit.Store(nil)
+		return
+	}
+	blockExec.verifiedCommit.Store(&verifiedCommit{
+		chainID:      state.ChainID,
+		height:       commit.Height,
+		blockID:      blockID,
+		quorumType:   state.Validators.QuorumType,
+		quorumHash:   state.Validators.QuorumHash,
+		thresholdKey: state.Validators.ThresholdPublicKey,
+		commit:       encoded,
+	})
+}
+
+// lastCommitAlreadyVerified reports whether block.LastCommit was already
+// verified against exactly the inputs validateBlock would use: same chain,
+// height, block ID, quorum and threshold key, and a byte-identical commit.
+// Anything short of a full match falls through to a real verification.
+func (blockExec *BlockExecutor) lastCommitAlreadyVerified(state State, block *types.Block) bool {
+	vc := blockExec.verifiedCommit.Load()
+	if vc == nil || block.LastCommit == nil || state.LastValidators == nil {
+		return false
+	}
+	if vc.chainID != state.ChainID || vc.height != block.Height-1 {
+		return false
+	}
+	if !vc.blockID.Equals(state.LastBlockID) {
+		return false
+	}
+	if vc.quorumType != state.LastValidators.QuorumType ||
+		!vc.quorumHash.Equal(state.LastValidators.QuorumHash) {
+		return false
+	}
+	if vc.thresholdKey == nil || state.LastValidators.ThresholdPublicKey == nil ||
+		!vc.thresholdKey.Equals(state.LastValidators.ThresholdPublicKey) {
+		return false
+	}
+	got, err := block.LastCommit.ToProto().Marshal()
+	if err != nil {
+		return false
+	}
+	return bytes.Equal(vc.commit, got)
 }
 
 func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
