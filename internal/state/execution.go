@@ -527,7 +527,14 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 		)
 	}
 
-	if block.Height > state.InitialHeight {
+	// ValidateBlock above normally verifies block.LastCommit, but it short-circuits
+	// on its per-height cache, which is keyed on the block hash alone and so says
+	// nothing about the state the earlier validation ran against. That is why this
+	// second verification exists. Skip it only when the memo proves this exact
+	// commit was already verified against these exact inputs — same chain, height,
+	// block ID, quorum, threshold key and byte-identical commit — which is a
+	// property of the data rather than of the cache.
+	if block.Height > state.InitialHeight && !blockExec.lastCommitAlreadyVerified(state, block) {
 		if err := state.LastValidators.VerifyCommit(
 			state.ChainID, state.LastBlockID, block.Height-1, block.LastCommit); err != nil {
 			return fmt.Errorf("error validating block: %w", err)
