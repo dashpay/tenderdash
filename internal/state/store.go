@@ -217,7 +217,7 @@ func (store dbStore) save(state State, key []byte) error {
 		return err
 	}
 
-	return batch.WriteSync()
+	return writeBatch(batch)
 }
 
 // BootstrapState saves a new state, used e.g. by state sync when starting from non-zero height.
@@ -254,7 +254,7 @@ func (store dbStore) Bootstrap(state State) error {
 		return err
 	}
 
-	return batch.WriteSync()
+	return writeBatch(batch)
 }
 
 // PruneStates deletes states up to the height specified (exclusive). It is not
@@ -415,7 +415,7 @@ func (store dbStore) pruneRange(start []byte, end []byte) error {
 		}
 	}
 
-	return batch.WriteSync()
+	return writeBatch(batch)
 }
 
 // reverseBatchDelete runs a reverse iterator (from end to start) filling up a batch until either
@@ -497,7 +497,7 @@ func (store dbStore) saveABCIResponses(height int64, abciResponses tmstate.ABCIR
 	if err != nil {
 		return err
 	}
-	return store.db.SetSync(abciResponsesKey(height), bz)
+	return dbSet(store.db, abciResponsesKey(height), bz)
 }
 
 // SaveValidatorSets is used to save the validator set over multiple heights.
@@ -515,7 +515,7 @@ func (store dbStore) SaveValidatorSets(lowerHeight, upperHeight int64, vals *typ
 		}
 	}
 
-	return batch.WriteSync()
+	return writeBatch(batch)
 }
 
 // -----------------------------------------------------------------------------

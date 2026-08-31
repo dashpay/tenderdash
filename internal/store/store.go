@@ -402,7 +402,7 @@ func (bs *BlockStore) DeleteBlock(height int64) (uint64, error) {
 	}
 
 	// Write all deletions atomically
-	if err := batch.WriteSync(); err != nil {
+	if err := writeBatch(batch); err != nil {
 		return 0, fmt.Errorf("failed to write deletions for height %d: %w", height, err)
 	}
 
@@ -454,7 +454,7 @@ func (bs *BlockStore) pruneRange(
 	}
 
 	// once we looped over all keys we do a final flush to disk
-	if err := batch.WriteSync(); err != nil {
+	if err := writeBatch(batch); err != nil {
 		return totalPruned, err
 	}
 	totalPruned += pruned
@@ -512,7 +512,7 @@ func (bs *BlockStore) SaveBlock(block *types.Block, blockParts *types.PartSet, s
 		panic(err)
 	}
 
-	if err := batch.WriteSync(); err != nil {
+	if err := writeBatch(batch); err != nil {
 		panic(err)
 	}
 
@@ -640,7 +640,7 @@ func (bs *BlockStore) SaveSignedHeader(sh *types.SignedHeader, blockID types.Blo
 		return fmt.Errorf("unable to save commit: %w", err)
 	}
 
-	if err := batch.WriteSync(); err != nil {
+	if err := writeBatch(batch); err != nil {
 		return err
 	}
 
