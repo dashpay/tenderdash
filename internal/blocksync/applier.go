@@ -23,6 +23,7 @@ type (
 		state     sm.State
 		metrics   *consensus.Metrics
 		stats     applyStats
+		lastDone  time.Time
 	}
 )
 
@@ -62,6 +63,13 @@ func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *ty
 	e.mtx.Lock()
 	defer e.mtx.Unlock()
 
+	// Time between the end of the previous apply and the start of this one: with
+	// a fast application this is what the sync rate is actually limited by, and
+	// it is block fetching, not block execution.
+	if !e.lastDone.IsZero() {
+		sm.RecordPerf("apply_gap", time.Since(e.lastDone))
+	}
+
 	// The part set is needed twice: to derive the block ID and to persist the
 	// block. Building it serializes the whole block and builds a Merkle tree over
 	// the parts, so build it once and pass it to both.
@@ -96,6 +104,7 @@ func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *ty
 	// ByteSize is the size of the serialized block we just built, so the metric
 	// costs nothing extra here
 	e.metrics.RecordConsMetrics(block, blockParts.ByteSize())
+	e.lastDone = time.Now()
 	return nil
 }
 
@@ -121,7 +130,10 @@ func (e *blockApplier) UpdateState(newState sm.State) {
 }
 
 func (e *blockApplier) verify(ctx context.Context, blockID types.BlockID, block *types.Block, commit *types.Commit) error {
+	lp := startLapBS()
 	err := e.state.Validators.VerifyCommit(e.state.ChainID, blockID, block.Height, commit)
+	lp.done("verify_commit_sig")
+	defer func() { lp.done("verify_validate_block") }()
 
 	// If either of the checks failed we log the error and request for a new block
 	// at that height

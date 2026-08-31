@@ -45,6 +45,15 @@ func (l *lap) done(name string) {
 	l.t = now
 }
 
+// RecordPerf adds a duration to the block-sync stage totals from outside this
+// package. No-op unless TD_BLOCK_PERF=1.
+func RecordPerf(name string, d time.Duration) {
+	if !perf.on {
+		return
+	}
+	perf.add(name, d)
+}
+
 func (p *execPerf) add(name string, d time.Duration) {
 	p.mtx.Lock()
 	p.totals[name] += d
