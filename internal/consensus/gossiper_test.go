@@ -771,6 +771,74 @@ func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupRetryIntervalArmsW
 	suite.Require().Equal(7, sends, "a fresh pass opens once the full interval has elapsed")
 }
 
+// TestGossipBlockPartsForCatchupRetryIntervalArmsAfterSendReturns is a
+// regression test for a defect where the pass's retry deadline was armed from
+// a timestamp taken before the send, so a send that blocked for part of the
+// interval - the p2p channel applies backpressure on this very goroutine -
+// had its own duration counted against the quiet gap that is supposed to
+// start once it returns. A send lasting a full catchupResendInterval left the
+// deadline already elapsed on return, so the next gossip tick opened a fresh
+// pass with no gap at all: the slower the peer's channel, the weaker the
+// throttle, which is exactly backwards.
+func (suite *GossiperSuiteTest) TestGossipBlockPartsForCatchupRetryIntervalArmsAfterSendReturns() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const partSize = uint32(100)
+	partSet := types.NewPartSetFromData(tmrand.Bytes(int(partSize)*3), partSize)
+	suite.Require().Equal(uint32(3), partSet.Total(), "need a 3-part block for this test")
+	blockMeta := types.BlockMeta{BlockID: types.BlockID{PartSetHeader: partSet.Header()}}
+
+	// The peer reports exactly one part missing, so a pass is one send wide
+	// and the very first tick spends its last slot.
+	peerParts := partSet.BitArray().Copy()
+	peerParts.SetIndex(2, false)
+
+	suite.ps.PRS = cstypes.PeerRoundState{
+		Height:                     999,
+		Round:                      0,
+		ProposalBlockParts:         peerParts,
+		ProposalBlockPartSetHeader: partSet.Header(),
+	}
+
+	suite.blockStore.On("LoadBlockMeta", int64(999)).Return(&blockMeta)
+	suite.blockStore.On("LoadBlockPart", int64(999), 2).Return(partSet.GetPart(2))
+
+	// Each send occupies the whole interval before it returns.
+	sends := 0
+	suite.dataCh.On("Send", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			env, ok := args.Get(1).(p2p.Envelope)
+			if !ok {
+				return
+			}
+			if _, ok := env.Message.(*tmcons.BlockPart); ok {
+				sends++
+				suite.clock.Advance(catchupResendInterval)
+			}
+		}).
+		Return(nil)
+
+	tick := func() {
+		suite.gossiper.GossipBlockPartsForCatchup(ctx, cstypes.RoundState{}, suite.ps.GetRoundState())
+	}
+
+	tick()
+	suite.Require().Equal(1, sends, "the pass's single slot is spent on the first tick")
+
+	tick()
+	suite.Require().Equal(1, sends,
+		"the time spent inside the send must not count towards the quiet gap that follows it")
+
+	suite.clock.Advance(catchupResendInterval - time.Nanosecond)
+	tick()
+	suite.Require().Equal(1, sends, "a full interval after the send returned is still not up")
+
+	suite.clock.Advance(time.Nanosecond)
+	tick()
+	suite.Require().Equal(2, sends, "a fresh pass opens an interval after the send returned")
+}
+
 // TestGossipBlockPartsForCatchupHeightAdvanceInterruptingPassIsThrottled is a
 // regression test for a defect where a height change interrupting a pass
 // BEFORE it exhausted its own budget left catchupRetryAt unarmed (only

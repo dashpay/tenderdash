@@ -225,12 +225,20 @@ func (g *msgGossiper) GossipBlockPartsForCatchup(
 	_ cstypes.RoundState,
 	prs *cstypes.PeerRoundState,
 ) {
-	if !g.beginCatchupAttempt(prs) {
+	draw, lastSlot := g.beginCatchupAttempt(prs)
+	if !draw {
 		return
 	}
 	sent := false
 	defer func() {
-		if !sent {
+		switch {
+		case sent && lastSlot:
+			// A spent pass settles here, not in beginCatchupAttempt, so its
+			// quiet gap runs from the moment the send returned: the p2p channel
+			// applies backpressure on this very goroutine, and time spent
+			// blocked inside a send is not quiet time.
+			g.completeCatchupPass()
+		case !sent:
 			// The peer controls both the budget a pass opens with and the
 			// inputs that fail here, so a pass that cannot produce a send is
 			// abandoned rather than charged one slot per tick. A defer, not a
@@ -296,13 +304,18 @@ func (g *msgGossiper) sendCatchupBlockPart(ctx context.Context, prs *cstypes.Pee
 }
 
 // beginCatchupAttempt draws a send from the current catch-up pass, reporting
-// false once the pass is spent and until its retry interval elapses. A pass is
-// worth at most one send per part the peer reported missing when it opened, so a
-// peer that dropped those parts is served again every interval while it stays
-// behind. Any attempt that fails ends the pass early, via endCatchupPass.
-func (g *msgGossiper) beginCatchupAttempt(prs *cstypes.PeerRoundState) bool {
+// draw=false once the pass is spent and until its retry interval elapses. A
+// pass is worth at most one send per part the peer reported missing when it
+// opened, so a peer that dropped those parts is served again every interval
+// while it stays behind. Any attempt that fails ends the pass early, via
+// endCatchupPass.
+//
+// lastSlot reports that this draw was the pass's final one, which obliges the
+// caller to settle the pass - via completeCatchupPass on a successful send,
+// endCatchupPass otherwise - once the send has returned.
+func (g *msgGossiper) beginCatchupAttempt(prs *cstypes.PeerRoundState) (draw, lastSlot bool) {
 	if prs.ProposalBlockParts == nil {
-		return false
+		return false, false
 	}
 	g.catchupMu.Lock()
 	defer g.catchupMu.Unlock()
@@ -369,7 +382,7 @@ func (g *msgGossiper) beginCatchupAttempt(prs *cstypes.PeerRoundState) bool {
 		// backoff spans roughly catchupResendInterval / PeerGossipSleepDuration
 		// ticks), and the peer-controlled bit-array can be up to
 		// MaxBlockPartsCount bits.
-		return false
+		return false, false
 	}
 	// PickRandom draws from the parts the peer reports missing, so the pass is
 	// worth that many sends rather than one per entry in the bit-array. Derived
@@ -401,7 +414,7 @@ func (g *msgGossiper) beginCatchupAttempt(prs *cstypes.PeerRoundState) bool {
 			// left to do" case the height-change branch grants amnesty for.
 			g.catchupRetrySticky = false
 		}
-		return false
+		return false, false
 	}
 	if noOpenPass {
 		// The budget is fixed here, for the whole pass. The peer owns the
@@ -421,15 +434,17 @@ func (g *msgGossiper) beginCatchupAttempt(prs *cstypes.PeerRoundState) bool {
 	}
 	g.catchupRemaining--
 	if g.catchupRemaining <= 0 {
-		// Arm the deadline as the pass closes, not as it opens: a multi-part
-		// pass spans more ticks than the interval, so a deadline set at open
-		// would already have elapsed by the time the budget runs out. Spending
-		// the budget down to zero this way is genuine completion (every part
-		// the peer reported missing at open got a send), so non-sticky.
-		g.catchupRetryAt = now.Add(catchupResendInterval)
-		g.catchupRetrySticky = false
+		// The pass is spent, but its deadline is left to the caller to arm once
+		// the send returns, so the quiet gap excludes the send's own duration.
+		// Until then the pass is closed with a stale deadline, which the
+		// governing invariant allows (it only forbids a future deadline while
+		// catchupRemaining > 0) and no other code can observe: the single
+		// caller is inside that send for the whole window, so no further
+		// attempt - and no height change, which is only ever read from a
+		// per-tick prs here - can run before it settles.
+		return true, true
 	}
-	return true
+	return true, false
 }
 
 // endCatchupPass abandons the rest of the current pass and starts its retry
@@ -440,11 +455,32 @@ func (g *msgGossiper) beginCatchupAttempt(prs *cstypes.PeerRoundState) bool {
 // must survive a height change - a peer cannot dodge it by claiming a new
 // height right after triggering the failure.
 func (g *msgGossiper) endCatchupPass() {
+	g.settleCatchupPass(true)
+}
+
+// completeCatchupPass closes a pass whose last slot was just spent on a
+// successful send and starts its retry interval now: at the pass's end rather
+// than its start (a multi-part pass outlasts the interval, so a deadline armed
+// at open has elapsed before the budget runs out) and after that send returned
+// rather than before it (a send blocked on channel backpressure must not spend
+// the quiet gap it is supposed to precede). Non-sticky: every part the peer
+// reported missing when the pass opened got a send, so a peer that then
+// reports a new height owes nothing carried over.
+func (g *msgGossiper) completeCatchupPass() {
+	g.settleCatchupPass(false)
+}
+
+// settleCatchupPass closes the current pass and arms its retry deadline an
+// interval from now; sticky marks a pass that ended without rendering the
+// service it opened for. Called only once an attempt has finished, so the
+// deadline it arms is measured from the moment the pass really stopped
+// working.
+func (g *msgGossiper) settleCatchupPass(sticky bool) {
 	g.catchupMu.Lock()
 	defer g.catchupMu.Unlock()
 	g.catchupRemaining = 0
 	g.catchupRetryAt = g.clock.Now().Add(catchupResendInterval)
-	g.catchupRetrySticky = true
+	g.catchupRetrySticky = sticky
 }
 
 // GossipCommit sends a commit message to the peer
