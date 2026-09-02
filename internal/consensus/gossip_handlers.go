@@ -73,7 +73,10 @@ func dataGossipHandler(ps *PeerState, logger log.Logger, blockStore sm.BlockStor
 		if shouldPeerBeCaughtUp(rs, prs, blockStoreBase) {
 			if prs.ProposalBlockParts != nil {
 				gossiper.GossipBlockPartsForCatchup(ctx, rs, prs)
-				// block parts already delivered -  send commits?
+				// GossipBlockPartsForCatchup is rate-limited between passes, not
+				// per tick (see catchupResendInterval); GossipCommit runs
+				// regardless, so the peer still gets its missing commit while a
+				// part-set pass is between replays.
 				gossiper.GossipCommit(ctx, rs, prs)
 				return
 			}
