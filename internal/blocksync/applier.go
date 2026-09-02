@@ -80,17 +80,35 @@ func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *ty
 	}
 	verifyTime := time.Since(start)
 
+	// The two halves of sm.Executor.ApplyBlock are run separately so the block
+	// store is advanced between them. An application that refuses the block does
+	// so here, and refusing it must leave nothing behind: a block persisted for a
+	// height the application never processed is re-processed by the handshake on
+	// every later start, by the same application that already refused it
+	// (dashpay/tenderdash#1413). Saving it before the application commits is what
+	// keeps the store from ever falling behind the application, which the
+	// handshake rejects outright.
+	//
+	// verify is false because FinalizeBlock runs ValidateBlockWithRoundState with
+	// the same arguments; verifying here as well costs a second threshold
+	// signature verification of block.LastCommit per block.
+	start = time.Now()
+	uncommittedState, err := e.blockExec.ProcessProposal(ctx, block, commit.Round, e.state, false)
+	if err != nil {
+		panic(fmt.Sprintf("failed to process committed block (%d:%X): %v", block.Height, block.Hash(), err))
+	}
+	processTime := time.Since(start)
+
 	start = time.Now()
 	e.store.SaveBlock(block, blockParts, commit)
 	saveTime := time.Since(start)
 
 	start = time.Now()
-	// TODO: Same thing for app - but we would need a way to get the hash without persisting the state.
-	e.state, err = e.blockExec.ApplyBlock(ctx, e.state, blockID, block, commit)
+	e.state, err = e.blockExec.FinalizeBlock(ctx, e.state, uncommittedState, blockID, block, commit)
 	if err != nil {
-		panic(fmt.Sprintf("failed to process committed block (%d:%X): %v", block.Height, block.Hash(), err))
+		panic(fmt.Sprintf("failed to finalize committed block (%d:%X): %v", block.Height, block.Hash(), err))
 	}
-	execTime := time.Since(start)
+	execTime := processTime + time.Since(start)
 
 	e.stats.add(partSetTime, verifyTime, saveTime, execTime)
 	// ByteSize is the size of the serialized block we just built, so the metric

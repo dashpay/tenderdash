@@ -443,8 +443,16 @@ func (r *Reactor) WaitSync() bool {
 
 // SwitchToConsensus switches from block-sync mode to consensus mode. It resets
 // the state, turns off block-sync, and starts the consensus state-machine.
-func (r *Reactor) SwitchToConsensus(ctx context.Context, state sm.State, skipWAL bool) {
-	r.logger.Info("switching to consensus")
+//
+// skipWAL says the node needs no WAL catchup. behind says block sync stopped
+// while a peer still claimed a height above ours, and holds back proposals until
+// the node has caught up - see catchupTracker.
+func (r *Reactor) SwitchToConsensus(ctx context.Context, state sm.State, skipWAL bool, behind bool) {
+	r.logger.Info("switching to consensus", "behind", behind)
+
+	if behind {
+		r.state.catchup.arm(r.maxPeerHeight)
+	}
 
 	stateData := r.state.GetStateData()
 	// we have no votes, so reconstruct LastCommit from SeenCommit
@@ -488,6 +496,18 @@ conR:
 	if err := r.eventBus.PublishEventBlockSyncStatus(d); err != nil {
 		r.logger.Error("failed to emit the blocksync complete event", "err", err)
 	}
+}
+
+// maxPeerHeight returns the highest height any connected peer reports, and 0
+// when none has reported one yet.
+func (r *Reactor) maxPeerHeight() int64 {
+	r.mtx.RLock()
+	defer r.mtx.RUnlock()
+	var height int64
+	for _, ps := range r.peers {
+		height = max(height, ps.GetHeight())
+	}
+	return height
 }
 
 // String returns a string representation of the Reactor.

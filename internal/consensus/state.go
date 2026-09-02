@@ -198,6 +198,8 @@ type State struct {
 	voteSigner     *voteSigner
 	ctrl           *Controller
 	roundScheduler *roundScheduler
+	// holds back proposals while the node catches up after a block-sync handover
+	catchup        *catchupTracker
 	msgMiddlewares []msgMiddlewareFunc
 
 	stopFn func(cs *State) bool
@@ -330,6 +332,7 @@ func NewState(
 		wal:      wal,
 	}
 	cs.roundScheduler = &roundScheduler{timeoutTicker: cs.timeoutTicker}
+	cs.catchup = &catchupTracker{}
 	propler := NewProposaler(cs.logger, cs.metrics, cs.privValidator, cs.msgInfoQueue, cs.blockExecutor)
 	cs.ctrl = NewController(cs, wal, cs.statsMsgQueue, propler)
 	subs := []eventemitter.Subscriber{propler, cs.blockExecutor, cs.stateDataStore, cs.voteSigner}

@@ -56,7 +56,7 @@ func (rts *reactorTestSuite) switchToConsensus(ctx context.Context) {
 	for nodeID, reactor := range rts.reactors {
 		stateData := reactor.state.GetStateData()
 		sCtx := dash.ContextWithProTxHash(ctx, rts.states[nodeID].privValidator.ProTxHash)
-		reactor.SwitchToConsensus(sCtx, stateData.state, false)
+		reactor.SwitchToConsensus(sCtx, stateData.state, false, false)
 	}
 }
 

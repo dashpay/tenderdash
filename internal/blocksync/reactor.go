@@ -32,10 +32,21 @@ const (
 	// consider block sync stalled after this duration of inactivity
 	syncTimeout = 60 * time.Second
 
-	// hand over to consensus after this duration of inactivity even when peers
+	// hand over to consensus after this duration of inactivity, even when peers
 	// still report higher blocks, so that a wedged synchronizer cannot keep the
-	// node out of consensus forever
+	// node out of consensus forever - but only within maxCatchupGap of the tip
 	maxSyncStall = 10 * time.Minute
+
+	// maxCatchupGap is how far behind the highest height any peer claims the node
+	// may be and still hand over to consensus on the stall backstop above.
+	//
+	// What is left after the handover is covered by consensus catch-up, which
+	// moves about one block per gossip cycle: it closes a gap of a few blocks in
+	// seconds and a gap of thousands never. Beyond this, block sync retrying an
+	// unproductive peer set is the only route to the tip that exists, and giving
+	// up on it puts a validator at heights the network committed long ago
+	// (dashpay/tenderdash#1413).
+	maxCatchupGap int64 = 10
 )
 
 type ReactorOption func(*Reactor)
@@ -43,7 +54,7 @@ type ReactorOption func(*Reactor)
 type consensusReactor interface {
 	// For when we switch from block sync reactor to the consensus
 	// machine.
-	SwitchToConsensus(ctx context.Context, state sm.State, skipWAL bool)
+	SwitchToConsensus(ctx context.Context, state sm.State, skipWAL bool, behind bool)
 }
 
 // Reactor handles long-term catchup syncing.
@@ -292,12 +303,18 @@ func (r *Reactor) requestRoutine(ctx context.Context, p2pClient *client.Client) 
 // NOTE: Don't sleep in the FOR_LOOP or otherwise slow it down!
 func (r *Reactor) poolRoutine(ctx context.Context, stateSynced bool) {
 	caughtUp := r.synchronizer.WaitForSync(ctx)
+	state := r.executor.State()
+	// Read before the synchronizer stops, and only as evidence that the node is
+	// behind: a peer claiming a height above ours is the one thing that says so.
+	// Where no peer claims one - a solo validator, a network with no peers at all
+	// - the node is not held back at all.
+	behind := !caughtUp && r.synchronizer.MaxPeerHeight() > state.LastBlockHeight
 	r.synchronizer.Stop()
 	r.blockSyncFlag.Store(false)
 	if r.consReactor != nil {
 		// caughtUp is what WaitForSync actually decided on, rather than a second
 		// IsCaughtUp call that races the synchronizer we just stopped
-		r.consReactor.SwitchToConsensus(ctx, r.executor.State(), caughtUp || stateSynced)
+		r.consReactor.SwitchToConsensus(ctx, state, caughtUp || stateSynced, behind)
 	}
 }
 
