@@ -349,17 +349,15 @@ use-p2p = false
 # for example: "host.example.com:2125"
 rpc-servers = ""
 
-# The hash and height of a trusted block. Must be within the trust-period.
-trust-height = 0
-trust-hash = ""
-
-# The trust period should be set so that Tendermint can detect and gossip misbehavior before
-# it is considered expired. For chains based on the Cosmos SDK, one day less than the unbonding
-# period should suffice.
-trust-period = "168h0m0s"
-
 # Time to spend discovering snapshots before initiating a restore.
 discovery-time = "15s"
+
+# Number of times to retry state sync. When retries are exhausted, the node will
+# fall back to the regular block sync. Set to 0 to retry
+# indefinitely, never falling back to block sync. Default is 3.
+# Note that in pessimistic case, it will take at least (discovery-time * retries) before
+# falling back to block sync.
+retries = 3
 
 # Temporary directory for state sync snapshot chunks, defaults to os.TempDir().
 # The synchronizer will create a new, randomly named directory within this directory
