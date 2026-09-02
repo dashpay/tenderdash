@@ -23,7 +23,6 @@ func TestReactorMetricer(t *testing.T) {
 	require.Zero(t, m.ChunkProcessAvgTime())
 	require.Zero(t, m.SnapshotHeight())
 	require.Zero(t, m.SnapshotChunksCount())
-	require.Zero(t, m.SnapshotChunksTotal())
 	require.Zero(t, m.BackFilledBlocks())
 	require.Zero(t, m.BackFillBlocksTotal())
 
@@ -47,13 +46,13 @@ func TestReactorMetricer(t *testing.T) {
 	require.NoError(t, err)
 
 	s := &syncer{
-		logger:                   log.NewTestingLogger(t),
-		snapshots:                newSnapshotPool(),
-		chunkQueue:               queue,
-		metrics:                  NopMetrics(),
-		avgChunkTime:             int64(5 * time.Second),
-		lastSyncedSnapshotHeight: 7,
+		logger:     log.NewTestingLogger(t),
+		snapshots:  newSnapshotPool(),
+		chunkQueue: queue,
+		metrics:    NopMetrics(),
 	}
+	s.avgChunkTime.Store(int64(5 * time.Second))
+	s.lastSyncedSnapshotHeight.Store(7)
 	r.syncer = s
 
 	// discover the snapshots through the syncer, so the cumulative counter
@@ -75,21 +74,19 @@ func TestReactorMetricer(t *testing.T) {
 	require.Equal(t, 5*time.Second, m.ChunkProcessAvgTime())
 	require.Equal(t, int64(7), m.SnapshotHeight())
 	require.Equal(t, int64(1), m.SnapshotChunksCount())
-	require.Equal(t, int64(3), m.SnapshotChunksTotal())
 
 	// TotalSnapshots is cumulative: peers disconnecting (e.g. during the
 	// backfill that follows the restore) empty the pool but must not zero the
 	// metric that syncComplete is about to snapshot
 	s.RemovePeer(types.NodeID("aa"))
 	s.RemovePeer(types.NodeID("bb"))
-	require.Zero(t, s.snapshots.Len())
+	require.Nil(t, s.snapshots.Best())
 	require.Equal(t, int64(2), m.TotalSnapshots())
 
-	// the syncer records the queue's final counts when dropping it
+	// the syncer records the queue's final count when dropping it
 	s.releaseChunkQueue()
 	require.Nil(t, s.chunkQueue)
 	require.Equal(t, int64(1), m.SnapshotChunksCount())
-	require.Equal(t, int64(3), m.SnapshotChunksTotal())
 
 	// syncComplete drops the syncer but snapshots its final values first
 	r.syncComplete()
@@ -98,5 +95,4 @@ func TestReactorMetricer(t *testing.T) {
 	require.Equal(t, 5*time.Second, m.ChunkProcessAvgTime())
 	require.Equal(t, int64(7), m.SnapshotHeight())
 	require.Equal(t, int64(1), m.SnapshotChunksCount())
-	require.Equal(t, int64(3), m.SnapshotChunksTotal())
 }

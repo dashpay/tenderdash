@@ -79,19 +79,19 @@ type syncer struct {
 	metrics    *Metrics
 
 	// avgChunkTime, lastSyncedSnapshotHeight and totalSnapshots are written by
-	// the sync goroutines and read by the RPC metrics getters; access them
-	// atomically. totalSnapshots counts every snapshot ever discovered: unlike
-	// the pool size it never decreases, so the metric survives snapshot
-	// rejections and peer disconnects after the restore completes.
-	avgChunkTime             int64
-	lastSyncedSnapshotHeight int64
-	totalSnapshots           int64
+	// the sync goroutines and read by the RPC metrics getters. totalSnapshots
+	// counts every snapshot ever discovered: unlike the pool size it never
+	// decreases, so the metric survives snapshot rejections and peer
+	// disconnects after the restore completes.
+	avgChunkTime             atomic.Int64
+	lastSyncedSnapshotHeight atomic.Int64
+	totalSnapshots           atomic.Int64
 	processingSnapshot       *snapshot
 
-	// last observed chunk counts, retained after the chunk queue is dropped at
-	// the end of Sync() so the metrics survive the sync itself; guarded by mtx.
+	// last observed processed-chunk count, retained after the chunk queue is
+	// dropped at the end of Sync() so the metric survives the sync itself;
+	// guarded by mtx.
 	lastChunksCount int64
-	lastChunksTotal int64
 }
 
 // AddChunk adds a chunk to the chunk queue, if any. It returns false if the chunk has already
@@ -131,7 +131,7 @@ func (s *syncer) AddSnapshot(peerID types.NodeID, snapshot *snapshot) (bool, err
 		return false, err
 	}
 	if added {
-		atomic.AddInt64(&s.totalSnapshots, 1)
+		s.totalSnapshots.Add(1)
 		s.metrics.TotalSnapshots.Add(1)
 		s.logger.Info("Discovered new snapshot",
 			"height", snapshot.Height,
@@ -232,7 +232,7 @@ func (s *syncer) SyncAny(
 		switch {
 		case err == nil:
 			s.metrics.SnapshotHeight.Set(float64(snapshot.Height))
-			atomic.StoreInt64(&s.lastSyncedSnapshotHeight, tmmath.MustConvertInt64(snapshot.Height))
+			s.lastSyncedSnapshotHeight.Store(tmmath.MustConvertInt64(snapshot.Height))
 			return newState, commit, nil
 
 		case errors.Is(err, errAbort):
@@ -508,18 +508,17 @@ func (s *syncer) applyChunks(ctx context.Context, queue *chunkQueue, start time.
 func (s *syncer) acceptChunk(queue *chunkQueue, start time.Time) {
 	s.metrics.SnapshotChunk.Add(1)
 	avgChunkTime := time.Since(start).Nanoseconds() / int64(queue.DoneChunksCount())
-	atomic.StoreInt64(&s.avgChunkTime, avgChunkTime)
+	s.avgChunkTime.Store(avgChunkTime)
 	s.metrics.ChunkProcessAvgTime.Set(float64(avgChunkTime))
 }
 
-// releaseChunkQueue records the queue's final chunk counts and then drops the
-// queue, so the metrics getters keep reporting the counts after the sync ends.
+// releaseChunkQueue records the queue's final processed-chunk count and then
+// drops the queue, so the metrics getter keeps reporting it after the sync ends.
 func (s *syncer) releaseChunkQueue() {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 	if s.chunkQueue != nil {
 		s.lastChunksCount = int64(s.chunkQueue.DoneChunksCount())
-		s.lastChunksTotal = int64(s.chunkQueue.TotalChunksCount())
 	}
 	s.chunkQueue = nil
 }
@@ -529,18 +528,18 @@ func (s *syncer) releaseChunkQueue() {
 // are rejected or peers disconnect, which would zero the /status metrics if a
 // peer left between the restore finishing and the sync completing.
 func (s *syncer) TotalSnapshots() int64 {
-	return atomic.LoadInt64(&s.totalSnapshots)
+	return s.totalSnapshots.Load()
 }
 
 // AvgChunkTime returns the average chunk processing time, in nanoseconds.
 func (s *syncer) AvgChunkTime() int64 {
-	return atomic.LoadInt64(&s.avgChunkTime)
+	return s.avgChunkTime.Load()
 }
 
 // LastSyncedSnapshotHeight returns the height of the last successfully synced
 // snapshot, or 0 if none completed yet.
 func (s *syncer) LastSyncedSnapshotHeight() int64 {
-	return atomic.LoadInt64(&s.lastSyncedSnapshotHeight)
+	return s.lastSyncedSnapshotHeight.Load()
 }
 
 // SnapshotChunksCount returns the number of chunks processed for the snapshot
@@ -552,19 +551,6 @@ func (s *syncer) SnapshotChunksCount() int64 {
 		return int64(s.chunkQueue.DoneChunksCount())
 	}
 	return s.lastChunksCount
-}
-
-// SnapshotChunksTotal returns the number of chunks known so far for the
-// snapshot being restored, falling back to the last finished sync when idle.
-// Chunks are content-addressed and discovered incrementally, so during a sync
-// this is a lower bound that grows as the application requests more chunks.
-func (s *syncer) SnapshotChunksTotal() int64 {
-	s.mtx.RLock()
-	defer s.mtx.RUnlock()
-	if s.chunkQueue != nil {
-		return int64(s.chunkQueue.TotalChunksCount())
-	}
-	return s.lastChunksTotal
 }
 
 // fetchChunks requests chunks from peers, receiving allocations from the chunk queue. Chunks

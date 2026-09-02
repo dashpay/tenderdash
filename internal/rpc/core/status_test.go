@@ -20,12 +20,8 @@ func (fakeStateSyncMetricer) TotalSnapshots() int64              { return 2 }
 func (fakeStateSyncMetricer) ChunkProcessAvgTime() time.Duration { return 5 * time.Second }
 func (fakeStateSyncMetricer) SnapshotHeight() int64              { return 7 }
 func (fakeStateSyncMetricer) SnapshotChunksCount() int64         { return 3 }
-
-// SnapshotChunksTotal only satisfies the interface: SyncInfo has no
-// snapshot_chunks_total field, so /status never reads it.
-func (fakeStateSyncMetricer) SnapshotChunksTotal() int64 { return 4 }
-func (fakeStateSyncMetricer) BackFilledBlocks() int64    { return 5 }
-func (fakeStateSyncMetricer) BackFillBlocksTotal() int64 { return 6 }
+func (fakeStateSyncMetricer) BackFilledBlocks() int64            { return 5 }
+func (fakeStateSyncMetricer) BackFillBlocksTotal() int64         { return 6 }
 
 // TestStatusStateSyncMetrics verifies that /status copies the state-sync
 // metrics from the wired Metricer into sync_info.

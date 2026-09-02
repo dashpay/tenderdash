@@ -86,7 +86,6 @@ type Metricer interface {
 	ChunkProcessAvgTime() time.Duration
 	SnapshotHeight() int64
 	SnapshotChunksCount() int64
-	SnapshotChunksTotal() int64
 	BackFilledBlocks() int64
 	BackFillBlocksTotal() int64
 }
@@ -144,7 +143,6 @@ type Reactor struct {
 	lastChunkProcessAvgTime time.Duration
 	lastSnapshotHeight      int64
 	lastSnapshotChunksCount int64
-	lastSnapshotChunksTotal int64
 
 	dashCoreClient dashcore.Client
 
@@ -453,7 +451,6 @@ func (r *Reactor) syncComplete() {
 		r.lastChunkProcessAvgTime = time.Duration(r.syncer.AvgChunkTime())
 		r.lastSnapshotHeight = r.syncer.LastSyncedSnapshotHeight()
 		r.lastSnapshotChunksCount = r.syncer.SnapshotChunksCount()
-		r.lastSnapshotChunksTotal = r.syncer.SnapshotChunksTotal()
 	}
 	// reset syncing objects at the close of Sync
 	r.syncer = nil
@@ -1460,7 +1457,7 @@ func (r *Reactor) TotalSnapshots() int64 {
 	r.mtx.RLock()
 	defer r.mtx.RUnlock()
 
-	if r.syncer != nil && r.syncer.snapshots != nil {
+	if r.syncer != nil {
 		return r.syncer.TotalSnapshots()
 	}
 	return r.lastTotalSnapshots
@@ -1494,16 +1491,6 @@ func (r *Reactor) SnapshotChunksCount() int64 {
 		return r.syncer.SnapshotChunksCount()
 	}
 	return r.lastSnapshotChunksCount
-}
-
-func (r *Reactor) SnapshotChunksTotal() int64 {
-	r.mtx.RLock()
-	defer r.mtx.RUnlock()
-
-	if r.syncer != nil {
-		return r.syncer.SnapshotChunksTotal()
-	}
-	return r.lastSnapshotChunksTotal
 }
 
 func (r *Reactor) BackFilledBlocks() int64 {

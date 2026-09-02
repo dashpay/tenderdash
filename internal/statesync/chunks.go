@@ -408,15 +408,6 @@ func (q *chunkQueue) DoneChunksCount() int {
 	return q.doneCount
 }
 
-// TotalChunksCount returns the number of distinct chunks seen by the queue so far.
-// Chunks are content-addressed and discovered incrementally as the application
-// requests them, so this grows during a sync; it is not known upfront.
-func (q *chunkQueue) TotalChunksCount() int {
-	q.mtx.Lock()
-	defer q.mtx.Unlock()
-	return len(q.items)
-}
-
 // getItem fetches chunk item from the items map. If the item is not found, it returns an error.
 // The caller must hold the mutex lock.
 func (q *chunkQueue) getItem(chunkID bytes.HexBytes) (*chunkItem, error) {
