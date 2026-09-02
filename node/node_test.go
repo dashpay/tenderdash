@@ -101,6 +101,52 @@ func TestNodeStartStop(t *testing.T) {
 	require.False(t, n.IsRunning(), "node must shut down")
 }
 
+// TestNodeFullModeRequiresCoreRPCHost ensures that constructing a full node
+// without a Dash Core RPC host fails with a descriptive error (instead of
+// panicking) and does not leak resources: the config is validated before any
+// databases or event sinks are opened.
+func TestNodeFullModeRequiresCoreRPCHost(t *testing.T) {
+	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
+	require.NoError(t, err)
+	defer os.RemoveAll(cfg.RootDir)
+
+	cfg.Mode = config.ModeFull
+	cfg.PrivValidator.CoreRPCHost = ""
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	logger := log.NewTestingLogger(t)
+
+	dirEntries := func(dir string) []string {
+		entries, err := os.ReadDir(dir)
+		require.NoError(t, err)
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		return names
+	}
+	before := dirEntries(cfg.DBDir())
+
+	ns, err := newDefaultNode(ctx, cfg, logger)
+	require.Error(t, err)
+	require.Nil(t, ns)
+	require.Contains(t, err.Error(), "core-rpc-host")
+
+	// the check must run before any resources are opened: the data directory
+	// must be untouched (no block/state store DBs were created) ...
+	require.Equal(t, before, dirEntries(cfg.DBDir()),
+		"constructor must not open databases before config validation")
+
+	// ... and a retry must fail with the same config error, not a DB-lock
+	// error from handles leaked by the first attempt
+	ns, err = newDefaultNode(ctx, cfg, logger)
+	require.Error(t, err)
+	require.Nil(t, ns)
+	require.Contains(t, err.Error(), "core-rpc-host")
+}
+
 func getTestNode(ctx context.Context, t *testing.T, conf *config.Config, logger log.Logger) *nodeImpl {
 	t.Helper()
 	ctx, cancel := context.WithCancel(ctx)

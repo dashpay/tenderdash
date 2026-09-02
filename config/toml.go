@@ -508,7 +508,8 @@ rpc-servers = "{{ StringsJoin .StateSync.RPCServers "," }}"
 discovery-time = "{{ .StateSync.DiscoveryTime }}"
 
 # Number of times to retry state sync. When retries are exhausted, the node will
-# fall back to the regular block sync. Set to 0 to disable retries. Default is 3.
+# fall back to the regular block sync. Set to 0 to retry
+# indefinitely, never falling back to block sync. Default is 3.
 # Note that in pessimistic case, it will take at least (discovery-time * retries) before
 # falling back to block sync.
 retries = {{ .StateSync.Retries }}
@@ -546,7 +547,10 @@ double-sign-check-height = {{ .Consensus.DoubleSignCheckHeight }}
 create-empty-blocks = {{ .Consensus.CreateEmptyBlocks }}
 create-empty-blocks-interval = "{{ .Consensus.CreateEmptyBlocksInterval }}"
 
-# Reactor sleep duration parameters
+# Reactor sleep duration parameters. peer-gossip-sleep-duration also sets the
+# tick rate a lagging peer's catch-up block-part replay is metered against
+# (a fixed 500ms internal throttle): raising this above 500ms disables that
+# throttle.
 peer-gossip-sleep-duration = "{{ .Consensus.PeerGossipSleepDuration }}"
 peer-query-maj23-sleep-duration = "{{ .Consensus.PeerQueryMaj23SleepDuration }}"
 
