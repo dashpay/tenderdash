@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -1414,9 +1415,9 @@ func newVerifiedCommitFixture(t *testing.T) verifiedCommitFixture {
 
 	genesis := state
 	proposer := state.GetProposerFromState(1, 0).ProTxHash
-	state, blockID, commit := makeAndCommitGoodBlock(ctx, t, state, 1, new(types.Commit), proposer, blockExec, privVals, nil, 0)
-	// makeAndCommitGoodBlock validated through this executor and populated its
+	// makeAndCommitGoodBlock validates through this executor and populates its
 	// per-height cache; FinalizeBlock resets it, so height 2 validates for real.
+	state, blockID, commit := makeAndCommitGoodBlock(ctx, t, state, 1, new(types.Commit), proposer, blockExec, privVals, nil, 0)
 
 	f := verifiedCommitFixture{
 		ctx:             ctx,
@@ -1438,6 +1439,17 @@ func (f verifiedCommitFixture) blockWith(lastCommit *types.Commit) *types.Block 
 	return block
 }
 
+// applyNext runs the height 2 block carrying lastCommit through ApplyBlock and
+// returns the resulting error.
+func (f verifiedCommitFixture) applyNext(t *testing.T, lastCommit *types.Commit) error {
+	t.Helper()
+	block := f.blockWith(lastCommit)
+	bps, err := block.MakePartSet(testPartSize)
+	require.NoError(t, err)
+	_, err = f.blockExec.ApplyBlock(f.ctx, f.state, block.BlockID(bps), block, new(types.Commit))
+	return err
+}
+
 // cloneCommit returns a commit with the same fields and no cached hash, so a
 // test can mutate it without touching the fixture's copy.
 func cloneCommit(c *types.Commit) *types.Commit {
@@ -1447,7 +1459,7 @@ func cloneCommit(c *types.Commit) *types.Commit {
 		BlockID:                 c.BlockID.Copy(),
 		QuorumHash:              bytes.Clone(c.QuorumHash),
 		ThresholdBlockSignature: bytes.Clone(c.ThresholdBlockSignature),
-		ThresholdVoteExtensions: append([]*tmtypes.VoteExtension(nil), c.ThresholdVoteExtensions...),
+		ThresholdVoteExtensions: slices.Clone(c.ThresholdVoteExtensions),
 	}
 }
 
@@ -1552,12 +1564,6 @@ func TestApplyBlockSkipsVerifiedLastCommit(t *testing.T) {
 		c.ThresholdBlockSignature[0] ^= 0xff
 		return c
 	}
-	blockAndID := func(f verifiedCommitFixture, lastCommit *types.Commit) (*types.Block, types.BlockID) {
-		block := f.blockWith(lastCommit)
-		bps, err := block.MakePartSet(testPartSize)
-		require.NoError(t, err)
-		return block, block.BlockID(bps)
-	}
 	// ErrInvalidBlock does not unwrap, so match the signature failure by message
 	const badSignature = "invalid commit signatures for quorum"
 
@@ -1568,15 +1574,13 @@ func TestApplyBlockSkipsVerifiedLastCommit(t *testing.T) {
 		// the skip fires. Block sync never notes a commit it did not verify itself.
 		bad := forged(f.commit)
 		f.blockExec.NoteVerifiedCommit(f.verifiedAgainst, f.blockID, bad)
-		block, blockID := blockAndID(f, bad)
-		_, err := f.blockExec.ApplyBlock(f.ctx, f.state, blockID, block, new(types.Commit))
-		require.NoError(t, err, "a commit the memo proves verified must not be verified again")
+		require.NoError(t, f.applyNext(t, bad),
+			"a commit the memo proves verified must not be verified again")
 	})
 
 	t.Run("unnoted forged commit is rejected", func(t *testing.T) {
 		f := newVerifiedCommitFixture(t)
-		block, blockID := blockAndID(f, forged(f.commit))
-		_, err := f.blockExec.ApplyBlock(f.ctx, f.state, blockID, block, new(types.Commit))
+		err := f.applyNext(t, forged(f.commit))
 		require.ErrorAs(t, err, &sm.ErrInvalidBlock{})
 		require.ErrorContains(t, err, badSignature)
 	})
@@ -1584,21 +1588,15 @@ func TestApplyBlockSkipsVerifiedLastCommit(t *testing.T) {
 	t.Run("memo for a different commit does not cover a forged one", func(t *testing.T) {
 		f := newVerifiedCommitFixture(t)
 		f.blockExec.NoteVerifiedCommit(f.verifiedAgainst, f.blockID, f.commit)
-		block, blockID := blockAndID(f, forged(f.commit))
-		_, err := f.blockExec.ApplyBlock(f.ctx, f.state, blockID, block, new(types.Commit))
-		require.ErrorContains(t, err, badSignature)
+		require.ErrorContains(t, f.applyNext(t, forged(f.commit)), badSignature)
 	})
 
 	t.Run("genuine commit passes with or without the memo", func(t *testing.T) {
 		f := newVerifiedCommitFixture(t)
-		block, blockID := blockAndID(f, f.commit)
-		_, err := f.blockExec.ApplyBlock(f.ctx, f.state, blockID, block, new(types.Commit))
-		require.NoError(t, err)
+		require.NoError(t, f.applyNext(t, f.commit))
 
 		f = newVerifiedCommitFixture(t)
 		f.blockExec.NoteVerifiedCommit(f.verifiedAgainst, f.blockID, f.commit)
-		block, blockID = blockAndID(f, f.commit)
-		_, err = f.blockExec.ApplyBlock(f.ctx, f.state, blockID, block, new(types.Commit))
-		require.NoError(t, err)
+		require.NoError(t, f.applyNext(t, f.commit))
 	})
 }
