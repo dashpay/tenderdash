@@ -372,7 +372,14 @@ func (r *Reactor) Sync(ctx context.Context) (sm.State, error) {
 	}
 
 	if err := r.Backfill(ctx, state); err != nil {
-		r.logger.Error("backfill failed. Proceeding optimistically...", "error", err)
+		r.logger.Error("state sync backfill failed; proceeding optimistically. "+
+			"The node is missing historical light blocks within the evidence age and may be "+
+			"unable to validate evidence of misbehavior committed before the snapshot height. "+
+			"Check connectivity to peers that retain older blocks. To retry state sync "+
+			"(e.g. from a more recent snapshot), stop the node and reset BOTH the tenderdash "+
+			"data directory and the application state: state sync only runs on first start, "+
+			"and this node has already persisted state at the snapshot height.",
+			"error", err)
 	}
 
 	if r.eventBus != nil {

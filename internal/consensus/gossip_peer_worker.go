@@ -42,15 +42,17 @@ func newPeerGossipWorker(
 	state *State,
 	msgSender *p2pMsgSender,
 ) *peerGossipWorker {
+	clock := clockwork.NewRealClock()
 	gossiper := msgGossiper{
 		ps:         ps,
 		blockStore: &blockRepository{BlockStore: state.blockStore, logger: logger},
 		msgSender:  msgSender,
 		logger:     logger,
 		optimistic: true,
+		clock:      clock,
 	}
 	return &peerGossipWorker{
-		clock:          clockwork.NewRealClock(),
+		clock:          clock,
 		logger:         logger,
 		stopCh:         make(chan struct{}),
 		stateDataStore: state.stateDataStore,
