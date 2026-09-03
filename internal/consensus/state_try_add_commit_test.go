@@ -1,6 +1,7 @@
 package consensus
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -8,6 +9,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dashpay/tenderdash/abci/example/kvstore"
+	"github.com/dashpay/tenderdash/dash"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	sf "github.com/dashpay/tenderdash/internal/state/test/factory"
+	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -154,4 +160,60 @@ func TestHandleCommitVerifyErrorQueueFull(t *testing.T) {
 		action.handleCommitVerifyError(types.ErrInvalidCommitSignature{}, "peer", false)
 	})
 	assert.Len(t, queue.ch, 1, "the pre-existing report must be preserved")
+}
+
+// TestTryAddCommitWithAssembledBlockAndStaleProposal covers a commit that arrives
+// after the block it commits has been fully assembled, while a Proposal for a
+// block the network dropped is still around: the +2/3 prevote majority that
+// retargeted ProposalBlockParts left the Proposal untouched
+// (addVoteUpdateValidBlockMw). Deciding from that Proposal rejects the commit,
+// and because the part set is already complete no later part can retry it while
+// the parked StateData.Commit turns every further commit into a no-op — the node
+// stalls at this height holding the very block it needs
+// (dashpay/tenderdash#1414).
+func TestTryAddCommitWithAssembledBlockAndStaleProposal(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cfg := configSetup(t)
+
+	css := makeConsensusState(ctx, t, cfg, 2, t.Name(), newTickerFunc())
+	privVals := make([]types.PrivValidator, 0, len(css))
+	for _, c := range css {
+		privVals = append(privVals, c.privValidator.PrivValidator)
+	}
+	proposer, otherNode := css[0], css[1]
+	proposerStateData := proposer.GetStateData()
+	stateData := otherNode.GetStateData()
+
+	block, err := sf.MakeBlock(proposerStateData.state, 1, &types.Commit{}, kvstore.ProtocolVersion)
+	require.NoError(t, err)
+	block.CoreChainLockedHeight = 1
+	parts, err := block.MakePartSet(types.BlockPartSizeBytes)
+	require.NoError(t, err)
+
+	commit, err := factory.MakeCommit(
+		ctx,
+		block.BlockID(parts),
+		block.Height,
+		0,
+		proposerStateData.Votes.Precommits(0),
+		proposerStateData.Validators,
+		privVals,
+	)
+	require.NoError(t, err)
+
+	staleProposal := types.NewProposal(block.Height, block.CoreChainLockedHeight, 0, -1, factory.MakeBlockID(), block.Time)
+
+	peerID := proposerStateData.Validators.Proposer().NodeAddress.NodeID
+	stateData.Proposal = staleProposal
+	stateData.ProposalBlock = block
+	stateData.ProposalBlockParts = parts
+	stateData.updateRoundStep(commit.Round, cstypes.RoundStepPrevote)
+
+	ctx = dash.ContextWithProTxHash(ctx, otherNode.privValidator.ProTxHash)
+	ctx = msgInfoWithCtx(ctx, msgInfo{Msg: &CommitMessage{commit}, PeerID: peerID})
+
+	require.NoError(t, otherNode.ctrl.Dispatch(ctx, &TryAddCommitEvent{Commit: commit, PeerID: peerID}, &stateData))
+	assert.Equal(t, int64(2), stateData.Height,
+		"a commit for the block we hold must be applied rather than dropped over a proposal that outlived its own block")
 }

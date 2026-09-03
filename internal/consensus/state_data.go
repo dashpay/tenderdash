@@ -450,42 +450,70 @@ func (s *StateData) verifyCommit(
 		return false, nil
 	}
 
-	if rs.Proposal == nil || ignoreProposalBlock {
-		if ignoreProposalBlock {
-			s.logger.Debug("Commit verified for future round", "height", commit.Height, "round", commit.Round)
-		} else {
-			s.logger.Debug("Commit came in before proposal", "height", commit.Height, "round", commit.Round)
-		}
-
-		// We need to verify that it was properly signed
-		// This generally proves that the commit is correct
-		if err := s.verifyCommitSignatures(commit.BlockID, commit, budget); err != nil {
-			return false, fmt.Errorf("error verifying commit: %w", err)
-		}
-
-		if !s.ProposalBlockParts.HasHeader(commit.BlockID.PartSetHeader) {
-			s.logger.Debug("setting proposal block parts from commit", "partSetHeader", commit.BlockID.PartSetHeader)
-			s.ProposalBlockParts = types.NewPartSetFromHeader(commit.BlockID.PartSetHeader)
-		}
-
-		s.Commit = commit
-
-		if ignoreProposalBlock {
-			// If we are verifying the commit for a future round we just need to know if the commit was properly signed
-			// so we can go to the next round
-			return true, nil
-		}
-		// We don't need to go to the next round, when we get the proposal in the commit will be set and the proposal
-		// block will be executed
-		return false, nil
-	}
-
-	// Lets verify that the threshold signature matches the current validator set
-	if err := s.verifyCommitSignatures(rs.Proposal.BlockID, commit, budget); err != nil {
+	// The threshold signature covers the commit's own BlockID and nothing else, so
+	// a proposal of ours the network never committed proves nothing about it:
+	// checking against it rejects genuine commits (dashpay/tenderdash#1414).
+	if err := s.verifyCommitSignatures(commit.BlockID, commit, budget); err != nil {
 		return false, fmt.Errorf("error verifying commit: %w", err)
 	}
 
-	return true, nil
+	if ignoreProposalBlock {
+		// For a future round, a properly signed commit is all we need to know to go
+		// to that round.
+		s.logger.Debug("Commit verified for future round", "height", commit.Height, "round", commit.Round)
+		s.adoptCommit(commit)
+		return true, nil
+	}
+
+	if rs.Proposal != nil && rs.Proposal.BlockID.Equals(commit.BlockID) {
+		return true, nil
+	}
+
+	// A Proposal for a block the network dropped outlives a part set already
+	// retargeted to the committed one (addVoteUpdateValidBlockMw replaces the parts
+	// and leaves the Proposal alone), so an assembled block that hashes to the
+	// commit settles the question the stale Proposal would answer wrongly.
+	if rs.ProposalBlock.HashesTo(commit.BlockID.Hash) && rs.ProposalBlockParts.HasHeader(commit.BlockID.PartSetHeader) {
+		return true, nil
+	}
+
+	if rs.Proposal == nil {
+		s.logger.Debug("Commit came in before proposal", "height", commit.Height, "round", commit.Round)
+	} else {
+		s.logger.Debug("commit is for a block other than the one we proposed",
+			"height", commit.Height,
+			"round", commit.Round,
+			"commit_block", commit.BlockID.Hash,
+			"proposal_block", rs.Proposal.BlockID.Hash,
+		)
+	}
+	// We don't need to go to the next round; the commit is applied once the block
+	// it commits has been received.
+	s.adoptCommit(commit)
+	return false, nil
+}
+
+// adoptCommit keeps commit until the block it commits arrives and readies the
+// round state to receive that block. Proposal state for a different block is
+// dropped; keeping it would reject both the real proposal and its parts.
+func (s *StateData) adoptCommit(commit *types.Commit) {
+	// Staleness of the proposal is a question about the whole BlockID: a part set
+	// header that happens to match says nothing about the hash or the state ID.
+	if s.Proposal != nil && !s.Proposal.BlockID.Equals(commit.BlockID) {
+		s.logger.Debug("dropping proposal for a block other than the committed one",
+			"proposal_block", s.Proposal.BlockID.Hash, "commit_block", commit.BlockID.Hash)
+		s.Proposal = nil
+		s.ProposalReceiveTime = time.Time{}
+	}
+	// The part set header is a Merkle root over exactly the committed block's
+	// bytes, so parts already collected under it are that block's; replacing the
+	// set would discard them and force the whole block to be fetched again.
+	if !s.ProposalBlockParts.HasHeader(commit.BlockID.PartSetHeader) {
+		s.logger.Debug("setting proposal block parts from commit", "partSetHeader", commit.BlockID.PartSetHeader)
+		s.ProposalBlock = nil
+		s.ProposalBlockParts = types.NewPartSetFromHeader(commit.BlockID.PartSetHeader)
+	}
+	s.Commit = commit
 }
 
 func (s *StateData) verifyCommitSignatures(
