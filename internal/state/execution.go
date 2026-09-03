@@ -336,6 +336,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 	verify bool,
 ) (CurrentRoundState, error) {
 	version := block.Version.ToProto()
+	lp := startLap()
 	resp, err := blockExec.appClient.ProcessProposal(ctx, &abci.RequestProcessProposal{
 		Hash:               block.Header.Hash(),
 		Height:             block.Header.Height,
@@ -370,6 +371,8 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		return CurrentRoundState{}, fmt.Errorf("invalid tx results: %w", err)
 	}
 
+	lp.done("pp_abci")
+
 	rp := RoundParamsFromProcessProposal(resp, block.CoreChainLock, round)
 
 	// update some round state data
@@ -384,6 +387,8 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		)
 		return stateChanges, errors.New("invalid App Hash size")
 	}
+
+	lp.done("pp_changeset")
 
 	if verify {
 		// Here we check if the ProcessProposal response matches
@@ -497,9 +502,11 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	// the time block sync gets here the block has already been delivered to the
 	// app by ProcessProposal and written by blockApplier.Apply; what this guards
 	// is the state and ABCI responses written below.
+	lp := startLap()
 	if err := blockExec.ValidateBlockWithRoundState(ctx, state, uncommittedState, block); err != nil {
 		return state, ErrInvalidBlock{err}
 	}
+	lp.done("fb_validate")
 
 	// Save ResponseProcessProposal before FinalizeBlock to be able to recover when app state is ahead of tenderdash state
 	// (eg. when tenderdash fails just after receiving ResponseFinalizeBlock).
@@ -509,6 +516,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	if err := blockExec.store.SaveABCIResponses(block.Height, abciResponses); err != nil {
 		return state, err
 	}
+	lp.done("fb_save_abci_resp")
 
 	startTime := time.Now().UnixNano()
 	fbResp, err := execBlockWithoutState(ctx, blockExec.appClient, block, commit, blockExec.logger)
@@ -517,26 +525,32 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	}
 	endTime := time.Now().UnixNano()
 	blockExec.metrics.BlockProcessingTime.Observe(float64(endTime-startTime) / 1000000)
+	lp.done("fb_abci")
 
 	if state, err = state.Update(blockID, &block.Header, &uncommittedState); err != nil {
 		return state, fmt.Errorf("commit failed for application: %w", err)
 	}
+	lp.done("fb_state_update")
 
 	// Lock mempool, commit app state, update mempoool.
 	err = blockExec.flushMempool(ctx, state, block, uncommittedState.TxResults)
 	if err != nil {
 		return state, fmt.Errorf("commit failed for application: %w", err)
 	}
+	lp.done("fb_mempool")
 
 	// Update evpool with the latest state.
 	blockExec.evpool.Update(ctx, state, block.Evidence)
+	lp.done("fb_evpool")
 
 	if err = blockExec.store.Save(state); err != nil {
 		return state, err
 	}
+	lp.done("fb_save_state")
 
 	// Prune old heights, if requested by ABCI app
 	blockExec.pruneBlocks(fbResp.RetainHeight)
+	lp.done("fb_prune")
 
 	// reset the verification cache
 	blockExec.cache = make(map[string]struct{})
@@ -547,6 +561,8 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	if err = es.Publish(blockExec.eventPublisher); err != nil {
 		blockExec.logger.Error("failed publishing event", "err", err)
 	}
+	lp.done("fb_events")
+	perf.block(block.Height, blockExec.logger)
 
 	return state, nil
 }
