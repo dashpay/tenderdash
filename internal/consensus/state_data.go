@@ -469,6 +469,14 @@ func (s *StateData) verifyCommit(
 		return true, nil
 	}
 
+	// A Proposal for a block the network dropped outlives a part set already
+	// retargeted to the committed one (addVoteUpdateValidBlockMw replaces the parts
+	// and leaves the Proposal alone), so an assembled block that hashes to the
+	// commit settles the question the stale Proposal would answer wrongly.
+	if rs.ProposalBlock.HashesTo(commit.BlockID.Hash) && rs.ProposalBlockParts.HasHeader(commit.BlockID.PartSetHeader) {
+		return true, nil
+	}
+
 	if rs.Proposal == nil {
 		s.logger.Debug("Commit came in before proposal", "height", commit.Height, "round", commit.Round)
 	} else {
@@ -489,10 +497,19 @@ func (s *StateData) verifyCommit(
 // round state to receive that block. Proposal state for a different block is
 // dropped; keeping it would reject both the real proposal and its parts.
 func (s *StateData) adoptCommit(commit *types.Commit) {
-	if !s.ProposalBlockParts.HasHeader(commit.BlockID.PartSetHeader) {
-		s.logger.Debug("setting proposal block parts from commit", "partSetHeader", commit.BlockID.PartSetHeader)
+	// Staleness of the proposal is a question about the whole BlockID: a part set
+	// header that happens to match says nothing about the hash or the state ID.
+	if s.Proposal != nil && !s.Proposal.BlockID.Equals(commit.BlockID) {
+		s.logger.Debug("dropping proposal for a block other than the committed one",
+			"proposal_block", s.Proposal.BlockID.Hash, "commit_block", commit.BlockID.Hash)
 		s.Proposal = nil
 		s.ProposalReceiveTime = time.Time{}
+	}
+	// The part set header is a Merkle root over exactly the committed block's
+	// bytes, so parts already collected under it are that block's; replacing the
+	// set would discard them and force the whole block to be fetched again.
+	if !s.ProposalBlockParts.HasHeader(commit.BlockID.PartSetHeader) {
+		s.logger.Debug("setting proposal block parts from commit", "partSetHeader", commit.BlockID.PartSetHeader)
 		s.ProposalBlock = nil
 		s.ProposalBlockParts = types.NewPartSetFromHeader(commit.BlockID.PartSetHeader)
 	}
