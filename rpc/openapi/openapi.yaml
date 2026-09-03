@@ -1692,24 +1692,27 @@ components:
           example: "0"
         total_snapshots:
           type: string
+          description: Number of distinct snapshots discovered from peers during state sync.
           example: "10"
         chunk_process_avg_time:
           type: string
+          description: Average time to fetch and apply one snapshot chunk, in nanoseconds.
           example: "1000000000"
         snapshot_height:
           type: string
+          description: Height of the last successfully restored snapshot, or "0" if none.
           example: "1262196"
         snapshot_chunks_count:
           type: string
+          description: Number of snapshot chunks applied so far during the restore.
           example: "10"
-        snapshot_chunks_total:
-          type: string
-          example: "100"
         backfilled_blocks:
           type: string
+          description: Number of light blocks backfilled after the snapshot restore.
           example: "10"
         backfill_blocks_total:
           type: string
+          description: Number of light blocks the backfill is expected to fetch.
           example: "100"
     ValidatorInfo:
       type: object

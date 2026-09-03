@@ -285,6 +285,15 @@ func TestReactor_Sync(t *testing.T) {
 	// Run state sync
 	_, err := rts.reactor.Sync(ctx)
 	require.NoError(t, err)
+
+	// The sync metrics must survive the completed sync (the syncer is dropped
+	// by syncComplete, but its final values are snapshotted first), so /status
+	// keeps reporting them for the life of the process.
+	require.Nil(t, rts.reactor.getSyncer())
+	require.Equal(t, int64(1), rts.reactor.TotalSnapshots())
+	require.Equal(t, int64(snapshotHeight), rts.reactor.SnapshotHeight())
+	require.Equal(t, int64(1), rts.reactor.SnapshotChunksCount())
+	require.Greater(t, rts.reactor.ChunkProcessAvgTime(), time.Duration(0))
 }
 
 func TestReactor_ChunkRequest_InvalidRequest(t *testing.T) {
@@ -746,12 +755,10 @@ func TestReactor_Backfill(t *testing.T) {
 				10*time.Millisecond,
 				100*time.Millisecond,
 			)
-			require.Equal(t, startHeight-stopHeight+1, rts.reactor.backfillBlockTotal)
-			require.Equal(t, rts.reactor.backfilledBlocks, rts.reactor.BackFilledBlocks())
-			require.Equal(t, rts.reactor.backfillBlockTotal, rts.reactor.BackFillBlocksTotal())
+			require.Equal(t, startHeight-stopHeight+1, rts.reactor.BackFillBlocksTotal())
 			if tc.failureRate > 3 {
 				require.Error(t, err)
-				require.NotEqual(t, rts.reactor.backfilledBlocks, rts.reactor.backfillBlockTotal)
+				require.NotEqual(t, rts.reactor.BackFilledBlocks(), rts.reactor.BackFillBlocksTotal())
 				return
 			}
 			require.NoError(t, err)
@@ -763,7 +770,7 @@ func TestReactor_Backfill(t *testing.T) {
 			}
 			require.Nil(t, rts.blockStore.LoadBlockMeta(stopHeight-1))
 			require.Nil(t, rts.blockStore.LoadBlockMeta(startHeight+1))
-			require.Equal(t, startHeight-stopHeight+1, rts.reactor.backfilledBlocks)
+			require.Equal(t, startHeight-stopHeight+1, rts.reactor.BackFilledBlocks())
 		})
 	}
 }

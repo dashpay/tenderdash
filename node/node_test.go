@@ -61,6 +61,12 @@ func TestNodeStartStop(t *testing.T) {
 
 	n, ok := ns.(*nodeImpl)
 	require.True(t, ok)
+
+	// the state sync reactor must be wired into the RPC environment, so that
+	// the /status endpoint reports state sync metrics instead of zeros
+	require.NotNil(t, n.RPCEnvironment().StateSyncMetricer,
+		"statesync reactor is not wired into the RPC env as StateSyncMetricer")
+
 	t.Cleanup(func() {
 		bcancel()
 		n.Wait()

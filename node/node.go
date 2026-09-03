@@ -396,7 +396,7 @@ func makeNode(
 	// FIXME The way we do phased startups (e.g. replay -> block sync -> consensus) is very messy,
 	// we should clean this whole thing up. See:
 	// https://github.com/dashpay/tenderdash/issues/4644
-	node.services = append(node.services, statesync.NewReactor(
+	ssReactor := statesync.NewReactor(
 		genDoc.ChainID,
 		genDoc.InitialHeight,
 		*cfg.StateSync,
@@ -428,7 +428,9 @@ func makeNode(
 		stateSync,
 		dashCoreRPCClient,
 		csState,
-	))
+	)
+	node.services = append(node.services, ssReactor)
+	node.rpcEnv.StateSyncMetricer = ssReactor
 
 	if cfg.Mode == config.ModeValidator {
 		if privValidator != nil {
