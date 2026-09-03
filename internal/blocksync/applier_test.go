@@ -48,6 +48,9 @@ func TestBlockApplierApply(t *testing.T) {
 					Once().
 					Return(nil)
 				mockBlockExec.
+					On("NoteVerifiedCommit", initialState, blockH1ID, commitH1).
+					Once()
+				mockBlockExec.
 					On("ApplyBlock", mock.Anything, initialState, blockH1ID, blockH1, commitH1).
 					Once().
 					Return(state, nil)

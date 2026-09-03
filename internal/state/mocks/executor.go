@@ -363,6 +363,58 @@ func (_c *Executor_FinalizeBlock_Call) RunAndReturn(run func(ctx context.Context
 	return _c
 }
 
+// NoteVerifiedCommit provides a mock function for the type Executor
+func (_mock *Executor) NoteVerifiedCommit(state1 state.State, blockID types.BlockID, commit *types.Commit) {
+	_mock.Called(state1, blockID, commit)
+	return
+}
+
+// Executor_NoteVerifiedCommit_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'NoteVerifiedCommit'
+type Executor_NoteVerifiedCommit_Call struct {
+	*mock.Call
+}
+
+// NoteVerifiedCommit is a helper method to define mock.On call
+//   - state1 state.State
+//   - blockID types.BlockID
+//   - commit *types.Commit
+func (_e *Executor_Expecter) NoteVerifiedCommit(state1 interface{}, blockID interface{}, commit interface{}) *Executor_NoteVerifiedCommit_Call {
+	return &Executor_NoteVerifiedCommit_Call{Call: _e.mock.On("NoteVerifiedCommit", state1, blockID, commit)}
+}
+
+func (_c *Executor_NoteVerifiedCommit_Call) Run(run func(state1 state.State, blockID types.BlockID, commit *types.Commit)) *Executor_NoteVerifiedCommit_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 state.State
+		if args[0] != nil {
+			arg0 = args[0].(state.State)
+		}
+		var arg1 types.BlockID
+		if args[1] != nil {
+			arg1 = args[1].(types.BlockID)
+		}
+		var arg2 *types.Commit
+		if args[2] != nil {
+			arg2 = args[2].(*types.Commit)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *Executor_NoteVerifiedCommit_Call) Return() *Executor_NoteVerifiedCommit_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *Executor_NoteVerifiedCommit_Call) RunAndReturn(run func(state1 state.State, blockID types.BlockID, commit *types.Commit)) *Executor_NoteVerifiedCommit_Call {
+	_c.Run(run)
+	return _c
+}
+
 // ProcessProposal provides a mock function for the type Executor
 func (_mock *Executor) ProcessProposal(ctx context.Context, block *types.Block, round int32, state1 state.State, verify bool) (state.CurrentRoundState, error) {
 	ret := _mock.Called(ctx, block, round, state1, verify)

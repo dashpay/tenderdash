@@ -85,6 +85,9 @@ func (suite *SynchronizerTestSuite) TestBasic() {
 		Maybe().
 		Return(nil)
 	suite.blockExec.
+		On("NoteVerifiedCommit", mock.Anything, mock.Anything, mock.Anything).
+		Maybe()
+	suite.blockExec.
 		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
 		Return(func(_ context.Context, state sm.State, _ types.BlockID, block *types.Block, _ *types.Commit) sm.State {
@@ -203,6 +206,9 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResult() {
 					On("ValidateBlock", mock.Anything, mock.Anything, respH1.Block).
 					Once().
 					Return(nil)
+				suite.blockExec.
+					On("NoteVerifiedCommit", mock.Anything, mock.Anything, mock.Anything).
+					Maybe()
 				suite.blockExec.
 					On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, respH1.Block, respH1.Commit).
 					Once().
@@ -419,6 +425,9 @@ func (suite *SynchronizerTestSuite) TestConsumeDuplicateThenDrain() {
 		On("ValidateBlock", mock.Anything, mock.Anything, mock.Anything).
 		Twice().
 		Return(nil)
+	suite.blockExec.
+		On("NoteVerifiedCommit", mock.Anything, mock.Anything, mock.Anything).
+		Maybe()
 	suite.blockExec.
 		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Twice().
@@ -1210,6 +1219,9 @@ func (suite *SynchronizerTestSuite) newBacklogHarness() *backlogHarness {
 		Maybe().
 		Return(nil)
 	suite.blockExec.
+		On("NoteVerifiedCommit", mock.Anything, mock.Anything, mock.Anything).
+		Maybe()
+	suite.blockExec.
 		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
 		Return(func(_ context.Context, state sm.State, _ types.BlockID, _ *types.Block, _ *types.Commit) sm.State {
@@ -1659,6 +1671,9 @@ func (suite *SynchronizerTestSuite) TestClientTimeoutUnwedgesAFullWindow() {
 		On("ValidateBlock", mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
 		Return(nil)
+	suite.blockExec.
+		On("NoteVerifiedCommit", mock.Anything, mock.Anything, mock.Anything).
+		Maybe()
 	suite.blockExec.
 		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Maybe().

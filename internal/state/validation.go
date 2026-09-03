@@ -14,7 +14,12 @@ import (
 //-----------------------------------------------------
 // Validate block
 
-func validateBlock(state State, block *types.Block) error {
+// lastCommitVerified tells validateBlock that block.LastCommit has already been
+// verified against state.LastValidators by the caller. Block sync verifies each
+// commit when it applies the block that commit belongs to, and the same commit
+// comes back one height later as the next block's LastCommit; re-verifying it
+// costs a second BLS threshold verification on every block.
+func validateBlock(state State, block *types.Block, lastCommitVerified bool) error {
 	// Validate internal consistency.
 	if err := block.ValidateBasic(); err != nil {
 		return err
@@ -79,9 +84,7 @@ func validateBlock(state State, block *types.Block) error {
 		if len(block.LastCommit.ThresholdBlockSignature) != 0 {
 			return errors.New("initial block can't have ThresholdBlockSignature set")
 		}
-	} else {
-		// fmt.Printf("validating against state with lastBlockId %s lastStateId %s\n", state.LastBlockID.String(),
-		//  state.LastStateID.String())
+	} else if !lastCommitVerified {
 		// LastPrecommits.Signatures length is checked in VerifyCommit.
 		if err := state.LastValidators.VerifyCommit(
 			state.ChainID, state.LastBlockID, block.Height-1, block.LastCommit); err != nil {
