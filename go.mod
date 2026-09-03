@@ -44,7 +44,7 @@ require (
 require (
 	github.com/bufbuild/buf v1.72.0
 	github.com/creachadair/atomicfile v0.4.2
-	github.com/go-pkgz/jrpc v0.4.0
+	github.com/go-pkgz/jrpc v0.4.2
 	github.com/google/go-cmp v0.7.0
 	github.com/vektra/mockery/v2 v2.53.5
 )
@@ -140,8 +140,8 @@ require (
 	github.com/ghostiam/protogetter v0.3.21 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-pkgz/rest v1.21.0 // indirect
-	github.com/go-pkgz/routegroup v1.6.0 // indirect
+	github.com/go-pkgz/rest v1.24.0 // indirect
+	github.com/go-pkgz/routegroup v1.6.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/godoc-lint/godoc-lint v0.11.2 // indirect
 	github.com/golangci/asciicheck v0.5.0 // indirect
