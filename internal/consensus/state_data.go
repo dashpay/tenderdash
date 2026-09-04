@@ -384,7 +384,13 @@ func (s *StateData) updateValidBlock() bool {
 	// we only update valid block if it's not set already; otherwise we might overwrite the recv time
 	if !s.ValidBlock.HashesTo(s.ProposalBlock.Hash()) {
 		s.ValidBlock = s.ProposalBlock
+		// A block can be held without a proposal to date it, and the zero time is
+		// not timely: propose reads this back and would refuse the block. Now is
+		// when this node learned it.
 		s.ValidBlockRecvTime = s.ProposalReceiveTime
+		if s.ValidBlockRecvTime.IsZero() {
+			s.ValidBlockRecvTime = tmtime.Now()
+		}
 		s.ValidBlockParts = s.ProposalBlockParts
 
 		return true
@@ -409,9 +415,13 @@ func (s *StateData) updateLockedBlock() {
 }
 
 // readyToApplyCommit verifies commit's threshold signature against the commit's
-// own BlockID and reports whether the round state can act on it now. A false
-// return with a nil error means the commit is authentic but parked by
-// adoptCommit until the block it commits arrives.
+// own BlockID and reports whether the caller may proceed.
+//
+// (true, nil) means proceed; under ignoreProposalBlock that means move to the
+// commit's round, not apply it. (false, nil) means either that the commit is not
+// for this height, in which case it is ignored unverified, or that it is
+// authentic but its block has not arrived, in which case adoptCommit has parked
+// it. A non-nil error is a verification failure and identifies the sender.
 func (s *StateData) readyToApplyCommit(
 	commit *types.Commit,
 	peerID types.NodeID,
@@ -472,17 +482,10 @@ func (s *StateData) readyToApplyCommit(
 		return true, nil
 	}
 
-	if rs.Proposal != nil && rs.Proposal.BlockID.Equals(commit.BlockID) {
-		return true, nil
-	}
-
-	// A Proposal for a block the network dropped outlives a part set already
-	// retargeted to the committed one (addVoteUpdateValidBlockMw replaces the parts
-	// and leaves the Proposal alone), so an assembled block that hashes to the
-	// commit settles the question the stale Proposal would answer wrongly.
-	// StateID needs no separate check: the signature verified above ran against the
-	// full commit.BlockID, and CanonicalVote covers StateID.
-	if s.holdsBlock(commit.BlockID) {
+	// A Proposal attests which block the round is collecting, not that it has
+	// arrived, so holding the block is the whole question. StateID needs no
+	// separate check: the signature above ran against the full commit.BlockID.
+	if s.holdsProposalBlock(commit.BlockID) {
 		return true, nil
 	}
 
@@ -502,12 +505,10 @@ func (s *StateData) readyToApplyCommit(
 	return false, nil
 }
 
-// adoptCommit keeps commit until the block it commits arrives and readies the
-// round state to receive that block. A Proposal whose BlockID differs is dropped
-// with its receive time; the block and its parts are dropped only when the
-// part-set header differs, so parts already collected for the committed block
-// survive. That preservation reaches the caller on the same-round path only:
-// EnterNewRound resets the whole proposal state for any round > 0.
+// adoptCommit keeps commit until the block it commits arrives and points the
+// round state at that block. Parts already collected for the committed block
+// survive, but on the same-round path only: EnterNewRound resets the whole
+// proposal state for any round > 0.
 func (s *StateData) adoptCommit(commit *types.Commit) {
 	s.retargetTo(commit.BlockID, "commit")
 	s.Commit = commit
@@ -564,9 +565,9 @@ func (s *StateData) dropStaleProposal(blockID types.BlockID, reason string) {
 	s.ProposalReceiveTime = time.Time{}
 }
 
-// holdsBlock reports whether the round state already carries the block blockID
+// holdsProposalBlock reports whether the round state already carries the block blockID
 // names, as an assembled block under a part set built from the same header.
-func (s *StateData) holdsBlock(blockID types.BlockID) bool {
+func (s *StateData) holdsProposalBlock(blockID types.BlockID) bool {
 	return s.ProposalBlock.HashesTo(blockID.Hash) && s.ProposalBlockParts.HasHeader(blockID.PartSetHeader)
 }
 

@@ -54,9 +54,9 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 	// We need to first verify that the commit received wasn't for a future round,
 	// If it was then we must go to next round
 	if commit.Height == rs.Height && commit.Round > rs.Round {
-		cs.logger.Trace("Commit received for a later round", "height", commit.Height, "our round",
-			rs.Round, "commit round", commit.Round)
-		verified, err := cs.verifyCommit(ctx, stateData, commit, peerID, true)
+		cs.logger.Trace("commit received for a later round", "height", commit.Height,
+			"our_round", rs.Round, "commit_round", commit.Round)
+		verified, err := cs.prepareCommitForApply(ctx, stateData, commit, peerID, true)
 		if err != nil {
 			cs.handleCommitVerifyError(err, peerID, fromReplay)
 			return err
@@ -73,7 +73,7 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 	}
 
 	// First lets verify that the commit is what we are expecting
-	verified, err := cs.verifyCommit(ctx, stateData, commit, peerID, false)
+	verified, err := cs.prepareCommitForApply(ctx, stateData, commit, peerID, false)
 	if err != nil {
 		cs.handleCommitVerifyError(err, peerID, fromReplay)
 		return err
@@ -84,10 +84,16 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 
 	stateData.Commit = commit
 
-	// Applying the commit waits on the block, not on the round step: a node that
-	// never received the proposal cannot leave RoundStepPropose, and its part set
-	// completes exactly once, so a commit parked on the step is parked for good.
-	if !stateData.holdsBlock(commit.BlockID) {
+	// prepareCommitForApply has already established that the block is held.
+	// Restated so that a later change there cannot silently let the round step
+	// stand in for it again: a commit parked on the step is parked for good,
+	// because a part set completes exactly once.
+	if !stateData.holdsProposalBlock(commit.BlockID) {
+		cs.logger.Error("commit verified against a block the round state does not hold",
+			"height", commit.Height,
+			"round", commit.Round,
+			"commit_block", commit.BlockID.Hash,
+		)
 		return nil
 	}
 	return stateEvent.Ctrl.Dispatch(ctx, &AddCommitEvent{Commit: commit}, stateData)
@@ -125,7 +131,17 @@ func (cs *TryAddCommitAction) handleCommitVerifyError(err error, peerID types.No
 	}
 }
 
-func (cs *TryAddCommitAction) verifyCommit(ctx context.Context, stateData *StateData, commit *types.Commit, peerID types.NodeID, ignoreProposalBlock bool) (verified bool, err error) {
+// prepareCommitForApply verifies the commit and, unless ignoreProposalBlock, the
+// block it names: it runs that block through the application, so a true return
+// means the block is processed and validated, not merely that a signature checked
+// out.
+func (cs *TryAddCommitAction) prepareCommitForApply(
+	ctx context.Context,
+	stateData *StateData,
+	commit *types.Commit,
+	peerID types.NodeID,
+	ignoreProposalBlock bool,
+) (verified bool, err error) {
 	verified, err = stateData.readyToApplyCommit(
 		commit,
 		peerID,
@@ -143,7 +159,7 @@ func (cs *TryAddCommitAction) verifyCommit(ctx context.Context, stateData *State
 		return false, nil
 	}
 	if !blockParts.HasHeader(commit.BlockID.PartSetHeader) {
-		return false, fmt.Errorf("expected ProposalBlockParts header to be commit header")
+		return false, errors.New("expected ProposalBlockParts header to be commit header")
 	}
 	proTxHash := dash.MustProTxHashFromContext(ctx)
 	if !block.HashesTo(commit.BlockID.Hash) {
@@ -154,7 +170,7 @@ func (cs *TryAddCommitAction) verifyCommit(ctx context.Context, stateData *State
 			"commit", commit,
 			"complete_proposal", stateData.isProposalComplete(),
 		)
-		return false, fmt.Errorf("cannot finalize commit; proposal block does not hash to commit hash")
+		return false, errors.New("cannot finalize commit; proposal block does not hash to commit hash")
 	}
 	// We have a correct block, let's process it before applying the commit
 	err = cs.blockExec.ensureProcess(ctx, &stateData.RoundState, commit.Round)

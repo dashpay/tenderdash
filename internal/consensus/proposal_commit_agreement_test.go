@@ -14,43 +14,6 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
-// signedProposalFrom builds a proposal for blockID signed by the validator that
-// is entitled to propose at the round, so it clears every check except the ones
-// under test.
-func signedProposalFrom(
-	ctx context.Context,
-	t *testing.T,
-	n staleProposalNode,
-	round int32,
-	coreChainLockedHeight uint32,
-	blockID types.BlockID,
-) *types.Proposal {
-	t.Helper()
-
-	stateData := n.node.GetStateData()
-	proposer, err := stateData.ProposerSelector.GetProposer(n.block.Height, round)
-	require.NoError(t, err)
-
-	var key types.PrivValidator
-	for _, pv := range n.privVals {
-		proTxHash, err := pv.GetProTxHash(ctx)
-		require.NoError(t, err)
-		if proTxHash.Equal(proposer.ProTxHash) {
-			key = pv
-		}
-	}
-	require.NotNil(t, key, "the entitled proposer's key must be among the validators")
-
-	proposal := types.NewProposal(
-		n.block.Height, coreChainLockedHeight, round, -1, blockID, n.block.Header.Time)
-	proto := proposal.ToProto()
-	vals := stateData.Validators
-	_, err = key.SignProposal(ctx, stateData.state.ChainID, vals.QuorumType, vals.QuorumHash, proto)
-	require.NoError(t, err)
-	proposal.Signature = proto.Signature
-	return proposal
-}
-
 // TestEquivocatedProposalCannotStrandAParkedCommit pins the last route into the
 // dashpay/tenderdash#1414 stall. Once a commit is parked its block is fixed, and
 // the round state is collecting that block's parts. A proposer that equivocates
@@ -65,8 +28,7 @@ func TestEquivocatedProposalCannotStrandAParkedCommit(t *testing.T) {
 	defer cancel()
 	cfg := configSetup(t)
 
-	n := newStaleProposalNode(ctx, t, cfg, 64, 0)
-	require.Greater(t, n.parts.Total(), uint32(1), "the commit must be able to arrive before the last part")
+	n := newCommitFixture(ctx, t, cfg, multiPartBlockPartSize, 0)
 	stateData := n.node.GetStateData()
 
 	received := types.NewPartSetFromHeader(n.commit.BlockID.PartSetHeader)
@@ -109,7 +71,7 @@ func TestProposalAgreeingWithParkedCommitIsAccepted(t *testing.T) {
 	defer cancel()
 	cfg := configSetup(t)
 
-	n := newStaleProposalNode(ctx, t, cfg, 64, 0)
+	n := newCommitFixture(ctx, t, cfg, multiPartBlockPartSize, 0)
 	stateData := n.node.GetStateData()
 
 	received := types.NewPartSetFromHeader(n.commit.BlockID.PartSetHeader)
@@ -132,4 +94,40 @@ func TestProposalAgreeingWithParkedCommitIsAccepted(t *testing.T) {
 	require.NotNil(t, stateData.Proposal, "the proposal for the committed block is the one we are waiting for")
 	assert.True(t, stateData.Proposal.BlockID.Equals(n.commit.BlockID))
 	assert.Equal(t, receiveTime, stateData.ProposalReceiveTime, "the receive time must survive with the proposal")
+}
+
+// TestCommitIsParkedWhileTheProposedBlockIsStillArriving pins what a held
+// Proposal is and is not evidence of. It attests which block the round is
+// collecting; it says nothing about whether that block has arrived. Treating it
+// as a proxy for holding the block lets a commit pass readiness and then fail
+// the block checks behind it, and the commit is dropped rather than parked —
+// the node waits for a commit the network has already sent.
+func TestCommitIsParkedWhileTheProposedBlockIsStillArriving(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cfg := configSetup(t)
+
+	n := newCommitFixture(ctx, t, cfg, multiPartBlockPartSize, 0)
+	stateData := n.node.GetStateData()
+	collectFirstPartOf(t, n, &stateData)
+
+	ctx = dash.ContextWithProTxHash(ctx, n.node.privValidator.ProTxHash)
+	stateData.Proposal = signedProposalFrom(ctx, t, n, n.commit.Round, n.block.CoreChainLockedHeight, n.commit.BlockID)
+	stateData.ProposalReceiveTime = tmtime.Now()
+	require.Nil(t, stateData.ProposalBlock, "the block this proposal names has not assembled yet")
+
+	commitCtx := msgInfoWithCtx(ctx, msgInfo{Msg: &CommitMessage{n.commit}, PeerID: n.peerID})
+	require.NoError(t, n.node.ctrl.Dispatch(commitCtx, &TryAddCommitEvent{Commit: n.commit, PeerID: n.peerID}, &stateData))
+
+	require.NotNil(t, stateData.Commit, "a verified commit must be parked until its block arrives")
+	assert.NotNil(t, stateData.Proposal, "the proposal names the committed block, so it is not stale")
+
+	for i := 1; i < int(n.parts.Total()); i++ {
+		msg := &BlockPartMessage{Height: n.block.Height, Round: n.commit.Round, Part: n.parts.GetPart(i)}
+		partCtx := msgInfoWithCtx(ctx, msgInfo{Msg: msg, PeerID: n.peerID})
+		require.NoError(t,
+			n.node.ctrl.Dispatch(partCtx, &AddProposalBlockPartEvent{Msg: msg, PeerID: n.peerID}, &stateData),
+			"block part %d of %d", i, n.parts.Total())
+	}
+	assert.Equal(t, int64(2), stateData.Height, "the parked commit must be applied once its block completes")
 }

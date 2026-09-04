@@ -29,8 +29,7 @@ func TestAddProposalBlockPartAppliesParkedCommit(t *testing.T) {
 
 	// A part size small enough that the block is gossiped in several parts, so a
 	// commit can arrive while parts are still missing.
-	n := newStaleProposalNode(ctx, t, cfg, 64, 0)
-	require.Greater(t, n.parts.Total(), uint32(1), "a single-part block cannot arrive after its commit")
+	n := newCommitFixture(ctx, t, cfg, multiPartBlockPartSize, 0)
 	stateData := n.node.GetStateData()
 
 	// A proposal for a block the network dropped, disagreeing with the committed

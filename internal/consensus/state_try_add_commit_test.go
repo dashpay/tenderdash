@@ -174,7 +174,7 @@ func TestTryAddCommitWithAssembledBlockAndStaleProposal(t *testing.T) {
 	defer cancel()
 	cfg := configSetup(t)
 
-	n := newStaleProposalNode(ctx, t, cfg, types.BlockPartSizeBytes, 0)
+	n := newCommitFixture(ctx, t, cfg, types.BlockPartSizeBytes, 0)
 	stateData := n.node.GetStateData()
 
 	staleProposal := types.NewProposal(
@@ -205,7 +205,7 @@ func TestTryAddCommitForFutureRoundParksCommitAndPartSet(t *testing.T) {
 	cfg := configSetup(t)
 
 	const futureRound = int32(1)
-	n := newStaleProposalNode(ctx, t, cfg, types.BlockPartSizeBytes, futureRound)
+	n := newCommitFixture(ctx, t, cfg, types.BlockPartSizeBytes, futureRound)
 	stateData := n.node.GetStateData()
 
 	stateData.Proposal = types.NewProposal(
@@ -237,7 +237,7 @@ func TestTryAddCommitAppliesAssembledBlockBeforeProposeStep(t *testing.T) {
 	defer cancel()
 	cfg := configSetup(t)
 
-	n := newStaleProposalNode(ctx, t, cfg, types.BlockPartSizeBytes, 0)
+	n := newCommitFixture(ctx, t, cfg, types.BlockPartSizeBytes, 0)
 	stateData := n.node.GetStateData()
 
 	stateData.Proposal = nil

@@ -13,7 +13,7 @@ type proposalUpdater struct {
 
 func (u *proposalUpdater) updateStateData(stateData *StateData, blockID types.BlockID) error {
 	stateData.replaceProposalBlockOnLockedBlock(blockID)
-	if stateData.holdsBlock(blockID) {
+	if stateData.holdsProposalBlock(blockID) {
 		return nil
 	}
 	u.logger.Debug(

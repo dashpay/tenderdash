@@ -14,6 +14,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	tmrequire "github.com/dashpay/tenderdash/internal/test/require"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -110,9 +111,9 @@ func TestIsValidForPrevote(t *testing.T) {
 	}
 }
 
-// newVerifyCommitStateData wraps the round state readyToApplyCommit reads in the
+// newReadyToApplyCommitStateData wraps the round state readyToApplyCommit reads in the
 // minimal StateData it needs to run.
-func newVerifyCommitStateData(chainID string, rs cstypes.RoundState) StateData {
+func newReadyToApplyCommitStateData(chainID string, rs cstypes.RoundState) StateData {
 	return StateData{
 		logger:     log.NewNopLogger(),
 		metrics:    NopMetrics(),
@@ -121,7 +122,7 @@ func newVerifyCommitStateData(chainID string, rs cstypes.RoundState) StateData {
 	}
 }
 
-// TestVerifyCommitAgainstCommitBlockID pins which block a peer-sent commit is
+// TestReadyToApplyCommitUsesTheCommitBlockID pins which block a peer-sent commit is
 // checked against. The threshold signature only ever covers the commit's own
 // BlockID, so verifying it against a proposal we happen to hold rejects the very
 // commit the network produced and leaves a lagging node stuck (dashpay/tenderdash#1414).
@@ -129,7 +130,7 @@ func newVerifyCommitStateData(chainID string, rs cstypes.RoundState) StateData {
 // commit that arrived before any proposal. Only a signature that fails against
 // the commit's own BlockID is forgery, and it must surface as
 // types.ErrInvalidCommitSignature, the one class that evicts the sender.
-func TestVerifyCommitAgainstCommitBlockID(t *testing.T) {
+func TestReadyToApplyCommitUsesTheCommitBlockID(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -140,8 +141,22 @@ func TestVerifyCommitAgainstCommitBlockID(t *testing.T) {
 	)
 
 	valSet, privVals := factory.MockValidatorSet()
-	committedBlockID := factory.MakeBlockID()
-	ourBlockID := factory.MakeBlockID()
+	// Real blocks with real part sets: whether the round state holds the block a
+	// commit names is the question readyToApplyCommit answers, so a placeholder
+	// block would make every answer vacuous.
+	makeBlock := func(coreChainLockedHeight uint32) (*types.Block, *types.PartSet, types.BlockID) {
+		block := &types.Block{
+			Header:     *factory.MakeHeader(t, &types.Header{Height: height, CoreChainLockedHeight: coreChainLockedHeight}),
+			LastCommit: &types.Commit{},
+		}
+		require.NotNil(t, block.Hash(), "a block without a LastCommit hashes to nil, making every comparison vacuous")
+		parts, err := block.MakePartSet(types.BlockPartSizeBytes)
+		require.NoError(t, err)
+		return block, parts, block.BlockID(parts)
+	}
+	committedBlock, committedParts, committedBlockID := makeBlock(1)
+	ourBlock, ourParts, ourBlockID := makeBlock(2)
+	require.False(t, ourBlockID.Equals(committedBlockID))
 
 	makeCommit := func(t *testing.T, blockID types.BlockID, forged bool) *types.Commit {
 		t.Helper()
@@ -225,10 +240,12 @@ func TestVerifyCommitAgainstCommitBlockID(t *testing.T) {
 			)
 			if !tc.noProposal {
 				proposal = types.NewProposal(height, 1, round, -1, tc.proposalBlockID, time.Now())
-				proposalBlock = &types.Block{Header: types.Header{Height: height}}
-				parts = types.NewPartSetFromHeader(tc.proposalBlockID.PartSetHeader)
+				proposalBlock, parts = ourBlock, ourParts
+				if tc.proposalBlockID.Equals(committedBlockID) {
+					proposalBlock, parts = committedBlock, committedParts
+				}
 			}
-			stateData := newVerifyCommitStateData(chainID, cstypes.RoundState{
+			stateData := newReadyToApplyCommitStateData(chainID, cstypes.RoundState{
 				Height:             height,
 				Round:              round,
 				Proposal:           proposal,
@@ -288,7 +305,7 @@ func TestVerifyCommitIsRefusedWhenBudgetIsExhausted(t *testing.T) {
 	commit, err := factory.MakeCommit(ctx, blockID, height, round, voteSet, valSet, privVals)
 	require.NoError(t, err)
 
-	stateData := newVerifyCommitStateData(chainID, cstypes.RoundState{
+	stateData := newReadyToApplyCommitStateData(chainID, cstypes.RoundState{
 		Height:     height,
 		Round:      round,
 		Validators: valSet,
@@ -408,7 +425,7 @@ func TestVerifyCommitWithRetargetedProposalBlockParts(t *testing.T) {
 				// still tracks the block of an earlier round.
 				parts = types.NewPartSetFromHeader(staleBlockID.PartSetHeader)
 			}
-			stateData := newVerifyCommitStateData(chainID, cstypes.RoundState{
+			stateData := newReadyToApplyCommitStateData(chainID, cstypes.RoundState{
 				Height:              height,
 				Round:               round,
 				Proposal:            proposal,
@@ -448,4 +465,36 @@ func TestVerifyCommitWithRetargetedProposalBlockParts(t *testing.T) {
 			assert.Equal(t, uint32(1), stateData.ProposalBlockParts.Count(), "no received part may be discarded")
 		})
 	}
+}
+
+// TestValidBlockRecvTimeIsNeverZero pins the one field updateValidBlock copies
+// out of the proposal state rather than deriving. ProposalReceiveTime is cleared
+// whenever a proposal stops describing the block the round is collecting, so it
+// is zero exactly when the block arrived without a proposal of its own. A zero
+// reaching ValidBlockRecvTime is not a neutral value: the proposal timeliness
+// rule reads it, and a block dated to the zero time is not timely, so this node
+// would refuse to propose the very block it holds as valid.
+func TestValidBlockRecvTimeIsNeverZero(t *testing.T) {
+	block := &types.Block{
+		Header:     *factory.MakeHeader(t, &types.Header{Height: 10}),
+		LastCommit: &types.Commit{},
+	}
+	parts, err := block.MakePartSet(types.BlockPartSizeBytes)
+	require.NoError(t, err)
+
+	stateData := newReadyToApplyCommitStateData("valid-block-recv-time", cstypes.RoundState{
+		Height:             block.Height,
+		Round:              0,
+		ProposalBlock:      block,
+		ProposalBlockParts: parts,
+	})
+	require.True(t, stateData.ProposalReceiveTime.IsZero(), "no proposal accompanied this block")
+
+	before := tmtime.Now()
+	require.True(t, stateData.updateValidBlock())
+
+	assert.False(t, stateData.ValidBlockRecvTime.IsZero(),
+		"a block held without a proposal must still be dated when this node learned it")
+	assert.False(t, stateData.ValidBlockRecvTime.Before(before),
+		"the fallback must be the time the block was learned, not an older stamp")
 }

@@ -23,7 +23,7 @@ func TestEnterPrecommitDropsProposalForABlockTheRoundMovedPast(t *testing.T) {
 	defer cancel()
 	cfg := configSetup(t)
 
-	n := newStaleProposalNode(ctx, t, cfg, types.BlockPartSizeBytes, 0)
+	n := newCommitFixture(ctx, t, cfg, types.BlockPartSizeBytes, 0)
 	stateData := n.node.GetStateData()
 	ctx = dash.ContextWithProTxHash(ctx, n.node.privValidator.ProTxHash)
 
@@ -37,7 +37,7 @@ func TestEnterPrecommitDropsProposalForABlockTheRoundMovedPast(t *testing.T) {
 	// We hold a different block, complete, with the proposal that brought it.
 	receiveTime := tmtime.Now()
 	stateData.Proposal = types.NewProposal(
-		n.block.Height, n.block.CoreChainLockedHeight, 0, -1, n.block.BlockID(n.parts), n.block.Header.Time)
+		n.block.Height, n.block.CoreChainLockedHeight, 0, -1, n.block.BlockID(n.parts), n.block.Time)
 	stateData.ProposalReceiveTime = receiveTime
 	stateData.ProposalBlock = n.block
 	stateData.ProposalBlockParts = n.parts

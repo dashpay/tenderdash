@@ -14,20 +14,6 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
-// collectFirstPartOf points the round state at the node's block and hands it the
-// first part, the state a retarget leaves behind while the rest arrives.
-func collectFirstPartOf(t *testing.T, n staleProposalNode, stateData *StateData) {
-	t.Helper()
-
-	require.Greater(t, n.parts.Total(), uint32(1), "the block must need more than one part")
-	received := types.NewPartSetFromHeader(n.commit.BlockID.PartSetHeader)
-	added, err := received.AddPart(n.parts.GetPart(0))
-	require.NoError(t, err)
-	require.True(t, added)
-	stateData.ProposalBlockParts = received
-	stateData.updateRoundStep(n.commit.Round, cstypes.RoundStepPrevote)
-}
-
 // TestProposalDisagreeingWithCollectedPartsIsRefused covers the route into the
 // dashpay/tenderdash#1414 stall that no commit is involved in. A polka retargets
 // the round state at a block, and from then on the part set can only ever
@@ -40,7 +26,7 @@ func TestProposalDisagreeingWithCollectedPartsIsRefused(t *testing.T) {
 	defer cancel()
 	cfg := configSetup(t)
 
-	n := newStaleProposalNode(ctx, t, cfg, 64, 0)
+	n := newCommitFixture(ctx, t, cfg, multiPartBlockPartSize, 0)
 	stateData := n.node.GetStateData()
 	collectFirstPartOf(t, n, &stateData)
 	require.Nil(t, stateData.Commit, "no commit: the part set is the only thing fixing the block")
@@ -61,7 +47,7 @@ func TestProposalAgreeingWithCollectedPartsIsAccepted(t *testing.T) {
 	defer cancel()
 	cfg := configSetup(t)
 
-	n := newStaleProposalNode(ctx, t, cfg, 64, 0)
+	n := newCommitFixture(ctx, t, cfg, multiPartBlockPartSize, 0)
 	stateData := n.node.GetStateData()
 	collectFirstPartOf(t, n, &stateData)
 
@@ -87,7 +73,7 @@ func TestAssembledBlockIsNotJudgedByAnUnrelatedProposal(t *testing.T) {
 	defer cancel()
 	cfg := configSetup(t)
 
-	n := newStaleProposalNode(ctx, t, cfg, 64, 0)
+	n := newCommitFixture(ctx, t, cfg, multiPartBlockPartSize, 0)
 	stateData := n.node.GetStateData()
 	collectFirstPartOf(t, n, &stateData)
 
@@ -165,4 +151,28 @@ func TestRoundStateRefusalNamesWhatFixedTheBlock(t *testing.T) {
 			require.ErrorIs(t, roundStateRefusal(proposal, &tc.rs), tc.wantErr)
 		})
 	}
+}
+
+// TestNonValidatorProposalIsCheckedAgainstTheCommitItself keeps the check where
+// the decision is made. Outside the validator set there is no proposer public
+// key, so nothing on this path verifies a signature: a commit for the same
+// height and round is the whole attestation, and a proposal naming another block
+// is attested by nothing at all. A caller-side precondition is not a substitute
+// for the comparison on the path that accepts.
+func TestNonValidatorProposalIsCheckedAgainstTheCommitItself(t *testing.T) {
+	const (
+		height = int64(10)
+		round  = int32(2)
+	)
+	committed := factory.MakeBlockID()
+	rs := cstypes.RoundState{Commit: &types.Commit{Height: height, Round: round, BlockID: committed}}
+	p := &Proposaler{}
+
+	agreeing := types.NewProposal(height, 1, round, -1, committed, tmtime.Now())
+	require.NoError(t, p.verifyProposalForNonValidatorSet(agreeing, rs))
+
+	disagreeing := types.NewProposal(height, 1, round, -1, factory.MakeBlockID(), tmtime.Now())
+	require.ErrorIs(t, p.verifyProposalForNonValidatorSet(disagreeing, rs), ErrInvalidProposalForCommit)
+
+	require.ErrorIs(t, p.verifyProposalForNonValidatorSet(agreeing, cstypes.RoundState{}), ErrUnableToVerifyProposal)
 }

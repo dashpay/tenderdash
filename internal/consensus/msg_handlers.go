@@ -42,10 +42,10 @@ func isPeerFloodableError(err error) bool {
 		errors.Is(err, ErrUnableToVerifyProposal) ||
 		errors.Is(err, ErrPeerStateInvalidVoteIndex) ||
 		errors.Is(err, ErrInvalidNewRoundStepHeight) ||
-		// Commit verification now runs against the commit's own BlockID, so every
-		// peer commit reaches these two rejections. Both are reachable by an honest
-		// peer on a different quorum rotation or vote-extension configuration, and
-		// both cost the sender a copied commit and nothing else.
+		// Every peer commit for the current height that clears ValidateBasic reaches
+		// these two rejections, and an honest peer on a different quorum rotation or
+		// vote-extension configuration reaches them too. Both cost the sender a
+		// copied commit and nothing else.
 		errors.As(err, &types.ErrInvalidCommitQuorumHash{}) ||
 		errors.As(err, &types.ErrVoteExtensionCountMismatch{})
 }

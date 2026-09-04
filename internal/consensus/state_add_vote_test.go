@@ -594,8 +594,7 @@ func TestPolkaRetargetDropsProposalForAnotherBlock(t *testing.T) {
 	defer cancel()
 	cfg := configSetup(t)
 
-	n := newStaleProposalNode(ctx, t, cfg, 64, 0)
-	require.Greater(t, n.parts.Total(), uint32(1), "a single-part block cannot complete after the polka")
+	n := newCommitFixture(ctx, t, cfg, multiPartBlockPartSize, 0)
 	stateData := n.node.GetStateData()
 
 	receiveTime := tmtime.Now()
@@ -635,7 +634,7 @@ func TestPolkaRetargetKeepsProposalForTheChosenBlock(t *testing.T) {
 	defer cancel()
 	cfg := configSetup(t)
 
-	n := newStaleProposalNode(ctx, t, cfg, types.BlockPartSizeBytes, 0)
+	n := newCommitFixture(ctx, t, cfg, types.BlockPartSizeBytes, 0)
 	stateData := n.node.GetStateData()
 
 	blockID := n.block.BlockID(n.parts)

@@ -225,16 +225,19 @@ func (p *Proposaler) verifyProposal(ctx context.Context, proposal *types.Proposa
 			proposal.Height, proposal.Round, rs.Height, rs.Round)
 	}
 
-	// A verified commit settles which block this round produced, so a proposal
-	// disagreeing with one is refused whether or not we can check its signature —
-	// before the branch below, and before any verification work is charged.
-	if err := p.checkProposalAgainstRoundState(proposal, rs); err != nil {
-		return err
-	}
-
+	// Resolved once: the refusal below names the proposer, and the branch after it
+	// decides whether a signature can be checked at all.
 	proposer, err := rs.ProposerSelector.GetProposer(rs.Height, rs.Round)
 	if err != nil {
 		return fmt.Errorf("error getting proposer: %w", err)
+	}
+
+	// A round state that has already fixed a block settles which block this round
+	// produced, so a disagreeing proposal is refused whether or not its signature
+	// can be checked. Refusing costs a BlockID comparison and the lookup above and
+	// spends no verification permit; the data channel's rate limit bounds it.
+	if err := p.checkProposalAgainstRoundState(proposal, rs, proposer); err != nil {
+		return err
 	}
 
 	if proposer.PubKey == nil {
@@ -290,26 +293,22 @@ func (p *Proposaler) verifyProposal(ctx context.Context, proposal *types.Proposa
 // Merkle root over exactly one block's bytes and so can complete into no other.
 // A proposal that disagrees with either cannot be acted on, and installing it
 // makes the round state reject the parts it is itself waiting for.
-func (p *Proposaler) checkProposalAgainstRoundState(proposal *types.Proposal, rs *cstypes.RoundState) error {
+func (p *Proposaler) checkProposalAgainstRoundState(
+	proposal *types.Proposal,
+	rs *cstypes.RoundState,
+	proposer *types.Validator,
+) error {
 	err := roundStateRefusal(proposal, rs)
 	if err == nil {
 		return nil
 	}
-	proposer, proposerErr := rs.ProposerSelector.GetProposer(proposal.Height, proposal.Round)
-	if proposerErr != nil {
-		p.logger.Error("error getting proposer",
-			"height", proposal.Height,
-			"round", proposal.Round,
-			"err", proposerErr)
-	} else {
-		// A mismatching block ID is free to produce, so this cannot be
-		// louder than Debug.
-		p.logger.Debug("proposal names a block the round is not collecting",
-			"height", proposal.Height,
-			"round", proposal.Round,
-			"reason", err,
-			"proposer_proTxHash", proposer.ProTxHash.ShortString())
-	}
+	// A mismatching block ID is free to produce, so this cannot be louder
+	// than Debug.
+	p.logger.Debug("proposal names a block the round is not collecting",
+		"height", proposal.Height,
+		"round", proposal.Round,
+		"reason", err,
+		"proposer_proTxHash", proposer.ProTxHash.ShortString())
 	return err
 }
 
@@ -333,14 +332,18 @@ func roundStateRefusal(proposal *types.Proposal, rs *cstypes.RoundState) error {
 
 // verifyProposalForNonValidatorSet attests a proposal this node cannot check by
 // signature. Outside the validator set there is no proposer public key, so a
-// commit for the same height and round is the only thing that can vouch for a
-// proposal; checkProposalAgainstRoundState has already refused one that
-// disagrees with it.
+// commit for the same height and round is the whole attestation. The comparison
+// against that commit is repeated here rather than inherited from the caller:
+// there is no signature check on this path to fall back on, so the acceptance
+// must not rest on a precondition established somewhere else.
 func (p *Proposaler) verifyProposalForNonValidatorSet(proposal *types.Proposal, rs cstypes.RoundState) error {
 	commit := rs.Commit
 	if commit == nil || commit.Height != proposal.Height || commit.Round != proposal.Round {
 		// We received a proposal we can not check
 		return ErrUnableToVerifyProposal
+	}
+	if !proposal.BlockID.Equals(commit.BlockID) {
+		return ErrInvalidProposalForCommit
 	}
 	return nil
 }

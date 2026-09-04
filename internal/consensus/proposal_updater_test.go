@@ -25,7 +25,7 @@ func TestEnterCommitDropsProposalForAnotherBlock(t *testing.T) {
 	defer cancel()
 	cfg := configSetup(t)
 
-	n := newStaleProposalNode(ctx, t, cfg, 64, 0)
+	n := newCommitFixture(ctx, t, cfg, multiPartBlockPartSize, 0)
 	stateData := n.node.GetStateData()
 	ctx = dash.ContextWithProTxHash(ctx, n.node.privValidator.ProTxHash)
 
@@ -54,8 +54,7 @@ func TestEnterCommitKeepsPartsAlreadyCollectedForTheCommittedBlock(t *testing.T)
 	defer cancel()
 	cfg := configSetup(t)
 
-	n := newStaleProposalNode(ctx, t, cfg, 64, 0)
-	require.Greater(t, n.parts.Total(), uint32(1), "a single-part block cannot show a partial part set")
+	n := newCommitFixture(ctx, t, cfg, multiPartBlockPartSize, 0)
 	stateData := n.node.GetStateData()
 	ctx = dash.ContextWithProTxHash(ctx, n.node.privValidator.ProTxHash)
 
