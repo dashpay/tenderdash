@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/dashpay/tenderdash/dash"
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	"github.com/dashpay/tenderdash/internal/eventbus"
 	sm "github.com/dashpay/tenderdash/internal/state"
@@ -17,6 +19,7 @@ import (
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/libs/eventemitter"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -574,4 +577,79 @@ func TestAddVoteVerifyExtensionMwIndexNotInStateValidators(t *testing.T) {
 	require.Error(t, err)
 	require.False(t, added)
 	require.False(t, reached)
+}
+
+// TestPolkaRetargetDropsProposalForAnotherBlock covers the source of the
+// dashpay/tenderdash#1414 inconsistency. A +2/3 prevote majority for a block we
+// do not hold repoints ProposalBlockParts at it; a Proposal describing the block
+// the network dropped must go with them. Kept, it rejects the real block's last
+// part on its core chain locked height, and because a part set completes exactly
+// once nothing re-enters that path — this variant needs no commit to stall.
+func TestPolkaRetargetDropsProposalForAnotherBlock(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cfg := configSetup(t)
+
+	n := newStaleProposalNode(ctx, t, cfg, 64, 0)
+	require.Greater(t, n.parts.Total(), uint32(1), "a single-part block cannot complete after the polka")
+	stateData := n.node.GetStateData()
+
+	receiveTime := tmtime.Now()
+	stateData.Proposal = types.NewProposal(
+		n.block.Height, n.block.CoreChainLockedHeight+1, 0, -1, factory.MakeBlockID(), n.block.Time)
+	stateData.ProposalReceiveTime = receiveTime
+	stateData.updateRoundStep(0, cstypes.RoundStepPrevote)
+
+	ctx = dash.ContextWithProTxHash(ctx, n.node.privValidator.ProTxHash)
+	blockID := n.block.BlockID(n.parts)
+	for _, vote := range n.prevote(ctx, t, blockID) {
+		voteCtx := msgInfoWithCtx(ctx, msgInfo{Msg: &VoteMessage{vote}, PeerID: n.peerID})
+		require.NoError(t, n.node.ctrl.Dispatch(voteCtx, &AddVoteEvent{Vote: vote, PeerID: n.peerID}, &stateData))
+	}
+
+	require.True(t, stateData.ProposalBlockParts.HasHeader(blockID.PartSetHeader),
+		"the polka must repoint the part set at the block the network chose")
+	assert.Nil(t, stateData.Proposal, "a proposal that outlived its own block must not survive the retarget")
+	assert.True(t, stateData.ProposalReceiveTime.IsZero(), "the receive time belongs to the dropped proposal")
+
+	for i := 0; i < int(n.parts.Total()); i++ {
+		msg := &BlockPartMessage{Height: n.block.Height, Round: 0, Part: n.parts.GetPart(i)}
+		partCtx := msgInfoWithCtx(ctx, msgInfo{Msg: msg, PeerID: n.peerID})
+		require.NoError(t,
+			n.node.ctrl.Dispatch(partCtx, &AddProposalBlockPartEvent{Msg: msg, PeerID: n.peerID}, &stateData),
+			"block part %d of %d", i, n.parts.Total())
+	}
+	assert.NotNil(t, stateData.ProposalBlock,
+		"the block the network chose must assemble, with no commit needed to unblock it")
+}
+
+// The other half of the same guard: a Proposal that does describe the block the
+// network chose survives a part set that has not caught up to it, keeping the
+// receive time its timeliness is measured from.
+func TestPolkaRetargetKeepsProposalForTheChosenBlock(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cfg := configSetup(t)
+
+	n := newStaleProposalNode(ctx, t, cfg, types.BlockPartSizeBytes, 0)
+	stateData := n.node.GetStateData()
+
+	blockID := n.block.BlockID(n.parts)
+	receiveTime := tmtime.Now()
+	proposal := types.NewProposal(n.block.Height, n.block.CoreChainLockedHeight, 0, -1, blockID, n.block.Time)
+	stateData.Proposal = proposal
+	stateData.ProposalReceiveTime = receiveTime
+	stateData.ProposalBlockParts = types.NewPartSetFromHeader(factory.MakeBlockID().PartSetHeader)
+	stateData.updateRoundStep(0, cstypes.RoundStepPrevote)
+
+	ctx = dash.ContextWithProTxHash(ctx, n.node.privValidator.ProTxHash)
+	for _, vote := range n.prevote(ctx, t, blockID) {
+		voteCtx := msgInfoWithCtx(ctx, msgInfo{Msg: &VoteMessage{vote}, PeerID: n.peerID})
+		require.NoError(t, n.node.ctrl.Dispatch(voteCtx, &AddVoteEvent{Vote: vote, PeerID: n.peerID}, &stateData))
+	}
+
+	require.True(t, stateData.ProposalBlockParts.HasHeader(blockID.PartSetHeader), "the part set must be retargeted")
+	assert.Same(t, proposal, stateData.Proposal, "a proposal for the block the network chose must survive")
+	assert.Equal(t, receiveTime, stateData.ProposalReceiveTime,
+		"dropping the receive time of a surviving proposal loses its timeliness")
 }

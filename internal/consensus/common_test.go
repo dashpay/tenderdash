@@ -1064,11 +1064,12 @@ func newMockTickerFunc(onlyOnce bool) func() TimeoutTicker {
 // that block is gossiped in, and a commit for it. The caller installs whatever
 // stale round state its scenario needs before dispatching.
 type staleProposalNode struct {
-	node   *State
-	block  *types.Block
-	parts  *types.PartSet
-	commit *types.Commit
-	peerID types.NodeID
+	node     *State
+	block    *types.Block
+	parts    *types.PartSet
+	commit   *types.Commit
+	peerID   types.NodeID
+	privVals []types.PrivValidator
 }
 
 // newStaleProposalNode builds the network and signs a commit at commitRound for
@@ -1114,12 +1115,31 @@ func newStaleProposalNode(
 	require.NoError(t, err)
 
 	return staleProposalNode{
-		node:   css[1],
-		block:  block,
-		parts:  parts,
-		commit: commit,
-		peerID: proposerStateData.Validators.Proposer().NodeAddress.NodeID,
+		node:     css[1],
+		block:    block,
+		parts:    parts,
+		commit:   commit,
+		peerID:   proposerStateData.Validators.Proposer().NodeAddress.NodeID,
+		privVals: privVals,
 	}
+}
+
+// prevote signs a prevote for blockID from every validator, enough for a polka.
+func (n staleProposalNode) prevote(ctx context.Context, t *testing.T, blockID types.BlockID) []*types.Vote {
+	t.Helper()
+
+	stateData := n.node.GetStateData()
+	vals := stateData.Validators
+	votes := make([]*types.Vote, 0, len(n.privVals))
+	for _, pv := range n.privVals {
+		proTxHash, err := pv.GetProTxHash(ctx)
+		require.NoError(t, err)
+		index, val := vals.GetByProTxHash(proTxHash)
+		require.NotNil(t, val, "every private validator must be in the set")
+		votes = append(votes, signVote(ctx, t, newValidatorStub(pv, index, n.block.Height),
+			tmproto.PrevoteType, stateData.state.ChainID, blockID, vals.QuorumType, vals.QuorumHash))
+	}
+	return votes
 }
 
 func newTickerFunc() func() TimeoutTicker {

@@ -509,15 +509,7 @@ func (s *StateData) readyToApplyCommit(
 // survive. That preservation reaches the caller on the same-round path only:
 // EnterNewRound resets the whole proposal state for any round > 0.
 func (s *StateData) adoptCommit(commit *types.Commit) {
-	// Staleness of the proposal is a question about the whole BlockID: a part set
-	// header that happens to match says nothing about the hash or the state ID.
-	if s.Proposal != nil && !s.Proposal.BlockID.Equals(commit.BlockID) {
-		s.logger.Debug("dropping proposal for a block other than the committed one",
-			"height", s.Height, "round", s.Round,
-			"proposal_block", s.Proposal.BlockID.Hash, "commit_block", commit.BlockID.Hash)
-		s.Proposal = nil
-		s.ProposalReceiveTime = time.Time{}
-	}
+	s.dropStaleProposal(commit.BlockID)
 	// The part set header is a Merkle root over exactly the committed block's
 	// bytes, so parts already collected under it are that block's; replacing the
 	// set would discard them and force the whole block to be fetched again.
@@ -540,6 +532,22 @@ func (s *StateData) verifyCommitSignatures(
 		return s.Validators.VerifyCommitWithBudget(s.state.ChainID, blockID, s.Height, commit, budget)
 	}
 	return s.Validators.VerifyCommit(s.state.ChainID, blockID, s.Height, commit)
+}
+
+// dropStaleProposal clears a Proposal describing a block other than blockID,
+// along with the receive time its timeliness is measured from. Staleness is a
+// question about the whole BlockID: a part set header that happens to match says
+// nothing about the hash or the state ID. A Proposal that outlives the block it
+// names rejects the real block's last part over its core chain locked height.
+func (s *StateData) dropStaleProposal(blockID types.BlockID) {
+	if s.Proposal == nil || s.Proposal.BlockID.Equals(blockID) {
+		return
+	}
+	s.logger.Debug("dropping proposal for a block the round no longer tracks",
+		"height", s.Height, "round", s.Round,
+		"proposal_block", s.Proposal.BlockID.Hash, "block", blockID.Hash)
+	s.Proposal = nil
+	s.ProposalReceiveTime = time.Time{}
 }
 
 // holdsBlock reports whether the round state already carries the block blockID

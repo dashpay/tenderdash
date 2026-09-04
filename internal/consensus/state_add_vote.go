@@ -169,6 +169,9 @@ func addVoteUpdateValidBlockMw(ep *EventPublisher) AddVoteMiddlewareFunc {
 			}
 			if !stateData.ProposalBlockParts.HasHeader(blockID.PartSetHeader) {
 				//c.metrics.MarkBlockGossipStarted()
+				// Without a Proposal isProposalComplete stays false, so a nil prevote
+				// here waits for timeoutPropose rather than block completion.
+				stateData.dropStaleProposal(blockID)
 				stateData.ProposalBlockParts = types.NewPartSetFromHeader(blockID.PartSetHeader)
 			}
 			err = stateData.Save()
