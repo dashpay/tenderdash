@@ -115,6 +115,7 @@ func TestIsValidForPrevote(t *testing.T) {
 func newVerifyCommitStateData(chainID string, rs cstypes.RoundState) StateData {
 	return StateData{
 		logger:     log.NewNopLogger(),
+		metrics:    NopMetrics(),
 		state:      sm.State{ChainID: chainID},
 		RoundState: rs,
 	}

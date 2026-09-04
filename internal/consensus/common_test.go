@@ -1124,8 +1124,26 @@ func newStaleProposalNode(
 	}
 }
 
+// precommit signs a precommit for blockID from every validator, enough for a
+// +2/3 majority.
+func (n staleProposalNode) precommit(ctx context.Context, t *testing.T, blockID types.BlockID) []*types.Vote {
+	t.Helper()
+	return n.signAll(ctx, t, tmproto.PrecommitType, blockID)
+}
+
 // prevote signs a prevote for blockID from every validator, enough for a polka.
 func (n staleProposalNode) prevote(ctx context.Context, t *testing.T, blockID types.BlockID) []*types.Vote {
+	t.Helper()
+
+	return n.signAll(ctx, t, tmproto.PrevoteType, blockID)
+}
+
+func (n staleProposalNode) signAll(
+	ctx context.Context,
+	t *testing.T,
+	voteType tmproto.SignedMsgType,
+	blockID types.BlockID,
+) []*types.Vote {
 	t.Helper()
 
 	stateData := n.node.GetStateData()
@@ -1137,9 +1155,18 @@ func (n staleProposalNode) prevote(ctx context.Context, t *testing.T, blockID ty
 		index, val := vals.GetByProTxHash(proTxHash)
 		require.NotNil(t, val, "every private validator must be in the set")
 		votes = append(votes, signVote(ctx, t, newValidatorStub(pv, index, n.block.Height),
-			tmproto.PrevoteType, stateData.state.ChainID, blockID, vals.QuorumType, vals.QuorumHash))
+			voteType, stateData.state.ChainID, blockID, vals.QuorumType, vals.QuorumHash))
 	}
 	return votes
+}
+
+// deliver dispatches votes through the real message path.
+func (n staleProposalNode) deliver(ctx context.Context, t *testing.T, stateData *StateData, votes []*types.Vote) {
+	t.Helper()
+	for _, vote := range votes {
+		voteCtx := msgInfoWithCtx(ctx, msgInfo{Msg: &VoteMessage{vote}, PeerID: n.peerID})
+		require.NoError(t, n.node.ctrl.Dispatch(voteCtx, &AddVoteEvent{Vote: vote, PeerID: n.peerID}, stateData))
+	}
 }
 
 func newTickerFunc() func() TimeoutTicker {

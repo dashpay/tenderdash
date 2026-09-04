@@ -1,6 +1,7 @@
 package consensus
 
 import (
+	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -15,17 +16,13 @@ func (u *proposalUpdater) updateStateData(stateData *StateData, blockID types.Bl
 	if stateData.holdsBlock(blockID) {
 		return nil
 	}
-	// If we don't have the block being committed, set up to get it.
 	u.logger.Debug(
-		"commit is for a block we do not know about; set ProposalBlock=nil",
-		"proposal", stateData.ProposalBlock.Hash(),
-		"commit", blockID.Hash,
+		"retargeting proposal block state at the committed block",
+		"proposal_block", tmstrings.LazyBlockHash(stateData.ProposalBlock),
+		"commit_block", blockID.Hash,
+		"part_set_header_matched", stateData.ProposalBlockParts.HasHeader(blockID.PartSetHeader),
 	)
-	// We're getting the wrong block.
-	// Set up ProposalBlockParts and keep waiting.
-	stateData.ProposalBlock = nil
-	stateData.metrics.MarkBlockGossipStarted()
-	stateData.ProposalBlockParts = types.NewPartSetFromHeader(blockID.PartSetHeader)
+	stateData.retargetTo(blockID, "apply_commit")
 	err := stateData.Save()
 	if err != nil {
 		return err

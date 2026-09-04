@@ -509,17 +509,7 @@ func (s *StateData) readyToApplyCommit(
 // survive. That preservation reaches the caller on the same-round path only:
 // EnterNewRound resets the whole proposal state for any round > 0.
 func (s *StateData) adoptCommit(commit *types.Commit) {
-	s.dropStaleProposal(commit.BlockID)
-	// The part set header is a Merkle root over exactly the committed block's
-	// bytes, so parts already collected under it are that block's; replacing the
-	// set would discard them and force the whole block to be fetched again.
-	if !s.ProposalBlockParts.HasHeader(commit.BlockID.PartSetHeader) {
-		s.logger.Debug("setting proposal block parts from commit",
-			"height", s.Height, "round", s.Round,
-			"part_set_header", commit.BlockID.PartSetHeader)
-		s.ProposalBlock = nil
-		s.ProposalBlockParts = types.NewPartSetFromHeader(commit.BlockID.PartSetHeader)
-	}
+	s.retargetTo(commit.BlockID, "commit")
 	s.Commit = commit
 }
 
@@ -534,17 +524,41 @@ func (s *StateData) verifyCommitSignatures(
 	return s.Validators.VerifyCommit(s.state.ChainID, blockID, s.Height, commit)
 }
 
+// retargetTo points the round state at blockID, the block this node is now
+// collecting. Three pieces of state, three criteria, in one place so that no
+// site can repoint the part set without also dropping a Proposal that describes
+// something else -- the inconsistency behind dashpay/tenderdash#1414.
+//
+// reason names the caller in the logs, since four of them share these lines.
+func (s *StateData) retargetTo(blockID types.BlockID, reason string) {
+	s.dropStaleProposal(blockID, reason)
+	// The block is a question about its hash alone.
+	if !s.ProposalBlock.HashesTo(blockID.Hash) {
+		s.ProposalBlock = nil
+	}
+	// The part set header is a Merkle root over exactly this block's bytes, so
+	// parts already collected under it are this block's; replacing the set would
+	// discard them and force the whole block to be fetched again.
+	if !s.ProposalBlockParts.HasHeader(blockID.PartSetHeader) {
+		s.logger.Debug("collecting a different block; replacing the part set",
+			"height", s.Height, "round", s.Round, "reason", reason,
+			"part_set_header", blockID.PartSetHeader)
+		s.metrics.MarkBlockGossipStarted()
+		s.ProposalBlockParts = types.NewPartSetFromHeader(blockID.PartSetHeader)
+	}
+}
+
 // dropStaleProposal clears a Proposal describing a block other than blockID,
 // along with the receive time its timeliness is measured from. Staleness is a
 // question about the whole BlockID: a part set header that happens to match says
 // nothing about the hash or the state ID. A Proposal that outlives the block it
 // names rejects the real block's last part over its core chain locked height.
-func (s *StateData) dropStaleProposal(blockID types.BlockID) {
+func (s *StateData) dropStaleProposal(blockID types.BlockID, reason string) {
 	if s.Proposal == nil || s.Proposal.BlockID.Equals(blockID) {
 		return
 	}
 	s.logger.Debug("dropping proposal for a block the round no longer tracks",
-		"height", s.Height, "round", s.Round,
+		"height", s.Height, "round", s.Round, "reason", reason,
 		"proposal_block", s.Proposal.BlockID.Hash, "block", blockID.Hash)
 	s.Proposal = nil
 	s.ProposalReceiveTime = time.Time{}

@@ -161,19 +161,13 @@ func addVoteUpdateValidBlockMw(ep *EventPublisher) AddVoteMiddlewareFunc {
 					"pol_round", vote.Round)
 				stateData.updateValidBlock()
 			} else {
-				logger.Debug("valid block we do not know about; set ProposalBlock=nil",
+				logger.Debug("polka for a valid block we do not know about",
 					"proposal", tmstrings.LazyBlockHash(stateData.ProposalBlock),
 					"block_id", blockID.Hash)
-				// we're getting the wrong block
-				stateData.ProposalBlock = nil
 			}
-			if !stateData.ProposalBlockParts.HasHeader(blockID.PartSetHeader) {
-				//c.metrics.MarkBlockGossipStarted()
-				// Without a Proposal isProposalComplete stays false, so a nil prevote
-				// here waits for timeoutPropose rather than block completion.
-				stateData.dropStaleProposal(blockID)
-				stateData.ProposalBlockParts = types.NewPartSetFromHeader(blockID.PartSetHeader)
-			}
+			// Dropping the Proposal keeps isProposalComplete false, so this round
+			// prevotes nil on timeoutPropose, not on the retargeted block completing.
+			stateData.retargetTo(blockID, "polka")
 			err = stateData.Save()
 			if err != nil {
 				return added, err

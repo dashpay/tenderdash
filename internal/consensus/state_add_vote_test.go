@@ -328,7 +328,9 @@ func (suite *AddVoteTestSuite) TestAddVoteUpdateValidBlockMw() {
 			returnError = tc.returnError
 			store := &StateDataStore{emitter: suite.emitter}
 			stateData := &StateData{
-				store: store,
+				store:   store,
+				logger:  log.NewNopLogger(),
+				metrics: NopMetrics(),
 				state: sm.State{
 					Validators: suite.valSet,
 				},
@@ -374,7 +376,9 @@ func TestAddVoteValidatorIndexBounds(t *testing.T) {
 
 	newState := func() *StateData {
 		return &StateData{
-			state: sm.State{Validators: valSet},
+			logger:  log.NewNopLogger(),
+			metrics: NopMetrics(),
+			state:   sm.State{Validators: valSet},
 			RoundState: cstypes.RoundState{
 				Height:     height,
 				Round:      0,
