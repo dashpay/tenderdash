@@ -225,6 +225,13 @@ func (p *Proposaler) verifyProposal(ctx context.Context, proposal *types.Proposa
 			proposal.Height, proposal.Round, rs.Height, rs.Round)
 	}
 
+	// A verified commit settles which block this round produced, so a proposal
+	// disagreeing with one is refused whether or not we can check its signature —
+	// before the branch below, and before any verification work is charged.
+	if err := p.checkProposalAgainstCommit(proposal, rs); err != nil {
+		return err
+	}
+
 	proposer, err := rs.ProposerSelector.GetProposer(rs.Height, rs.Round)
 	if err != nil {
 		return fmt.Errorf("error getting proposer: %w", err)
@@ -276,31 +283,47 @@ func (p *Proposaler) verifyProposal(ctx context.Context, proposal *types.Proposa
 	return ErrInvalidProposalSignature
 }
 
+// checkProposalAgainstCommit refuses a proposal naming a block other than the
+// one a commit for the same height and round has already fixed. The commit
+// carries a verified threshold signature, so the block it names is settled; a
+// proposal that disagrees cannot be acted on, and installing it makes the round
+// state reject the committed block's own parts.
+func (p *Proposaler) checkProposalAgainstCommit(proposal *types.Proposal, rs *cstypes.RoundState) error {
+	commit := rs.Commit
+	if commit == nil || commit.Height != proposal.Height || commit.Round != proposal.Round {
+		// No commit to check it against; the signature is the only attestation.
+		return nil
+	}
+	if proposal.BlockID.Equals(commit.BlockID) {
+		return nil
+	}
+	proposer, err := rs.ProposerSelector.GetProposer(proposal.Height, proposal.Round)
+	if err != nil {
+		p.logger.Error("error getting proposer",
+			"height", proposal.Height,
+			"round", proposal.Round,
+			"err", err)
+	} else {
+		// A mismatching block ID is free to produce, so this cannot be
+		// louder than Debug.
+		p.logger.Debug("proposal blockID isn't the same as the commit blockID",
+			"height", proposal.Height,
+			"round", proposal.Round,
+			"proposer_proTxHash", proposer.ProTxHash.ShortString())
+	}
+	return ErrInvalidProposalForCommit
+}
+
+// verifyProposalForNonValidatorSet attests a proposal this node cannot check by
+// signature. Outside the validator set there is no proposer public key, so a
+// commit for the same height and round is the only thing that can vouch for a
+// proposal; checkProposalAgainstCommit has already refused one that disagrees
+// with it.
 func (p *Proposaler) verifyProposalForNonValidatorSet(proposal *types.Proposal, rs cstypes.RoundState) error {
 	commit := rs.Commit
 	if commit == nil || commit.Height != proposal.Height || commit.Round != proposal.Round {
 		// We received a proposal we can not check
 		return ErrUnableToVerifyProposal
-	}
-	// We are not part of the validator set
-	// We might have a commit already for the Round State
-	// We need to verify that the commit block id is equal to the proposal block id
-	if !proposal.BlockID.Equals(commit.BlockID) {
-		proposer, err := rs.ProposerSelector.GetProposer(proposal.Height, proposal.Round)
-		if err != nil {
-			p.logger.Error("error getting proposer",
-				"height", proposal.Height,
-				"round", proposal.Round,
-				"err", err)
-		} else {
-			// A mismatching block ID is free to produce, so this cannot be
-			// louder than Debug.
-			p.logger.Debug("proposal blockID isn't the same as the commit blockID",
-				"height", proposal.Height,
-				"round", proposal.Round,
-				"proposer_proTxHash", proposer.ProTxHash.ShortString())
-		}
-		return ErrInvalidProposalForCommit
 	}
 	return nil
 }

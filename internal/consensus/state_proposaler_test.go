@@ -161,10 +161,52 @@ func (suite *ProposalerTestSuite) TestSet() {
 			wantErr:    ErrInvalidProposalPOLRound.Error(),
 		},
 		{
+			// no commit parked: the signature is the only attestation, as before
 			rs: cstypes.RoundState{Height: 100,
 				Round:            0,
 				Validators:       suite.mockValSet,
 				ProposerSelector: suite.proposerSelector,
+			},
+			proposal:        *proposalH100R0,
+			receivedAt:      receivedAt,
+			wantProposal:    proposalH100R0,
+			wantReceiveTime: receivedAt,
+		},
+		{
+			// a commit for this round has already fixed another block, so this
+			// proposal cannot be acted on however well it is signed
+			rs: cstypes.RoundState{Height: 100,
+				Round:            0,
+				Validators:       suite.mockValSet,
+				ProposerSelector: suite.proposerSelector,
+				Commit:           &types.Commit{Height: 100, Round: 0, BlockID: factory.MakeBlockID()},
+			},
+			proposal:   *proposalH100R0,
+			receivedAt: receivedAt,
+			wantErr:    ErrInvalidProposalForCommit.Error(),
+		},
+		{
+			// the proposal names the block the parked commit fixed: it is the one
+			// we are waiting for and must be accepted
+			rs: cstypes.RoundState{Height: 100,
+				Round:            0,
+				Validators:       suite.mockValSet,
+				ProposerSelector: suite.proposerSelector,
+				Commit:           &types.Commit{Height: 100, Round: 0, BlockID: blockID},
+			},
+			proposal:        *proposalH100R0,
+			receivedAt:      receivedAt,
+			wantProposal:    proposalH100R0,
+			wantReceiveTime: receivedAt,
+		},
+		{
+			// a commit attests its own round only; one for another round says
+			// nothing about this proposal
+			rs: cstypes.RoundState{Height: 100,
+				Round:            0,
+				Validators:       suite.mockValSet,
+				ProposerSelector: suite.proposerSelector,
+				Commit:           &types.Commit{Height: 100, Round: 1, BlockID: factory.MakeBlockID()},
 			},
 			proposal:        *proposalH100R0,
 			receivedAt:      receivedAt,
