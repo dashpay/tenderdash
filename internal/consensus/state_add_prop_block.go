@@ -172,10 +172,14 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 			return added, err
 		}
 
-		if stateData.RoundState.Proposal != nil &&
-			block.Header.CoreChainLockedHeight != stateData.RoundState.Proposal.CoreChainLockedHeight {
+		// Only a proposal describing this block says anything about its header.
+		// Judging the block against a proposal for a different one rejects a block
+		// the node asked for, and a part set completes exactly once.
+		proposal := stateData.RoundState.Proposal
+		if proposal != nil && block.HashesTo(proposal.BlockID.Hash) &&
+			block.Header.CoreChainLockedHeight != proposal.CoreChainLockedHeight {
 			return added, fmt.Errorf("core chain lock height of block %d does not match proposal %d",
-				block.Header.CoreChainLockedHeight, stateData.RoundState.Proposal.CoreChainLockedHeight)
+				block.Header.CoreChainLockedHeight, proposal.CoreChainLockedHeight)
 		}
 
 		stateData.ProposalBlock = block

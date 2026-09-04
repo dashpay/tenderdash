@@ -38,6 +38,7 @@ func isPeerFloodableError(err error) bool {
 		errors.Is(err, ErrInvalidProposalPOLRound) ||
 		errors.Is(err, ErrInvalidProposalCoreHeight) ||
 		errors.Is(err, ErrInvalidProposalForCommit) ||
+		errors.Is(err, ErrInvalidProposalForPartSet) ||
 		errors.Is(err, ErrUnableToVerifyProposal) ||
 		errors.Is(err, ErrPeerStateInvalidVoteIndex) ||
 		errors.Is(err, ErrInvalidNewRoundStepHeight) ||
