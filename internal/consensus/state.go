@@ -42,6 +42,7 @@ var (
 	ErrInvalidProposalCoreHeight = errors.New("error invalid proposal core height")
 	ErrInvalidProposalPOLRound   = errors.New("error invalid proposal POL round")
 	ErrAddingVote                = errors.New("error adding vote")
+	ErrProposalBlockNotSet       = errors.New("proposal block is not set")
 
 	ErrPrivValidatorNotSet = errors.New("priv-validator is not set")
 )
