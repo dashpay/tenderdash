@@ -291,11 +291,13 @@ func loggingMiddleware(logger log.Logger) msgMiddlewareFunc {
 				switch {
 				case !isPeerFloodableError(err):
 					loggerWithArgs.Error("failed to process message", "error", err)
-				case envelope.PeerID == "":
+				case envelope.PeerID == "" && !envelope.fromReplay:
 					// The floodable classes describe what a peer can force. Reaching
 					// one on a message this node produced describes a local fault --
 					// our own proposal refused means this node has stopped being able
-					// to propose -- and debug would bury it.
+					// to propose -- and debug would bury it. Replay is exempt: it is
+					// re-playing what already happened, and says nothing about what
+					// this node can do now.
 					loggerWithArgs.Warn("rejected message this node produced", "error", err)
 				default:
 					loggerWithArgs.Debug("rejected peer message", "error", err)

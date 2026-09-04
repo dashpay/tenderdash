@@ -206,3 +206,49 @@ func TestCommitRejectionsAreFloodable(t *testing.T) {
 	assert.False(t, isPeerFloodableError(types.ErrInvalidCommitSignature{}),
 		"a forged threshold signature is not free to produce and evicts the sender")
 }
+
+// TestLoggingMiddlewareSeparatesLocalFaultsFromReplay pins the two conditions on
+// the warn arm. A floodable rejection of a message this node produced is a local
+// fault worth surfacing -- our own proposal refused means the node has stopped
+// being able to propose, and debug would bury it. The same rejection during
+// replay says nothing about what the node can do now: replay re-plays the past,
+// and warning there would fire on every restart.
+func TestLoggingMiddlewareSeparatesLocalFaultsFromReplay(t *testing.T) {
+	vote := &types.Vote{
+		Type:               tmproto.PrecommitType,
+		Height:             1,
+		ValidatorProTxHash: make([]byte, 32),
+	}
+	run := func(t *testing.T, peerID types.NodeID, fromReplay bool) string {
+		t.Helper()
+		var buf bytes.Buffer
+		logger, err := log.NewLogger("debug", &buf)
+		require.NoError(t, err)
+		env := msgEnvelope{
+			msgInfo:    msgInfo{Msg: &VoteMessage{Vote: vote}, PeerID: peerID},
+			fromReplay: fromReplay,
+		}
+		mw := loggingMiddleware(logger)(func(_ context.Context, _ *StateData, _ msgEnvelope) error {
+			return types.ErrVoteInvalidBlockSignature
+		})
+		require.NoError(t, mw(context.Background(), &StateData{}, env))
+		return buf.String()
+	}
+
+	t.Run("this node, live -> Warn", func(t *testing.T) {
+		out := run(t, "", false)
+		assert.Contains(t, out, `"level":"warn"`, "a local fault must not be filed as peer noise")
+	})
+
+	t.Run("this node, replay -> Debug", func(t *testing.T) {
+		out := run(t, "", true)
+		assert.NotContains(t, out, `"level":"warn"`, "replay re-plays the past and warns about nothing")
+		assert.Contains(t, out, `"level":"debug"`)
+	})
+
+	t.Run("a peer -> Debug", func(t *testing.T) {
+		out := run(t, "peerX", false)
+		assert.NotContains(t, out, `"level":"warn"`)
+		assert.Contains(t, out, `"level":"debug"`)
+	})
+}
