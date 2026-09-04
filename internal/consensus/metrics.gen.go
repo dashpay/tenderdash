@@ -208,6 +208,12 @@ func PrometheusMetrics(namespace string, labelsAndValues ...string) *Metrics {
 			Name:      "state_channel_drops",
 			Help:      "Number of State and VoteSetBits channel messages dropped over the per-peer or node-wide ceiling.",
 		}, labels).With(labelsAndValues...),
+		CommitVerifyFailures: prometheus.NewCounterFrom(stdprometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: MetricsSubsystem,
+			Name:      "commit_verify_failures",
+			Help:      "Number of peer commits refused by verification labeled by the class of refusal.",
+		}, append(labels, "reason")).With(labelsAndValues...),
 		ProposalVerifyFailures: prometheus.NewCounterFrom(stdprometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: MetricsSubsystem,
@@ -300,6 +306,7 @@ func NopMetrics() *Metrics {
 		PeerLaneDrops:                discard.NewCounter(),
 		BlockPartProofDrops:          discard.NewCounter(),
 		StateChannelDrops:            discard.NewCounter(),
+		CommitVerifyFailures:         discard.NewCounter(),
 		ProposalVerifyFailures:       discard.NewCounter(),
 		ProposalReceiveCount:         discard.NewCounter(),
 		ProposalCreateCount:          discard.NewCounter(),

@@ -546,6 +546,14 @@ const (
 // collecting. Three pieces of state, three criteria, in one place so that no
 // site can repoint the part set without also dropping a Proposal that describes
 // something else -- the inconsistency behind dashpay/tenderdash#1414.
+//
+// blockID must be one the round has at least +2/3 evidence for: a commit, or a
+// polka. Repointing at a block named by a single peer would let that peer
+// discard the parts and the proposal this round had collected. Every caller
+// satisfies this; nothing here checks it.
+//
+// Every path through here marks the start of block gossip, so the receive
+// latency histogram measures from the retarget rather than from the proposal.
 func (s *StateData) retargetTo(blockID types.BlockID, reason retargetReason) {
 	s.dropStaleProposal(blockID, reason)
 	// The part set header is a Merkle root over exactly this block's bytes, so

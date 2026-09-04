@@ -137,6 +137,14 @@ type Metrics struct {
 	//metrics:Number of State and VoteSetBits channel messages dropped over the per-peer or node-wide ceiling.
 	StateChannelDrops metrics.Counter
 
+	// CommitVerifyFailures is the number of peer commits refused by verification,
+	// labeled by the class of refusal. Every class is logged at debug so that a
+	// flood cannot amplify, which leaves a node whose validator set has gone stale
+	// refusing every commit and finalizing nothing without saying so; a sustained
+	// rate here is what makes that alertable.
+	//metrics:Number of peer commits refused by verification labeled by the class of refusal.
+	CommitVerifyFailures metrics.Counter `metrics_labels:"reason"`
+
 	// ProposalVerifyFailures is the number of peer proposals whose signature did
 	// not verify. A flood makes this the only signal that they are arriving,
 	// since the rejection itself is logged at debug.
@@ -215,6 +223,10 @@ func (m *Metrics) RecordConsMetrics(block *types.Block, blockSize int64) {
 	m.CommittedHeight.Set(float64(block.Height))
 }
 
+// MarkBlockGossipStarted starts the clock BlockGossipReceiveLatency reports
+// against. There is one such clock, not one per block: a retarget at another
+// height or round restarts it, and the latency then observed is measured from
+// the restart.
 func (m *Metrics) MarkBlockGossipStarted() {
 	m.blockGossipStart = time.Now()
 }

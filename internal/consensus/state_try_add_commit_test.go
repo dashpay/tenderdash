@@ -138,10 +138,11 @@ func TestHandleCommitVerifyErrorRecordsPeerVerificationBudgetDrop(t *testing.T) 
 	}
 }
 
-// TestHandleCommitVerifyErrorNilQueue ensures a nil queue (as used by tests that
-// build the action directly) is tolerated rather than panicking.
+// TestHandleCommitVerifyErrorNilQueue ensures a nil peer-error queue is tolerated
+// rather than panicking. The queue is optional; metrics are not, and every
+// production construction supplies them.
 func TestHandleCommitVerifyErrorNilQueue(t *testing.T) {
-	action := &TryAddCommitAction{}
+	action := &TryAddCommitAction{metrics: NopMetrics()}
 	assert.NotPanics(t, func() {
 		action.handleCommitVerifyError(types.ErrInvalidCommitSignature{}, "peer", false)
 	})
@@ -153,7 +154,7 @@ func TestHandleCommitVerifyErrorQueueFull(t *testing.T) {
 	queue := &chanQueue[peerErrorMsg]{ch: make(chan peerErrorMsg, 1)}
 	queue.ch <- peerErrorMsg{PeerID: "other"}
 
-	action := &TryAddCommitAction{peerErrorQueue: queue}
+	action := &TryAddCommitAction{peerErrorQueue: queue, metrics: NopMetrics()}
 	assert.NotPanics(t, func() {
 		action.handleCommitVerifyError(types.ErrInvalidCommitSignature{}, "peer", false)
 	})
@@ -253,4 +254,30 @@ func TestTryAddCommitAppliesAssembledBlockBeforeProposeStep(t *testing.T) {
 	require.NoError(t, n.node.ctrl.Dispatch(ctx, &TryAddCommitEvent{Commit: n.commit, PeerID: n.peerID}, &stateData))
 	assert.Equal(t, int64(2), stateData.Height,
 		"a commit for a block we hold complete must be applied, whatever step the missing proposal left us in")
+}
+
+// TestCommitVerifyFailureReasonSeparatesTheClasses pins the distinction the
+// metric exists to make. A quorum-hash disagreement says this node's validator
+// set is stale and it will finalize nothing until that is fixed; a forged
+// signature says the sender is dishonest; an exhausted budget says neither, only
+// that this node shed work. Collapsing them would make the one class that
+// indicates a local fault indistinguishable from peer noise.
+func TestCommitVerifyFailureReasonSeparatesTheClasses(t *testing.T) {
+	testCases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"stale validator set", types.ErrInvalidCommitQuorumHash{}, "quorum_hash"},
+		{"vote extension mismatch", types.ErrVoteExtensionCountMismatch{}, "extension_count"},
+		{"forged threshold signature", types.ErrInvalidCommitSignature{}, "invalid_signature"},
+		{"local shed", types.ErrVerificationBudgetExhausted, "budget"},
+		{"unclassified", errors.New("something else"), "other"},
+		{"wrapped", fmt.Errorf("error verifying commit: %w", types.ErrInvalidCommitQuorumHash{}), "quorum_hash"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, commitVerifyFailureReason(tc.err))
+		})
+	}
 }

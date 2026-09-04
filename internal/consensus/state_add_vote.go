@@ -165,6 +165,10 @@ func addVoteUpdateValidBlockMw(ep *EventPublisher) AddVoteMiddlewareFunc {
 					"proposal", tmstrings.LazyBlockHash(stateData.ProposalBlock),
 					"block_id", blockID.Hash)
 			}
+			// After updateValidBlock, not before: the retarget can drop the assembled
+			// block and replace the part set, and updateValidBlock copies both into
+			// ValidBlock and ValidBlockParts.
+			//
 			// Dropping the Proposal keeps isProposalComplete false, so this round
 			// prevotes nil on timeoutPropose, not on the retargeted block completing.
 			stateData.retargetTo(blockID, retargetOnPolka)

@@ -111,8 +111,11 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 // under the original PeerID, so a peer would otherwise be evicted at restart for
 // a message it sent long ago.
 func (cs *TryAddCommitAction) handleCommitVerifyError(err error, peerID types.NodeID, fromReplay bool) {
-	if peerID != "" && !fromReplay && errors.Is(err, types.ErrVerificationBudgetExhausted) {
-		cs.metrics.VerificationBudgetDrops.Add(1)
+	if peerID != "" && !fromReplay {
+		cs.metrics.CommitVerifyFailures.With("reason", commitVerifyFailureReason(err)).Add(1)
+		if errors.Is(err, types.ErrVerificationBudgetExhausted) {
+			cs.metrics.VerificationBudgetDrops.Add(1)
+		}
 	}
 	if cs.peerErrorQueue == nil || fromReplay {
 		return
@@ -128,6 +131,26 @@ func (cs *TryAddCommitAction) handleCommitVerifyError(err error, peerID types.No
 	select {
 	case cs.peerErrorQueue.ch <- peerErrorMsg{PeerID: peerID, Err: err, Fatal: true}:
 	default:
+	}
+}
+
+// commitVerifyFailureReason classifies a commit rejection for the metric. The
+// classes separate what they say about this node from what they say about the
+// sender: a quorum-hash disagreement usually means our validator set is stale,
+// a forged signature means the sender is dishonest, and an exhausted budget
+// means neither.
+func commitVerifyFailureReason(err error) string {
+	switch {
+	case errors.As(err, &types.ErrInvalidCommitQuorumHash{}):
+		return "quorum_hash"
+	case errors.As(err, &types.ErrVoteExtensionCountMismatch{}):
+		return "extension_count"
+	case errors.As(err, &types.ErrInvalidCommitSignature{}):
+		return "invalid_signature"
+	case errors.Is(err, types.ErrVerificationBudgetExhausted):
+		return "budget"
+	default:
+		return "other"
 	}
 }
 

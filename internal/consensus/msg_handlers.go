@@ -288,10 +288,17 @@ func loggingMiddleware(logger log.Logger) msgMiddlewareFunc {
 				// including internal faults such as ErrPrivValidatorNotSet
 				// surfaced while handling a peer message — stays at Error, so
 				// this never hides a real problem.
-				if isPeerFloodableError(err) {
-					loggerWithArgs.Debug("rejected peer message", "error", err)
-				} else {
+				switch {
+				case !isPeerFloodableError(err):
 					loggerWithArgs.Error("failed to process message", "error", err)
+				case envelope.PeerID == "":
+					// The floodable classes describe what a peer can force. Reaching
+					// one on a message this node produced describes a local fault --
+					// our own proposal refused means this node has stopped being able
+					// to propose -- and debug would bury it.
+					loggerWithArgs.Warn("rejected message this node produced", "error", err)
+				default:
+					loggerWithArgs.Debug("rejected peer message", "error", err)
 				}
 				return nil
 			}
