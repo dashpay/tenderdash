@@ -382,14 +382,17 @@ func (s *StateData) proposalIsTimely() error {
 func (s *StateData) updateValidBlock() bool {
 	s.ValidRound = s.Round
 	// we only update valid block if it's not set already; otherwise we might overwrite the recv time
-	if !s.ValidBlock.HashesTo(s.ProposalBlock.Hash()) {
+	blockHash := s.ProposalBlock.Hash()
+	if !s.ValidBlock.HashesTo(blockHash) {
 		s.ValidBlock = s.ProposalBlock
-		// A block can be held without a proposal to date it, and the zero time is
-		// not timely: propose reads this back and would refuse the block. Now is
-		// when this node learned it.
-		s.ValidBlockRecvTime = s.ProposalReceiveTime
-		if s.ValidBlockRecvTime.IsZero() {
-			s.ValidBlockRecvTime = tmtime.Now()
+		// Only a proposal for this block dates it; one for another block measures
+		// the arrival of something else and is dropped as stale moments later. With
+		// no live proposal to date it, now is when this node learned the block --
+		// and the zero time is not an option, since propose reads this back and the
+		// zero time is not timely.
+		s.ValidBlockRecvTime = tmtime.Now()
+		if s.Proposal != nil && s.Proposal.BlockID.Hash.Equal(blockHash) && !s.ProposalReceiveTime.IsZero() {
+			s.ValidBlockRecvTime = s.ProposalReceiveTime
 		}
 		s.ValidBlockParts = s.ProposalBlockParts
 
@@ -421,7 +424,8 @@ func (s *StateData) updateLockedBlock() {
 // commit's round, not apply it. (false, nil) means either that the commit is not
 // for this height, in which case it is ignored unverified, or that it is
 // authentic but its block has not arrived, in which case adoptCommit has parked
-// it. A non-nil error is a verification failure and identifies the sender.
+// it. A non-nil error is either a verification failure, which identifies the
+// sender, or ErrVerificationBudgetExhausted, which is local and does not.
 func (s *StateData) readyToApplyCommit(
 	commit *types.Commit,
 	peerID types.NodeID,
@@ -510,7 +514,7 @@ func (s *StateData) readyToApplyCommit(
 // survive, but on the same-round path only: EnterNewRound resets the whole
 // proposal state for any round > 0.
 func (s *StateData) adoptCommit(commit *types.Commit) {
-	s.retargetTo(commit.BlockID, "commit")
+	s.retargetTo(commit.BlockID, retargetOnParkCommit)
 	s.Commit = commit
 }
 
@@ -525,18 +529,25 @@ func (s *StateData) verifyCommitSignatures(
 	return s.Validators.VerifyCommit(s.state.ChainID, blockID, s.Height, commit)
 }
 
+// retargetReason names the call site that repointed the round state, since the
+// four of them share retargetTo's log lines. The two commit-driven reasons are
+// distinguished because they are opposite halves of one story: one parks a
+// commit whose block has not arrived, the other applies a commit whose block has.
+type retargetReason string
+
+const (
+	retargetOnParkCommit  retargetReason = "park_commit"
+	retargetOnApplyCommit retargetReason = "apply_commit"
+	retargetOnPolka       retargetReason = "polka"
+	retargetOnPrecommit   retargetReason = "precommit"
+)
+
 // retargetTo points the round state at blockID, the block this node is now
 // collecting. Three pieces of state, three criteria, in one place so that no
 // site can repoint the part set without also dropping a Proposal that describes
 // something else -- the inconsistency behind dashpay/tenderdash#1414.
-//
-// reason names the caller in the logs, since four of them share these lines.
-func (s *StateData) retargetTo(blockID types.BlockID, reason string) {
+func (s *StateData) retargetTo(blockID types.BlockID, reason retargetReason) {
 	s.dropStaleProposal(blockID, reason)
-	// The block is a question about its hash alone.
-	if !s.ProposalBlock.HashesTo(blockID.Hash) {
-		s.ProposalBlock = nil
-	}
 	// The part set header is a Merkle root over exactly this block's bytes, so
 	// parts already collected under it are this block's; replacing the set would
 	// discard them and force the whole block to be fetched again.
@@ -544,8 +555,13 @@ func (s *StateData) retargetTo(blockID types.BlockID, reason string) {
 		s.logger.Debug("collecting a different block; replacing the part set",
 			"height", s.Height, "round", s.Round, "reason", reason,
 			"part_set_header", blockID.PartSetHeader)
+		// The assembled block goes with the set it was assembled from: a block
+		// outliving its parts reads as held over a set with nothing in it.
+		s.ProposalBlock = nil
 		s.metrics.MarkBlockGossipStarted()
 		s.ProposalBlockParts = types.NewPartSetFromHeader(blockID.PartSetHeader)
+	} else if !s.ProposalBlock.HashesTo(blockID.Hash) {
+		s.ProposalBlock = nil
 	}
 }
 
@@ -554,7 +570,7 @@ func (s *StateData) retargetTo(blockID types.BlockID, reason string) {
 // question about the whole BlockID: a part set header that happens to match says
 // nothing about the hash or the state ID. A Proposal that outlives the block it
 // names rejects the real block's last part over its core chain locked height.
-func (s *StateData) dropStaleProposal(blockID types.BlockID, reason string) {
+func (s *StateData) dropStaleProposal(blockID types.BlockID, reason retargetReason) {
 	if s.Proposal == nil || s.Proposal.BlockID.Equals(blockID) {
 		return
 	}

@@ -241,7 +241,7 @@ func (p *Proposaler) verifyProposal(ctx context.Context, proposal *types.Proposa
 	}
 
 	if proposer.PubKey == nil {
-		return p.verifyProposalForNonValidatorSet(proposal, *rs)
+		return p.verifyProposalForNonValidatorSet(proposal, rs)
 	}
 
 	// We are part of the validator set, so the signature is checked here — one
@@ -336,7 +336,7 @@ func roundStateRefusal(proposal *types.Proposal, rs *cstypes.RoundState) error {
 // against that commit is repeated here rather than inherited from the caller:
 // there is no signature check on this path to fall back on, so the acceptance
 // must not rest on a precondition established somewhere else.
-func (p *Proposaler) verifyProposalForNonValidatorSet(proposal *types.Proposal, rs cstypes.RoundState) error {
+func (p *Proposaler) verifyProposalForNonValidatorSet(proposal *types.Proposal, rs *cstypes.RoundState) error {
 	commit := rs.Commit
 	if commit == nil || commit.Height != proposal.Height || commit.Round != proposal.Round {
 		// We received a proposal we can not check

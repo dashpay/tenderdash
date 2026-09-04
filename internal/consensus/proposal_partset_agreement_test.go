@@ -169,10 +169,10 @@ func TestNonValidatorProposalIsCheckedAgainstTheCommitItself(t *testing.T) {
 	p := &Proposaler{}
 
 	agreeing := types.NewProposal(height, 1, round, -1, committed, tmtime.Now())
-	require.NoError(t, p.verifyProposalForNonValidatorSet(agreeing, rs))
+	require.NoError(t, p.verifyProposalForNonValidatorSet(agreeing, &rs))
 
 	disagreeing := types.NewProposal(height, 1, round, -1, factory.MakeBlockID(), tmtime.Now())
-	require.ErrorIs(t, p.verifyProposalForNonValidatorSet(disagreeing, rs), ErrInvalidProposalForCommit)
+	require.ErrorIs(t, p.verifyProposalForNonValidatorSet(disagreeing, &rs), ErrInvalidProposalForCommit)
 
-	require.ErrorIs(t, p.verifyProposalForNonValidatorSet(agreeing, cstypes.RoundState{}), ErrUnableToVerifyProposal)
+	require.ErrorIs(t, p.verifyProposalForNonValidatorSet(agreeing, &cstypes.RoundState{}), ErrUnableToVerifyProposal)
 }

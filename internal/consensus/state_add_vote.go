@@ -167,7 +167,7 @@ func addVoteUpdateValidBlockMw(ep *EventPublisher) AddVoteMiddlewareFunc {
 			}
 			// Dropping the Proposal keeps isProposalComplete false, so this round
 			// prevotes nil on timeoutPropose, not on the retargeted block completing.
-			stateData.retargetTo(blockID, "polka")
+			stateData.retargetTo(blockID, retargetOnPolka)
 			err = stateData.Save()
 			if err != nil {
 				return added, err

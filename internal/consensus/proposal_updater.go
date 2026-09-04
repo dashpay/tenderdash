@@ -22,7 +22,7 @@ func (u *proposalUpdater) updateStateData(stateData *StateData, blockID types.Bl
 		"commit_block", blockID.Hash,
 		"part_set_header_matched", stateData.ProposalBlockParts.HasHeader(blockID.PartSetHeader),
 	)
-	stateData.retargetTo(blockID, "apply_commit")
+	stateData.retargetTo(blockID, retargetOnApplyCommit)
 	err := stateData.Save()
 	if err != nil {
 		return err

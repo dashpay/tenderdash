@@ -289,7 +289,7 @@ func TestReadyToApplyCommitUsesTheCommitBlockID(t *testing.T) {
 // gone and every peer commit costs a pairing. The verification budget is now the
 // only bound on that work, and it must refuse the commit rather than let it
 // through unverified.
-func TestVerifyCommitIsRefusedWhenBudgetIsExhausted(t *testing.T) {
+func TestReadyToApplyCommitIsRefusedWhenBudgetIsExhausted(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -322,7 +322,7 @@ func TestVerifyCommitIsRefusedWhenBudgetIsExhausted(t *testing.T) {
 	assert.Nil(t, stateData.Commit, "a commit that was never verified must not be parked")
 }
 
-// TestVerifyCommitWithRetargetedProposalBlockParts pins commit handling when a
+// TestReadyToApplyCommitWithRetargetedProposalBlockParts pins commit handling when a
 // +2/3 prevote majority has already pointed ProposalBlockParts at the committed
 // block while leaving Proposal untouched (addVoteUpdateValidBlockMw). The part
 // set header then matches the commit even though the Proposal describes a block
@@ -331,7 +331,7 @@ func TestVerifyCommitIsRefusedWhenBudgetIsExhausted(t *testing.T) {
 // its core chain lock height, and a Proposal consulted instead of the assembled
 // block rejects the very commit that block satisfies. Both leave a parked
 // StateData.Commit that no later message can retry (dashpay/tenderdash#1414).
-func TestVerifyCommitWithRetargetedProposalBlockParts(t *testing.T) {
+func TestReadyToApplyCommitWithRetargetedProposalBlockParts(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -470,7 +470,7 @@ func TestVerifyCommitWithRetargetedProposalBlockParts(t *testing.T) {
 // TestValidBlockRecvTimeIsNeverZero pins the one field updateValidBlock copies
 // out of the proposal state rather than deriving. ProposalReceiveTime is cleared
 // whenever a proposal stops describing the block the round is collecting, so it
-// is zero exactly when the block arrived without a proposal of its own. A zero
+// is zero whenever no live proposal dates the block the round holds. A zero
 // reaching ValidBlockRecvTime is not a neutral value: the proposal timeliness
 // rule reads it, and a block dated to the zero time is not timely, so this node
 // would refuse to propose the very block it holds as valid.
@@ -497,4 +497,81 @@ func TestValidBlockRecvTimeIsNeverZero(t *testing.T) {
 		"a block held without a proposal must still be dated when this node learned it")
 	assert.False(t, stateData.ValidBlockRecvTime.Before(before),
 		"the fallback must be the time the block was learned, not an older stamp")
+}
+
+// TestRetargetToNeverLeavesABlockOverAnEmptyPartSet pins the invariant that
+// couples the two: an assembled block exists only because its part set completed,
+// so a block that outlives the set it came from reads as held over a set with
+// nothing in it. holdsProposalBlock would then be true with zero parts collected,
+// and every consumer downstream of it assumes a complete part set.
+func TestRetargetToNeverLeavesABlockOverAnEmptyPartSet(t *testing.T) {
+	block := &types.Block{
+		Header:     *factory.MakeHeader(t, &types.Header{Height: 10}),
+		LastCommit: &types.Commit{},
+	}
+	parts, err := block.MakePartSet(types.BlockPartSizeBytes)
+	require.NoError(t, err)
+	blockID := block.BlockID(parts)
+
+	// The same block, reachable by another route, while the round collects a
+	// different part set: the one combination that separates the two guards.
+	elsewhere := factory.MakeBlockID()
+	stateData := newReadyToApplyCommitStateData("retarget-invariant", cstypes.RoundState{
+		Height:             block.Height,
+		ProposalBlock:      block,
+		ProposalBlockParts: types.NewPartSetFromHeader(elsewhere.PartSetHeader),
+	})
+	require.True(t, stateData.ProposalBlock.HashesTo(blockID.Hash))
+	require.False(t, stateData.ProposalBlockParts.HasHeader(blockID.PartSetHeader))
+
+	stateData.retargetTo(blockID, retargetOnParkCommit)
+
+	require.Equal(t, uint32(0), stateData.ProposalBlockParts.Count(), "the part set was replaced")
+	assert.Nil(t, stateData.ProposalBlock, "the block must not outlive the part set it came from")
+	assert.False(t, stateData.holdsProposalBlock(blockID),
+		"holding a block must never be reported over a part set with nothing in it")
+}
+
+// TestValidBlockIsDatedByAProposalForThatBlock pins which receive time may date a
+// valid block. A polka can make a block valid while the round holds a proposal
+// for a different one; that proposal's receive time measures the arrival of
+// something else, and it is dropped as stale one statement later.
+func TestValidBlockIsDatedByAProposalForThatBlock(t *testing.T) {
+	block := &types.Block{
+		Header:     *factory.MakeHeader(t, &types.Header{Height: 10}),
+		LastCommit: &types.Commit{},
+	}
+	parts, err := block.MakePartSet(types.BlockPartSizeBytes)
+	require.NoError(t, err)
+
+	otherBlock := factory.MakeBlockID()
+	staleReceiveTime := tmtime.Now().Add(-time.Hour)
+	stateData := newReadyToApplyCommitStateData("valid-block-dating", cstypes.RoundState{
+		Height:              block.Height,
+		Proposal:            types.NewProposal(block.Height, 1, 0, -1, otherBlock, tmtime.Now()),
+		ProposalReceiveTime: staleReceiveTime,
+		ProposalBlock:       block,
+		ProposalBlockParts:  parts,
+	})
+
+	before := tmtime.Now()
+	require.True(t, stateData.updateValidBlock())
+
+	assert.NotEqual(t, staleReceiveTime, stateData.ValidBlockRecvTime,
+		"a proposal for another block does not date this one")
+	assert.False(t, stateData.ValidBlockRecvTime.Before(before),
+		"the fallback must be the time this node learned the block")
+
+	// The other direction, or the rule above would be satisfied by never reading
+	// ProposalReceiveTime at all: a proposal that does name the block dates it.
+	dated := newReadyToApplyCommitStateData("valid-block-dating", cstypes.RoundState{
+		Height:              block.Height,
+		Proposal:            types.NewProposal(block.Height, 1, 0, -1, block.BlockID(parts), tmtime.Now()),
+		ProposalReceiveTime: staleReceiveTime,
+		ProposalBlock:       block,
+		ProposalBlockParts:  parts,
+	})
+	require.True(t, dated.updateValidBlock())
+	assert.Equal(t, staleReceiveTime, dated.ValidBlockRecvTime,
+		"the receive time of a proposal for this block is what dates it")
 }
