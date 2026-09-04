@@ -644,3 +644,35 @@ func TestCommitForALockedBlockStillDropsAStaleProposal(t *testing.T) {
 	assert.True(t, stateData.ProposalReceiveTime.IsZero(),
 		"the receive time goes with the proposal it measures")
 }
+
+// TestRetargetToRestartsTheGossipClockOnlyWhenTheSetIsReplaced pins when the
+// block-gossip latency clock restarts. There is one such clock, so restarting it
+// on a retarget that keeps the part set would discard the time a fetch already
+// under way has spent, and the histogram would report less than the block took.
+func TestRetargetToRestartsTheGossipClockOnlyWhenTheSetIsReplaced(t *testing.T) {
+	target := &types.Block{
+		Header:     *factory.MakeHeader(t, &types.Header{Height: 10, CoreChainLockedHeight: 1}),
+		LastCommit: &types.Commit{},
+	}
+	targetParts, err := target.MakePartSet(types.BlockPartSizeBytes)
+	require.NoError(t, err)
+	targetID := target.BlockID(targetParts)
+
+	stateData := newReadyToApplyCommitStateData("gossip-clock", cstypes.RoundState{
+		Height:             10,
+		ProposalBlockParts: types.NewPartSetFromHeader(targetID.PartSetHeader),
+	})
+	started := time.Now().Add(-time.Hour)
+	stateData.metrics.blockGossipStart = started
+
+	// The set already carries the target header: the fetch is under way.
+	stateData.retargetTo(targetID, retargetOnParkCommit)
+	assert.Equal(t, started, stateData.metrics.blockGossipStart,
+		"a retarget that keeps the part set is not starting to fetch anything")
+
+	// A different block: the parts collected so far are discarded, so the fetch
+	// genuinely begins again here.
+	stateData.retargetTo(factory.MakeBlockID(), retargetOnPolka)
+	assert.True(t, stateData.metrics.blockGossipStart.After(started),
+		"replacing the part set starts a new fetch, and the clock must follow it")
+}

@@ -529,10 +529,13 @@ func (s *StateData) verifyCommitSignatures(
 	return s.Validators.VerifyCommit(s.state.ChainID, blockID, s.Height, commit)
 }
 
-// retargetReason names the call site that repointed the round state, since the
-// four of them share retargetTo's log lines. The two commit-driven reasons are
-// distinguished because they are opposite halves of one story: one parks a
-// commit whose block has not arrived, the other applies a commit whose block has.
+// retargetReason names the call site that repointed the round state, since they
+// share the log lines in retargetTo and dropStaleProposal. retargetOnLockedBlock
+// belongs to the one site that repoints without going through retargetTo: it
+// installs the locked block and its parts directly, so only the proposal half
+// applies. The two commit-driven reasons are opposite halves of one story: one
+// parks a commit whose block has not arrived, the other applies a commit whose
+// block has.
 type retargetReason string
 
 const (
@@ -553,8 +556,10 @@ const (
 // discard the parts and the proposal this round had collected. Every caller
 // satisfies this; nothing here checks it.
 //
-// Every path through here marks the start of block gossip, so the receive
-// latency histogram measures from the retarget rather than from the proposal.
+// Block gossip is marked as started only where the part set is replaced. A
+// retarget that keeps the set is not starting to fetch anything, and marking
+// there would restart the latency clock partway through a fetch already under
+// way, reporting less time than the block actually took to arrive.
 func (s *StateData) retargetTo(blockID types.BlockID, reason retargetReason) {
 	s.dropStaleProposal(blockID, reason)
 	// The part set header is a Merkle root over exactly this block's bytes, so
