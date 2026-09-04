@@ -540,6 +540,7 @@ const (
 	retargetOnApplyCommit retargetReason = "apply_commit"
 	retargetOnPolka       retargetReason = "polka"
 	retargetOnPrecommit   retargetReason = "precommit"
+	retargetOnLockedBlock retargetReason = "locked_block"
 )
 
 // retargetTo points the round state at blockID, the block this node is now
@@ -599,6 +600,12 @@ func (s *StateData) isLockedBlockEqual(blockID types.BlockID) bool {
 	return s.LockedBlock.HashesTo(blockID.Hash)
 }
 
+// replaceProposalBlockOnLockedBlock repoints the round state at blockID using the
+// locked block, when that is the block blockID names. It is the one writer of the
+// proposal block slots that does not go through retargetTo: the locked block and
+// its parts are installed together and already satisfy the target, so there is
+// nothing for retargetTo to do -- except the part it owns that has nothing to do
+// with the block, which is dropping a Proposal describing something else.
 func (s *StateData) replaceProposalBlockOnLockedBlock(blockID types.BlockID) {
 	// The Locked* fields no longer matter.
 	// Move them over to ProposalBlock if they match the commit hash,
@@ -606,6 +613,7 @@ func (s *StateData) replaceProposalBlockOnLockedBlock(blockID types.BlockID) {
 	if !s.isLockedBlockEqual(blockID) {
 		return
 	}
+	s.dropStaleProposal(blockID, retargetOnLockedBlock)
 	s.ProposalBlock = s.LockedBlock
 	s.ProposalBlockParts = s.LockedBlockParts
 	s.logger.Trace("commit is for a locked block; set ProposalBlock=LockedBlock", "block_hash", blockID.Hash)

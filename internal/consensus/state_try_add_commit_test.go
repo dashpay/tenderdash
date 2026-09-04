@@ -273,11 +273,17 @@ func TestCommitVerifyFailureReasonSeparatesTheClasses(t *testing.T) {
 		{"forged threshold signature", types.ErrInvalidCommitSignature{}, "invalid_signature"},
 		{"local shed", types.ErrVerificationBudgetExhausted, "budget"},
 		{"unclassified", errors.New("something else"), "other"},
-		{"wrapped", fmt.Errorf("error verifying commit: %w", types.ErrInvalidCommitQuorumHash{}), "quorum_hash"},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			assert.Equal(t, tc.want, commitVerifyFailureReason(tc.err))
+		})
+		// Every one of these reaches handleCommitVerifyError wrapped by
+		// readyToApplyCommit. Matching on the bare error would put all of them in
+		// "other", and the counter would read zero while the condition fires.
+		t.Run(tc.name+" wrapped", func(t *testing.T) {
+			wrapped := fmt.Errorf("error verifying commit: %w", tc.err)
+			assert.Equal(t, tc.want, commitVerifyFailureReason(wrapped))
 		})
 	}
 }

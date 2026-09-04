@@ -575,3 +575,72 @@ func TestValidBlockIsDatedByAProposalForThatBlock(t *testing.T) {
 	assert.Equal(t, staleReceiveTime, dated.ValidBlockRecvTime,
 		"the receive time of a proposal for this block is what dates it")
 }
+
+// TestRetargetToDropsABlockThatDisagreesWithTheKeptPartSet covers the branch that
+// runs when the part set already carries the target header. Its sibling -- the
+// header differing -- is the common case; this one fires only when the round
+// holds a block that did not come from the parts it is collecting, and dropping
+// it is what keeps holdsProposalBlock from reporting a block the completing part
+// set will not produce.
+func TestRetargetToDropsABlockThatDisagreesWithTheKeptPartSet(t *testing.T) {
+	held := &types.Block{
+		Header:     *factory.MakeHeader(t, &types.Header{Height: 10, CoreChainLockedHeight: 1}),
+		LastCommit: &types.Commit{},
+	}
+	target := &types.Block{
+		Header:     *factory.MakeHeader(t, &types.Header{Height: 10, CoreChainLockedHeight: 2}),
+		LastCommit: &types.Commit{},
+	}
+	targetParts, err := target.MakePartSet(types.BlockPartSizeBytes)
+	require.NoError(t, err)
+	targetID := target.BlockID(targetParts)
+	require.False(t, held.HashesTo(targetID.Hash))
+
+	// Collecting the target's parts while holding some other block.
+	stateData := newReadyToApplyCommitStateData("kept-part-set", cstypes.RoundState{
+		Height:             10,
+		ProposalBlock:      held,
+		ProposalBlockParts: types.NewPartSetFromHeader(targetID.PartSetHeader),
+	})
+	require.True(t, stateData.ProposalBlockParts.HasHeader(targetID.PartSetHeader),
+		"the part set is kept, so only the block criterion can act")
+
+	stateData.retargetTo(targetID, retargetOnParkCommit)
+
+	assert.Nil(t, stateData.ProposalBlock, "a block that is not the target's must not survive the retarget")
+	assert.False(t, stateData.holdsProposalBlock(targetID))
+}
+
+// TestCommitForALockedBlockStillDropsAStaleProposal covers the fifth writer of the
+// round state's block slots. replaceProposalBlockOnLockedBlock installs the locked
+// block and its parts wholesale, which satisfies holdsProposalBlock and returns
+// before the retarget runs -- so it is the one place that repoints the round state
+// without reconsidering the Proposal, the inconsistency this series removes
+// everywhere else (dashpay/tenderdash#1414).
+func TestCommitForALockedBlockStillDropsAStaleProposal(t *testing.T) {
+	locked := &types.Block{
+		Header:     *factory.MakeHeader(t, &types.Header{Height: 10, CoreChainLockedHeight: 1}),
+		LastCommit: &types.Commit{},
+	}
+	lockedParts, err := locked.MakePartSet(types.BlockPartSizeBytes)
+	require.NoError(t, err)
+	lockedID := locked.BlockID(lockedParts)
+
+	stale := types.NewProposal(10, 7, 0, -1, factory.MakeBlockID(), tmtime.Now())
+	stateData := newReadyToApplyCommitStateData("locked-block-commit", cstypes.RoundState{
+		Height:              10,
+		Proposal:            stale,
+		ProposalReceiveTime: tmtime.Now(),
+		LockedBlock:         locked,
+		LockedBlockParts:    lockedParts,
+	})
+
+	stateData.replaceProposalBlockOnLockedBlock(lockedID)
+
+	require.True(t, stateData.holdsProposalBlock(lockedID),
+		"the locked block satisfies the commit, which is what makes the retarget be skipped")
+	assert.Nil(t, stateData.Proposal,
+		"a proposal naming another block must not survive the round being repointed")
+	assert.True(t, stateData.ProposalReceiveTime.IsZero(),
+		"the receive time goes with the proposal it measures")
+}
