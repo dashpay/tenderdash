@@ -934,9 +934,7 @@ func (vals *ValidatorSet) verifyCommit(
 		return err
 	}
 	if !vals.QuorumHash.Equal(commit.QuorumHash) {
-		return fmt.Errorf("invalid commit -- wrong quorum hash: validator set uses %X, commit has %X",
-			vals.QuorumHash, commit.QuorumHash)
-
+		return ErrInvalidCommitQuorumHash{Expected: vals.QuorumHash, Actual: commit.QuorumHash}
 	}
 	if budget != nil {
 		err = quorumSigns.VerifyWithBudget(vals.ThresholdPublicKey, NewQuorumSignsFromCommit(commit), budget)
@@ -1008,6 +1006,20 @@ func (e ErrInvalidCommitSignature) Error() string {
 }
 
 func (e ErrInvalidCommitSignature) Unwrap() error { return e.Err }
+
+// ErrInvalidCommitQuorumHash is returned when a commit names a quorum other than
+// the one this node's validator set uses. A peer that has already rotated, or
+// that has not yet, produces this without misbehaving, so the sender must not be
+// evicted for it.
+type ErrInvalidCommitQuorumHash struct {
+	Expected crypto.QuorumHash
+	Actual   crypto.QuorumHash
+}
+
+func (e ErrInvalidCommitQuorumHash) Error() string {
+	return fmt.Sprintf("invalid commit -- wrong quorum hash: validator set uses %X, commit has %X",
+		e.Expected, e.Actual)
+}
 
 func (vals *ValidatorSet) ABCIEquivalentValidatorUpdates() *abci.ValidatorSetUpdate {
 	var valUpdates []abci.ValidatorUpdate

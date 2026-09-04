@@ -31,6 +31,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/mempool"
 	tmpubsub "github.com/dashpay/tenderdash/internal/pubsub"
 	sm "github.com/dashpay/tenderdash/internal/state"
+	sf "github.com/dashpay/tenderdash/internal/state/test/factory"
 	"github.com/dashpay/tenderdash/internal/store"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
@@ -1055,6 +1056,69 @@ func newMockTickerFunc(onlyOnce bool) func() TimeoutTicker {
 			c:        make(chan timeoutInfo, 100),
 			onlyOnce: onlyOnce,
 		}
+	}
+}
+
+// staleProposalNode is a node of a two-validator network that is not the
+// proposer, together with the block the network commits at height 1, the parts
+// that block is gossiped in, and a commit for it. The caller installs whatever
+// stale round state its scenario needs before dispatching.
+type staleProposalNode struct {
+	node   *State
+	block  *types.Block
+	parts  *types.PartSet
+	commit *types.Commit
+	peerID types.NodeID
+}
+
+// newStaleProposalNode builds the network and signs a commit at commitRound for
+// a block gossiped in partSize chunks.
+func newStaleProposalNode(
+	ctx context.Context,
+	t *testing.T,
+	cfg *config.Config,
+	partSize uint32,
+	commitRound int32,
+) staleProposalNode {
+	t.Helper()
+
+	css := makeConsensusState(ctx, t, cfg, 2, t.Name(), newTickerFunc())
+	privVals := make([]types.PrivValidator, 0, len(css))
+	for _, c := range css {
+		privVals = append(privVals, c.privValidator.PrivValidator)
+	}
+	proposerStateData := css[0].GetStateData()
+
+	block, err := sf.MakeBlock(proposerStateData.state, 1, &types.Commit{}, kvstore.ProtocolVersion)
+	require.NoError(t, err)
+	block.CoreChainLockedHeight = 1
+	parts, err := block.MakePartSet(partSize)
+	require.NoError(t, err)
+
+	voteSet := types.NewVoteSet(
+		proposerStateData.state.ChainID,
+		block.Height,
+		commitRound,
+		tmproto.PrecommitType,
+		proposerStateData.Validators,
+	)
+	commit, err := factory.MakeCommit(
+		ctx,
+		block.BlockID(parts),
+		block.Height,
+		commitRound,
+		voteSet,
+		proposerStateData.Validators,
+		privVals,
+	)
+	require.NoError(t, err)
+
+	return staleProposalNode{
+		node:   css[1],
+		block:  block,
+		parts:  parts,
+		commit: commit,
+		peerID: proposerStateData.Validators.Proposer().NodeAddress.NodeID,
 	}
 }
 

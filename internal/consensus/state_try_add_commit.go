@@ -126,7 +126,7 @@ func (cs *TryAddCommitAction) handleCommitVerifyError(err error, peerID types.No
 }
 
 func (cs *TryAddCommitAction) verifyCommit(ctx context.Context, stateData *StateData, commit *types.Commit, peerID types.NodeID, ignoreProposalBlock bool) (verified bool, err error) {
-	verified, err = stateData.verifyCommit(
+	verified, err = stateData.readyToApplyCommit(
 		commit,
 		peerID,
 		ignoreProposalBlock,

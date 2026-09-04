@@ -187,3 +187,22 @@ func TestHasVoteIndexRejectionIsFloodable(t *testing.T) {
 	assert.True(t, isPeerFloodableError(ErrPeerStateInvalidVoteIndex),
 		"a vote index outside our validator set is peer-triggerable at will")
 }
+
+// A commit is verified against its own BlockID, so every peer commit that clears
+// ValidateBasic reaches the quorum-hash and vote-extension-count rejections. Both
+// are what an honest peer on a different quorum rotation or vote-extension
+// configuration produces, and copying a commit off the wire costs the sender
+// nothing. A forged threshold signature is the one commit failure that is not
+// free, and it must stay at Error so the eviction it triggers is visible.
+func TestCommitRejectionsAreFloodable(t *testing.T) {
+	assert.True(t, isPeerFloodableError(types.ErrInvalidCommitQuorumHash{}),
+		"a commit naming another quorum is peer-triggerable at will")
+	assert.True(t, isPeerFloodableError(types.ErrVoteExtensionCountMismatch{Extensions: 1, Signatures: 0}),
+		"a vote-extension count disagreement is peer-triggerable at will")
+	assert.True(t,
+		isPeerFloodableError(fmt.Errorf("error verifying commit: %w", types.ErrInvalidCommitQuorumHash{})),
+		"must see through the verifyCommit wrapping")
+
+	assert.False(t, isPeerFloodableError(types.ErrInvalidCommitSignature{}),
+		"a forged threshold signature is not free to produce and evicts the sender")
+}

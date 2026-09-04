@@ -9,10 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	"github.com/dashpay/tenderdash/dash"
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
-	sf "github.com/dashpay/tenderdash/internal/state/test/factory"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -50,7 +48,7 @@ func TestHandleCommitVerifyErrorClassification(t *testing.T) {
 		},
 		{
 			name:      "wrong quorum hash does not evict",
-			err:       fmt.Errorf("invalid commit -- wrong quorum hash: validator set uses %X, commit has %X", []byte{0x1}, []byte{0x2}),
+			err:       types.ErrInvalidCommitQuorumHash{Expected: []byte{0x1}, Actual: []byte{0x2}},
 			wantEvict: false,
 		},
 		{
@@ -176,44 +174,53 @@ func TestTryAddCommitWithAssembledBlockAndStaleProposal(t *testing.T) {
 	defer cancel()
 	cfg := configSetup(t)
 
-	css := makeConsensusState(ctx, t, cfg, 2, t.Name(), newTickerFunc())
-	privVals := make([]types.PrivValidator, 0, len(css))
-	for _, c := range css {
-		privVals = append(privVals, c.privValidator.PrivValidator)
-	}
-	proposer, otherNode := css[0], css[1]
-	proposerStateData := proposer.GetStateData()
-	stateData := otherNode.GetStateData()
+	n := newStaleProposalNode(ctx, t, cfg, types.BlockPartSizeBytes, 0)
+	stateData := n.node.GetStateData()
 
-	block, err := sf.MakeBlock(proposerStateData.state, 1, &types.Commit{}, kvstore.ProtocolVersion)
-	require.NoError(t, err)
-	block.CoreChainLockedHeight = 1
-	parts, err := block.MakePartSet(types.BlockPartSizeBytes)
-	require.NoError(t, err)
+	staleProposal := types.NewProposal(
+		n.block.Height, n.block.CoreChainLockedHeight, 0, -1, factory.MakeBlockID(), n.block.Time)
 
-	commit, err := factory.MakeCommit(
-		ctx,
-		block.BlockID(parts),
-		block.Height,
-		0,
-		proposerStateData.Votes.Precommits(0),
-		proposerStateData.Validators,
-		privVals,
-	)
-	require.NoError(t, err)
-
-	staleProposal := types.NewProposal(block.Height, block.CoreChainLockedHeight, 0, -1, factory.MakeBlockID(), block.Time)
-
-	peerID := proposerStateData.Validators.Proposer().NodeAddress.NodeID
 	stateData.Proposal = staleProposal
-	stateData.ProposalBlock = block
-	stateData.ProposalBlockParts = parts
-	stateData.updateRoundStep(commit.Round, cstypes.RoundStepPrevote)
+	stateData.ProposalBlock = n.block
+	stateData.ProposalBlockParts = n.parts
+	stateData.updateRoundStep(n.commit.Round, cstypes.RoundStepPrevote)
 
-	ctx = dash.ContextWithProTxHash(ctx, otherNode.privValidator.ProTxHash)
-	ctx = msgInfoWithCtx(ctx, msgInfo{Msg: &CommitMessage{commit}, PeerID: peerID})
+	ctx = dash.ContextWithProTxHash(ctx, n.node.privValidator.ProTxHash)
+	ctx = msgInfoWithCtx(ctx, msgInfo{Msg: &CommitMessage{n.commit}, PeerID: n.peerID})
 
-	require.NoError(t, otherNode.ctrl.Dispatch(ctx, &TryAddCommitEvent{Commit: commit, PeerID: peerID}, &stateData))
+	require.NoError(t, n.node.ctrl.Dispatch(ctx, &TryAddCommitEvent{Commit: n.commit, PeerID: n.peerID}, &stateData))
 	assert.Equal(t, int64(2), stateData.Height,
 		"a commit for the block we hold must be applied rather than dropped over a proposal that outlived its own block")
+}
+
+// TestTryAddCommitForFutureRoundParksCommitAndPartSet drives a commit for a round
+// ahead of ours through the real Controller. adoptCommit retargets the part set,
+// EnterNewRound then wipes the whole proposal state for a round > 0, and
+// TryAddCommitAction rebuilds the part set from the same header afterwards. The
+// end state is correct only because of that ordering, and a one-sided change to
+// either half would go unnoticed without this test.
+func TestTryAddCommitForFutureRoundParksCommitAndPartSet(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cfg := configSetup(t)
+
+	const futureRound = int32(1)
+	n := newStaleProposalNode(ctx, t, cfg, types.BlockPartSizeBytes, futureRound)
+	stateData := n.node.GetStateData()
+
+	stateData.Proposal = types.NewProposal(
+		n.block.Height, n.block.CoreChainLockedHeight, 0, -1, factory.MakeBlockID(), n.block.Time)
+	stateData.updateRoundStep(0, cstypes.RoundStepPrevote)
+	require.Less(t, stateData.Round, n.commit.Round, "the commit must name a round ahead of ours")
+
+	ctx = dash.ContextWithProTxHash(ctx, n.node.privValidator.ProTxHash)
+	ctx = msgInfoWithCtx(ctx, msgInfo{Msg: &CommitMessage{n.commit}, PeerID: n.peerID})
+
+	require.NoError(t, n.node.ctrl.Dispatch(ctx, &TryAddCommitEvent{Commit: n.commit, PeerID: n.peerID}, &stateData))
+
+	assert.Equal(t, futureRound, stateData.Round, "a verified commit for a later round must move us to that round")
+	assert.Same(t, n.commit, stateData.Commit, "the commit must be kept until the block it commits arrives")
+	require.NotNil(t, stateData.ProposalBlockParts, "the node must be ready to receive the committed block")
+	assert.True(t, stateData.ProposalBlockParts.HasHeader(n.commit.BlockID.PartSetHeader),
+		"the part set must target the committed block")
 }

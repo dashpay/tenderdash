@@ -110,13 +110,24 @@ func TestIsValidForPrevote(t *testing.T) {
 	}
 }
 
+// newVerifyCommitStateData wraps the round state readyToApplyCommit reads in the
+// minimal StateData it needs to run.
+func newVerifyCommitStateData(chainID string, rs cstypes.RoundState) StateData {
+	return StateData{
+		logger:     log.NewNopLogger(),
+		state:      sm.State{ChainID: chainID},
+		RoundState: rs,
+	}
+}
+
 // TestVerifyCommitAgainstCommitBlockID pins which block a peer-sent commit is
 // checked against. The threshold signature only ever covers the commit's own
 // BlockID, so verifying it against a proposal we happen to hold rejects the very
 // commit the network produced and leaves a lagging node stuck (dashpay/tenderdash#1414).
 // A commit for a block other than ours is catch-up traffic: it is adopted like a
 // commit that arrived before any proposal. Only a signature that fails against
-// the commit's own BlockID is forgery, and that must still evict the sender.
+// the commit's own BlockID is forgery, and it must surface as
+// types.ErrInvalidCommitSignature, the one class that evicts the sender.
 func TestVerifyCommitAgainstCommitBlockID(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -152,7 +163,6 @@ func TestVerifyCommitAgainstCommitBlockID(t *testing.T) {
 		commitBlockID       types.BlockID
 		forged              bool
 		wantVerified        bool
-		wantEvict           bool
 		wantAdopted         bool
 	}{
 		{
@@ -186,14 +196,22 @@ func TestVerifyCommitAgainstCommitBlockID(t *testing.T) {
 			proposalBlockID: committedBlockID,
 			commitBlockID:   committedBlockID,
 			forged:          true,
-			wantEvict:       true,
 		},
 		{
 			name:            "forged commit for another block evicts",
 			proposalBlockID: ourBlockID,
 			commitBlockID:   committedBlockID,
 			forged:          true,
-			wantEvict:       true,
+		},
+		{
+			// The future-round fast path short-circuits straight to EnterNewRound on
+			// success, so a forgery must be refused before adoptCommit touches
+			// anything.
+			name:                "forged commit for a future round evicts",
+			ignoreProposalBlock: true,
+			proposalBlockID:     ourBlockID,
+			commitBlockID:       committedBlockID,
+			forged:              true,
 		},
 	}
 
@@ -209,35 +227,26 @@ func TestVerifyCommitAgainstCommitBlockID(t *testing.T) {
 				proposalBlock = &types.Block{Header: types.Header{Height: height}}
 				parts = types.NewPartSetFromHeader(tc.proposalBlockID.PartSetHeader)
 			}
-			stateData := StateData{
-				logger: log.NewNopLogger(),
-				state:  sm.State{ChainID: chainID},
-				RoundState: cstypes.RoundState{
-					Height:             height,
-					Round:              round,
-					Proposal:           proposal,
-					ProposalBlock:      proposalBlock,
-					ProposalBlockParts: parts,
-					Validators:         valSet,
-				},
-			}
+			stateData := newVerifyCommitStateData(chainID, cstypes.RoundState{
+				Height:             height,
+				Round:              round,
+				Proposal:           proposal,
+				ProposalBlock:      proposalBlock,
+				ProposalBlockParts: parts,
+				Validators:         valSet,
+			})
 			commit := makeCommit(t, tc.commitBlockID, tc.forged)
 
-			verified, err := stateData.verifyCommit(commit, "peer", tc.ignoreProposalBlock, nil)
+			verified, err := stateData.readyToApplyCommit(commit, "peer", tc.ignoreProposalBlock, nil)
 
 			assert.Equal(t, tc.wantVerified, verified)
-			if !tc.wantEvict {
+			if !tc.forged {
 				require.NoError(t, err, "an honest peer relaying the block the network committed must not fail verification")
 			} else {
 				require.Error(t, err)
 				assert.ErrorAs(t, err, &types.ErrInvalidCommitSignature{},
 					"a forged threshold signature must stay evictable")
 			}
-
-			queue := &chanQueue[peerErrorMsg]{ch: make(chan peerErrorMsg, 1)}
-			action := &TryAddCommitAction{peerErrorQueue: queue, metrics: NopMetrics()}
-			action.handleCommitVerifyError(err, "peer", false)
-			assert.Equal(t, tc.wantEvict, len(queue.ch) == 1, "eviction must follow forgery and nothing else")
 
 			if !tc.wantAdopted {
 				assert.Same(t, proposal, stateData.Proposal, "our proposal must survive")
@@ -255,6 +264,44 @@ func TestVerifyCommitAgainstCommitBlockID(t *testing.T) {
 			assert.Nil(t, stateData.Proposal, "a proposal the network did not commit must not block the real one")
 		})
 	}
+}
+
+// Verifying against the commit's own BlockID makes ValidatorSet.verifyCommit's
+// BlockID guard tautological, so the free rejection of a mismatched commit is
+// gone and every peer commit costs a pairing. The verification budget is now the
+// only bound on that work, and it must refuse the commit rather than let it
+// through unverified.
+func TestVerifyCommitIsRefusedWhenBudgetIsExhausted(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const (
+		chainID = "verify-commit-budget"
+		height  = int64(10)
+		round   = int32(0)
+	)
+
+	valSet, privVals := factory.MockValidatorSet()
+	blockID := factory.MakeBlockID()
+	voteSet := types.NewVoteSet(chainID, height, round, tmproto.PrecommitType, valSet)
+	commit, err := factory.MakeCommit(ctx, blockID, height, round, voteSet, valSet, privVals)
+	require.NoError(t, err)
+
+	stateData := newVerifyCommitStateData(chainID, cstypes.RoundState{
+		Height:     height,
+		Round:      round,
+		Validators: valSet,
+	})
+
+	budget := newVerificationBudget(300)
+	drainVerificationBudget(budget)
+
+	verified, err := stateData.readyToApplyCommit(commit, "peer", false, budget)
+
+	assert.False(t, verified)
+	require.ErrorIs(t, err, types.ErrVerificationBudgetExhausted,
+		"a commit must be refused rather than verified once the budget is spent")
+	assert.Nil(t, stateData.Commit, "a commit that was never verified must not be parked")
 }
 
 // TestVerifyCommitWithRetargetedProposalBlockParts pins commit handling when a
@@ -360,21 +407,17 @@ func TestVerifyCommitWithRetargetedProposalBlockParts(t *testing.T) {
 				// still tracks the block of an earlier round.
 				parts = types.NewPartSetFromHeader(staleBlockID.PartSetHeader)
 			}
-			stateData := StateData{
-				logger: log.NewNopLogger(),
-				state:  sm.State{ChainID: chainID},
-				RoundState: cstypes.RoundState{
-					Height:              height,
-					Round:               round,
-					Proposal:            proposal,
-					ProposalReceiveTime: receiveTime,
-					ProposalBlock:       block,
-					ProposalBlockParts:  parts,
-					Validators:          valSet,
-				},
-			}
+			stateData := newVerifyCommitStateData(chainID, cstypes.RoundState{
+				Height:              height,
+				Round:               round,
+				Proposal:            proposal,
+				ProposalReceiveTime: receiveTime,
+				ProposalBlock:       block,
+				ProposalBlockParts:  parts,
+				Validators:          valSet,
+			})
 
-			verified, err := stateData.verifyCommit(commit, "peer", tc.ignoreBlock, nil)
+			verified, err := stateData.readyToApplyCommit(commit, "peer", tc.ignoreBlock, nil)
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantVerified, verified,
 				"the assembled block, not a proposal that outlived its own block, decides whether the commit is ours")

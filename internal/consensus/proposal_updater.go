@@ -12,7 +12,7 @@ type proposalUpdater struct {
 
 func (u *proposalUpdater) updateStateData(stateData *StateData, blockID types.BlockID) error {
 	stateData.replaceProposalBlockOnLockedBlock(blockID)
-	if stateData.ProposalBlock.HashesTo(blockID.Hash) || stateData.ProposalBlockParts.HasHeader(blockID.PartSetHeader) {
+	if stateData.holdsBlock(blockID) {
 		return nil
 	}
 	// If we don't have the block being committed, set up to get it.

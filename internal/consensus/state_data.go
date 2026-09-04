@@ -408,12 +408,16 @@ func (s *StateData) updateLockedBlock() {
 	s.LockedBlockParts = s.ProposalBlockParts
 }
 
-func (s *StateData) verifyCommit(
+// readyToApplyCommit verifies commit's threshold signature against the commit's
+// own BlockID and reports whether the round state can act on it now. A false
+// return with a nil error means the commit is authentic but parked by
+// adoptCommit until the block it commits arrives.
+func (s *StateData) readyToApplyCommit(
 	commit *types.Commit,
 	peerID types.NodeID,
 	ignoreProposalBlock bool,
 	budget types.VerificationBudget,
-) (verified bool, err error) {
+) (readyToApply bool, err error) {
 	// Lets first do some basic commit validation before more complicated commit verification
 	if err := commit.ValidateBasic(); err != nil {
 		return false, fmt.Errorf("error validating commit: %w", err)
@@ -453,6 +457,9 @@ func (s *StateData) verifyCommit(
 	// The threshold signature covers the commit's own BlockID and nothing else, so
 	// a proposal of ours the network never committed proves nothing about it:
 	// checking against it rejects genuine commits (dashpay/tenderdash#1414).
+	// Checking against commit.BlockID also makes ValidatorSet.verifyCommit's own
+	// BlockID guard tautological, so no commit is refused before a pairing is
+	// spent: VerificationRateLimit alone bounds the work a peer can ask for here.
 	if err := s.verifyCommitSignatures(commit.BlockID, commit, budget); err != nil {
 		return false, fmt.Errorf("error verifying commit: %w", err)
 	}
@@ -460,7 +467,7 @@ func (s *StateData) verifyCommit(
 	if ignoreProposalBlock {
 		// For a future round, a properly signed commit is all we need to know to go
 		// to that round.
-		s.logger.Debug("Commit verified for future round", "height", commit.Height, "round", commit.Round)
+		s.logger.Debug("commit verified for future round", "height", commit.Height, "round", commit.Round)
 		s.adoptCommit(commit)
 		return true, nil
 	}
@@ -473,14 +480,16 @@ func (s *StateData) verifyCommit(
 	// retargeted to the committed one (addVoteUpdateValidBlockMw replaces the parts
 	// and leaves the Proposal alone), so an assembled block that hashes to the
 	// commit settles the question the stale Proposal would answer wrongly.
-	if rs.ProposalBlock.HashesTo(commit.BlockID.Hash) && rs.ProposalBlockParts.HasHeader(commit.BlockID.PartSetHeader) {
+	// StateID needs no separate check: the signature verified above ran against the
+	// full commit.BlockID, and CanonicalVote covers StateID.
+	if s.holdsBlock(commit.BlockID) {
 		return true, nil
 	}
 
 	if rs.Proposal == nil {
-		s.logger.Debug("Commit came in before proposal", "height", commit.Height, "round", commit.Round)
+		s.logger.Debug("commit came in before proposal", "height", commit.Height, "round", commit.Round)
 	} else {
-		s.logger.Debug("commit is for a block other than the one we proposed",
+		s.logger.Debug("commit is for a block other than the proposal we hold",
 			"height", commit.Height,
 			"round", commit.Round,
 			"commit_block", commit.BlockID.Hash,
@@ -494,13 +503,17 @@ func (s *StateData) verifyCommit(
 }
 
 // adoptCommit keeps commit until the block it commits arrives and readies the
-// round state to receive that block. Proposal state for a different block is
-// dropped; keeping it would reject both the real proposal and its parts.
+// round state to receive that block. A Proposal whose BlockID differs is dropped
+// with its receive time; the block and its parts are dropped only when the
+// part-set header differs, so parts already collected for the committed block
+// survive. That preservation reaches the caller on the same-round path only:
+// EnterNewRound resets the whole proposal state for any round > 0.
 func (s *StateData) adoptCommit(commit *types.Commit) {
 	// Staleness of the proposal is a question about the whole BlockID: a part set
 	// header that happens to match says nothing about the hash or the state ID.
 	if s.Proposal != nil && !s.Proposal.BlockID.Equals(commit.BlockID) {
 		s.logger.Debug("dropping proposal for a block other than the committed one",
+			"height", s.Height, "round", s.Round,
 			"proposal_block", s.Proposal.BlockID.Hash, "commit_block", commit.BlockID.Hash)
 		s.Proposal = nil
 		s.ProposalReceiveTime = time.Time{}
@@ -509,7 +522,9 @@ func (s *StateData) adoptCommit(commit *types.Commit) {
 	// bytes, so parts already collected under it are that block's; replacing the
 	// set would discard them and force the whole block to be fetched again.
 	if !s.ProposalBlockParts.HasHeader(commit.BlockID.PartSetHeader) {
-		s.logger.Debug("setting proposal block parts from commit", "partSetHeader", commit.BlockID.PartSetHeader)
+		s.logger.Debug("setting proposal block parts from commit",
+			"height", s.Height, "round", s.Round,
+			"part_set_header", commit.BlockID.PartSetHeader)
 		s.ProposalBlock = nil
 		s.ProposalBlockParts = types.NewPartSetFromHeader(commit.BlockID.PartSetHeader)
 	}
@@ -525,6 +540,12 @@ func (s *StateData) verifyCommitSignatures(
 		return s.Validators.VerifyCommitWithBudget(s.state.ChainID, blockID, s.Height, commit, budget)
 	}
 	return s.Validators.VerifyCommit(s.state.ChainID, blockID, s.Height, commit)
+}
+
+// holdsBlock reports whether the round state already carries the block blockID
+// names, as an assembled block under a part set built from the same header.
+func (s *StateData) holdsBlock(blockID types.BlockID) bool {
+	return s.ProposalBlock.HashesTo(blockID.Hash) && s.ProposalBlockParts.HasHeader(blockID.PartSetHeader)
 }
 
 func (s *StateData) isLockedBlockEqual(blockID types.BlockID) bool {
