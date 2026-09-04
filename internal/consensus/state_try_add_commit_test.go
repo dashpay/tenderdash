@@ -224,3 +224,33 @@ func TestTryAddCommitForFutureRoundParksCommitAndPartSet(t *testing.T) {
 	assert.True(t, stateData.ProposalBlockParts.HasHeader(n.commit.BlockID.PartSetHeader),
 		"the part set must target the committed block")
 }
+
+// TestTryAddCommitAppliesAssembledBlockBeforeProposeStep covers the lagging node
+// of dashpay/tenderdash#1414: the block arrives by gossip after a polka and the
+// Proposal never does. Without a Proposal the round step cannot leave Propose, so
+// keying the commit on the step parks it behind a condition nothing can satisfy —
+// the part set completes exactly once and every later commit is short-circuited.
+// Whether the commit can be applied is a question about the block we hold, not
+// about the step we are in.
+func TestTryAddCommitAppliesAssembledBlockBeforeProposeStep(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cfg := configSetup(t)
+
+	n := newStaleProposalNode(ctx, t, cfg, types.BlockPartSizeBytes, 0)
+	stateData := n.node.GetStateData()
+
+	stateData.Proposal = nil
+	stateData.ProposalBlock = n.block
+	stateData.ProposalBlockParts = n.parts
+	stateData.updateRoundStep(n.commit.Round, cstypes.RoundStepPropose)
+	require.True(t, stateData.ProposalBlockParts.IsComplete(), "no further part can arrive to retry the commit")
+	require.False(t, stateData.isProposalComplete(), "without a Proposal the step cannot leave Propose")
+
+	ctx = dash.ContextWithProTxHash(ctx, n.node.privValidator.ProTxHash)
+	ctx = msgInfoWithCtx(ctx, msgInfo{Msg: &CommitMessage{n.commit}, PeerID: n.peerID})
+
+	require.NoError(t, n.node.ctrl.Dispatch(ctx, &TryAddCommitEvent{Commit: n.commit, PeerID: n.peerID}, &stateData))
+	assert.Equal(t, int64(2), stateData.Height,
+		"a commit for a block we hold complete must be applied, whatever step the missing proposal left us in")
+}
