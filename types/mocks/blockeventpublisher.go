@@ -60,7 +60,7 @@ type BlockEventPublisher_PublishEventNewBlock_Call struct {
 
 // PublishEventNewBlock is a helper method to define mock.On call
 //   - eventDataNewBlock types.EventDataNewBlock
-func (_e *BlockEventPublisher_Expecter) PublishEventNewBlock(eventDataNewBlock interface{}) *BlockEventPublisher_PublishEventNewBlock_Call {
+func (_e *BlockEventPublisher_Expecter) PublishEventNewBlock(eventDataNewBlock any) *BlockEventPublisher_PublishEventNewBlock_Call {
 	return &BlockEventPublisher_PublishEventNewBlock_Call{Call: _e.mock.On("PublishEventNewBlock", eventDataNewBlock)}
 }
 
@@ -111,7 +111,7 @@ type BlockEventPublisher_PublishEventNewBlockHeader_Call struct {
 
 // PublishEventNewBlockHeader is a helper method to define mock.On call
 //   - eventDataNewBlockHeader types.EventDataNewBlockHeader
-func (_e *BlockEventPublisher_Expecter) PublishEventNewBlockHeader(eventDataNewBlockHeader interface{}) *BlockEventPublisher_PublishEventNewBlockHeader_Call {
+func (_e *BlockEventPublisher_Expecter) PublishEventNewBlockHeader(eventDataNewBlockHeader any) *BlockEventPublisher_PublishEventNewBlockHeader_Call {
 	return &BlockEventPublisher_PublishEventNewBlockHeader_Call{Call: _e.mock.On("PublishEventNewBlockHeader", eventDataNewBlockHeader)}
 }
 
@@ -162,7 +162,7 @@ type BlockEventPublisher_PublishEventNewEvidence_Call struct {
 
 // PublishEventNewEvidence is a helper method to define mock.On call
 //   - eventDataNewEvidence types.EventDataNewEvidence
-func (_e *BlockEventPublisher_Expecter) PublishEventNewEvidence(eventDataNewEvidence interface{}) *BlockEventPublisher_PublishEventNewEvidence_Call {
+func (_e *BlockEventPublisher_Expecter) PublishEventNewEvidence(eventDataNewEvidence any) *BlockEventPublisher_PublishEventNewEvidence_Call {
 	return &BlockEventPublisher_PublishEventNewEvidence_Call{Call: _e.mock.On("PublishEventNewEvidence", eventDataNewEvidence)}
 }
 
@@ -213,7 +213,7 @@ type BlockEventPublisher_PublishEventTx_Call struct {
 
 // PublishEventTx is a helper method to define mock.On call
 //   - eventDataTx types.EventDataTx
-func (_e *BlockEventPublisher_Expecter) PublishEventTx(eventDataTx interface{}) *BlockEventPublisher_PublishEventTx_Call {
+func (_e *BlockEventPublisher_Expecter) PublishEventTx(eventDataTx any) *BlockEventPublisher_PublishEventTx_Call {
 	return &BlockEventPublisher_PublishEventTx_Call{Call: _e.mock.On("PublishEventTx", eventDataTx)}
 }
 
@@ -264,7 +264,7 @@ type BlockEventPublisher_PublishEventValidatorSetUpdates_Call struct {
 
 // PublishEventValidatorSetUpdates is a helper method to define mock.On call
 //   - eventDataValidatorSetUpdate types.EventDataValidatorSetUpdate
-func (_e *BlockEventPublisher_Expecter) PublishEventValidatorSetUpdates(eventDataValidatorSetUpdate interface{}) *BlockEventPublisher_PublishEventValidatorSetUpdates_Call {
+func (_e *BlockEventPublisher_Expecter) PublishEventValidatorSetUpdates(eventDataValidatorSetUpdate any) *BlockEventPublisher_PublishEventValidatorSetUpdates_Call {
 	return &BlockEventPublisher_PublishEventValidatorSetUpdates_Call{Call: _e.mock.On("PublishEventValidatorSetUpdates", eventDataValidatorSetUpdate)}
 }
 

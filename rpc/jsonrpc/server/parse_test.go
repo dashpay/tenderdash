@@ -290,14 +290,18 @@ func TestParseURI(t *testing.T) {
 				},
 			},
 			{
+				// The stdlib's exact wording for a malformed json.Number
+				// changed between Go versions; assert on our own error
+				// family (see RPCError, CodeInvalidParams) instead of
+				// stdlib phrasing that Data merely happens to carry.
 				name: "invalid quoted number",
 				url:  `http://localhost?height="-xx"`,
-				fail: "invalid number literal",
+				fail: "Invalid params",
 			},
 			{
 				name: "invalid unquoted number",
 				url:  `http://localhost?height=25*q`,
-				fail: "invalid number literal",
+				fail: "Invalid params",
 			},
 			{
 				name: "invalid boolean",

@@ -45,7 +45,7 @@ jobs:
       - uses: actions/setup-go@v7.0.0
         if: env.GIT_DIFF
         with:
-          go-version: "^1.26.5"
+          go-version: "^1.27.1"
 
       - name: Install dependencies
         if: env.GIT_DIFF
@@ -61,7 +61,7 @@ jobs:
           # Required: the version of golangci-lint is required and
           # must be specified without patch version: we always use the
           # latest patch version.
-          version: v2.12
+          version: v2.13
           # only-new-issues filters against a patch the action assembles itself,
           # which it fails to do for a branch with a large diff — it then falls
           # back to reporting every pre-existing issue in the repository. Ask
