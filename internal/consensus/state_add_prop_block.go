@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/cosmos/gogoproto/proto"
 
@@ -172,13 +173,46 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 			return added, err
 		}
 
-		// A verified commit authenticates the block's header independently of proposal metadata.
-		committedBlock := stateData.Commit != nil &&
-			block.BlockID(stateData.ProposalBlockParts).Equals(stateData.Commit.BlockID)
-		if !committedBlock && stateData.Proposal != nil &&
-			block.CoreChainLockedHeight != stateData.Proposal.CoreChainLockedHeight {
-			return added, fmt.Errorf("core chain lock height of block %d does not match proposal %d",
-				block.CoreChainLockedHeight, stateData.Proposal.CoreChainLockedHeight)
+		// Dropping the proposal, rather than rejecting the block, is what keeps this
+		// recoverable: the completing part is already spent -- AddPart returns
+		// (false, nil) for one it holds -- and Proposaler.Set refuses a second
+		// proposal while one is held, so only clearing it lets the honest copy land.
+		// HasHeader selects the diagnosis, not the outcome: a proposal about other
+		// bytes is reported by the block ID check below, so reaching this message
+		// means a genuine chain lock disagreement.
+		if proposal := stateData.Proposal; proposal != nil &&
+			stateData.ProposalBlockParts.HasHeader(proposal.BlockID.PartSetHeader) &&
+			block.CoreChainLockedHeight != proposal.CoreChainLockedHeight {
+			c.logger.Error("proposal disagrees with the block it names about the core chain locked height; dropping the proposal",
+				"height", stateData.Height,
+				"round", stateData.Round,
+				"block_core_chain_locked_height", block.CoreChainLockedHeight,
+				"proposal_core_chain_locked_height", proposal.CoreChainLockedHeight,
+				"peer", peerID,
+			)
+			stateData.Proposal = nil
+			stateData.ProposalReceiveTime = time.Time{}
+		}
+
+		// A Proposal carries a BlockID the proposer signed before anyone had seen
+		// the block. Now that the block is assembled the claim is checkable, and a
+		// proposer that builds one honestly derives it from exactly these bytes and
+		// these parts, so any difference is a signed statement about a block this
+		// is not. The block is kept -- it is the bytes, and they are what they are;
+		// the Proposal is discarded, so nothing downstream signs its BlockID.
+		if proposal := stateData.Proposal; proposal != nil {
+			if derived := block.BlockID(stateData.ProposalBlockParts); !derived.Equals(proposal.BlockID) {
+				c.logger.Error("proposal block ID does not describe the proposed block; dropping the proposal",
+					"height", stateData.Height,
+					"round", stateData.Round,
+					"proposer_pro_tx_hash", stateData.Validators.Proposer().ProTxHash.ShortString(),
+					"proposal_block_id", proposal.BlockID,
+					"block_id", derived,
+					"peer", peerID,
+				)
+				stateData.Proposal = nil
+				stateData.ProposalReceiveTime = time.Time{}
+			}
 		}
 
 		stateData.ProposalBlock = block

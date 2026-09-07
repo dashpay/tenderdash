@@ -79,6 +79,16 @@ func (p *Proposaler) Set(
 		return ErrInvalidProposalCoreHeight
 	}
 
+	// Parts may finish before a replacement proposal arrives.
+	if rs.ProposalBlock != nil && rs.ProposalBlockParts != nil {
+		if !rs.ProposalBlock.BlockID(rs.ProposalBlockParts).Equals(proposal.BlockID) {
+			return ErrInvalidProposalBlockID
+		}
+		if rs.ProposalBlock.CoreChainLockedHeight != proposal.CoreChainLockedHeight {
+			return ErrInvalidProposalCoreHeight
+		}
+	}
+
 	err := p.verifyProposal(ctx, proposal, rs)
 	if err != nil {
 		return err

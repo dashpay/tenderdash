@@ -559,16 +559,24 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 		{height: 10, count: 2, operation: addValsOp},
 		{height: 17, count: 2, operation: removeValsOp},
 	}
+	// The network needs a real timeout ticker: it recovers from a missing or late
+	// proposal only through the timeoutPropose / timeoutPrecommitWait round change,
+	// and mockTicker discards every timeout but the first.
 	gen := consensusNetGen{
 		cfg:              cfg,
 		nPeers:           nPeers,
 		nVals:            nVals,
 		appFunc:          newKVStoreFunc(t),
-		tickerFun:        newMockTickerFunc(true),
+		tickerFun:        newTickerFunc(),
 		validatorUpdates: updates,
 		consensusParams: factory.ConsensusParams(func(cp *types.ConsensusParams) {
-			cp.Timeout.Propose = 2 * time.Second
-			cp.Timeout.Vote = 1 * time.Second
+			// Seven nodes gossiping in one process under the race detector need far
+			// more wall clock per round than production does. These timeouts only
+			// fire when the network stalls; tighter ones make a loaded runner
+			// abandon rounds it would have completed, so it churns instead of
+			// converging.
+			cp.Timeout.Propose = 5 * time.Second
+			cp.Timeout.Vote = 2 * time.Second
 		}),
 	}
 	states, genDoc, _, validatorSetUpdates := gen.generate(ctx, t)

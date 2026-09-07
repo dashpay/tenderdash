@@ -54,7 +54,9 @@ func (c *AddCommitAction) Execute(ctx context.Context, stateEvent StateEvent) er
 	c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
 
 	// The commit is all good, let's apply it to the state
-	_ = stateEvent.Ctrl.Dispatch(ctx, &ApplyCommitEvent{Commit: commit}, stateData)
+	if err := stateEvent.Ctrl.Dispatch(ctx, &ApplyCommitEvent{Commit: commit}, stateData); err != nil {
+		return err
+	}
 
 	// This will relay the commit to peers
 	err = c.eventPublisher.PublishCommitEvent(commit)
