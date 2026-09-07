@@ -146,10 +146,10 @@ func (env *Environment) BroadcastTxCommit(ctx context.Context, req *coretypes.Re
 					"duration", time.Since(startAt),
 					"err", err)
 				return &coretypes.ResultBroadcastTxCommit{
-						CheckTx: *r,
-						Hash:    req.Tx.Hash(),
-					}, fmt.Errorf("timeout waiting for commit of tx %s (%s)",
-						req.Tx.Hash(), time.Since(startAt))
+					CheckTx: *r,
+					Hash:    req.Tx.Hash(),
+				}, fmt.Errorf("timeout waiting for commit of tx %s (%s)",
+					req.Tx.Hash(), time.Since(startAt))
 			case <-timer.C:
 				txres, err := env.Tx(ctx, &coretypes.RequestTx{
 					Hash:  req.Tx.Hash(),
