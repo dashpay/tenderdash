@@ -307,6 +307,16 @@ lint-all:
 	$(GOLANGCI_LINT) run --timeout 10m
 .PHONY: lint-all
 
+# Covers every package, including those the Test workflow skips for having no
+# tests: `go test` vets only what it builds, so those are otherwise unchecked.
+# `go build` is deliberately absent -- vet typechecks in order to analyse, so it
+# reports compile errors too and adding build would only advertise coverage this
+# gate does not separately have.
+vet:
+	@echo "--> Running go vet"
+	go vet ./...
+.PHONY: vet
+
 vulncheck:
 	@echo "--> Running vulnerability scanner"
 	go run golang.org/x/vuln/cmd/govulncheck@v1.3.0 ./...
