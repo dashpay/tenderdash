@@ -19,7 +19,6 @@ endif
 BUILD_FLAGS = -mod=readonly -ldflags "$(LD_FLAGS)"
 HTTPS_GIT := https://${REPO_NAME}.git
 BUILD_IMAGE := ghcr.io/tendermint/docker-build-proto
-BASE_BRANCH ?= v0.8-dev
 DOCKER_PROTO := docker run -v $(shell pwd):/workspace --workdir /workspace $(BUILD_IMAGE)
 CGO_ENABLED ?= 1
 # Fix for a gogoproto bug
