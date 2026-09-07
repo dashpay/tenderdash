@@ -546,7 +546,10 @@ double-sign-check-height = {{ .Consensus.DoubleSignCheckHeight }}
 create-empty-blocks = {{ .Consensus.CreateEmptyBlocks }}
 create-empty-blocks-interval = "{{ .Consensus.CreateEmptyBlocksInterval }}"
 
-# Reactor sleep duration parameters
+# Reactor sleep duration parameters. peer-gossip-sleep-duration also sets the
+# tick rate a lagging peer's catch-up block-part replay is metered against
+# (a fixed 500ms internal throttle): raising this above 500ms disables that
+# throttle.
 peer-gossip-sleep-duration = "{{ .Consensus.PeerGossipSleepDuration }}"
 peer-query-maj23-sleep-duration = "{{ .Consensus.PeerQueryMaj23SleepDuration }}"
 
