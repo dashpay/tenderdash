@@ -82,8 +82,6 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 		return nil
 	}
 
-	stateData.Commit = commit
-
 	// prepareCommitForApply has already established that the block is held.
 	// Restated so that a later change there cannot silently let the round step
 	// stand in for it again: a commit parked on the step is parked for good,
@@ -96,6 +94,11 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 		)
 		return nil
 	}
+
+	// Below the guard, so that the guard firing leaves nothing behind. Setting
+	// Commit is what stops a later commit being reconsidered, and a round holding
+	// one it never dispatched waits for an event that will not arrive.
+	stateData.Commit = commit
 	return stateEvent.Ctrl.Dispatch(ctx, &AddCommitEvent{Commit: commit}, stateData)
 }
 
