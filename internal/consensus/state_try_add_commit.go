@@ -8,7 +8,6 @@ import (
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
 	"github.com/dashpay/tenderdash/dash"
-	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -86,11 +85,6 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 
 	stateData.Commit = commit
 
-	// We need to make sure we are past the Propose step
-	if stateData.Step <= cstypes.RoundStepPropose {
-		// In this case we need to apply the commit after the proposal block comes in
-		return nil
-	}
 	return stateEvent.Ctrl.Dispatch(ctx, &AddCommitEvent{Commit: commit}, stateData)
 }
 

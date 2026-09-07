@@ -2,6 +2,7 @@
 
 ### Bug Fixes
 
+- Apply valid late commits when the complete block is retained after rejecting conflicting proposal metadata.
 - Check complete block IDs before applying commits and validate proposals arriving after their blocks (#1439).
 
 ## [1.7.0] - 2026-08-17

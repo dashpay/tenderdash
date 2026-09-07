@@ -463,6 +463,11 @@ func (s *StateData) verifyCommit(
 			return false, fmt.Errorf("error verifying commit: %w", err)
 		}
 
+		// A complete block can outlive its proposal; validate it before parking the commit.
+		if !ignoreProposalBlock && s.ProposalBlock != nil && s.ProposalBlockParts.IsComplete() {
+			return true, nil
+		}
+
 		if !s.ProposalBlockParts.HasHeader(commit.BlockID.PartSetHeader) {
 			s.logger.Debug("setting proposal block parts from commit", "partSetHeader", commit.BlockID.PartSetHeader)
 			s.ProposalBlockParts = types.NewPartSetFromHeader(commit.BlockID.PartSetHeader)
