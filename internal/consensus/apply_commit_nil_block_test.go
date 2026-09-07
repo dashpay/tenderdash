@@ -71,11 +71,14 @@ func TestLaterRoundProposalDoesNotStrandTheParkedCommit(t *testing.T) {
 		name       string
 		coreHeight uint32
 		retransmit bool
+		matchingID bool
 	}{
 		{name: "same core height", coreHeight: 1},
 		{name: "different core height", coreHeight: 2},
 		{name: "retransmission with same core height", coreHeight: 1, retransmit: true},
 		{name: "retransmission with different core height", coreHeight: 2, retransmit: true},
+		{name: "matching block ID with same core height", coreHeight: 1, matchingID: true},
+		{name: "matching block ID with different core height", coreHeight: 2, matchingID: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
@@ -165,6 +168,17 @@ func TestLaterRoundProposalDoesNotStrandTheParkedCommit(t *testing.T) {
 					Msg: &ProposalMessage{Proposal: proposal}, PeerID: peerID, ReceiveTime: tmtime.Now()}))
 				assert.Nil(t, stateData.Proposal, "a conflicting retransmission must not replace commit metadata")
 				assert.True(t, stateData.ProposalReceiveTime.IsZero())
+			}
+
+			if tc.matchingID {
+				matchingProposal := types.NewProposal(block.Height, tc.coreHeight, 1, -1, commit.BlockID, block.Time)
+				protoMatchingProposal := matchingProposal.ToProto()
+				_, err = key.SignProposal(ctx, stateData.state.ChainID,
+					stateData.Validators.QuorumType, stateData.Validators.QuorumHash, protoMatchingProposal)
+				require.NoError(t, err)
+				matchingProposal.Signature = protoMatchingProposal.Signature
+				require.NoError(t, node.msgDispatcher.dispatch(ctx, &stateData, msgInfo{
+					Msg: &ProposalMessage{Proposal: matchingProposal}, PeerID: peerID, ReceiveTime: tmtime.Now()}))
 			}
 
 			for i := 0; i < int(committedParts.Total()); i++ {

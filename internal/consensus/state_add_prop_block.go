@@ -172,10 +172,13 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 			return added, err
 		}
 
-		if stateData.RoundState.Proposal != nil &&
-			block.Header.CoreChainLockedHeight != stateData.RoundState.Proposal.CoreChainLockedHeight {
+		// A verified commit authenticates the block's header independently of proposal metadata.
+		committedBlock := stateData.Commit != nil &&
+			block.BlockID(stateData.ProposalBlockParts).Equals(stateData.Commit.BlockID)
+		if !committedBlock && stateData.Proposal != nil &&
+			block.CoreChainLockedHeight != stateData.Proposal.CoreChainLockedHeight {
 			return added, fmt.Errorf("core chain lock height of block %d does not match proposal %d",
-				block.Header.CoreChainLockedHeight, stateData.RoundState.Proposal.CoreChainLockedHeight)
+				block.CoreChainLockedHeight, stateData.Proposal.CoreChainLockedHeight)
 		}
 
 		stateData.ProposalBlock = block
