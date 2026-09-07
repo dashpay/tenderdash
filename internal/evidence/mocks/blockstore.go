@@ -150,7 +150,7 @@ type BlockStore_LoadBlockCommit_Call struct {
 
 // LoadBlockCommit is a helper method to define mock.On call
 //   - height int64
-func (_e *BlockStore_Expecter) LoadBlockCommit(height interface{}) *BlockStore_LoadBlockCommit_Call {
+func (_e *BlockStore_Expecter) LoadBlockCommit(height any) *BlockStore_LoadBlockCommit_Call {
 	return &BlockStore_LoadBlockCommit_Call{Call: _e.mock.On("LoadBlockCommit", height)}
 }
 
@@ -203,7 +203,7 @@ type BlockStore_LoadBlockMeta_Call struct {
 
 // LoadBlockMeta is a helper method to define mock.On call
 //   - height int64
-func (_e *BlockStore_Expecter) LoadBlockMeta(height interface{}) *BlockStore_LoadBlockMeta_Call {
+func (_e *BlockStore_Expecter) LoadBlockMeta(height any) *BlockStore_LoadBlockMeta_Call {
 	return &BlockStore_LoadBlockMeta_Call{Call: _e.mock.On("LoadBlockMeta", height)}
 }
 

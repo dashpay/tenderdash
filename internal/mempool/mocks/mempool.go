@@ -67,7 +67,7 @@ type Mempool_CheckTx_Call struct {
 //   - tx types.Tx
 //   - cb func(*types0.ResponseCheckTx)
 //   - txInfo mempool.TxInfo
-func (_e *Mempool_Expecter) CheckTx(ctx interface{}, tx interface{}, cb interface{}, txInfo interface{}) *Mempool_CheckTx_Call {
+func (_e *Mempool_Expecter) CheckTx(ctx any, tx any, cb any, txInfo any) *Mempool_CheckTx_Call {
 	return &Mempool_CheckTx_Call{Call: _e.mock.On("CheckTx", ctx, tx, cb, txInfo)}
 }
 
@@ -199,7 +199,7 @@ type Mempool_FlushAppConn_Call struct {
 
 // FlushAppConn is a helper method to define mock.On call
 //   - context1 context.Context
-func (_e *Mempool_Expecter) FlushAppConn(context1 interface{}) *Mempool_FlushAppConn_Call {
+func (_e *Mempool_Expecter) FlushAppConn(context1 any) *Mempool_FlushAppConn_Call {
 	return &Mempool_FlushAppConn_Call{Call: _e.mock.On("FlushAppConn", context1)}
 }
 
@@ -252,7 +252,7 @@ type Mempool_GetTxByHash_Call struct {
 
 // GetTxByHash is a helper method to define mock.On call
 //   - txHash types.TxKey
-func (_e *Mempool_Expecter) GetTxByHash(txHash interface{}) *Mempool_GetTxByHash_Call {
+func (_e *Mempool_Expecter) GetTxByHash(txHash any) *Mempool_GetTxByHash_Call {
 	return &Mempool_GetTxByHash_Call{Call: _e.mock.On("GetTxByHash", txHash)}
 }
 
@@ -339,7 +339,7 @@ type Mempool_ReapMaxBytesMaxGas_Call struct {
 // ReapMaxBytesMaxGas is a helper method to define mock.On call
 //   - maxBytes int64
 //   - maxGas int64
-func (_e *Mempool_Expecter) ReapMaxBytesMaxGas(maxBytes interface{}, maxGas interface{}) *Mempool_ReapMaxBytesMaxGas_Call {
+func (_e *Mempool_Expecter) ReapMaxBytesMaxGas(maxBytes any, maxGas any) *Mempool_ReapMaxBytesMaxGas_Call {
 	return &Mempool_ReapMaxBytesMaxGas_Call{Call: _e.mock.On("ReapMaxBytesMaxGas", maxBytes, maxGas)}
 }
 
@@ -397,7 +397,7 @@ type Mempool_ReapMaxTxs_Call struct {
 
 // ReapMaxTxs is a helper method to define mock.On call
 //   - max int
-func (_e *Mempool_Expecter) ReapMaxTxs(max interface{}) *Mempool_ReapMaxTxs_Call {
+func (_e *Mempool_Expecter) ReapMaxTxs(max any) *Mempool_ReapMaxTxs_Call {
 	return &Mempool_ReapMaxTxs_Call{Call: _e.mock.On("ReapMaxTxs", max)}
 }
 
@@ -448,7 +448,7 @@ type Mempool_RemoveTxByKey_Call struct {
 
 // RemoveTxByKey is a helper method to define mock.On call
 //   - txKey types.TxKey
-func (_e *Mempool_Expecter) RemoveTxByKey(txKey interface{}) *Mempool_RemoveTxByKey_Call {
+func (_e *Mempool_Expecter) RemoveTxByKey(txKey any) *Mempool_RemoveTxByKey_Call {
 	return &Mempool_RemoveTxByKey_Call{Call: _e.mock.On("RemoveTxByKey", txKey)}
 }
 
@@ -672,7 +672,7 @@ type Mempool_Update_Call struct {
 //   - newPreFn mempool.PreCheckFunc
 //   - newPostFn mempool.PostCheckFunc
 //   - recheck bool
-func (_e *Mempool_Expecter) Update(ctx interface{}, blockHeight interface{}, blockTxs interface{}, txResults interface{}, newPreFn interface{}, newPostFn interface{}, recheck interface{}) *Mempool_Update_Call {
+func (_e *Mempool_Expecter) Update(ctx any, blockHeight any, blockTxs any, txResults any, newPreFn any, newPostFn any, recheck any) *Mempool_Update_Call {
 	return &Mempool_Update_Call{Call: _e.mock.On("Update", ctx, blockHeight, blockTxs, txResults, newPreFn, newPostFn, recheck)}
 }
 

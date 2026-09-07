@@ -73,7 +73,7 @@ type Transport_Accept_Call struct {
 
 // Accept is a helper method to define mock.On call
 //   - context1 context.Context
-func (_e *Transport_Expecter) Accept(context1 interface{}) *Transport_Accept_Call {
+func (_e *Transport_Expecter) Accept(context1 any) *Transport_Accept_Call {
 	return &Transport_Accept_Call{Call: _e.mock.On("Accept", context1)}
 }
 
@@ -101,8 +101,8 @@ func (_c *Transport_Accept_Call) RunAndReturn(run func(context1 context.Context)
 }
 
 // AddChannelDescriptors provides a mock function for the type Transport
-func (_mock *Transport) AddChannelDescriptors(vs []*p2p.ChannelDescriptor) {
-	_mock.Called(vs)
+func (_mock *Transport) AddChannelDescriptors(channelDescriptors []*p2p.ChannelDescriptor) {
+	_mock.Called(channelDescriptors)
 	return
 }
 
@@ -112,12 +112,12 @@ type Transport_AddChannelDescriptors_Call struct {
 }
 
 // AddChannelDescriptors is a helper method to define mock.On call
-//   - vs []*p2p.ChannelDescriptor
-func (_e *Transport_Expecter) AddChannelDescriptors(vs interface{}) *Transport_AddChannelDescriptors_Call {
-	return &Transport_AddChannelDescriptors_Call{Call: _e.mock.On("AddChannelDescriptors", vs)}
+//   - channelDescriptors []*p2p.ChannelDescriptor
+func (_e *Transport_Expecter) AddChannelDescriptors(channelDescriptors any) *Transport_AddChannelDescriptors_Call {
+	return &Transport_AddChannelDescriptors_Call{Call: _e.mock.On("AddChannelDescriptors", channelDescriptors)}
 }
 
-func (_c *Transport_AddChannelDescriptors_Call) Run(run func(vs []*p2p.ChannelDescriptor)) *Transport_AddChannelDescriptors_Call {
+func (_c *Transport_AddChannelDescriptors_Call) Run(run func(channelDescriptors []*p2p.ChannelDescriptor)) *Transport_AddChannelDescriptors_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 []*p2p.ChannelDescriptor
 		if args[0] != nil {
@@ -135,7 +135,7 @@ func (_c *Transport_AddChannelDescriptors_Call) Return() *Transport_AddChannelDe
 	return _c
 }
 
-func (_c *Transport_AddChannelDescriptors_Call) RunAndReturn(run func(vs []*p2p.ChannelDescriptor)) *Transport_AddChannelDescriptors_Call {
+func (_c *Transport_AddChannelDescriptors_Call) RunAndReturn(run func(channelDescriptors []*p2p.ChannelDescriptor)) *Transport_AddChannelDescriptors_Call {
 	_c.Run(run)
 	return _c
 }
@@ -220,7 +220,7 @@ type Transport_Dial_Call struct {
 // Dial is a helper method to define mock.On call
 //   - context1 context.Context
 //   - endpoint *p2p.Endpoint
-func (_e *Transport_Expecter) Dial(context1 interface{}, endpoint interface{}) *Transport_Dial_Call {
+func (_e *Transport_Expecter) Dial(context1 any, endpoint any) *Transport_Dial_Call {
 	return &Transport_Dial_Call{Call: _e.mock.On("Dial", context1, endpoint)}
 }
 
@@ -331,7 +331,7 @@ type Transport_Listen_Call struct {
 
 // Listen is a helper method to define mock.On call
 //   - endpoint *p2p.Endpoint
-func (_e *Transport_Expecter) Listen(endpoint interface{}) *Transport_Listen_Call {
+func (_e *Transport_Expecter) Listen(endpoint any) *Transport_Listen_Call {
 	return &Transport_Listen_Call{Call: _e.mock.On("Listen", endpoint)}
 }
 
