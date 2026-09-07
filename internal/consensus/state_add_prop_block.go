@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/cosmos/gogoproto/proto"
 
@@ -176,6 +177,27 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 			block.Header.CoreChainLockedHeight != stateData.RoundState.Proposal.CoreChainLockedHeight {
 			return added, fmt.Errorf("core chain lock height of block %d does not match proposal %d",
 				block.Header.CoreChainLockedHeight, stateData.RoundState.Proposal.CoreChainLockedHeight)
+		}
+
+		// A Proposal carries a BlockID the proposer signed before anyone had seen
+		// the block. Now that the block is assembled the claim is checkable, and a
+		// proposer that builds one honestly derives it from exactly these bytes and
+		// these parts, so any difference is a signed statement about a block this
+		// is not. The block is kept -- it is the bytes, and they are what they are;
+		// the Proposal is discarded, so nothing downstream signs its BlockID.
+		if proposal := stateData.Proposal; proposal != nil {
+			if derived := block.BlockID(stateData.ProposalBlockParts); !derived.Equals(proposal.BlockID) {
+				c.logger.Error("proposal block ID does not describe the proposed block; dropping the proposal",
+					"height", stateData.Height,
+					"round", stateData.Round,
+					"proposer_pro_tx_hash", stateData.Validators.Proposer().ProTxHash.ShortString(),
+					"proposal_block_id", proposal.BlockID,
+					"block_id", derived,
+					"peer", peerID,
+				)
+				stateData.Proposal = nil
+				stateData.ProposalReceiveTime = time.Time{}
+			}
 		}
 
 		stateData.ProposalBlock = block
