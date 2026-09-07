@@ -274,10 +274,39 @@ format:
 	find . -name '*.go' -type f -not -path "*.git*"  -not -name '*.pb.go' -not -name '*pb_test.go' | xargs goimports -w -local ${REPO_NAME}
 .PHONY: format
 
+# Kept in step with .github/workflows/lint.yml, which pins the same floating
+# minor so both always resolve to the latest patch of it.
+GOLANGCI_LINT_VERSION ?= v2.12
+GOLANGCI_LINT := go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+
+# Ref that `make lint` reports new findings against; CI uses the pull request's
+# target branch. Override it when working off another release line:
+#   make lint LINT_BASE=origin/v1.6-dev
+# Once the base advances past your branch point, its own commits enter the diff
+# and can raise findings you did not write. Rebase; changing the flag would make
+# this a different gate from the one CI enforces.
+LINT_BASE ?= origin/v1.7-dev
+
+# What CI enforces: findings on lines this branch changed. The repository carries
+# several hundred pre-existing findings, so an unfiltered run can never exit 0 --
+# use `make lint-all` to see those.
 lint:
-	@echo "--> Running linter"
-	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.8 run
+	@echo "--> Running linter (new findings vs $(LINT_BASE))"
+	@git rev-parse --verify --quiet $(LINT_BASE) >/dev/null || { \
+		echo "make lint: base ref '$(LINT_BASE)' not found."; \
+		echo "  fetch it with 'git fetch origin', or pick another: make lint LINT_BASE=origin/<branch>"; \
+		exit 1; }
+	@git merge-base $(LINT_BASE) HEAD >/dev/null 2>&1 || { \
+		echo "make lint: no common history with '$(LINT_BASE)' -- shallow clone?"; \
+		echo "  deepen it with 'git fetch --unshallow'"; \
+		exit 1; }
+	$(GOLANGCI_LINT) run --timeout 10m --new-from-rev=$(LINT_BASE)
 .PHONY: lint
+
+lint-all:
+	@echo "--> Running linter (whole repository, including pre-existing findings)"
+	$(GOLANGCI_LINT) run --timeout 10m
+.PHONY: lint-all
 
 vulncheck:
 	@echo "--> Running vulnerability scanner"
