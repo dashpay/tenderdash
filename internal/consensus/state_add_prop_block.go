@@ -173,10 +173,25 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 			return added, err
 		}
 
-		if stateData.RoundState.Proposal != nil &&
-			block.Header.CoreChainLockedHeight != stateData.RoundState.Proposal.CoreChainLockedHeight {
-			return added, fmt.Errorf("core chain lock height of block %d does not match proposal %d",
-				block.Header.CoreChainLockedHeight, stateData.RoundState.Proposal.CoreChainLockedHeight)
+		// Dropping the proposal, rather than rejecting the block, is what keeps this
+		// recoverable: the completing part is already spent -- AddPart returns
+		// (false, nil) for one it holds -- and Proposaler.Set refuses a second
+		// proposal while one is held, so only clearing it lets the honest copy land.
+		// HasHeader selects the diagnosis, not the outcome: a proposal about other
+		// bytes is reported by the block ID check below, so reaching this message
+		// means a genuine chain lock disagreement.
+		if proposal := stateData.Proposal; proposal != nil &&
+			stateData.ProposalBlockParts.HasHeader(proposal.BlockID.PartSetHeader) &&
+			block.CoreChainLockedHeight != proposal.CoreChainLockedHeight {
+			c.logger.Error("proposal disagrees with the block it names about the core chain locked height; dropping the proposal",
+				"height", stateData.Height,
+				"round", stateData.Round,
+				"block_core_chain_locked_height", block.CoreChainLockedHeight,
+				"proposal_core_chain_locked_height", proposal.CoreChainLockedHeight,
+				"peer", peerID,
+			)
+			stateData.Proposal = nil
+			stateData.ProposalReceiveTime = time.Time{}
 		}
 
 		// A Proposal carries a BlockID the proposer signed before anyone had seen
