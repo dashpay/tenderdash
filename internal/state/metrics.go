@@ -26,4 +26,11 @@ type Metrics struct {
 	// udated the validator set since process start.
 	//metrics:Number of validator set updates returned by the application since process start.
 	ValidatorSetUpdates metrics.Counter
+
+	// LastCommitVerificationSkipped counts the LastCommit threshold verifications
+	// that were skipped because VerifyCommit had already verified the identical
+	// commit against the identical inputs. During block sync this should track
+	// the block rate; in consensus it stays flat.
+	//metrics:Number of LastCommit threshold verifications skipped because the same commit was already verified.
+	LastCommitVerificationSkipped metrics.Counter
 }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	dbm "github.com/cometbft/cometbft-db"
+	"github.com/go-kit/kit/metrics"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -1370,11 +1371,17 @@ func TestApplyBlockValidatesBlock(t *testing.T) {
 		"an invalid block must not advance the state store")
 }
 
+// badCommitSignature is what ValidatorSet.VerifyCommit reports for a forged threshold
+// signature. ErrInvalidBlock does not unwrap, so tests match it by message.
+const badCommitSignature = "invalid commit signatures for quorum"
+
 // verifiedCommitFixture drives a real BlockExecutor through height 1 so height 2
 // carries a genuine BLS LastCommit, then returns everything a memo test needs.
 type verifiedCommitFixture struct {
 	ctx       context.Context
 	blockExec *sm.BlockExecutor
+	// skipped counts the LastCommit verifications the executor skipped
+	skipped *skipCounter
 	// state after height 1 is applied; the state height 2 validates against
 	state sm.State
 	// block ID and commit for height 1, as block sync would hand to the applier
@@ -1384,6 +1391,7 @@ type verifiedCommitFixture struct {
 	block *types.Block
 	// state height 1 was verified against (Validators is the signing set)
 	verifiedAgainst sm.State
+	privVals        map[string]types.PrivValidator
 }
 
 func newVerifiedCommitFixture(t *testing.T) verifiedCommitFixture {
@@ -1410,8 +1418,11 @@ func newVerifiedCommitFixture(t *testing.T) verifiedCommitFixture {
 	mp.On("FlushAppConn", mock.Anything).Return(nil)
 	mp.On("Update", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	skipped := &skipCounter{}
+	execMetrics := sm.NopMetrics()
+	execMetrics.LastCommitVerificationSkipped = skipped
 	blockExec := sm.NewBlockExecutor(stateStore, proxyApp, mp, sm.EmptyEvidencePool{},
-		store.NewBlockStore(dbm.NewMemDB()), eventBus)
+		store.NewBlockStore(dbm.NewMemDB()), eventBus, sm.BockExecWithMetrics(execMetrics))
 
 	genesis := state
 	proposer := state.GetProposerFromState(1, 0).ProTxHash
@@ -1422,13 +1433,21 @@ func newVerifiedCommitFixture(t *testing.T) verifiedCommitFixture {
 	f := verifiedCommitFixture{
 		ctx:             ctx,
 		blockExec:       blockExec,
+		skipped:         skipped,
 		state:           state,
 		blockID:         blockID,
 		commit:          commit,
 		verifiedAgainst: genesis,
+		privVals:        privVals,
 	}
 	f.block = f.blockWith(commit)
 	return f
+}
+
+// verify runs commit through the executor as block sync does when it applies
+// the height 1 block.
+func (f verifiedCommitFixture) verify(commit *types.Commit) error {
+	return f.blockExec.VerifyCommit(f.verifiedAgainst, f.blockID, 1, commit)
 }
 
 // blockWith builds the height 2 block carrying lastCommit, ready for ApplyBlock.
@@ -1450,6 +1469,24 @@ func (f verifiedCommitFixture) applyNext(t *testing.T, lastCommit *types.Commit)
 	return err
 }
 
+// genuineCommit signs a commit for an unrelated block at height with the
+// fixture's validators, so a test can fill the memo with commits that pass
+// verification but are not the one under test.
+func (f verifiedCommitFixture) genuineCommit(t *testing.T, height int64) (types.BlockID, *types.Commit) {
+	t.Helper()
+	blockID := factory.MakeBlockID()
+	commit, _ := makeValidCommit(f.ctx, t, height, blockID, f.verifiedAgainst.Validators, f.privVals)
+	return blockID, commit
+}
+
+// skipCounter is a metrics.Counter that only counts, so a test can read how
+// many LastCommit verifications the executor skipped.
+type skipCounter struct{ total float64 }
+
+func (c *skipCounter) With(_ ...string) metrics.Counter { return c }
+func (c *skipCounter) Add(delta float64)                { c.total += delta }
+func (c *skipCounter) Value() float64                   { return c.total }
+
 // cloneCommit returns a commit with the same fields and no cached hash, so a
 // test can mutate it without touching the fixture's copy.
 func cloneCommit(c *types.Commit) *types.Commit {
@@ -1463,19 +1500,39 @@ func cloneCommit(c *types.Commit) *types.Commit {
 	}
 }
 
-// TestLastCommitAlreadyVerified checks that the memo matches only when every
-// input VerifyCommit reads is identical, and falls through otherwise.
-func TestLastCommitAlreadyVerified(t *testing.T) {
+// forgedCommit returns a copy of commit with a corrupted threshold signature.
+func forgedCommit(commit *types.Commit) *types.Commit {
+	c := cloneCommit(commit)
+	c.ThresholdBlockSignature[0] ^= 0xff
+	return c
+}
+
+// TestVerifyCommitMemo checks that only a commit VerifyCommit accepted is
+// remembered, that the memo matches only when every input VerifyCommit reads is
+// identical, and that it falls through otherwise.
+func TestVerifyCommitMemo(t *testing.T) {
 	f := newVerifiedCommitFixture(t)
 
-	t.Run("nil memo never matches", func(t *testing.T) {
-		require.False(t, f.blockExec.LastCommitAlreadyVerified(f.state, f.block))
+	t.Run("empty memo never matches", func(t *testing.T) {
+		require.False(t, f.blockExec.LastCommitVerified(f.state, f.block))
 	})
 
-	f.blockExec.NoteVerifiedCommit(f.verifiedAgainst, f.blockID, f.commit)
+	t.Run("rejected commit is not remembered", func(t *testing.T) {
+		require.ErrorContains(t, f.verify(forgedCommit(f.commit)), badCommitSignature)
+		require.False(t, f.blockExec.LastCommitVerified(f.state, f.block))
+	})
+
+	t.Run("state without validators cannot verify", func(t *testing.T) {
+		noVals := f.verifiedAgainst.Copy()
+		noVals.Validators = nil
+		require.Error(t, f.blockExec.VerifyCommit(noVals, f.blockID, 1, f.commit))
+		require.False(t, f.blockExec.LastCommitVerified(f.state, f.block))
+	})
+
+	require.NoError(t, f.verify(f.commit))
 
 	t.Run("exact match", func(t *testing.T) {
-		require.True(t, f.blockExec.LastCommitAlreadyVerified(f.state, f.block))
+		require.True(t, f.blockExec.LastCommitVerified(f.state, f.block))
 	})
 
 	// each mutation changes exactly one pinned input; the memo must reject all
@@ -1532,71 +1589,94 @@ func TestLastCommitAlreadyVerified(t *testing.T) {
 			state := f.state.Copy()
 			block := f.blockWith(cloneCommit(f.commit))
 			mutate(&state, block)
-			require.False(t, f.blockExec.LastCommitAlreadyVerified(state, block),
+			require.False(t, f.blockExec.LastCommitVerified(state, block),
 				"a %s mismatch must fall through to a real verification", name)
 		})
 	}
 
-	t.Run("later note replaces the memo", func(t *testing.T) {
-		f.blockExec.NoteVerifiedCommit(f.verifiedAgainst, f.blockID, types.NewCommit(7, 0, f.blockID, nil, nil))
-		require.False(t, f.blockExec.LastCommitAlreadyVerified(f.state, f.block))
-		f.blockExec.NoteVerifiedCommit(f.verifiedAgainst, f.blockID, f.commit)
-		require.True(t, f.blockExec.LastCommitAlreadyVerified(f.state, f.block))
+	t.Run("memo survives mutation of what it was built from", func(t *testing.T) {
+		// The memo owns its copies, so changing the inputs after the fact must not
+		// change what it matches. The validator set is deep-copied first: the
+		// fixture states share their quorum hash backing array.
+		blockID, commit := f.genuineCommit(t, 5)
+		verifiedAgainst := f.verifiedAgainst.Copy()
+		verifiedAgainst.Validators = f.verifiedAgainst.Validators.Copy()
+		verifiedAgainst.Validators.QuorumHash = bytes.Clone(verifiedAgainst.Validators.QuorumHash)
+		require.NoError(t, f.blockExec.VerifyCommit(verifiedAgainst, blockID, 5, commit))
+
+		// the height 6 block and state built from the inputs as they were verified
+		state := f.state.Copy()
+		state.LastBlockID = blockID.Copy()
+		block := f.blockWith(cloneCommit(commit))
+		block.Height = 6
+		require.True(t, f.blockExec.LastCommitVerified(state, block))
+
+		blockID.Hash[0] ^= 0xff
+		commit.ThresholdBlockSignature[0] ^= 0xff
+		verifiedAgainst.Validators.QuorumHash[0] ^= 0xff
+		require.True(t, f.blockExec.LastCommitVerified(state, block),
+			"the memo must not alias the block ID, commit or validator set it was built from")
 	})
 
-	t.Run("nil commit or validators leave the memo alone", func(t *testing.T) {
-		f.blockExec.NoteVerifiedCommit(f.verifiedAgainst, f.blockID, nil)
-		require.True(t, f.blockExec.LastCommitAlreadyVerified(f.state, f.block))
-		noVals := f.verifiedAgainst.Copy()
-		noVals.Validators = nil
-		f.blockExec.NoteVerifiedCommit(noVals, f.blockID, f.commit)
-		require.True(t, f.blockExec.LastCommitAlreadyVerified(f.state, f.block))
+	t.Run("the two most recent commits are remembered", func(t *testing.T) {
+		// Block sync verifies commit N before it validates block N, whose
+		// LastCommit is commit N-1, so both have to be present at once. A third
+		// verification evicts the oldest.
+		f := newVerifiedCommitFixture(t)
+		require.NoError(t, f.verify(f.commit))
+		blockID2, commit2 := f.genuineCommit(t, 2)
+		require.NoError(t, f.blockExec.VerifyCommit(f.verifiedAgainst, blockID2, 2, commit2))
+		require.True(t, f.blockExec.LastCommitVerified(f.state, f.block),
+			"verifying the next commit must not forget the previous one")
+
+		blockID3, commit3 := f.genuineCommit(t, 3)
+		require.NoError(t, f.blockExec.VerifyCommit(f.verifiedAgainst, blockID3, 3, commit3))
+		require.False(t, f.blockExec.LastCommitVerified(f.state, f.block),
+			"the memo must not grow beyond the two most recent commits")
 	})
 }
 
 // TestApplyBlockSkipsVerifiedLastCommit checks the block sync flow end to end:
-// once the applier notes a verified commit, ApplyBlock for the next block does
+// once the executor has verified a commit, ApplyBlock for the next block does
 // not threshold-verify it again, while a commit that does not match the memo,
-// or was never noted, is verified and rejected when its signature is forged.
+// or was never verified, is verified and rejected when its signature is forged.
 func TestApplyBlockSkipsVerifiedLastCommit(t *testing.T) {
-	forged := func(commit *types.Commit) *types.Commit {
-		c := cloneCommit(commit)
-		c.ThresholdBlockSignature[0] ^= 0xff
-		return c
-	}
-	// ErrInvalidBlock does not unwrap, so match the signature failure by message
-	const badSignature = "invalid commit signatures for quorum"
-
-	t.Run("noted commit is not re-verified", func(t *testing.T) {
+	t.Run("verified commit is not re-verified", func(t *testing.T) {
 		f := newVerifiedCommitFixture(t)
-		// A forged signature can only pass if verification is skipped, so noting the
-		// forged commit as verified and then applying a block that carries it proves
-		// the skip fires. Block sync never notes a commit it did not verify itself.
-		bad := forged(f.commit)
-		f.blockExec.NoteVerifiedCommit(f.verifiedAgainst, f.blockID, bad)
-		require.NoError(t, f.applyNext(t, bad),
+		require.NoError(t, f.verify(f.commit))
+		require.NoError(t, f.applyNext(t, f.commit))
+		// once in validateBlock and once in ValidateBlockWithRoundState: the two
+		// threshold verifications ApplyBlock would otherwise run on LastCommit
+		require.Equal(t, 2.0, f.skipped.Value(),
 			"a commit the memo proves verified must not be verified again")
 	})
 
-	t.Run("unnoted forged commit is rejected", func(t *testing.T) {
+	t.Run("genuine commit passes without the memo", func(t *testing.T) {
 		f := newVerifiedCommitFixture(t)
-		err := f.applyNext(t, forged(f.commit))
+		require.NoError(t, f.applyNext(t, f.commit))
+		require.Equal(t, 0.0, f.skipped.Value(), "nothing was verified, so nothing may be skipped")
+	})
+
+	t.Run("unverified forged commit is rejected", func(t *testing.T) {
+		f := newVerifiedCommitFixture(t)
+		err := f.applyNext(t, forgedCommit(f.commit))
 		require.ErrorAs(t, err, &sm.ErrInvalidBlock{})
-		require.ErrorContains(t, err, badSignature)
+		require.ErrorContains(t, err, badCommitSignature)
+		require.Equal(t, 0.0, f.skipped.Value())
 	})
 
-	t.Run("memo for a different commit does not cover a forged one", func(t *testing.T) {
+	t.Run("forged commit rejected by VerifyCommit is still rejected by ApplyBlock", func(t *testing.T) {
 		f := newVerifiedCommitFixture(t)
-		f.blockExec.NoteVerifiedCommit(f.verifiedAgainst, f.blockID, f.commit)
-		require.ErrorContains(t, f.applyNext(t, forged(f.commit)), badSignature)
+		bad := forgedCommit(f.commit)
+		require.ErrorContains(t, f.verify(bad), badCommitSignature)
+		require.ErrorContains(t, f.applyNext(t, bad), badCommitSignature)
+		require.Equal(t, 0.0, f.skipped.Value())
 	})
 
-	t.Run("genuine commit passes with or without the memo", func(t *testing.T) {
+	t.Run("memo for the genuine commit does not cover a forged one", func(t *testing.T) {
 		f := newVerifiedCommitFixture(t)
-		require.NoError(t, f.applyNext(t, f.commit))
-
-		f = newVerifiedCommitFixture(t)
-		f.blockExec.NoteVerifiedCommit(f.verifiedAgainst, f.blockID, f.commit)
-		require.NoError(t, f.applyNext(t, f.commit))
+		require.NoError(t, f.verify(f.commit))
+		require.ErrorContains(t, f.applyNext(t, forgedCommit(f.commit)), badCommitSignature)
+		require.Equal(t, 0.0, f.skipped.Value())
 	})
 }

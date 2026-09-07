@@ -85,8 +85,9 @@ func (suite *SynchronizerTestSuite) TestBasic() {
 		Maybe().
 		Return(nil)
 	suite.blockExec.
-		On("NoteVerifiedCommit", mock.Anything, mock.Anything, mock.Anything).
-		Maybe()
+		On("VerifyCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Maybe().
+		Return(nil)
 	suite.blockExec.
 		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
@@ -207,8 +208,9 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResult() {
 					Once().
 					Return(nil)
 				suite.blockExec.
-					On("NoteVerifiedCommit", mock.Anything, mock.Anything, mock.Anything).
-					Maybe()
+					On("VerifyCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Maybe().
+					Return(nil)
 				suite.blockExec.
 					On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, respH1.Block, respH1.Commit).
 					Once().
@@ -245,6 +247,8 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResult() {
 			wantPushBack: []int64{1, 2},
 			mockFn: func(pool *Synchronizer) {
 				pool.pendingToApply[2] = BlockResponse{PeerID: "peer 1", Block: respH2.Block}
+				// VerifyCommit is covered by the Maybe expectation the earlier case
+				// registered on this shared mock
 				suite.blockExec.
 					On("ValidateBlock", mock.Anything, mock.Anything, respH1.Block).
 					Once().
@@ -426,8 +430,9 @@ func (suite *SynchronizerTestSuite) TestConsumeDuplicateThenDrain() {
 		Twice().
 		Return(nil)
 	suite.blockExec.
-		On("NoteVerifiedCommit", mock.Anything, mock.Anything, mock.Anything).
-		Maybe()
+		On("VerifyCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Maybe().
+		Return(nil)
 	suite.blockExec.
 		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Twice().
@@ -495,6 +500,10 @@ func (suite *SynchronizerTestSuite) TestApplyFailurePunishesSupplyingPeer() {
 	pool.AddPeer(newPeerData(honestPeerID, 1, 100))
 	pool.pendingToApply[poisonH1.Block.Height] = *poisonH1
 
+	suite.blockExec.
+		On("VerifyCommit", mock.Anything, mock.Anything, poisonH1.Block.Height, poisonH1.Commit).
+		Once().
+		Return(nil)
 	suite.blockExec.
 		On("ValidateBlock", mock.Anything, mock.Anything, poisonH1.Block).
 		Once().
@@ -1219,8 +1228,9 @@ func (suite *SynchronizerTestSuite) newBacklogHarness() *backlogHarness {
 		Maybe().
 		Return(nil)
 	suite.blockExec.
-		On("NoteVerifiedCommit", mock.Anything, mock.Anything, mock.Anything).
-		Maybe()
+		On("VerifyCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Maybe().
+		Return(nil)
 	suite.blockExec.
 		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
@@ -1672,8 +1682,9 @@ func (suite *SynchronizerTestSuite) TestClientTimeoutUnwedgesAFullWindow() {
 		Maybe().
 		Return(nil)
 	suite.blockExec.
-		On("NoteVerifiedCommit", mock.Anything, mock.Anything, mock.Anything).
-		Maybe()
+		On("VerifyCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Maybe().
+		Return(nil)
 	suite.blockExec.
 		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Maybe().

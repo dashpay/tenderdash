@@ -79,9 +79,6 @@ func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *ty
 		return err
 	}
 	verifyTime := time.Since(start)
-	// The validator set that just verified this commit, kept for the memo below:
-	// ApplyBlock reassigns e.state.
-	verifiedAgainst := e.state
 
 	start = time.Now()
 	e.store.SaveBlock(block, blockParts, commit)
@@ -94,13 +91,6 @@ func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *ty
 		panic(fmt.Sprintf("failed to process committed block (%d:%X): %v", block.Height, block.Hash(), err))
 	}
 	execTime := time.Since(start)
-
-	// Record only now that the block is applied. This commit is block N+1's
-	// LastCommit, and both places that would verify it again — validateBlock and
-	// ValidateBlockWithRoundState — run while the *next* block is applied. Storing
-	// it earlier would overwrite the entry those two are still reading for this
-	// block, and neither skip would ever fire.
-	e.blockExec.NoteVerifiedCommit(verifiedAgainst, blockID, commit)
 
 	e.stats.add(partSetTime, verifyTime, saveTime, execTime)
 	// ByteSize is the size of the serialized block we just built, so the metric
@@ -131,7 +121,9 @@ func (e *blockApplier) UpdateState(newState sm.State) {
 }
 
 func (e *blockApplier) verify(ctx context.Context, blockID types.BlockID, block *types.Block, commit *types.Commit) error {
-	err := e.state.Validators.VerifyCommit(e.state.ChainID, blockID, block.Height, commit)
+	// Verified through the executor so it can remember the result: this commit is
+	// the next block's LastCommit, and the executor skips verifying it again then.
+	err := e.blockExec.VerifyCommit(e.state, blockID, block.Height, commit)
 
 	// If either of the checks failed we log the error and request for a new block
 	// at that height

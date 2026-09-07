@@ -11,8 +11,8 @@ func ValidateValidatorUpdates(abciUpdates []abci.ValidatorUpdate, params types.V
 	return validateValidatorUpdates(abciUpdates, params)
 }
 
-// LastCommitAlreadyVerified exposes lastCommitAlreadyVerified for tests of the
-// verified-commit memo.
-func (blockExec *BlockExecutor) LastCommitAlreadyVerified(state State, block *types.Block) bool {
-	return blockExec.lastCommitAlreadyVerified(state, block)
+// LastCommitVerified exposes lastCommitVerified for tests of the verified-commit
+// memo.
+func (blockExec *BlockExecutor) LastCommitVerified(state State, block *types.Block) bool {
+	return blockExec.lastCommitVerified(state, block)
 }

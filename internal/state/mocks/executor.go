@@ -363,58 +363,6 @@ func (_c *Executor_FinalizeBlock_Call) RunAndReturn(run func(ctx context.Context
 	return _c
 }
 
-// NoteVerifiedCommit provides a mock function for the type Executor
-func (_mock *Executor) NoteVerifiedCommit(state1 state.State, blockID types.BlockID, commit *types.Commit) {
-	_mock.Called(state1, blockID, commit)
-	return
-}
-
-// Executor_NoteVerifiedCommit_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'NoteVerifiedCommit'
-type Executor_NoteVerifiedCommit_Call struct {
-	*mock.Call
-}
-
-// NoteVerifiedCommit is a helper method to define mock.On call
-//   - state1 state.State
-//   - blockID types.BlockID
-//   - commit *types.Commit
-func (_e *Executor_Expecter) NoteVerifiedCommit(state1 interface{}, blockID interface{}, commit interface{}) *Executor_NoteVerifiedCommit_Call {
-	return &Executor_NoteVerifiedCommit_Call{Call: _e.mock.On("NoteVerifiedCommit", state1, blockID, commit)}
-}
-
-func (_c *Executor_NoteVerifiedCommit_Call) Run(run func(state1 state.State, blockID types.BlockID, commit *types.Commit)) *Executor_NoteVerifiedCommit_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 state.State
-		if args[0] != nil {
-			arg0 = args[0].(state.State)
-		}
-		var arg1 types.BlockID
-		if args[1] != nil {
-			arg1 = args[1].(types.BlockID)
-		}
-		var arg2 *types.Commit
-		if args[2] != nil {
-			arg2 = args[2].(*types.Commit)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-		)
-	})
-	return _c
-}
-
-func (_c *Executor_NoteVerifiedCommit_Call) Return() *Executor_NoteVerifiedCommit_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *Executor_NoteVerifiedCommit_Call) RunAndReturn(run func(state1 state.State, blockID types.BlockID, commit *types.Commit)) *Executor_NoteVerifiedCommit_Call {
-	_c.Run(run)
-	return _c
-}
-
 // ProcessProposal provides a mock function for the type Executor
 func (_mock *Executor) ProcessProposal(ctx context.Context, block *types.Block, round int32, state1 state.State, verify bool) (state.CurrentRoundState, error) {
 	ret := _mock.Called(ctx, block, round, state1, verify)
@@ -627,6 +575,75 @@ func (_c *Executor_ValidateBlockWithRoundState_Call) Return(err error) *Executor
 }
 
 func (_c *Executor_ValidateBlockWithRoundState_Call) RunAndReturn(run func(ctx context.Context, state1 state.State, uncommittedState state.CurrentRoundState, block *types.Block) error) *Executor_ValidateBlockWithRoundState_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// VerifyCommit provides a mock function for the type Executor
+func (_mock *Executor) VerifyCommit(state1 state.State, blockID types.BlockID, height int64, commit *types.Commit) error {
+	ret := _mock.Called(state1, blockID, height, commit)
+
+	if len(ret) == 0 {
+		panic("no return value specified for VerifyCommit")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(state.State, types.BlockID, int64, *types.Commit) error); ok {
+		r0 = returnFunc(state1, blockID, height, commit)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// Executor_VerifyCommit_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'VerifyCommit'
+type Executor_VerifyCommit_Call struct {
+	*mock.Call
+}
+
+// VerifyCommit is a helper method to define mock.On call
+//   - state1 state.State
+//   - blockID types.BlockID
+//   - height int64
+//   - commit *types.Commit
+func (_e *Executor_Expecter) VerifyCommit(state1 interface{}, blockID interface{}, height interface{}, commit interface{}) *Executor_VerifyCommit_Call {
+	return &Executor_VerifyCommit_Call{Call: _e.mock.On("VerifyCommit", state1, blockID, height, commit)}
+}
+
+func (_c *Executor_VerifyCommit_Call) Run(run func(state1 state.State, blockID types.BlockID, height int64, commit *types.Commit)) *Executor_VerifyCommit_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 state.State
+		if args[0] != nil {
+			arg0 = args[0].(state.State)
+		}
+		var arg1 types.BlockID
+		if args[1] != nil {
+			arg1 = args[1].(types.BlockID)
+		}
+		var arg2 int64
+		if args[2] != nil {
+			arg2 = args[2].(int64)
+		}
+		var arg3 *types.Commit
+		if args[3] != nil {
+			arg3 = args[3].(*types.Commit)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *Executor_VerifyCommit_Call) Return(err error) *Executor_VerifyCommit_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *Executor_VerifyCommit_Call) RunAndReturn(run func(state1 state.State, blockID types.BlockID, height int64, commit *types.Commit) error) *Executor_VerifyCommit_Call {
 	_c.Call.Return(run)
 	return _c
 }

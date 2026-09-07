@@ -44,12 +44,13 @@ func TestBlockApplierApply(t *testing.T) {
 			mockFn: func() {
 				mockBlockStore.On("SaveBlock", blockH1, blockH1Parts, commitH1).Once()
 				mockBlockExec.
-					On("ValidateBlock", mock.Anything, initialState, blockH1).
+					On("VerifyCommit", initialState, blockH1ID, blockH1.Height, commitH1).
 					Once().
 					Return(nil)
 				mockBlockExec.
-					On("NoteVerifiedCommit", initialState, blockH1ID, commitH1).
-					Once()
+					On("ValidateBlock", mock.Anything, initialState, blockH1).
+					Once().
+					Return(nil)
 				mockBlockExec.
 					On("ApplyBlock", mock.Anything, initialState, blockH1ID, blockH1, commitH1).
 					Once().
@@ -57,9 +58,26 @@ func TestBlockApplierApply(t *testing.T) {
 			},
 		},
 		{
+			// a commit the executor rejects stops the block before it is validated,
+			// saved or applied
 			block:  blockH1,
 			commit: commitH1,
 			mockFn: func() {
+				mockBlockExec.
+					On("VerifyCommit", initialState, blockH1ID, blockH1.Height, commitH1).
+					Once().
+					Return(errors.New("bad signature"))
+			},
+			wantErr: "invalid a commit: bad signature",
+		},
+		{
+			block:  blockH1,
+			commit: commitH1,
+			mockFn: func() {
+				mockBlockExec.
+					On("VerifyCommit", initialState, blockH1ID, blockH1.Height, commitH1).
+					Once().
+					Return(nil)
 				mockBlockExec.
 					On("ValidateBlock", mock.Anything, initialState, blockH1).
 					Once().
@@ -72,6 +90,10 @@ func TestBlockApplierApply(t *testing.T) {
 			commit: commitH1,
 			mockFn: func() {
 				mockBlockStore.On("SaveBlock", blockH1, blockH1Parts, commitH1).Once()
+				mockBlockExec.
+					On("VerifyCommit", initialState, blockH1ID, blockH1.Height, commitH1).
+					Once().
+					Return(nil)
 				mockBlockExec.
 					On("ValidateBlock", mock.Anything, initialState, blockH1).
 					Once().

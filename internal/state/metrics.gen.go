@@ -34,13 +34,20 @@ func PrometheusMetrics(namespace string, labelsAndValues ...string) *Metrics {
 			Name:      "validator_set_updates",
 			Help:      "Number of validator set updates returned by the application since process start.",
 		}, labels).With(labelsAndValues...),
+		LastCommitVerificationSkipped: prometheus.NewCounterFrom(stdprometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: MetricsSubsystem,
+			Name:      "last_commit_verification_skipped",
+			Help:      "Number of LastCommit threshold verifications skipped because the same commit was already verified.",
+		}, labels).With(labelsAndValues...),
 	}
 }
 
 func NopMetrics() *Metrics {
 	return &Metrics{
-		BlockProcessingTime:   discard.NewHistogram(),
-		ConsensusParamUpdates: discard.NewCounter(),
-		ValidatorSetUpdates:   discard.NewCounter(),
+		BlockProcessingTime:           discard.NewHistogram(),
+		ConsensusParamUpdates:         discard.NewCounter(),
+		ValidatorSetUpdates:           discard.NewCounter(),
+		LastCommitVerificationSkipped: discard.NewCounter(),
 	}
 }
