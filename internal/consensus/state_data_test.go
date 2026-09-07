@@ -208,6 +208,20 @@ func TestReadyToApplyCommitUsesTheCommitBlockID(t *testing.T) {
 			wantAdopted:     true,
 		},
 		{
+			// The part set header alone agrees, which is the one combination a
+			// stale proposal can hide behind: the round is already collecting the
+			// committed block's parts, so any test of the header is satisfied
+			// while the proposal still names another block by hash and state ID.
+			name: "proposal sharing only the part set header is dropped",
+			proposalBlockID: types.BlockID{
+				Hash:          ourBlockID.Hash,
+				PartSetHeader: committedBlockID.PartSetHeader,
+				StateID:       ourBlockID.StateID,
+			},
+			commitBlockID: committedBlockID,
+			wantAdopted:   true,
+		},
+		{
 			name:            "forged commit for our proposal evicts",
 			proposalBlockID: committedBlockID,
 			commitBlockID:   committedBlockID,
@@ -240,9 +254,16 @@ func TestReadyToApplyCommitUsesTheCommitBlockID(t *testing.T) {
 			)
 			if !tc.noProposal {
 				proposal = types.NewProposal(height, 1, round, -1, tc.proposalBlockID, time.Now())
+				// Chosen field by field, not as a pair. Selecting both from the whole
+				// BlockID makes every row either "the same block" or "a different
+				// block", and a BlockID that agrees on the part set header while
+				// disagreeing on the rest cannot be written down at all.
 				proposalBlock, parts = ourBlock, ourParts
-				if tc.proposalBlockID.Equals(committedBlockID) {
-					proposalBlock, parts = committedBlock, committedParts
+				if tc.proposalBlockID.Hash.Equal(committedBlockID.Hash) {
+					proposalBlock = committedBlock
+				}
+				if tc.proposalBlockID.PartSetHeader.Equals(committedBlockID.PartSetHeader) {
+					parts = committedParts
 				}
 			}
 			stateData := newReadyToApplyCommitStateData(chainID, cstypes.RoundState{
