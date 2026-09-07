@@ -70,9 +70,12 @@ func TestLaterRoundProposalDoesNotStrandTheParkedCommit(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		coreHeight uint32
+		retransmit bool
 	}{
 		{name: "same core height", coreHeight: 1},
 		{name: "different core height", coreHeight: 2},
+		{name: "retransmission with same core height", coreHeight: 1, retransmit: true},
+		{name: "retransmission with different core height", coreHeight: 2, retransmit: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
@@ -156,6 +159,13 @@ func TestLaterRoundProposalDoesNotStrandTheParkedCommit(t *testing.T) {
 			assert.True(t, stateData.ProposalBlockParts.HasHeader(commit.BlockID.PartSetHeader),
 				"the round state must go back to collecting the committed block")
 			assert.Less(t, stateData.Height, int64(2), "a block the network did not commit must not be applied")
+
+			if tc.retransmit {
+				require.NoError(t, node.msgDispatcher.dispatch(ctx, &stateData, msgInfo{
+					Msg: &ProposalMessage{Proposal: proposal}, PeerID: peerID, ReceiveTime: tmtime.Now()}))
+				assert.Nil(t, stateData.Proposal, "a conflicting retransmission must not replace commit metadata")
+				assert.True(t, stateData.ProposalReceiveTime.IsZero())
+			}
 
 			for i := 0; i < int(committedParts.Total()); i++ {
 				msg := &BlockPartMessage{Height: commit.Height, Round: commit.Round, Part: committedParts.GetPart(i)}
