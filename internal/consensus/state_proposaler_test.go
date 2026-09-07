@@ -208,6 +208,21 @@ func (suite *ProposalerTestSuite) TestSet() {
 			wantProposal:    proposalH100R0,
 			wantReceiveTime: receivedAt,
 		},
+		{
+			// A matching proposal remains admissible during committed-block download.
+			rs: cstypes.RoundState{
+				Height:             100,
+				Round:              0,
+				Validators:         suite.mockValSet,
+				ProposerSelector:   suite.proposerSelector,
+				Commit:             &types.Commit{Height: 100, BlockID: blockID},
+				ProposalBlockParts: types.NewPartSetFromHeader(blockID.PartSetHeader),
+			},
+			proposal:        *proposalH100R0,
+			receivedAt:      receivedAt,
+			wantProposal:    proposalH100R0,
+			wantReceiveTime: receivedAt,
+		},
 	}
 	for i, tc := range testCases {
 		suite.Run(fmt.Sprintf("%d", i), func() {

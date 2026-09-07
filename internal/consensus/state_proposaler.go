@@ -63,6 +63,12 @@ func (p *Proposaler) Set(
 		return nil
 	}
 
+	// Keep a later-round proposal from disrupting the committed-block download.
+	if rs.Commit != nil && rs.ProposalBlockParts.HasHeader(rs.Commit.BlockID.PartSetHeader) &&
+		!proposal.BlockID.Equals(rs.Commit.BlockID) {
+		return nil
+	}
+
 	// Verify POLRound, which must be -1 or in range [0, proposal.Round).
 	if proposal.POLRound < -1 ||
 		(proposal.POLRound >= 0 && proposal.POLRound >= proposal.Round) {
