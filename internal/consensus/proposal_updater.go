@@ -1,6 +1,8 @@
 package consensus
 
 import (
+	"time"
+
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -24,6 +26,11 @@ func (u *proposalUpdater) updateStateData(stateData *StateData, blockID types.Bl
 	// We're getting the wrong block.
 	// Set up ProposalBlockParts and keep waiting.
 	stateData.ProposalBlock = nil
+	// Metadata for another block must not reject the committed block when it arrives.
+	if stateData.Proposal != nil && !stateData.Proposal.BlockID.Equals(blockID) {
+		stateData.Proposal = nil
+		stateData.ProposalReceiveTime = time.Time{}
+	}
 	stateData.metrics.MarkBlockGossipStarted()
 	stateData.ProposalBlockParts = types.NewPartSetFromHeader(blockID.PartSetHeader)
 	err := stateData.Save()
