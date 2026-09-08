@@ -356,7 +356,7 @@ func authenticateStateSyncValidatorSet(
 		return nil, errors.New("light block is missing header or validator set")
 	}
 	if dashCoreClient == nil {
-		return nil, errors.New("Dash Core client is required to authenticate validator membership")
+		return nil, errors.New("cannot authenticate validator membership without a Dash Core client")
 	}
 
 	wireSet := lightBlock.ValidatorSet
@@ -365,7 +365,7 @@ func authenticateStateSyncValidatorSet(
 		return nil, fmt.Errorf("querying quorum info: %w", err)
 	}
 	if info == nil {
-		return nil, errors.New("Dash Core returned nil quorum info")
+		return nil, errors.New("received nil quorum info from Dash Core")
 	}
 	return authenticateStateSyncValidatorSetWithQuorumInfo(lightBlock, info)
 }
@@ -386,12 +386,12 @@ func authenticateStateSyncValidatorSetWithQuorumInfo(
 		}
 	}
 	if quorumType.Validate() != nil || quorumType != wireSet.QuorumType {
-		return nil, fmt.Errorf("Dash Core quorum type %q does not match light block %d", info.Type, wireSet.QuorumType)
+		return nil, fmt.Errorf("quorum type %q returned by Dash Core does not match light block %d", info.Type, wireSet.QuorumType)
 	}
 
 	quorumHash, err := hex.DecodeString(info.QuorumHash)
 	if err != nil || !bytes.Equal(quorumHash, wireSet.QuorumHash) {
-		return nil, fmt.Errorf("Dash Core quorum hash %q does not match light block %X", info.QuorumHash, wireSet.QuorumHash)
+		return nil, fmt.Errorf("quorum hash %q returned by Dash Core does not match light block %X", info.QuorumHash, wireSet.QuorumHash)
 	}
 	thresholdKeyBytes, err := hex.DecodeString(info.QuorumPublicKey)
 	if err != nil || len(thresholdKeyBytes) != bls12381.PubKeySize {
@@ -399,7 +399,7 @@ func authenticateStateSyncValidatorSetWithQuorumInfo(
 	}
 	thresholdKey := bls12381.PubKey(thresholdKeyBytes)
 	if !thresholdKey.Equals(wireSet.ThresholdPublicKey) {
-		return nil, errors.New("Dash Core threshold public key does not match light block")
+		return nil, errors.New("threshold public key returned by Dash Core does not match light block")
 	}
 
 	validators := make([]*types.Validator, 0, len(info.Members))
@@ -433,7 +433,7 @@ func authenticateStateSyncValidatorSetWithQuorumInfo(
 		validators = append(validators, validator)
 	}
 	if len(validators) == 0 {
-		return nil, errors.New("Dash Core quorum has no valid members")
+		return nil, errors.New("quorum returned by Dash Core has no valid members")
 	}
 
 	authenticated := types.NewValidatorSet(
@@ -444,7 +444,7 @@ func authenticateStateSyncValidatorSetWithQuorumInfo(
 		true,
 		nil,
 	)
-	if err := authenticated.SetProposer(lightBlock.Header.ProposerProTxHash); err != nil {
+	if err := authenticated.SetProposer(lightBlock.ProposerProTxHash); err != nil {
 		return nil, fmt.Errorf("signed proposer is not a valid quorum member: %w", err)
 	}
 	if err := authenticated.ValidateBasic(); err != nil {

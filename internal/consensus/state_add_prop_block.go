@@ -195,8 +195,12 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 				stateData.Proposal = nil
 				stateData.ProposalReceiveTime = time.Time{}
 			} else {
-				proposal.CoreChainLockedHeight = block.CoreChainLockedHeight
-				proposal.BlockID = derived.Copy()
+				// RoundState snapshots may still expose this proposal to gossip workers.
+				// Publish a corrected copy so those readers keep an immutable value.
+				correctedProposal := *proposal
+				correctedProposal.CoreChainLockedHeight = block.CoreChainLockedHeight
+				correctedProposal.BlockID = derived.Copy()
+				stateData.Proposal = &correctedProposal
 			}
 		}
 

@@ -117,6 +117,8 @@ func TestCompletedBlockRepairsUnsignedProposalStateID(t *testing.T) {
 		"an honest proposer derives the block ID from the block and its parts")
 
 	proposal.BlockID = forgeField(t, honest, "state_id")
+	receivedProposal := proposal
+	forged := proposal.BlockID.Copy()
 
 	stateData = cs.GetStateData()
 	stateData.Proposal = proposal
@@ -134,6 +136,10 @@ func TestCompletedBlockRepairsUnsignedProposalStateID(t *testing.T) {
 
 	require.NotNil(t, stateData.ProposalBlock, "the block is the bytes; it is kept")
 	require.NotNil(t, stateData.Proposal)
+	assert.NotSame(t, receivedProposal, stateData.Proposal,
+		"repair must publish a copy because gossip workers may retain the original proposal")
+	assert.True(t, receivedProposal.BlockID.Equals(forged),
+		"repair must not mutate a proposal visible to concurrent readers")
 	assert.True(t, stateData.Proposal.BlockID.Equals(honest),
 		"unsigned metadata must be derived from the completed block")
 	assert.False(t, stateData.ProposalReceiveTime.IsZero())
