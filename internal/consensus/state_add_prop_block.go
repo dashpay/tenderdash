@@ -1,6 +1,7 @@
 package consensus
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -173,35 +174,16 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 			return added, err
 		}
 
-		// Dropping the proposal, rather than rejecting the block, is what keeps this
-		// recoverable: the completing part is already spent -- AddPart returns
-		// (false, nil) for one it holds -- and Proposaler.Set refuses a second
-		// proposal while one is held, so only clearing it lets the honest copy land.
-		// HasHeader selects the diagnosis, not the outcome: a proposal about other
-		// bytes is reported by the block ID check below, so reaching this message
-		// means a genuine chain lock disagreement.
-		if proposal := stateData.Proposal; proposal != nil &&
-			stateData.ProposalBlockParts.HasHeader(proposal.BlockID.PartSetHeader) &&
-			block.CoreChainLockedHeight != proposal.CoreChainLockedHeight {
-			c.logger.Error("proposal disagrees with the block it names about the core chain locked height; dropping the proposal",
-				"height", stateData.Height,
-				"round", stateData.Round,
-				"block_core_chain_locked_height", block.CoreChainLockedHeight,
-				"proposal_core_chain_locked_height", proposal.CoreChainLockedHeight,
-				"peer", peerID,
-			)
-			stateData.Proposal = nil
-			stateData.ProposalReceiveTime = time.Time{}
-		}
-
-		// A Proposal carries a BlockID the proposer signed before anyone had seen
-		// the block. Now that the block is assembled the claim is checkable, and a
-		// proposer that builds one honestly derives it from exactly these bytes and
-		// these parts, so any difference is a signed statement about a block this
-		// is not. The block is kept -- it is the bytes, and they are what they are;
-		// the Proposal is discarded, so nothing downstream signs its BlockID.
+		// CoreChainLockedHeight and BlockID.StateID are not covered by the legacy
+		// proposal signature. A relay can therefore alter them without invalidating
+		// the proposer signature. Once the block is complete, derive those fields
+		// from the authenticated block bytes instead of allowing the relay's copy to
+		// erase the proposal slot. Hash and PartSetHeader are signed; a disagreement
+		// in either still proves that the proposal describes different bytes.
 		if proposal := stateData.Proposal; proposal != nil {
-			if derived := block.BlockID(stateData.ProposalBlockParts); !derived.Equals(proposal.BlockID) {
+			derived := block.BlockID(stateData.ProposalBlockParts)
+			if !bytes.Equal(derived.Hash, proposal.BlockID.Hash) ||
+				!derived.PartSetHeader.Equals(proposal.BlockID.PartSetHeader) {
 				c.logger.Error("proposal block ID does not describe the proposed block; dropping the proposal",
 					"height", stateData.Height,
 					"round", stateData.Round,
@@ -212,6 +194,9 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 				)
 				stateData.Proposal = nil
 				stateData.ProposalReceiveTime = time.Time{}
+			} else {
+				proposal.CoreChainLockedHeight = block.CoreChainLockedHeight
+				proposal.BlockID = derived.Copy()
 			}
 		}
 

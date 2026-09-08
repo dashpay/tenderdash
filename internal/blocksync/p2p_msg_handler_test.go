@@ -7,6 +7,7 @@ import (
 
 	"github.com/cosmos/gogoproto/proto"
 	"github.com/google/uuid"
+	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
@@ -127,6 +128,31 @@ func (suite *BlockP2PMessageHandlerTestSuite) TestHandleBlockRequest() {
 			err := suite.handleMessage(ctx, blockRequestH1001, peerID)
 			tmrequire.Error(suite.T(), tc.wantErr, err)
 		})
+	}
+}
+
+func (suite *BlockP2PMessageHandlerTestSuite) TestBlockRequestAmplificationIsRateLimitedPerPeer() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	peerID := types.NodeID("amplifying-peer")
+	request := &bcproto.BlockRequest{Height: 1001}
+
+	suite.fakeStore.On("LoadBlock", int64(1001)).Times(blockRequestBurst).Return(nil)
+	suite.fakeP2PChannel.
+		On("Send", ctx, mock.MatchedBy(suite.envelopeArg(peerID, &bcproto.NoBlockResponse{Height: 1001}))).
+		Times(blockRequestBurst).
+		Return(nil)
+
+	params := consumerHandler(ctx, suite.logger, suite.fakeStore, suite.fakePeerAdder,
+		client.WithRateLimitClock(clockwork.NewFakeClock()))
+	envelope := &p2p.Envelope{
+		Attributes: map[string]string{client.RequestIDAttribute: suite.reqID},
+		From:       peerID,
+		Message:    request,
+		ChannelID:  p2p.BlockSyncChannel,
+	}
+	for range blockRequestBurst + 1 {
+		suite.Require().NoError(params.Handler.Handle(ctx, suite.fakeClient, envelope))
 	}
 }
 

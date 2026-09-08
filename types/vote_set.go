@@ -10,6 +10,7 @@ import (
 	"github.com/rs/zerolog"
 	sync "github.com/sasha-s/go-deadlock"
 
+	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/libs/bits"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -427,11 +428,9 @@ func (voteSet *VoteSet) addVerifiedVote(
 		if voteSet.signedMsgType == tmproto.PrecommitType {
 			if err := voteSet.recoverThresholdSignsAndVerify(votesByBlock); err != nil {
 				// SEC-001: do NOT halt the whole process on a recovery/verification
-				// failure here. A vote-extension count mismatch (zero OR non-zero) can
-				// no longer cause this: recoverThresholdSigns recovers from the
-				// count-consistent group whose voting power reaches the recovery
-				// threshold and excludes any differing-count minority (see
-				// canonicalVoteExtensionCount). The remaining reason to fail is timing -
+				// failure here. Recovery uses only the complete ordered extension
+				// vector backed by the recovery threshold, so a differing minority
+				// cannot contaminate it. The remaining reason to fail is timing -
 				// the just-crossed minimal quorum may not yet contain enough honest,
 				// count-consistent extension shares to reach the threshold - in which
 				// case we roll back maj23 and retry as more honest votes arrive. Once the
@@ -439,11 +438,6 @@ func (voteSet *VoteSet) addVerifiedVote(
 				// and the block is finalized; if it never does, the round simply times
 				// out and consensus advances - no fork, no crash.
 				//
-				// The hard fail is retained only for the genuinely unattributable case:
-				// every validator has voted for this block yet still no count is backed
-				// by the threshold voting power (i.e. > 1/3 Byzantine power, a BFT-safety
-				// violation) or the BLS layer itself is broken. There is then no safe way
-				// to continue.
 				voteSet.maj23 = nil
 				// Roll back the threshold signatures derived from this attempt too:
 				// recoverThresholdSigns may have populated thresholdBlockSig/
@@ -453,9 +447,6 @@ func (voteSet *VoteSet) addVerifiedVote(
 				// recovery (and all external readers gate on maj23 anyway).
 				voteSet.thresholdBlockSig = nil
 				voteSet.thresholdVoteExtSigs = nil
-				if votesByBlock.sum >= voteSet.valSet.TotalVotingPower() {
-					panic(fmt.Errorf("failed recovering or verifying threshold signature with all votes present: %w", err))
-				}
 				// Debug, not Warn/Error: this is an expected, benign retry that fires
 				// on every post-gate vote while maj23 is unset (see the SEC-001 note
 				// above). It is the only place err is observable on the soft-retry
@@ -503,7 +494,7 @@ func (voteSet *VoteSet) recoverThresholdSignsAndVerify(blockVotes *blockVotes) e
 			}).Copy()
 		return nil
 	}
-	err := voteSet.recoverThresholdSigns(blockVotes)
+	canonicalVote, err := voteSet.recoverThresholdSigns(blockVotes)
 	if err != nil {
 		return err
 	}
@@ -518,21 +509,10 @@ func (voteSet *VoteSet) recoverThresholdSignsAndVerify(blockVotes *blockVotes) e
 	// length-mismatch error even though recovery succeeded (SEC-001 liveness fix).
 	//
 	// After recoverThresholdSigns returns, voteSet.thresholdVoteExtSigs contains
-	// all extensions from the first canonical vote, so its length equals the
-	// total canonical extension count. Any vote in blockVotes with that count is
-	// guaranteed to be in the honest, count-consistent majority group.
-	canonicalExtCount := len(voteSet.thresholdVoteExtSigs)
-	var canonicalVote *Vote
-	for _, v := range blockVotes.votes {
-		if v != nil && len(v.VoteExtensions) == canonicalExtCount {
-			canonicalVote = v
-			break
-		}
-	}
+	// Use the representative of the threshold-backed vector. Its sign data is
+	// exactly the data whose shares were admitted to extension recovery.
 	if canonicalVote == nil {
-		// Unreachable: recoverThresholdSigns just succeeded using votes with
-		// canonicalExtCount extensions, so at least one must exist.
-		return fmt.Errorf("internal: no canonical vote (ext count %d) found after successful threshold recovery", canonicalExtCount)
+		return errors.New("internal: no canonical vote after successful threshold recovery")
 	}
 	canonicalSignData, err := MakeQuorumSignsWithVoteSet(voteSet, canonicalVote.ToProto())
 	if err != nil {
@@ -544,80 +524,51 @@ func (voteSet *VoteSet) recoverThresholdSignsAndVerify(blockVotes *blockVotes) e
 	return canonicalSignData.Verify(voteSet.valSet.ThresholdPublicKey, sigs)
 }
 
-func (voteSet *VoteSet) recoverThresholdSigns(blockVotes *blockVotes) error {
+func (voteSet *VoteSet) recoverThresholdSigns(blockVotes *blockVotes) (*Vote, error) {
 	if len(blockVotes.votes) < 2 {
-		return fmt.Errorf("attempting to recover a threshold signature with only 1 vote")
+		return nil, fmt.Errorf("attempting to recover a threshold signature with only 1 vote")
 	}
 
-	// Determine the canonical vote-extension count for this block before
-	// recovering: the count shared by a set of votes whose aggregate voting power
-	// reaches the recovery threshold. Honest validators run the same deterministic
-	// ABCI ExtendVote and so all produce the same count; under < 1/3 Byzantine
-	// voting power at most one count can reach the threshold (Byzantine validators
-	// hold < 1/3 of power, strictly below the recovery threshold for all supported
-	// quorum types, so they cannot form a qualifying group on their own), so the
-	// canonical count is unambiguous and is the honest one. Votes carrying any other count (a
-	// Byzantine minority, with either fewer or more extensions) are excluded from
-	// vote-extension recovery but still contribute their block signature. If no
-	// count reaches the threshold yet, recovery is not possible; the caller
-	// (addVerifiedVote) retries as more votes arrive and only fails hard once
-	// every validator has voted (SEC-001).
-	canonicalCount, ok := voteSet.canonicalVoteExtensionCount(blockVotes)
+	canonicalVote, canonicalVoters, ok, err := voteSet.canonicalVoteExtensionGroup(blockVotes)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
-		return fmt.Errorf("no vote-extension count is backed by the recovery threshold voting power")
+		return nil, errors.New("no vote-extension vector is backed by the recovery threshold voting power")
 	}
 
 	// if the vote is voting for nil, then we do not care to Recover the state signature
 	signsRecoverer, err := NewSignsRecoverer(blockVotes.votes,
 		WithQuorumReached(voteSet.IsQuorumReached()),
-		WithCanonicalVoteExtensionCount(canonicalCount),
+		WithCanonicalVoteExtensionVoters(canonicalVoters),
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	thresholdSigns, err := signsRecoverer.Recover()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	voteSet.thresholdBlockSig = thresholdSigns.BlockSign
 	voteSet.thresholdVoteExtSigs = signsRecoverer.GetVoteExtensions(*thresholdSigns)
-	return nil
+	return canonicalVote, nil
 }
 
-// canonicalVoteExtensionCount returns the vote-extension count that is backed by
-// at least the threshold-signature recovery power among the votes for a single
-// block, and whether such a count exists.
-//
-// Votes are grouped by their extension count and each group's aggregate voting
-// power is summed; the count of the group reaching the threshold is canonical.
-//
-// The bar is the FIXED, LLMQ-type-derived recovery threshold
-// (QuorumTypeThresholdVotingPower), NOT the configurable commit gate
-// (QuorumVotingThresholdPower): a count-group holding less than the recovery
-// threshold cannot produce a verifiable threshold signature anyway, so it can
-// never be canonical. Keying off the recovery threshold is also what makes the
-// selection correct - the configurable VotingPowerThreshold override can be set
-// below 1/2 of the power (see ValidatorSet.BelowStrictThreshold), under which two
-// count-groups could both clear it and the tie-break could wrongly pick a
-// Byzantine count. The recovery threshold is quorum-type-dependent (see
-// QuorumTypeThresholdVotingPower and dash/llmq/llmq.go): production Platform
-// types are >= 60% (e.g. LLMQType_100_67 at 67%), while some devnet/test types
-// are exactly 50% (e.g. LLMQType_DEVNET, LLMQType_TEST_DIP0024). For types with
-// threshold > 1/2, at most one group can reach it by the pigeonhole principle.
-// For types at exactly 50%, two equal-power groups could theoretically both reach
-// it, but only under BFT-violating (>= 50%) Byzantine stake — under the standard
-// < 1/3 Byzantine assumption the Byzantine group holds < 1/3 < 50% <= threshold
-// and therefore cannot form a qualifying group on its own. The result is therefore
-// deterministic across nodes regardless of map iteration order. Under < 1/3
-// Byzantine voting power the honest validators - which share one count - always
-// form the sole qualifying group, so the canonical count is the honest one and a
-// differing-count Byzantine minority is excluded from vote-extension recovery.
-// The smallest-count tie-break below is not exercisable under correct BFT
-// operation.
-func (voteSet *VoteSet) canonicalVoteExtensionCount(blockVotes *blockVotes) (int, bool) {
+type voteExtensionGroup struct {
+	power          int64
+	representative *Vote
+	voters         map[string]struct{}
+}
+
+// canonicalVoteExtensionGroup selects the complete ordered signed extension
+// vector backed by threshold voting power. Sign hashes bind type, payload and
+// effective request ID, so equal length alone is never treated as agreement.
+func (voteSet *VoteSet) canonicalVoteExtensionGroup(
+	blockVotes *blockVotes,
+) (*Vote, map[string]struct{}, bool, error) {
 	threshold := voteSet.valSet.QuorumTypeThresholdVotingPower()
-	powerByCount := make(map[int]int64)
+	groups := make(map[string]*voteExtensionGroup)
 	for _, vote := range blockVotes.votes {
 		if vote == nil {
 			continue
@@ -626,16 +577,45 @@ func (voteSet *VoteSet) canonicalVoteExtensionCount(blockVotes *blockVotes) (int
 		if val == nil {
 			continue
 		}
-		powerByCount[len(vote.VoteExtensions)] += val.VotingPower
+		items, err := vote.VoteExtensions.SignItems(
+			voteSet.chainID,
+			voteSet.valSet.QuorumType,
+			voteSet.valSet.QuorumHash,
+			vote.Height,
+			vote.Round,
+		)
+		if err != nil {
+			return nil, nil, false, fmt.Errorf("building vote-extension identity: %w", err)
+		}
+		identityBytes := make([]byte, 0, len(items)*crypto.DefaultHashSize)
+		for _, item := range items {
+			identityBytes = append(identityBytes, item.SignHash...)
+		}
+		identity := string(identityBytes)
+		group := groups[identity]
+		if group == nil {
+			group = &voteExtensionGroup{
+				representative: vote,
+				voters:         make(map[string]struct{}),
+			}
+			groups[identity] = group
+		}
+		group.power += val.VotingPower
+		group.voters[string(vote.ValidatorProTxHash)] = struct{}{}
 	}
 
-	canonical, found := 0, false
-	for count, power := range powerByCount {
-		if power >= threshold && (!found || count < canonical) {
-			canonical, found = count, true
+	canonicalIdentity := ""
+	var canonical *voteExtensionGroup
+	for identity, group := range groups {
+		if group.power >= threshold && (canonical == nil || identity < canonicalIdentity) {
+			canonicalIdentity = identity
+			canonical = group
 		}
 	}
-	return canonical, found
+	if canonical == nil {
+		return nil, nil, false, nil
+	}
+	return canonical.representative, canonical.voters, true, nil
 }
 
 // If a peer claims that it has 2/3 majority for given blockKey, call this.

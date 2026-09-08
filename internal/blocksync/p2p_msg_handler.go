@@ -17,6 +17,14 @@ import (
 // height arithmetic (MaxHeight()+1, target counts) cannot overflow.
 const maxPlausiblePeerHeight = int64(1) << 60
 
+const (
+	// Honest block sync issues one request every requestInterval and keeps at
+	// most maxPendingRequestsPerPeer requests in flight to one peer. Allow headroom
+	// for timer jitter while bounding peers that do not follow that schedule.
+	blockRequestsPerSecond = 1000
+	blockRequestBurst      = maxPendingRequestsPerPeer
+)
+
 type (
 	response               func(ctx context.Context, msg proto.Message) error
 	blockP2PMessageHandler struct {
@@ -26,7 +34,19 @@ type (
 	}
 )
 
-func consumerHandler(logger log.Logger, store sm.BlockStore, peerAdder PeerAdder) client.ConsumerParams {
+func consumerHandler(
+	ctx context.Context,
+	logger log.Logger,
+	store sm.BlockStore,
+	peerAdder PeerAdder,
+	rateLimitOptions ...client.RateLimitOptionFunc,
+) client.ConsumerParams {
+	requestCost := func(envelope *p2p.Envelope) uint {
+		if _, ok := envelope.Message.(*bcproto.BlockRequest); ok {
+			return 1
+		}
+		return 0
+	}
 	return client.ConsumerParams{
 		ReadChannels: []p2p.ChannelID{p2p.BlockSyncChannel},
 		Handler: client.HandlerWithMiddlewares(
@@ -35,6 +55,15 @@ func consumerHandler(logger log.Logger, store sm.BlockStore, peerAdder PeerAdder
 				store:     store,
 				peerAdder: peerAdder,
 			},
+			client.WithRecvRateLimitPerPeerHandlerWithBurst(
+				ctx,
+				blockRequestsPerSecond,
+				blockRequestBurst,
+				requestCost,
+				true,
+				logger,
+				rateLimitOptions...,
+			),
 			client.WithValidateMessageHandler([]p2p.ChannelID{p2p.BlockSyncChannel}),
 			client.WithErrorLoggerMiddleware(logger),
 			client.WithRecoveryMiddleware(logger),

@@ -3,15 +3,21 @@ package statesync
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"strings"
 	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
 
 	dbm "github.com/cometbft/cometbft-db"
+	"github.com/dashpay/dashd-go/btcjson"
 
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/crypto/bls12381"
 	dashcore "github.com/dashpay/tenderdash/dash/core"
 	"github.com/dashpay/tenderdash/internal/p2p"
 	sm "github.com/dashpay/tenderdash/internal/state"
@@ -45,11 +51,12 @@ type StateProvider interface {
 // stateProviderRPC is a state provider using RPC to communicate with light clients.
 // Deprecated, will be removed in future.
 type stateProviderRPC struct {
-	sync.Mutex    // light.Client is not concurrency-safe
-	lc            *light.Client
-	initialHeight int64
-	providers     map[lightprovider.Provider]string
-	logger        log.Logger
+	sync.Mutex     // light.Client is not concurrency-safe
+	lc             *light.Client
+	initialHeight  int64
+	providers      map[lightprovider.Provider]string
+	logger         log.Logger
+	dashCoreClient dashcore.Client
 }
 
 // NewRPCStateProvider creates a new StateProvider using a light client and RPC clients.
@@ -85,10 +92,11 @@ func NewRPCStateProvider(
 		return nil, err
 	}
 	return &stateProviderRPC{
-		logger:        logger,
-		lc:            lc,
-		initialHeight: initialHeight,
-		providers:     providerRemotes,
+		logger:         logger,
+		lc:             lc,
+		initialHeight:  initialHeight,
+		providers:      providerRemotes,
+		dashCoreClient: dashCoreClient,
 	}, nil
 }
 
@@ -162,8 +170,14 @@ func (s *stateProviderRPC) State(ctx context.Context, height uint64) (sm.State, 
 	state.LastCoreChainLockedBlockHeight = lastLightBlock.Header.CoreChainLockedHeight
 	state.LastAppHash = currentLightBlock.AppHash
 	state.LastResultsHash = currentLightBlock.ResultsHash
-	state.LastValidators = lastLightBlock.ValidatorSet
-	state.Validators = currentLightBlock.ValidatorSet
+	state.LastValidators, err = authenticateStateSyncValidatorSet(lastLightBlock, s.dashCoreClient)
+	if err != nil {
+		return sm.State{}, fmt.Errorf("authenticating last validator set: %w", err)
+	}
+	state.Validators, err = authenticateStateSyncValidatorSet(currentLightBlock, s.dashCoreClient)
+	if err != nil {
+		return sm.State{}, fmt.Errorf("authenticating current validator set: %w", err)
+	}
 	state.LastHeightValidatorsChanged = currentLightBlock.Height
 
 	// We'll also need to fetch consensus params via RPC, using light client verification.
@@ -200,11 +214,12 @@ func rpcClient(server string) (*rpchttp.HTTP, error) {
 }
 
 type stateProviderP2P struct {
-	sync.Mutex    // light.Client is not concurrency-safe
-	lc            *light.Client
-	initialHeight int64
-	paramsSendCh  p2p.Channel
-	paramsRecvCh  chan types.ConsensusParams
+	sync.Mutex     // light.Client is not concurrency-safe
+	lc             *light.Client
+	initialHeight  int64
+	paramsSendCh   p2p.Channel
+	paramsRecvCh   chan types.ConsensusParams
+	dashCoreClient dashcore.Client
 }
 
 // NewP2PStateProvider creates a light client state
@@ -229,10 +244,11 @@ func NewP2PStateProvider(
 	}
 
 	return &stateProviderP2P{
-		lc:            lc,
-		initialHeight: initialHeight,
-		paramsSendCh:  paramsSendCh,
-		paramsRecvCh:  make(chan types.ConsensusParams),
+		lc:             lc,
+		initialHeight:  initialHeight,
+		paramsSendCh:   paramsSendCh,
+		paramsRecvCh:   make(chan types.ConsensusParams),
+		dashCoreClient: dashCoreClient,
 	}, nil
 }
 
@@ -304,8 +320,14 @@ func (s *stateProviderP2P) State(ctx context.Context, height uint64) (sm.State, 
 	state.LastCoreChainLockedBlockHeight = lastLightBlock.Header.CoreChainLockedHeight
 	state.LastAppHash = currentLightBlock.AppHash
 	state.LastResultsHash = currentLightBlock.ResultsHash
-	state.LastValidators = lastLightBlock.ValidatorSet
-	state.Validators = currentLightBlock.ValidatorSet
+	state.LastValidators, err = authenticateStateSyncValidatorSet(lastLightBlock, s.dashCoreClient)
+	if err != nil {
+		return sm.State{}, fmt.Errorf("authenticating last validator set: %w", err)
+	}
+	state.Validators, err = authenticateStateSyncValidatorSet(currentLightBlock, s.dashCoreClient)
+	if err != nil {
+		return sm.State{}, fmt.Errorf("authenticating current validator set: %w", err)
+	}
 	state.LastHeightValidatorsChanged = currentLightBlock.Height
 
 	// We'll also need to fetch consensus params via P2P.
@@ -320,6 +342,115 @@ func (s *stateProviderP2P) State(ctx context.Context, height uint64) (sm.State, 
 	state.LastHeightConsensusParamsChanged = currentLightBlock.Height
 
 	return state, nil
+}
+
+// authenticateStateSyncValidatorSet replaces validator membership and live
+// consensus controls supplied by a light-block peer with values from local Dash
+// Core and the signed header. The legacy ValidatorsHash authenticates only the
+// threshold key and quorum hash, so copying those peer fields into state is unsafe.
+func authenticateStateSyncValidatorSet(
+	lightBlock *types.LightBlock,
+	dashCoreClient dashcore.Client,
+) (*types.ValidatorSet, error) {
+	if lightBlock == nil || lightBlock.ValidatorSet == nil || lightBlock.Header == nil {
+		return nil, errors.New("light block is missing header or validator set")
+	}
+	if dashCoreClient == nil {
+		return nil, errors.New("Dash Core client is required to authenticate validator membership")
+	}
+
+	wireSet := lightBlock.ValidatorSet
+	info, err := dashCoreClient.QuorumInfo(wireSet.QuorumType, wireSet.QuorumHash)
+	if err != nil {
+		return nil, fmt.Errorf("querying quorum info: %w", err)
+	}
+	if info == nil {
+		return nil, errors.New("Dash Core returned nil quorum info")
+	}
+	return authenticateStateSyncValidatorSetWithQuorumInfo(lightBlock, info)
+}
+
+func authenticateStateSyncValidatorSetWithQuorumInfo(
+	lightBlock *types.LightBlock,
+	info *btcjson.QuorumInfoResult,
+) (*types.ValidatorSet, error) {
+	if lightBlock == nil || lightBlock.ValidatorSet == nil || lightBlock.Header == nil || info == nil {
+		return nil, errors.New("validator-set authentication input is incomplete")
+	}
+	wireSet := lightBlock.ValidatorSet
+	quorumType := btcjson.GetLLMQType(info.Type)
+	if quorumType == 0 {
+		numericType, parseErr := strconv.Atoi(info.Type)
+		if parseErr == nil {
+			quorumType = btcjson.LLMQType(numericType)
+		}
+	}
+	if quorumType.Validate() != nil || quorumType != wireSet.QuorumType {
+		return nil, fmt.Errorf("Dash Core quorum type %q does not match light block %d", info.Type, wireSet.QuorumType)
+	}
+
+	quorumHash, err := hex.DecodeString(info.QuorumHash)
+	if err != nil || !bytes.Equal(quorumHash, wireSet.QuorumHash) {
+		return nil, fmt.Errorf("Dash Core quorum hash %q does not match light block %X", info.QuorumHash, wireSet.QuorumHash)
+	}
+	thresholdKeyBytes, err := hex.DecodeString(info.QuorumPublicKey)
+	if err != nil || len(thresholdKeyBytes) != bls12381.PubKeySize {
+		return nil, fmt.Errorf("invalid Dash Core threshold public key %q", info.QuorumPublicKey)
+	}
+	thresholdKey := bls12381.PubKey(thresholdKeyBytes)
+	if !thresholdKey.Equals(wireSet.ThresholdPublicKey) {
+		return nil, errors.New("Dash Core threshold public key does not match light block")
+	}
+
+	validators := make([]*types.Validator, 0, len(info.Members))
+	seen := make(map[string]struct{}, len(info.Members))
+	for i, member := range info.Members {
+		if !member.Valid {
+			continue
+		}
+		proTxHash, err := hex.DecodeString(member.ProTxHash)
+		if err != nil || len(proTxHash) != crypto.ProTxHashSize {
+			return nil, fmt.Errorf("invalid quorum member proTxHash at index %d", i)
+		}
+		key := string(proTxHash)
+		if _, ok := seen[key]; ok {
+			return nil, fmt.Errorf("duplicate quorum member proTxHash at index %d", i)
+		}
+		seen[key] = struct{}{}
+
+		pubKeyBytes, err := hex.DecodeString(member.PubKeyShare)
+		if err != nil || len(pubKeyBytes) != bls12381.PubKeySize {
+			return nil, fmt.Errorf("invalid quorum member public-key share at index %d", i)
+		}
+		validator := &types.Validator{
+			ProTxHash:   types.ProTxHash(proTxHash),
+			PubKey:      bls12381.PubKey(pubKeyBytes),
+			VotingPower: types.DefaultDashVotingPower,
+		}
+		if _, wireValidator := wireSet.GetByProTxHash(proTxHash); wireValidator != nil {
+			validator.NodeAddress = wireValidator.NodeAddress
+		}
+		validators = append(validators, validator)
+	}
+	if len(validators) == 0 {
+		return nil, errors.New("Dash Core quorum has no valid members")
+	}
+
+	authenticated := types.NewValidatorSet(
+		validators,
+		thresholdKey,
+		quorumType,
+		wireSet.QuorumHash.Copy(),
+		true,
+		nil,
+	)
+	if err := authenticated.SetProposer(lightBlock.Header.ProposerProTxHash); err != nil {
+		return nil, fmt.Errorf("signed proposer is not a valid quorum member: %w", err)
+	}
+	if err := authenticated.ValidateBasic(); err != nil {
+		return nil, fmt.Errorf("authenticated validator set is invalid: %w", err)
+	}
+	return authenticated, nil
 }
 
 // verifyConsensusParams checks peer-supplied consensus params before Bootstrap

@@ -122,7 +122,9 @@ func TestCommitAfterDroppedProposalAppliesCompleteBlock(t *testing.T) {
 				deliver(&BlockPartMessage{Height: block.Height, Round: tc.localRound, Part: parts.GetPart(i)})
 			}
 			if !tc.commitFirst {
-				require.Nil(t, stateData.Proposal, "the completing part must drop the conflicting metadata")
+				require.NotNil(t, stateData.Proposal, "the completing part must preserve the signed proposal")
+				require.Equal(t, block.CoreChainLockedHeight, stateData.Proposal.CoreChainLockedHeight)
+				require.True(t, stateData.Proposal.BlockID.Equals(block.BlockID(parts)))
 				require.True(t, stateData.ProposalBlockParts.IsComplete())
 				require.True(t, stateData.ProposalBlock.BlockID(stateData.ProposalBlockParts).Equals(block.BlockID(parts)))
 				if tc.invalidCommit != "" {

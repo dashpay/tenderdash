@@ -229,6 +229,7 @@ func TestReactor_Sync(t *testing.T) {
 	const snapshotHeight = 7
 	rts := setup(ctx, t, nil, nil, nil, 100)
 	chain := buildLightBlockChain(ctx, t, 1, 10, time.Now(), rts.privVal)
+	registerMockCoreQuorums(t, rts.dashcoreClient, chain)
 	// app accepts any snapshot
 	rts.conn.
 		On("OfferSnapshot", ctx, mock.IsType(&abci.RequestOfferSnapshot{})).
@@ -615,6 +616,7 @@ func TestReactor_StateProviderP2P(t *testing.T) {
 	defer close(closeCh)
 
 	chain := buildLightBlockChain(ctx, t, 1, 10, time.Now(), rts.privVal)
+	registerMockCoreQuorums(t, rts.dashcoreClient, chain)
 	go handleLightBlockRequests(ctx, t, chain, rts.blockOutCh, rts.blockInCh, closeCh, 0, 0)
 	go handleConsensusParamsRequest(ctx, t, rts.paramsOutCh, rts.paramsInCh, closeCh)
 
@@ -904,15 +906,25 @@ func buildLightBlockChain(ctx context.Context, t *testing.T, fromHeight, toHeigh
 	return chain
 }
 
+func registerMockCoreQuorums(t *testing.T, coreClient dashcore.Client, chain map[int64]*types.LightBlock) {
+	t.Helper()
+	mockClient, ok := coreClient.(*dashcore.MockClient)
+	require.True(t, ok)
+	for _, lightBlock := range chain {
+		mockClient.SetValidatorSet(lightBlock.ValidatorSet)
+	}
+}
+
 func mockLB(ctx context.Context, t *testing.T, height int64, time time.Time, lastBlockID types.BlockID,
 	currentVals *types.ValidatorSet, currentPrivVals []types.PrivValidator,
 ) (*types.ValidatorSet, []types.PrivValidator, *types.LightBlock) {
 	t.Helper()
 	header := factory.MakeHeader(t, &types.Header{
-		Height:      height,
-		LastBlockID: lastBlockID,
-		Time:        time,
-		AppHash:     make([]byte, crypto.DefaultHashSize),
+		Height:            height,
+		LastBlockID:       lastBlockID,
+		Time:              time,
+		AppHash:           make([]byte, crypto.DefaultHashSize),
+		ProposerProTxHash: currentVals.Proposer().ProTxHash,
 	})
 	header.Version.App = testAppVersion
 

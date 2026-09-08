@@ -450,7 +450,8 @@ func (s *StateData) verifyCommit(
 		return false, nil
 	}
 
-	if rs.Proposal == nil || ignoreProposalBlock {
+	proposalMatchesCommit := rs.Proposal != nil && rs.Proposal.BlockID.Equals(commit.BlockID)
+	if !proposalMatchesCommit || ignoreProposalBlock {
 		if ignoreProposalBlock {
 			s.logger.Debug("Commit verified for future round", "height", commit.Height, "round", commit.Round)
 		} else {
@@ -461,6 +462,13 @@ func (s *StateData) verifyCommit(
 		// This generally proves that the commit is correct
 		if err := s.verifyCommitSignatures(commit.BlockID, commit, budget); err != nil {
 			return false, fmt.Errorf("error verifying commit: %w", err)
+		}
+		if rs.Proposal != nil && !proposalMatchesCommit {
+			// A valid threshold commit is stronger evidence than a proposal. Clear
+			// metadata for another block only after authenticating the commit, then
+			// use the ordinary commit-before-proposal download path below.
+			s.Proposal = nil
+			s.ProposalReceiveTime = time.Time{}
 		}
 
 		// A retained block with matching parts can be validated without its proposal.

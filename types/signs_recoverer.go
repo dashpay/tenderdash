@@ -16,14 +16,11 @@ type SignsRecoverer struct {
 	// List of all vote extensions. Order matters.
 	voteExtensions VoteExtensions
 
-	// canonicalVoteExtCount, when set, is the only vote-extension count that
-	// contributes to vote-extension recovery; votes carrying any other count are
-	// skipped (their block signature is still used). It is determined by the
-	// caller from aggregate voting power (see VoteSet.canonicalVoteExtensionCount)
-	// so a Byzantine minority offering a different count can neither halt nor
-	// corrupt recovery (SEC-001).
-	canonicalVoteExtCount    int
-	hasCanonicalVoteExtCount bool
+	// canonicalVoteExtVoters contains the validators whose complete ordered
+	// vote-extension vector is backed by the recovery threshold. Votes outside
+	// this set still contribute their block signature, but their extension shares
+	// are not mixed into threshold recovery.
+	canonicalVoteExtVoters map[string]struct{}
 
 	// true when the recovery of vote extensions was already executed
 	voteExtensionsRecovered bool
@@ -38,26 +35,20 @@ func WithQuorumReached(quorumReached bool) func(*SignsRecoverer) {
 	}
 }
 
-// WithCanonicalVoteExtensionCount restricts vote-extension recovery to the votes
-// carrying exactly count extensions. Every other vote (fewer OR more, including
-// zero) is excluded from vote-extension recovery while still contributing its
-// block signature. The caller is responsible for choosing count as the value
-// backed by at least the recovery threshold voting power.
-func WithCanonicalVoteExtensionCount(count int) func(*SignsRecoverer) {
+// WithCanonicalVoteExtensionVoters restricts vote-extension recovery to shares
+// from the validators selected by the caller. Every other vote still
+// contributes its block signature.
+func WithCanonicalVoteExtensionVoters(voters map[string]struct{}) func(*SignsRecoverer) {
 	return func(r *SignsRecoverer) {
-		r.canonicalVoteExtCount = count
-		r.hasCanonicalVoteExtCount = true
+		r.canonicalVoteExtVoters = voters
 	}
 }
 
 // NewSignsRecoverer creates and returns a new instance of SignsRecoverer
 // the state fills with signatures from the votes.
 //
-// When a canonical vote-extension count is supplied (WithCanonicalVoteExtensionCount),
-// only votes carrying that count contribute to vote-extension recovery and no
-// count mismatch is ever treated as an error. Without it (legacy callers passing
-// already-consistent votes), a precommit with no extensions is skipped and a
-// non-zero count mismatch is reported as an error.
+// When canonical voters are supplied, only their extension shares contribute to
+// recovery. Without that option, callers must supply already-consistent votes.
 func NewSignsRecoverer(votes []*Vote, opts ...func(*SignsRecoverer)) (*SignsRecoverer, error) {
 	sigs := SignsRecoverer{
 		quorumReached: true,
@@ -149,9 +140,8 @@ func (v *SignsRecoverer) addVoteSigs(vote *Vote) error {
 // QuorumSignData.Verify), so a Byzantine validator can only influence the
 // *count* of extensions it offers, never their content.
 func (v *SignsRecoverer) addVoteExtensionSigs(vote *Vote) error {
-	if v.hasCanonicalVoteExtCount {
-		// Recovery path: contribute only if this vote carries the canonical count.
-		if len(vote.VoteExtensions) != v.canonicalVoteExtCount {
+	if v.canonicalVoteExtVoters != nil {
+		if _, ok := v.canonicalVoteExtVoters[string(vote.ValidatorProTxHash)]; !ok {
 			return nil
 		}
 	}

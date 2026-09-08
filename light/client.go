@@ -451,8 +451,9 @@ func (c *Client) VerifyHeader(ctx context.Context, newHeader *types.Header, now 
 	// Check if newHeader already verified.
 	l, err := c.TrustedLightBlock(newHeader.Height)
 	if err == nil {
-		// Make sure it's the same header.
-		if !bytes.Equal(l.Hash(), newHeader.Hash()) {
+		// Hash equality alone is insufficient for legacy headers because fields
+		// whose codec type was unsupported did not affect Header.Hash.
+		if !bytes.Equal(l.Hash(), newHeader.Hash()) || !l.Header.Equals(newHeader) {
 			return fmt.Errorf("existing trusted header %X does not match newHeader %X", l.Hash(), newHeader.Hash())
 		}
 		c.logger.Debug("header has already been verified",
@@ -467,7 +468,7 @@ func (c *Client) VerifyHeader(ctx context.Context, newHeader *types.Header, now 
 		return fmt.Errorf("failed to retrieve light block from primary to verify against: %w", err)
 	}
 
-	if !bytes.Equal(l.Hash(), newHeader.Hash()) {
+	if !bytes.Equal(l.Hash(), newHeader.Hash()) || !l.Header.Equals(newHeader) {
 		return fmt.Errorf("header from primary %X does not match newHeader %X", l.Hash(), newHeader.Hash())
 	}
 

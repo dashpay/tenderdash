@@ -172,6 +172,21 @@ func (vals *ValidatorSet) ValidateBasic() error {
 	return vals.validateThreshold()
 }
 
+// HasCompletePublicKeys reports whether every validator carries a public-key
+// share. HasPublicKeys cannot answer this for network data because it is a
+// serialized, peer-controlled flag.
+func (vals *ValidatorSet) HasCompletePublicKeys() bool {
+	if vals.IsNilOrEmpty() {
+		return false
+	}
+	for _, val := range vals.Validators {
+		if val == nil || val.PubKey == nil || len(val.PubKey.Bytes()) == 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // validateThreshold sanity-checks the quorum voting threshold against the total
 // voting power.
 //
