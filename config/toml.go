@@ -508,7 +508,8 @@ rpc-servers = "{{ StringsJoin .StateSync.RPCServers "," }}"
 discovery-time = "{{ .StateSync.DiscoveryTime }}"
 
 # Number of times to retry state sync. When retries are exhausted, the node will
-# fall back to the regular block sync. Set to 0 to disable retries. Default is 3.
+# fall back to the regular block sync. Set to 0 to retry
+# indefinitely, never falling back to block sync. Default is 3.
 # Note that in pessimistic case, it will take at least (discovery-time * retries) before
 # falling back to block sync.
 retries = {{ .StateSync.Retries }}
