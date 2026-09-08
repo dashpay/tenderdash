@@ -463,6 +463,12 @@ func (s *StateData) verifyCommit(
 			return false, fmt.Errorf("error verifying commit: %w", err)
 		}
 
+		// A retained block with matching parts can be validated without its proposal.
+		if !ignoreProposalBlock && s.ProposalBlock != nil && s.ProposalBlockParts.IsComplete() &&
+			s.ProposalBlockParts.HasHeader(commit.BlockID.PartSetHeader) {
+			return true, nil
+		}
+
 		if !s.ProposalBlockParts.HasHeader(commit.BlockID.PartSetHeader) {
 			s.logger.Debug("setting proposal block parts from commit", "partSetHeader", commit.BlockID.PartSetHeader)
 			s.ProposalBlockParts = types.NewPartSetFromHeader(commit.BlockID.PartSetHeader)
