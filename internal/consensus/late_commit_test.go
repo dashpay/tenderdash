@@ -24,12 +24,17 @@ func TestCommitAfterDroppedProposalAppliesCompleteBlock(t *testing.T) {
 		localRound      int32
 		step            cstypes.RoundStepType
 		stateIDMismatch bool
+		differentBlock  bool
 		invalidCommit   string
 	}{
 		{name: "commit before block control", commitFirst: true, step: cstypes.RoundStepPrevote},
 		{name: "block before current round commit", step: cstypes.RoundStepPrevote},
 		{name: "block before commit during propose", step: cstypes.RoundStepPropose},
 		{name: "block before earlier round commit", localRound: 1, step: cstypes.RoundStepPrevote},
+		{name: "different block before current round commit", differentBlock: true, step: cstypes.RoundStepPrevote},
+		{name: "different block before earlier round commit", differentBlock: true, localRound: 1, step: cstypes.RoundStepPrevote},
+		{name: "different block before commit during propose", differentBlock: true, step: cstypes.RoundStepPropose},
+		{name: "different block with invalid commit signature", differentBlock: true, invalidCommit: "signature", step: cstypes.RoundStepPrevote},
 		{name: "state ID mismatch before current round commit", stateIDMismatch: true, step: cstypes.RoundStepPrevote},
 		{name: "state ID mismatch before earlier round commit", localRound: 1, stateIDMismatch: true, step: cstypes.RoundStepPrevote},
 		{name: "invalid commit signature", invalidCommit: "signature", step: cstypes.RoundStepPrevote},
@@ -48,9 +53,22 @@ func TestCommitAfterDroppedProposalAppliesCompleteBlock(t *testing.T) {
 			block, err := sf.MakeBlock(source.state, 1, &types.Commit{}, kvstore.ProtocolVersion)
 			require.NoError(t, err)
 			block.CoreChainLockedHeight = 1
+			if tc.differentBlock {
+				block.CoreChainLockedHeight = 2
+			}
 			parts, err := block.MakePartSet(types.BlockPartSizeBytes)
 			require.NoError(t, err)
-			commitBlockID := block.BlockID(parts)
+			committedParts := parts
+			committedBlock := block
+			if tc.differentBlock {
+				committedBlock, err = sf.MakeBlock(source.state, 1, &types.Commit{}, kvstore.ProtocolVersion)
+				require.NoError(t, err)
+				committedBlock.CoreChainLockedHeight = 1
+				committedParts, err = committedBlock.MakePartSet(types.BlockPartSizeBytes)
+				require.NoError(t, err)
+				require.False(t, parts.HasHeader(committedParts.Header()))
+			}
+			commitBlockID := committedBlock.BlockID(committedParts)
 			switch tc.invalidCommit {
 			case "hash", "state_id":
 				commitBlockID = forgeField(t, commitBlockID, tc.invalidCommit)
@@ -110,12 +128,28 @@ func TestCommitAfterDroppedProposalAppliesCompleteBlock(t *testing.T) {
 				if tc.invalidCommit != "" {
 					deliver(&CommitMessage{Commit: commit})
 					assert.Equal(t, block.Height, stateData.Height)
+					if tc.invalidCommit == "parts" {
+						// An authenticated unknown part set selects a download, not the retained block.
+						assert.Equal(t, commit, stateData.Commit)
+						assert.False(t, stateData.ProposalBlockParts.IsComplete())
+						assert.True(t, stateData.ProposalBlockParts.HasHeader(commit.BlockID.PartSetHeader))
+						return
+					}
 					assert.Nil(t, stateData.Commit)
 					assert.True(t, stateData.ProposalBlockParts.IsComplete())
 					assert.True(t, stateData.ProposalBlockParts.HasHeader(parts.Header()))
 					return
 				}
 				deliver(&CommitMessage{Commit: commit})
+				if tc.differentBlock {
+					require.Equal(t, block.Height, stateData.Height, "the retained block must not be applied")
+					require.Equal(t, commit, stateData.Commit)
+					require.False(t, stateData.ProposalBlockParts.IsComplete())
+					require.True(t, stateData.ProposalBlockParts.HasHeader(committedParts.Header()))
+					for i := 0; i < int(committedParts.Total()); i++ {
+						deliver(&BlockPartMessage{Height: block.Height, Round: tc.localRound, Part: committedParts.GetPart(i)})
+					}
+				}
 			}
 			assert.Equal(t, block.Height+1, stateData.Height,
 				"the valid committed block must be applied regardless of arrival order")

@@ -463,8 +463,9 @@ func (s *StateData) verifyCommit(
 			return false, fmt.Errorf("error verifying commit: %w", err)
 		}
 
-		// A complete block can outlive its proposal; validate it before parking the commit.
-		if !ignoreProposalBlock && s.ProposalBlock != nil && s.ProposalBlockParts.IsComplete() {
+		// A retained block with matching parts can be validated without its proposal.
+		if !ignoreProposalBlock && s.ProposalBlock != nil && s.ProposalBlockParts.IsComplete() &&
+			s.ProposalBlockParts.HasHeader(commit.BlockID.PartSetHeader) {
 			return true, nil
 		}
 
