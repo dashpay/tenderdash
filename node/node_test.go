@@ -1021,3 +1021,25 @@ func TestGetRouterConfigWiresMaxIncomingConnectionAttempts(t *testing.T) {
 	require.Equal(t, uint(7), opts.MaxIncomingConnectionAttempts,
 		"config max-incoming-connection-attempts must flow into RouterOptions")
 }
+
+// TestInitDBsAppliesUnsafeNoFsyncOnlyWhenConfigured pins where the no-fsync
+// policy enters the node: the block store built for the live node follows
+// the config flag, and nothing else. Other tooling that opens the same
+// databases builds its own stores and keeps durable writes.
+func TestInitDBsAppliesUnsafeNoFsyncOnlyWhenConfigured(t *testing.T) {
+	for _, unsafe := range []bool{false, true} {
+		t.Run(strconv.FormatBool(unsafe), func(t *testing.T) {
+			// the test root name feeds a temp dir pattern, so it cannot
+			// contain the "/" a subtest name has
+			cfg, err := config.ResetTestRoot(t.TempDir(), "TestInitDBsUnsafeNoFsync")
+			require.NoError(t, err)
+			cfg.UnsafeNoFsync = unsafe
+
+			blockStore, _, closer, err := initDBs(cfg, config.DefaultDBProvider)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = closer() })
+
+			require.Equal(t, unsafe, blockStore.UnsafeNoFsync())
+		})
+	}
+}
