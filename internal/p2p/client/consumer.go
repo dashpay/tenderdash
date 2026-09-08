@@ -49,7 +49,7 @@ type (
 	TokenNumberFunc func(*p2p.Envelope) uint
 
 	recvRateLimitPerPeerHandler struct {
-		RateLimit
+		*RateLimit
 
 		// next is the next handler in the chain
 		next ConsumerHandler
@@ -116,7 +116,7 @@ func WithRecvRateLimitPerPeerHandlerWithBurst(
 ) ConsumerMiddlewareFunc {
 	return func(next ConsumerHandler) ConsumerHandler {
 		hd := &recvRateLimitPerPeerHandler{
-			RateLimit:   *NewRateLimitWithBurst(ctx, limit, burst, drop, logger, opts...),
+			RateLimit:   NewRateLimitWithBurst(ctx, limit, burst, drop, logger, opts...),
 			nTokensFunc: nTokensFunc,
 		}
 

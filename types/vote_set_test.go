@@ -899,6 +899,19 @@ func signAddPrecommitWithExtCount(
 	idx, extCount int,
 	blockID BlockID,
 ) (bool, error) {
+	return signAddPrecommitWithExtensions(ctx, t, voteSet, privVal, idx, blockID,
+		thresholdVoteExtensionsOfLen(t, extCount))
+}
+
+func signAddPrecommitWithExtensions(
+	ctx context.Context,
+	t testing.TB,
+	voteSet *VoteSet,
+	privVal PrivValidator,
+	idx int,
+	blockID BlockID,
+	extensions VoteExtensions,
+) (bool, error) {
 	t.Helper()
 	proTxHash, err := privVal.GetProTxHash(ctx)
 	require.NoError(t, err)
@@ -909,9 +922,81 @@ func signAddPrecommitWithExtCount(
 		Round:              voteSet.GetRound(),
 		Type:               tmproto.PrecommitType,
 		BlockID:            blockID,
-		VoteExtensions:     thresholdVoteExtensionsOfLen(t, extCount),
+		VoteExtensions:     extensions,
 	}
 	return signAddVote(ctx, privVal, vote, voteSet)
+}
+
+func TestVoteSet_AddVote_IgnoresNonRecoverableExtensionsWhenGrouping(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const numValidators = 10
+	voteSet, valSet, privValidators := randVoteSet(ctx, t, 10, 0, tmproto.PrecommitType, numValidators)
+	blockID := makeBlockIDRandom()
+
+	for i := 0; i < numValidators; i++ {
+		extensions := thresholdVoteExtensionsOfLen(t, 2)
+		extensions = append(extensions, MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
+			Type:      tmproto.VoteExtensionType_DEFAULT,
+			Extension: []byte(strconv.Itoa(i)),
+		})...)
+		added, err := signAddPrecommitWithExtensions(
+			ctx, t, voteSet, privValidators[i], i, blockID, extensions,
+		)
+		require.NoError(t, err)
+		require.True(t, added)
+	}
+
+	require.True(t, voteSet.HasTwoThirdsMajority())
+	commit := voteSet.MakeCommit()
+	require.Len(t, commit.ThresholdVoteExtensions, 2)
+	require.NoError(t, valSet.VerifyCommit(voteSet.ChainID(), blockID, 10, commit))
+}
+
+func TestVoteSet_AddVote_DistinguishesEquivalentExtensionTypes(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const numValidators = 10
+	voteSet, _, privValidators := randVoteSet(ctx, t, 10, 0, tmproto.PrecommitType, numValidators)
+	blockID := makeBlockIDRandom()
+	canonical := MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
+		Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+		Extension: []byte("canonical"),
+	})
+	item, err := canonical[0].SignItem(
+		voteSet.chainID, 10, 0, voteSet.valSet.QuorumType, voteSet.valSet.QuorumHash,
+	)
+	require.NoError(t, err)
+	rawPayload := append([]byte(nil), item.MsgHash...)
+	for left, right := 0, len(rawPayload)-1; left < right; left, right = left+1, right-1 {
+		rawPayload[left], rawPayload[right] = rawPayload[right], rawPayload[left]
+	}
+	raw := MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
+		Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
+		Extension: rawPayload,
+	})
+	rawItem, err := raw[0].SignItem(
+		voteSet.chainID, 10, 0, voteSet.valSet.QuorumType, voteSet.valSet.QuorumHash,
+	)
+	require.NoError(t, err)
+	require.Equal(t, item.SignHash, rawItem.SignHash, "fixture must exercise equivalent signing data")
+
+	for i := 0; i < numValidators; i++ {
+		extensions := raw.Copy()
+		if i < 4 {
+			extensions = canonical.Copy()
+		}
+		added, err := signAddPrecommitWithExtensions(
+			ctx, t, voteSet, privValidators[i], i, blockID, extensions,
+		)
+		require.NoError(t, err)
+		require.True(t, added)
+	}
+
+	require.False(t, voteSet.HasTwoThirdsMajority(),
+		"different extension types must not combine into a recovery-threshold group")
 }
 
 // TestVoteSet_AddVote_InconsistentVoteExtensionCountDoesNotHalt is a regression

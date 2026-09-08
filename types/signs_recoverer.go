@@ -13,7 +13,7 @@ type SignsRecoverer struct {
 	blockSigs            [][]byte
 	stateSigs            [][]byte
 	validatorProTxHashes [][]byte
-	// List of all vote extensions. Order matters.
+	// Ordered threshold-recoverable vote extensions.
 	voteExtensions VoteExtensions
 
 	// canonicalVoteExtVoters contains the validators whose complete ordered
@@ -126,19 +126,8 @@ func (v *SignsRecoverer) addVoteSigs(vote *Vote) error {
 // addVoteExtensionSigs feeds a single vote's vote-extension signature shares
 // into the threshold recovery state.
 //
-// Only votes whose extension count matches the canonical count contribute their
-// extension shares; every other vote is skipped here but still contributes its
-// block signature (appended by the caller). This is the SEC-001 fix: honest
-// validators run the same deterministic ABCI ExtendVote for a given
-// (height, round) and so all produce the same extension count, while a Byzantine
-// minority offering a different count (zero OR non-zero) is excluded. The
-// canonical count is supplied by the caller and is the count backed by at least
-// the recovery threshold voting power (VoteSet.canonicalVoteExtensionCount), so
-// the excluded set can never be the honest majority. Excluding a vote's
-// extension share is safe because every vote's own extension signatures are
-// verified against its validator's key before admission (Vote.Verify ->
-// QuorumSignData.Verify), so a Byzantine validator can only influence the
-// *count* of extensions it offers, never their content.
+// Only validators in the canonical threshold-recoverable extension group
+// contribute extension shares. All votes still contribute block signatures.
 func (v *SignsRecoverer) addVoteExtensionSigs(vote *Vote) error {
 	if v.canonicalVoteExtVoters != nil {
 		if _, ok := v.canonicalVoteExtVoters[string(vote.ValidatorProTxHash)]; !ok {
@@ -159,21 +148,28 @@ func (v *SignsRecoverer) addVoteExtensionSigs(vote *Vote) error {
 		return fmt.Errorf("only non-nil precommits can have vote extensions, got: %s", vote.String())
 	}
 
+	recoverableExtensions := vote.VoteExtensions.Filter(func(ext VoteExtensionIf) bool {
+		return ext.IsThresholdRecoverable()
+	})
+	if len(recoverableExtensions) == 0 {
+		return nil
+	}
+
 	// Establish the canonical extension set from the first contributing vote.
 	if v.voteExtensions.IsEmpty() {
-		v.voteExtensions = vote.VoteExtensions.Copy()
+		v.voteExtensions = recoverableExtensions.Copy()
 	}
 
 	// Every contributing vote carries the canonical count, so this is a defensive
 	// consistency check. With a canonical count supplied it cannot fire; without
 	// one (legacy callers) it reports a genuine non-zero count mismatch.
-	if len(vote.VoteExtensions) != len(v.voteExtensions) {
+	if len(recoverableExtensions) != len(v.voteExtensions) {
 		return fmt.Errorf("received vote extensions with different length: current %d, received %d",
-			len(v.voteExtensions), len(vote.VoteExtensions))
+			len(v.voteExtensions), len(recoverableExtensions))
 	}
 
 	// append signatures from this vote to each extension
-	for i, ext := range vote.VoteExtensions {
+	for i, ext := range recoverableExtensions {
 		if recoverable, ok := (v.voteExtensions[i]).(ThresholdVoteExtensionIf); ok {
 			if err := recoverable.AddThresholdSignature(vote.ValidatorProTxHash, ext.GetSignature()); err != nil {
 				return fmt.Errorf("failed to add vote %s to recover vote extension threshold sig: %w", vote.String(), err)

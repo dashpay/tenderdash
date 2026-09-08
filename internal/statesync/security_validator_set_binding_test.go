@@ -86,3 +86,70 @@ func TestSecurityStateSyncAuthenticatesValidatorSetWithDashCore(t *testing.T) {
 		require.Error(t, err)
 	})
 }
+
+func TestSecurityStateSyncDoesNotTrustWireValidatorAddresses(t *testing.T) {
+	honest, _ := types.RandValidatorSet(4)
+	for _, validator := range honest.Validators {
+		validator.NodeAddress = types.ValidatorAddress{
+			NodeID:   types.NodeID("0102030405060708090a0b0c0d0e0f1011121314"),
+			Hostname: "attacker.example",
+			Port:     26656,
+		}
+	}
+	header := &types.Header{
+		Height:            10,
+		ValidatorsHash:    honest.Hash(),
+		ProposerProTxHash: honest.Proposer().ProTxHash,
+	}
+	quorumInfo := quorumInfoFromValidatorSet(honest, true)
+
+	authenticated, err := authenticateStateSyncValidatorSetWithQuorumInfo(
+		&types.LightBlock{SignedHeader: &types.SignedHeader{Header: header}, ValidatorSet: honest},
+		quorumInfo,
+	)
+	require.NoError(t, err)
+	for _, validator := range authenticated.Validators {
+		require.Zero(t, validator.NodeAddress)
+	}
+}
+
+func TestSecurityStateSyncAcceptsMissingCorePublicKeyShares(t *testing.T) {
+	honest, _ := types.RandValidatorSet(4)
+	header := &types.Header{
+		Height:            10,
+		ValidatorsHash:    honest.Hash(),
+		ProposerProTxHash: honest.Proposer().ProTxHash,
+	}
+	quorumInfo := quorumInfoFromValidatorSet(honest, false)
+
+	authenticated, err := authenticateStateSyncValidatorSetWithQuorumInfo(
+		&types.LightBlock{SignedHeader: &types.SignedHeader{Header: header}, ValidatorSet: honest},
+		quorumInfo,
+	)
+	require.NoError(t, err)
+	require.False(t, authenticated.HasPublicKeys)
+	for _, validator := range authenticated.Validators {
+		require.Nil(t, validator.PubKey)
+	}
+	require.Equal(t, honest.GetProTxHashesOrdered(), authenticated.GetProTxHashesOrdered())
+	require.NoError(t, authenticated.ValidateBasic())
+}
+
+func quorumInfoFromValidatorSet(valSet *types.ValidatorSet, includeShares bool) *btcjson.QuorumInfoResult {
+	info := &btcjson.QuorumInfoResult{
+		Type:            valSet.QuorumType.Name(),
+		QuorumHash:      hex.EncodeToString(valSet.QuorumHash),
+		QuorumPublicKey: hex.EncodeToString(valSet.ThresholdPublicKey.Bytes()),
+	}
+	for _, validator := range valSet.Validators {
+		member := btcjson.QuorumMember{
+			ProTxHash: hex.EncodeToString(validator.ProTxHash),
+			Valid:     true,
+		}
+		if includeShares {
+			member.PubKeyShare = hex.EncodeToString(validator.PubKey.Bytes())
+		}
+		info.Members = append(info.Members, member)
+	}
+	return info
+}

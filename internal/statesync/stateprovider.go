@@ -195,10 +195,13 @@ func (s *stateProviderRPC) State(ctx context.Context, height uint64) (sm.State, 
 		return sm.State{}, fmt.Errorf("unable to fetch consensus parameters for height %v: %w",
 			currentLightBlock.Height, err)
 	}
-	// This path does not call verifyConsensusParams: the equivalent checks run one
-	// layer down, in lightrpc.Client.ConsensusParams, which validates the params and
-	// compares their hash against the light-client-verified ConsensusHash before
-	// returning them. Note this is the provider used unless use-p2p is set.
+	if err := verifyConsensusParams(
+		result.ConsensusParams,
+		currentLightBlock.ConsensusHash,
+		currentLightBlock.Height,
+	); err != nil {
+		return sm.State{}, err
+	}
 	state.ConsensusParams = result.ConsensusParams
 	state.LastHeightConsensusParamsChanged = currentLightBlock.Height
 
@@ -403,6 +406,7 @@ func authenticateStateSyncValidatorSetWithQuorumInfo(
 	}
 
 	validators := make([]*types.Validator, 0, len(info.Members))
+	hasPublicKeys := true
 	seen := make(map[string]struct{}, len(info.Members))
 	for i, member := range info.Members {
 		if !member.Valid {
@@ -418,22 +422,30 @@ func authenticateStateSyncValidatorSetWithQuorumInfo(
 		}
 		seen[key] = struct{}{}
 
-		pubKeyBytes, err := hex.DecodeString(member.PubKeyShare)
-		if err != nil || len(pubKeyBytes) != bls12381.PubKeySize {
-			return nil, fmt.Errorf("invalid quorum member public-key share at index %d", i)
+		var pubKey bls12381.PubKey
+		if member.PubKeyShare == "" {
+			hasPublicKeys = false
+		} else {
+			pubKeyBytes, err := hex.DecodeString(member.PubKeyShare)
+			if err != nil || len(pubKeyBytes) != bls12381.PubKeySize {
+				return nil, fmt.Errorf("invalid quorum member public-key share at index %d", i)
+			}
+			pubKey = bls12381.PubKey(pubKeyBytes)
 		}
 		validator := &types.Validator{
 			ProTxHash:   types.ProTxHash(proTxHash),
-			PubKey:      bls12381.PubKey(pubKeyBytes),
+			PubKey:      pubKey,
 			VotingPower: types.DefaultDashVotingPower,
-		}
-		if _, wireValidator := wireSet.GetByProTxHash(proTxHash); wireValidator != nil {
-			validator.NodeAddress = wireValidator.NodeAddress
 		}
 		validators = append(validators, validator)
 	}
 	if len(validators) == 0 {
 		return nil, errors.New("quorum returned by Dash Core has no valid members")
+	}
+	if !hasPublicKeys {
+		for _, validator := range validators {
+			validator.PubKey = nil
+		}
 	}
 
 	authenticated := types.NewValidatorSet(
@@ -441,7 +453,7 @@ func authenticateStateSyncValidatorSetWithQuorumInfo(
 		thresholdKey,
 		quorumType,
 		wireSet.QuorumHash.Copy(),
-		true,
+		hasPublicKeys,
 		nil,
 	)
 	if err := authenticated.SetProposer(lightBlock.ProposerProTxHash); err != nil {
@@ -465,6 +477,9 @@ func verifyConsensusParams(params types.ConsensusParams, expectedHash tmbytes.He
 	if !bytes.Equal(expectedHash, params.HashConsensusParams()) {
 		return fmt.Errorf("consensus params hash mismatch at height %d. Expected %v, got %v",
 			height, expectedHash, params.HashConsensusParams())
+	}
+	if params.Validator.VotingPowerThreshold != nil {
+		return fmt.Errorf("consensus params at height %d contain an unauthenticated voting power threshold", height)
 	}
 	return nil
 }

@@ -300,6 +300,12 @@ func (c *MConnection) stopForError(ctx context.Context, r interface{}) {
 
 // Queues a message to be sent to channel.
 func (c *MConnection) Send(chID ChannelID, msgBytes []byte) bool {
+	return c.SendWithCompletion(chID, msgBytes, nil)
+}
+
+// SendWithCompletion queues a message and calls onSent after its final packet
+// has been written to the buffered connection.
+func (c *MConnection) SendWithCompletion(chID ChannelID, msgBytes []byte, onSent func()) bool {
 	if !c.IsRunning() {
 		return false
 	}
@@ -313,7 +319,7 @@ func (c *MConnection) Send(chID ChannelID, msgBytes []byte) bool {
 		return false
 	}
 
-	success := channel.sendBytes(msgBytes)
+	success := channel.sendBytesWithCompletion(msgBytes, onSent)
 	if success {
 		// Wake up sendRoutine if necessary
 		select {
@@ -652,14 +658,19 @@ type channel struct {
 
 	conn          *MConnection
 	desc          ChannelDescriptor
-	sendQueue     chan []byte
+	sendQueue     chan outboundMessage
 	sendQueueSize int32 // atomic.
 	recving       []byte
-	sending       []byte
+	sending       outboundMessage
 
 	maxPacketMsgPayloadSize int
 
 	logger log.Logger
+}
+
+type outboundMessage struct {
+	bytes  []byte
+	onSent func()
 }
 
 func newChannel(conn *MConnection, desc ChannelDescriptor) *channel {
@@ -670,7 +681,7 @@ func newChannel(conn *MConnection, desc ChannelDescriptor) *channel {
 	return &channel{
 		conn:                    conn,
 		desc:                    desc,
-		sendQueue:               make(chan []byte, desc.SendQueueCapacity),
+		sendQueue:               make(chan outboundMessage, desc.SendQueueCapacity),
 		recving:                 make([]byte, 0, desc.RecvBufferCapacity),
 		maxPacketMsgPayloadSize: conn.config.MaxPacketMsgPayloadSize,
 		logger:                  conn.logger,
@@ -681,8 +692,12 @@ func newChannel(conn *MConnection, desc ChannelDescriptor) *channel {
 // Goroutine-safe
 // Times out (and returns false) after defaultSendTimeout
 func (ch *channel) sendBytes(bytes []byte) bool {
+	return ch.sendBytesWithCompletion(bytes, nil)
+}
+
+func (ch *channel) sendBytesWithCompletion(bytes []byte, onSent func()) bool {
 	select {
-	case ch.sendQueue <- bytes:
+	case ch.sendQueue <- outboundMessage{bytes: bytes, onSent: onSent}:
 		atomic.AddInt32(&ch.sendQueueSize, 1)
 		return true
 	case <-time.After(defaultSendTimeout):
@@ -696,7 +711,7 @@ func (ch *channel) sendBytes(bytes []byte) bool {
 // Call before calling nextPacketMsg()
 // Goroutine-safe
 func (ch *channel) isSendPending() bool {
-	if len(ch.sending) == 0 {
+	if len(ch.sending.bytes) == 0 {
 		if len(ch.sendQueue) == 0 {
 			return false
 		}
@@ -710,14 +725,14 @@ func (ch *channel) isSendPending() bool {
 func (ch *channel) nextPacketMsg() tmp2p.PacketMsg {
 	packet := tmp2p.PacketMsg{ChannelID: int32(ch.desc.ID)}
 	maxSize := ch.maxPacketMsgPayloadSize
-	packet.Data = ch.sending[:tmmath.MinInt(maxSize, len(ch.sending))]
-	if len(ch.sending) <= maxSize {
+	packet.Data = ch.sending.bytes[:tmmath.MinInt(maxSize, len(ch.sending.bytes))]
+	if len(ch.sending.bytes) <= maxSize {
 		packet.EOF = true
-		ch.sending = nil
+		ch.sending.bytes = nil
 		atomic.AddInt32(&ch.sendQueueSize, -1) // decrement sendQueueSize
 	} else {
 		packet.EOF = false
-		ch.sending = ch.sending[tmmath.MinInt(maxSize, len(ch.sending)):]
+		ch.sending.bytes = ch.sending.bytes[tmmath.MinInt(maxSize, len(ch.sending.bytes)):]
 	}
 	return packet
 }
@@ -728,6 +743,11 @@ func (ch *channel) writePacketMsgTo(w io.Writer) (n int, err error) {
 	packet := ch.nextPacketMsg()
 	n, err = protoio.NewDelimitedWriter(w).WriteMsg(mustWrapPacket(&packet))
 	atomic.AddInt64(&ch.recentlySent, int64(n))
+	if err == nil && packet.EOF && ch.sending.onSent != nil {
+		onSent := ch.sending.onSent
+		ch.sending.onSent = nil
+		onSent()
+	}
 	return
 }
 

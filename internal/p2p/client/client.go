@@ -32,12 +32,16 @@ const (
 	ResponseIDAttribute = "ResponseID"
 )
 
-const peerTimeout = 15 * time.Second
+const peerTimeout = 60 * time.Second
 
 var (
 	ErrPeerNotResponded      = errors.New("peer did not send us anything")
 	ErrCannotResolveResponse = errors.New("cannot resolve a result")
 )
+
+// Keep enough request lifetime for one stalled delivery wave to be evicted and
+// a maximum-size response to finish at the default transport send rate.
+const deliveryTimeout = 30 * time.Second
 
 type (
 	// Sender is the interface that wraps Send method
@@ -283,6 +287,37 @@ func (c *Client) Send(ctx context.Context, msg any) error {
 	return c.SendN(ctx, msg, 1)
 }
 
+// SendAndWaitForDelivery sends a targeted envelope and waits until the
+// transport completes the message or the router drops it.
+func (c *Client) SendAndWaitForDelivery(ctx context.Context, envelope p2p.Envelope) error {
+	delivered := envelope.EnableDeliveryNotification()
+	if err := c.Send(ctx, envelope); err != nil {
+		return err
+	}
+	timer := c.clock.NewTimer(deliveryTimeout)
+	defer timer.Stop()
+	select {
+	case <-delivered:
+		return nil
+	case <-timer.Chan():
+		if err := c.Send(ctx, p2p.PeerError{
+			NodeID: envelope.To,
+			Err:    fmt.Errorf("outbound delivery exceeded %s", deliveryTimeout),
+			Fatal:  true,
+		}); err != nil {
+			return err
+		}
+		select {
+		case <-delivered:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 // SendN sends p2p message to a peer, consuming `nTokens` from rate limiter.
 //
 // Allowed `msg` types are: p2p.Envelope or p2p.PeerError
@@ -315,6 +350,7 @@ func (c *Client) SendN(ctx context.Context, msg any, nTokens int) error {
 			if !ok {
 				c.logger.Debug("dropping message due to rate limit",
 					"channel", t.ChannelID, "peer", t.To, "message", t.Message)
+				t.NotifyDelivery()
 				return nil
 			}
 		}
@@ -567,6 +603,21 @@ func isMessageResolvable(msg proto.Message) bool {
 func ResponseFuncFromEnvelope(channel *Client, envelope *p2p.Envelope) func(ctx context.Context, msg proto.Message) error {
 	return func(ctx context.Context, msg proto.Message) error {
 		return channel.Send(ctx, p2p.Envelope{
+			ChannelID: envelope.ChannelID,
+			Attributes: map[string]string{
+				ResponseIDAttribute: envelope.Attributes[RequestIDAttribute],
+			},
+			To:      envelope.From,
+			Message: msg,
+		})
+	}
+}
+
+// DeliveryResponseFuncFromEnvelope creates a response function that waits for
+// the transport to complete a large response or for the router to drop it.
+func DeliveryResponseFuncFromEnvelope(channel *Client, envelope *p2p.Envelope) func(context.Context, proto.Message) error {
+	return func(ctx context.Context, msg proto.Message) error {
+		return channel.SendAndWaitForDelivery(ctx, p2p.Envelope{
 			ChannelID: envelope.ChannelID,
 			Attributes: map[string]string{
 				ResponseIDAttribute: envelope.Attributes[RequestIDAttribute],

@@ -2,6 +2,7 @@ package types
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/libs/bits"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
@@ -325,8 +327,16 @@ func (voteSet *VoteSet) addVote(
 				voteSet.chainID, val.PubKey, val.ProTxHash, err))
 	}
 
+	voteExtensionIdentity := ""
+	if voteSet.signedMsgType == tmproto.PrecommitType {
+		voteExtensionIdentity, err = voteSet.voteExtensionIdentity(vote)
+		if err != nil {
+			return false, fmt.Errorf("building vote-extension identity: %w", err)
+		}
+	}
+
 	// Add vote and get conflicting vote if any.
-	added, conflicting := voteSet.addVerifiedVote(vote, blockKey, val.VotingPower)
+	added, conflicting := voteSet.addVerifiedVote(vote, blockKey, voteExtensionIdentity, val.VotingPower)
 	if conflicting != nil {
 		return added, NewConflictingVoteError(conflicting, vote)
 	}
@@ -352,6 +362,7 @@ func (voteSet *VoteSet) getVote(valIndex int32, blockKey string) (vote *Vote, ok
 func (voteSet *VoteSet) addVerifiedVote(
 	vote *Vote,
 	blockKey string,
+	voteExtensionIdentity string,
 	votingPower int64,
 ) (added bool, conflicting *Vote) {
 	valIndex := vote.ValidatorIndex
@@ -399,25 +410,22 @@ func (voteSet *VoteSet) addVerifiedVote(
 
 	quorum := voteSet.valSet.QuorumVotingThresholdPower()
 
-	// Add vote to votesByBlock
-	votesByBlock.addVerifiedVote(vote, votingPower)
+	previousPower := votesByBlock.sum
+	groupReachedRecoveryThreshold := votesByBlock.addVerifiedVote(
+		vote,
+		voteExtensionIdentity,
+		votingPower,
+		voteSet.valSet.QuorumTypeThresholdVotingPower(),
+	)
 
 	// Once this block reaches the quorum voting power, try to finalize it.
 	//
-	// We retry on every subsequently added vote (while maj23 is still unset),
-	// rather than acting only on the single vote that crosses the threshold,
-	// because the minimal quorum-crossing set may not yet contain enough
-	// *consistent* votes to recover the threshold signatures - see the SEC-001
-	// note below. maj23 is committed only after recovery actually succeeds.
-	//
-	// NOTE(perf): re-attempt full BLS recovery only when a new vote makes a
-	// count-group's aggregate power newly cross QuorumTypeThresholdVotingPower.
-	// Currently every post-gate vote re-runs O(threshold) BLS interpolations even
-	// though only the first successful attempt matters; for large quorums (e.g.
-	// LLMQ_400_60) this is O(N·threshold) total work. A per-count running-power
-	// cache would let us skip attempts where no count-group gained new qualifying
-	// power since the previous attempt. Deferred: correctness first.
-	if voteSet.maj23 == nil && quorum <= votesByBlock.sum {
+	// Recovery is useful only when both the block gate and one complete ordered
+	// extension group have crossed their thresholds. Attempt exactly when the
+	// latter of those two conditions becomes true.
+	blockReachedQuorum := previousPower < quorum && quorum <= votesByBlock.sum
+	if voteSet.maj23 == nil && quorum <= votesByBlock.sum &&
+		(blockReachedQuorum || groupReachedRecoveryThreshold) {
 		// Tentatively record the majority block so that the threshold recovery sees
 		// the correct "quorum reached" state (IsQuorumReached, used via
 		// WithQuorumReached, depends on maj23). It is rolled back below if recovery
@@ -499,18 +507,8 @@ func (voteSet *VoteSet) recoverThresholdSignsAndVerify(blockVotes *blockVotes) e
 		return err
 	}
 
-	// Build verification sign data from a canonical vote — a vote whose total
-	// extension count matches the canonical count selected by recoverThresholdSigns.
-	// Using the triggering vote's sign data (as was done previously) is incorrect
-	// when the triggering vote carries a Byzantine-crafted extension count that
-	// differs from the canonical count: the recovered QuorumSigns would then
-	// have a different VoteExtensionSignatures length than the triggering vote's
-	// VoteExtensionSignItems, causing VerifyVoteExtensions to return a spurious
-	// length-mismatch error even though recovery succeeded (SEC-001 liveness fix).
-	//
-	// After recoverThresholdSigns returns, voteSet.thresholdVoteExtSigs contains
-	// Use the representative of the threshold-backed vector. Its sign data is
-	// exactly the data whose shares were admitted to extension recovery.
+	// Use the representative of the threshold-backed extension vector. Its sign
+	// data is exactly the data whose shares were admitted to recovery.
 	if canonicalVote == nil {
 		return errors.New("internal: no canonical vote after successful threshold recovery")
 	}
@@ -568,45 +566,10 @@ func (voteSet *VoteSet) canonicalVoteExtensionGroup(
 	blockVotes *blockVotes,
 ) (*Vote, map[string]struct{}, bool, error) {
 	threshold := voteSet.valSet.QuorumTypeThresholdVotingPower()
-	groups := make(map[string]*voteExtensionGroup)
-	for _, vote := range blockVotes.votes {
-		if vote == nil {
-			continue
-		}
-		val := voteSet.valSet.GetByIndex(vote.ValidatorIndex)
-		if val == nil {
-			continue
-		}
-		items, err := vote.VoteExtensions.SignItems(
-			voteSet.chainID,
-			voteSet.valSet.QuorumType,
-			voteSet.valSet.QuorumHash,
-			vote.Height,
-			vote.Round,
-		)
-		if err != nil {
-			return nil, nil, false, fmt.Errorf("building vote-extension identity: %w", err)
-		}
-		identityBytes := make([]byte, 0, len(items)*crypto.DefaultHashSize)
-		for _, item := range items {
-			identityBytes = append(identityBytes, item.SignHash...)
-		}
-		identity := string(identityBytes)
-		group := groups[identity]
-		if group == nil {
-			group = &voteExtensionGroup{
-				representative: vote,
-				voters:         make(map[string]struct{}),
-			}
-			groups[identity] = group
-		}
-		group.power += val.VotingPower
-		group.voters[string(vote.ValidatorProTxHash)] = struct{}{}
-	}
 
 	canonicalIdentity := ""
 	var canonical *voteExtensionGroup
-	for identity, group := range groups {
+	for identity, group := range blockVotes.voteExtensionGroups {
 		if group.power >= threshold && (canonical == nil || identity < canonicalIdentity) {
 			canonicalIdentity = identity
 			canonical = group
@@ -616,6 +579,32 @@ func (voteSet *VoteSet) canonicalVoteExtensionGroup(
 		return nil, nil, false, nil
 	}
 	return canonical.representative, canonical.voters, true, nil
+}
+
+func (voteSet *VoteSet) voteExtensionIdentity(vote *Vote) (string, error) {
+	recoverableExtensions := vote.VoteExtensions.Filter(func(ext VoteExtensionIf) bool {
+		return ext.IsThresholdRecoverable()
+	})
+	items, err := recoverableExtensions.SignItems(
+		voteSet.chainID,
+		voteSet.valSet.QuorumType,
+		voteSet.valSet.QuorumHash,
+		vote.Height,
+		vote.Round,
+	)
+	if err != nil {
+		return "", err
+	}
+	identityBytes := make([]byte, 0, len(items)*(4+crypto.DefaultHashSize))
+	for i, item := range items {
+		extensionType, err := tmmath.SafeConvertUint32(recoverableExtensions[i].GetType())
+		if err != nil {
+			return "", fmt.Errorf("invalid vote-extension type: %w", err)
+		}
+		identityBytes = binary.BigEndian.AppendUint32(identityBytes, extensionType)
+		identityBytes = append(identityBytes, item.SignHash...)
+	}
+	return string(identityBytes), nil
 }
 
 // If a peer claims that it has 2/3 majority for given blockKey, call this.
@@ -1023,28 +1012,49 @@ There are two ways a *blockVotes gets created for a blockKey.
 2. A peer claims to have a 2/3 majority w/ blockKey (peerMaj23=true)
 */
 type blockVotes struct {
-	peerMaj23 bool           // peer claims to have maj23
-	bitArray  *bits.BitArray // valIndex -> hasVote?
-	votes     []*Vote        // valIndex -> *Vote
-	sum       int64          // vote sum
+	peerMaj23           bool           // peer claims to have maj23
+	bitArray            *bits.BitArray // valIndex -> hasVote?
+	votes               []*Vote        // valIndex -> *Vote
+	sum                 int64          // vote sum
+	voteExtensionGroups map[string]*voteExtensionGroup
 }
 
 func newBlockVotes(peerMaj23 bool, numValidators int) *blockVotes {
 	return &blockVotes{
-		peerMaj23: peerMaj23,
-		bitArray:  bits.NewBitArray(numValidators),
-		votes:     make([]*Vote, numValidators),
-		sum:       0,
+		peerMaj23:           peerMaj23,
+		bitArray:            bits.NewBitArray(numValidators),
+		votes:               make([]*Vote, numValidators),
+		sum:                 0,
+		voteExtensionGroups: make(map[string]*voteExtensionGroup),
 	}
 }
 
-func (vs *blockVotes) addVerifiedVote(vote *Vote, votingPower int64) {
+func (vs *blockVotes) addVerifiedVote(
+	vote *Vote,
+	voteExtensionIdentity string,
+	votingPower int64,
+	recoveryThreshold int64,
+) bool {
 	valIndex := vote.ValidatorIndex
 	if existing := vs.votes[valIndex]; existing == nil {
 		vs.bitArray.SetIndex(int(valIndex), true)
 		vs.votes[valIndex] = vote
 		vs.sum += votingPower
+
+		group := vs.voteExtensionGroups[voteExtensionIdentity]
+		if group == nil {
+			group = &voteExtensionGroup{
+				representative: vote,
+				voters:         make(map[string]struct{}),
+			}
+			vs.voteExtensionGroups[voteExtensionIdentity] = group
+		}
+		previousPower := group.power
+		group.power += votingPower
+		group.voters[string(vote.ValidatorProTxHash)] = struct{}{}
+		return previousPower < recoveryThreshold && group.power >= recoveryThreshold
 	}
+	return false
 }
 
 func (vs *blockVotes) getByIndex(index int32) *Vote {

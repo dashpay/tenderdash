@@ -22,6 +22,9 @@ func TestVerifyConsensusParams(t *testing.T) {
 
 	invalid := types.DefaultConsensusParams()
 	invalid.Timeout.Vote = -1
+	threshold := uint64(1)
+	withUnsignedThreshold := *types.DefaultConsensusParams()
+	withUnsignedThreshold.Validator.VotingPowerThreshold = &threshold
 
 	testCases := []struct {
 		name     string
@@ -53,6 +56,12 @@ func TestVerifyConsensusParams(t *testing.T) {
 			params:  *invalid,
 			hash:    tmbytes.HexBytes("not the params hash"),
 			errorIs: "invalid consensus params",
+		},
+		{
+			name:    "unsigned voting threshold",
+			params:  withUnsignedThreshold,
+			hash:    withUnsignedThreshold.HashConsensusParams(),
+			errorIs: "voting power threshold",
 		},
 	}
 

@@ -613,7 +613,11 @@ func (h *Header) Equals(other *Header) bool {
 	if h == nil || other == nil {
 		return h == nil && other == nil
 	}
-	return proto.Equal(h.ToProto(), other.ToProto())
+	left := h.ToProto()
+	right := other.ToProto()
+	left.Time = left.Time.Round(0).UTC()
+	right.Time = right.Time.Round(0).UTC()
+	return proto.Equal(left, right)
 }
 
 // StringIndented returns an indented string representation of the header.

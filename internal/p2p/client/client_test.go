@@ -150,6 +150,50 @@ func (suite *ChannelTestSuite) TestRetirePendingKeepsChannelSendable() {
 	}
 }
 
+func (suite *ChannelTestSuite) TestSendAndWaitForDeliveryEvictsStalledPeerBeforeReturning() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sent := make(chan p2p.Envelope, 1)
+	evicted := make(chan struct{}, 1)
+	suite.p2pChannel.
+		On("Send", mock.Anything, mock.Anything).
+		Once().
+		Run(func(args mock.Arguments) { sent <- args.Get(1).(p2p.Envelope) }).
+		Return(nil)
+	suite.p2pChannel.
+		On("SendError", mock.Anything, mock.MatchedBy(func(peerError p2p.PeerError) bool {
+			return peerError.NodeID == suite.peerID && peerError.Fatal
+		})).
+		Once().
+		Run(func(mock.Arguments) { evicted <- struct{}{} }).
+		Return(nil)
+
+	result := make(chan error, 1)
+	go func() {
+		result <- suite.client.SendAndWaitForDelivery(ctx, p2p.Envelope{
+			To:      suite.peerID,
+			Message: &bcproto.BlockResponse{},
+		})
+	}()
+	envelope := <-sent
+	suite.Require().NoError(suite.fakeClock.BlockUntilContext(ctx, 1))
+	suite.fakeClock.Advance(deliveryTimeout)
+	select {
+	case <-evicted:
+	case <-time.After(time.Second):
+		suite.FailNow("timed out waiting for stalled peer eviction")
+	}
+	suite.Never(func() bool { return len(result) > 0 }, 20*time.Millisecond, time.Millisecond)
+
+	envelope.NotifyDelivery()
+	suite.Require().NoError(<-result)
+}
+
+func (suite *ChannelTestSuite) TestRequestTimeoutCoversStalledDeliveryWave() {
+	suite.GreaterOrEqual(peerTimeout, 2*deliveryTimeout)
+}
+
 // A peer that answers a request we have already given up on is slow, not
 // dishonest. resolve must report no error for it, because iter turns any error
 // from resolve into a PeerError that can evict the peer outright - bypassing the

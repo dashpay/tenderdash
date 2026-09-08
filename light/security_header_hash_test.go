@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
@@ -106,6 +107,7 @@ func TestSecurityVerifyHeaderRejectsMetadataDifferentFromPrimary(t *testing.T) {
 	forged := primaryHeader
 	forged.CoreChainLockedHeight++
 	assert.Equal(t, primaryHeader.Hash(), forged.Hash(), "fixture must collide under the legacy hash")
-	assert.Error(t, client.VerifyHeader(context.Background(), &forged, time.Now()),
+	err := client.VerifyHeader(context.Background(), &forged, time.Now())
+	require.ErrorContains(t, err, "header from primary",
 		"the requested header must match every field returned by the primary")
 }
