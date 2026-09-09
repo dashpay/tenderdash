@@ -149,10 +149,7 @@ func (v *SignsRecoverer) addVoteExtensionSigs(vote *Vote) error {
 	}
 
 	if len(vote.VoteExtensions) == 0 {
-		// Nothing to recover from this vote: either the canonical count is zero
-		// (e.g. vote extensions disabled, or a nil-block precommit), or - for
-		// legacy callers without a canonical count - the precommit simply carries
-		// no extensions. It contributes only its block signature.
+		// A vote with no extensions contributes only its block signature.
 		return nil
 	}
 
@@ -173,9 +170,8 @@ func (v *SignsRecoverer) addVoteExtensionSigs(vote *Vote) error {
 		v.voteExtensions = recoverableExtensions.Copy()
 	}
 
-	// Every contributing vote carries the canonical count, so this is a defensive
-	// consistency check. With a canonical count supplied it cannot fire; without
-	// one (legacy callers) it reports a genuine non-zero count mismatch.
+	// VoteSet.voteExtensionIdentity binds the ordered recoverable extensions of
+	// canonical voters. Guard other callers against mismatched vector lengths.
 	if len(recoverableExtensions) != len(v.voteExtensions) {
 		return fmt.Errorf("received vote extensions with different length: current %d, received %d",
 			len(v.voteExtensions), len(recoverableExtensions))

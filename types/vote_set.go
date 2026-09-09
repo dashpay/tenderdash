@@ -541,9 +541,10 @@ type voteExtensionGroup struct {
 }
 
 // canonicalVoteExtensionGroup selects the complete ordered signed extension
-// vector backed by threshold voting power. An empty vector sorts first. For
-// quorum types with a 50% recovery threshold, two groups can qualify only at or
-// beyond the fault model; production quorum types use a threshold above 50%.
+// vector backed by the quorum's recovery threshold, not the configurable commit
+// gate. Above 50%, disjoint groups cannot both qualify. At 50%, ties can occur;
+// lexicographic ordering makes selection independent of map iteration over the
+// same votes, with the empty vector first. It does not reconcile differing vote sets.
 func (voteSet *VoteSet) canonicalVoteExtensionGroup(
 	blockVotes *blockVotes,
 ) (*Vote, map[string]struct{}, bool, error) {

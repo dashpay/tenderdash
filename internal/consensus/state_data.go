@@ -481,6 +481,7 @@ func (s *StateData) verifyCommit(
 
 		if !s.ProposalBlockParts.HasHeader(commit.BlockID.PartSetHeader) {
 			s.logger.Debug("setting proposal block parts from commit", "partSetHeader", commit.BlockID.PartSetHeader)
+			s.ProposalBlock = nil
 			s.ProposalBlockParts = types.NewPartSetFromHeader(commit.BlockID.PartSetHeader)
 		}
 

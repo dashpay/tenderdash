@@ -2,11 +2,14 @@ package statesync
 
 import (
 	"encoding/hex"
+	"errors"
 	"testing"
 
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dashpay/tenderdash/crypto"
+	dashcore "github.com/dashpay/tenderdash/dash/core"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -141,4 +144,44 @@ func quorumInfoFromValidatorSet(valSet *types.ValidatorSet, includeShares bool) 
 		info.Members = append(info.Members, member)
 	}
 	return info
+}
+
+type quorumInfoTestClient struct {
+	dashcore.Client
+	info  *btcjson.QuorumInfoResult
+	err   error
+	calls int
+}
+
+func (c *quorumInfoTestClient) QuorumInfo(btcjson.LLMQType, crypto.QuorumHash) (*btcjson.QuorumInfoResult, error) {
+	c.calls++
+	return c.info, c.err
+}
+
+func TestValidatorSetAuthenticationCachesOnlyValidatedQuorumInfo(t *testing.T) {
+	vals, _ := types.RandValidatorSet(4)
+	block := &types.LightBlock{SignedHeader: &types.SignedHeader{Header: &types.Header{
+		ValidatorsHash: vals.Hash(), ProposerProTxHash: vals.Proposer().ProTxHash,
+	}}, ValidatorSet: vals}
+	core := &quorumInfoTestClient{err: errors.New("unavailable")}
+	auth := stateSyncValidatorSetAuthenticator{client: core}
+	_, err := auth.authenticate(block)
+	require.ErrorContains(t, err, "unavailable")
+	core.err = nil
+	core.info = quorumInfoFromValidatorSet(vals, true)
+	_, err = auth.authenticate(block)
+	require.NoError(t, err)
+	block.ProposerProTxHash = vals.Validators[1].ProTxHash
+	authenticated, err := auth.authenticate(block)
+	require.NoError(t, err)
+	require.Equal(t, block.ProposerProTxHash, authenticated.Proposer().ProTxHash)
+	require.Equal(t, 2, core.calls)
+	other, _ := types.RandValidatorSet(4)
+	block.ValidatorSet = other
+	block.ValidatorsHash = other.Hash()
+	block.ProposerProTxHash = other.Proposer().ProTxHash
+	core.info = quorumInfoFromValidatorSet(other, true)
+	_, err = auth.authenticate(block)
+	require.NoError(t, err)
+	require.Equal(t, 3, core.calls)
 }

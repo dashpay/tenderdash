@@ -521,13 +521,8 @@ const (
 	penalizePeer peerSeverity = false
 )
 
-// maxThresholdVoteExtensions bounds the peer-supplied vote-extension list that
-// VerifyCommit walks, spending one BLS pairing (~3ms) per entry and never short-
-// circuiting. A genuine commit carries one extension per threshold-recoverable
-// request - an application-fixed handful - whereas the 10MB LightBlockChannel
-// message limit alone would otherwise buy tens of thousands of them, minutes of
-// single-threaded CPU, for one response.
-const maxThresholdVoteExtensions = 256
+// Apply the shared commit limit before backfill performs authentication work.
+const maxThresholdVoteExtensions = types.MaxVoteExtensions
 
 // validateThresholdVoteExtensions rejects a peer-supplied extension list that
 // exceeds the bound or repeats an entry. Repetition is the sharper of the two:
@@ -591,6 +586,7 @@ func (r *Reactor) backfill(
 		lastChangeHeight = startHeight
 	)
 
+	authenticator := stateSyncValidatorSetAuthenticator{client: r.dashCoreClient}
 	queue := newBlockQueue(startHeight, stopHeight, initialHeight, stopTime, maxLightBlockRequestRetries)
 
 	ctxWithCancel, cancel := context.WithCancel(ctx)
@@ -803,15 +799,6 @@ func (r *Reactor) backfill(
 			// values become expensive or unsafe: the BLS sign-hash path
 			// (MustConvertUint8) panics on a QuorumType outside a uint8, and the
 			// vote-extension list costs one BLS pairing an entry.
-			//
-			// The vote-extension bound has no other enforcer, so it fires here for
-			// real. The quorum type is already bounded by the ValidatorSet.ValidateBasic
-			// that decoding the response runs, which is the gate a peer actually meets;
-			// it is repeated here so that anything reaching this loop by another route
-			// still cannot carry a value the sign-hash path would panic on.
-			//
-			// The three refusals below are not equally damning, so each carries its
-			// own severity rather than sharing one.
 			var (
 				rejectErr      error
 				rejectSeverity peerSeverity
@@ -823,11 +810,7 @@ func (r *Reactor) backfill(
 				rejectErr = fmt.Errorf("received light block with invalid commit -- unsupported quorum type: %w", qerr)
 				rejectSeverity = disconnectPeer
 			} else if xerr := validateThresholdVoteExtensions(resp.block.Commit.ThresholdVoteExtensions); xerr != nil {
-				// maxThresholdVoteExtensions is a ceiling this build picked to bound
-				// verification work, not a rule of the protocol. A chain whose
-				// application legitimately attaches more of them puts an honest peer on
-				// the wrong side of it, so refuse the block without taking the peer's
-				// connection.
+				// Withdraw incompatible responses without disconnecting the peer.
 				rejectErr = fmt.Errorf("received light block with invalid commit -- %w", xerr)
 				rejectSeverity = penalizePeer
 			} else if verr := resp.block.ValidatorSet.VerifyCommit(
@@ -863,16 +846,17 @@ func (r *Reactor) backfill(
 				continue
 			}
 
+			authenticated, err := authenticator.authenticate(resp.block)
+			if err != nil {
+				return fmt.Errorf("authenticating backfill validator set at height %d: %w", resp.block.Height, err)
+			}
+
 			// save the signed headers
 			if err := r.blockStore.SaveSignedHeader(resp.block.SignedHeader, trustedBlockID); err != nil {
 				return err
 			}
 
 			// check if there has been a change in the validator set
-			//
-			// ValidatorsHash covers only the threshold public key and the quorum hash,
-			// so the member list, proposer index and VotingPowerThreshold persisted here
-			// are not authenticated by the header chain.
 			if lastValidatorSet != nil && !bytes.Equal(resp.block.Header.ValidatorsHash, resp.block.Header.NextValidatorsHash) {
 				// save all the heights that the last validator set was the same
 				if err := r.stateStore.SaveValidatorSets(resp.block.Height+1, lastChangeHeight, lastValidatorSet); err != nil {
@@ -887,7 +871,7 @@ func (r *Reactor) backfill(
 			queue.success()
 			r.logger.Info("backfill: verified and stored light block", "height", resp.block.Height)
 
-			lastValidatorSet = resp.block.ValidatorSet
+			lastValidatorSet = authenticated
 
 			r.backfilledBlocks++
 			r.metrics.BackFilledBlocks.Add(1)

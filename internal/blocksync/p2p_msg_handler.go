@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"sort"
 	"sync"
 
 	"github.com/cosmos/gogoproto/proto"
@@ -54,6 +56,8 @@ type (
 		queuedResponses int
 		activeResponses int
 		peerConnections map[types.NodeID]peerConnectionState
+		// PeerManager emits globally ordered, monotonically increasing connection IDs.
+		lastConnID uint64
 	}
 
 	peerConnectionState struct {
@@ -178,9 +182,10 @@ func (h *blockP2PMessageHandler) prepareBlockResponse(job blockResponseJob) (pro
 func (h *blockP2PMessageHandler) enqueueBlockResponse(job blockResponseJob) {
 	peerID := job.envelope.From
 	h.responseMtx.Lock()
-	if !h.connectionIsCurrentLocked(peerID, job.envelope.ConnID) {
+	if job.envelope.ConnID == 0 || (job.envelope.ConnID <= h.lastConnID &&
+		!h.connectionIsCurrentLocked(peerID, job.envelope.ConnID)) {
 		h.responseMtx.Unlock()
-		h.logger.Debug("dropping block request from an ended peer connection", "peer", peerID)
+		h.logger.Debug("dropping block request without a current or pending peer connection", "peer", peerID)
 		return
 	}
 	peerOutstanding := len(h.responseQueues[peerID])
@@ -195,13 +200,12 @@ func (h *blockP2PMessageHandler) enqueueBlockResponse(job blockResponseJob) {
 		h.logger.Debug("dropping block request because the response queue is full", "peer", peerID)
 		return
 	}
-	shouldSchedule := peerOutstanding == 0
 	h.responseQueues[peerID] = append(h.responseQueues[peerID], job)
 	h.queuedResponses++
-	if shouldSchedule {
-		h.readyPeers = append(h.readyPeers, peerID)
-		h.wakeBlockResponseWorkerLocked()
-	}
+	sort.SliceStable(h.responseQueues[peerID], func(i, j int) bool {
+		return h.responseQueues[peerID][i].envelope.ConnID < h.responseQueues[peerID][j].envelope.ConnID
+	})
+	h.schedulePeerLocked(peerID)
 	h.responseMtx.Unlock()
 }
 
@@ -263,7 +267,7 @@ func (h *blockP2PMessageHandler) nextBlockResponse() (types.NodeID, blockRespons
 		peerID := h.readyPeers[0]
 		h.readyPeers = h.readyPeers[1:]
 		queue := h.responseQueues[peerID]
-		if len(queue) == 0 || h.activePeers[peerID] {
+		if len(queue) == 0 || h.activePeers[peerID] || !h.connectionIsCurrentLocked(peerID, queue[0].envelope.ConnID) {
 			continue
 		}
 		job := queue[0]
@@ -288,8 +292,7 @@ func (h *blockP2PMessageHandler) finishBlockResponse(peerID types.NodeID) {
 		delete(h.responseQueues, peerID)
 		delete(h.activePeers, peerID)
 	} else {
-		h.readyPeers = append(h.readyPeers, peerID)
-		h.wakeBlockResponseWorkerLocked()
+		h.schedulePeerLocked(peerID)
 	}
 }
 
@@ -305,13 +308,16 @@ func (h *blockP2PMessageHandler) handlePeerUpdate(update p2p.PeerUpdate) {
 
 	switch update.Status {
 	case p2p.PeerStatusUp:
-		previous, ok := h.peerConnections[update.NodeID]
-		if ok && previous.connID != update.ConnID {
-			h.purgeQueuedResponsesLocked(update.NodeID)
+		if update.ConnID == 0 {
+			return
 		}
+		h.lastConnID = max(h.lastConnID, update.ConnID)
+		h.purgeQueuedResponsesBeforeLocked(update.NodeID, update.ConnID)
 		h.peerConnections[update.NodeID] = peerConnectionState{connID: update.ConnID, live: true}
+		h.schedulePeerLocked(update.NodeID)
 	case p2p.PeerStatusDown:
-		h.purgeQueuedResponsesLocked(update.NodeID)
+		state := h.peerConnections[update.NodeID]
+		h.purgeQueuedResponsesBeforeLocked(update.NodeID, state.connID+1)
 		delete(h.peerConnections, update.NodeID)
 	}
 }
@@ -324,7 +330,7 @@ func (h *blockP2PMessageHandler) connectionIsCurrent(peerID types.NodeID, connID
 
 func (h *blockP2PMessageHandler) connectionIsCurrentLocked(peerID types.NodeID, connID uint64) bool {
 	if connID == 0 {
-		return true
+		return false
 	}
 	state, known := h.peerConnections[peerID]
 	if !known {
@@ -333,9 +339,15 @@ func (h *blockP2PMessageHandler) connectionIsCurrentLocked(peerID types.NodeID, 
 	return state.live && state.connID == connID
 }
 
-func (h *blockP2PMessageHandler) purgeQueuedResponsesLocked(peerID types.NodeID) {
-	queued := len(h.responseQueues[peerID])
-	delete(h.responseQueues, peerID)
+func (h *blockP2PMessageHandler) purgeQueuedResponsesBeforeLocked(peerID types.NodeID, connID uint64) {
+	queue := h.responseQueues[peerID]
+	kept := slices.DeleteFunc(queue, func(job blockResponseJob) bool { return job.envelope.ConnID < connID })
+	queued := len(queue) - len(kept)
+	if len(kept) == 0 {
+		delete(h.responseQueues, peerID)
+	} else {
+		h.responseQueues[peerID] = kept
+	}
 	if !h.activePeers[peerID] {
 		delete(h.activePeers, peerID)
 	}
@@ -347,6 +359,18 @@ func (h *blockP2PMessageHandler) purgeQueuedResponsesLocked(peerID types.NodeID)
 		}
 	}
 	h.readyPeers = ready
+}
+
+// Requests may precede their ordered peer updates; keep them bounded and wait
+// for PeerStatusUp before reading blocks or scheduling a response.
+func (h *blockP2PMessageHandler) schedulePeerLocked(peerID types.NodeID) {
+	queue := h.responseQueues[peerID]
+	if len(queue) == 0 || h.activePeers[peerID] || slices.Contains(h.readyPeers, peerID) ||
+		!h.connectionIsCurrentLocked(peerID, queue[0].envelope.ConnID) {
+		return
+	}
+	h.readyPeers = append(h.readyPeers, peerID)
+	h.wakeBlockResponseWorkerLocked()
 }
 
 func (h *blockP2PMessageHandler) wakeBlockResponseWorkerLocked() {

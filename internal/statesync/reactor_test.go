@@ -561,6 +561,7 @@ func TestReactor_BlockProviders(t *testing.T) {
 	defer close(closeCh)
 
 	chain := buildLightBlockChain(ctx, t, 1, 10, time.Now(), rts.privVal)
+	registerMockCoreQuorums(t, rts.dashcoreClient, chain)
 	go handleLightBlockRequests(ctx, t, chain, rts.blockOutCh, rts.blockInCh, closeCh, 0, 0)
 
 	peers := rts.reactor.peers.All()
@@ -736,6 +737,7 @@ func TestReactor_Backfill(t *testing.T) {
 				})
 
 			chain := buildLightBlockChain(ctx, t, stopHeight-1, startHeight+1, stopTime, rts.privVal)
+			registerMockCoreQuorums(t, rts.dashcoreClient, chain)
 
 			closeCh := make(chan struct{})
 			defer close(closeCh)
@@ -1148,6 +1150,7 @@ func backfillTamperedBlock(
 		Return(nil)
 
 	chain := buildLightBlockChain(ctx, t, stopHeight-1, startHeight+1, stopTime, rts.privVal)
+	registerMockCoreQuorums(t, rts.dashcoreClient, chain)
 	tamper(chain[tamperedHeight])
 
 	closeCh := make(chan struct{})
@@ -1288,7 +1291,7 @@ func recordPeerErrors(mtx *sync.Mutex, reported *[]p2p.PeerError) func(*reactorT
 //     build's version.BlockProtocol exactly, a constant that has been bumped four
 //     times, so a rolling upgrade produces peers on both sides of it by construction;
 //   - a vote-extension list longer than maxThresholdVoteExtensions exceeds a ceiling
-//     this build picked to bound its own verification work;
+//     shared with commit verification throughout this build;
 //   - an out-of-range quorum type is the one refusal during decoding that really is
 //     unambiguous, and it is here to show that it still does not disconnect: the
 //     decode boundary cannot tell it apart from the skew case above, which is exactly
@@ -1381,18 +1384,8 @@ func TestReactor_Backfill_ReportsRefusalsBySeverity(t *testing.T) {
 	}
 }
 
-// TestReactor_Backfill_RejectsMalformedVoteExtensions covers the vote-extension
-// bounds on the backfill path, which no other caller reaches: the list a peer
-// attaches to a backfilled commit is walked by VerifyCommit at one BLS pairing per
-// entry, and its length, multiplicity and member types are authenticated by nothing
-// upstream - not the header chain, which does not cover the list, and not
-// ValidateBasic, which does not measure it.
-//
-// Each case must be refused with the error that names its own bound and must leave
-// the block unstored. The process surviving the run is itself the assertion that the
-// refusal is a rejection and not a panic: the checks guard a sign-hash path that
-// panics on a value it cannot convert, and both the fetch and verify sides run in
-// goroutines that would take the test binary down with them.
+// Malformed extension lists must be rejected before persistence, using the
+// shared commit limit and the backfill duplicate check.
 func TestReactor_Backfill_RejectsMalformedVoteExtensions(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode")
@@ -1603,6 +1596,7 @@ func TestReactor_Backfill_QuarantinesPeerSupplyingBadCommits(t *testing.T) {
 		Return(nil)
 
 	chain := buildLightBlockChain(ctx, t, stopHeight-1, startHeight+1, stopTime, rts.privVal)
+	registerMockCoreQuorums(t, rts.dashcoreClient, chain)
 
 	closeCh := make(chan struct{})
 	defer close(closeCh)
@@ -1648,4 +1642,55 @@ func TestReactor_Backfill_AcceptsCommitWithStrippedVoteExtensions(t *testing.T) 
 	require.NoError(t, err, "known gap: a commit stripped of every vote extension still verifies")
 	require.NotNil(t, blockStore.LoadBlockMeta(tamperedHeight),
 		"known gap: the stripped commit is persisted like any verified one")
+}
+
+func TestBackfillPersistsAuthenticatedValidatorControls(t *testing.T) {
+	for _, field := range []string{"threshold", "membership", "proposer", "public_keys"} {
+		t.Run(field, func(t *testing.T) {
+			var expected *types.ValidatorSet
+			var saved bool
+			_, _, err := backfillTamperedBlock(context.Background(), t, func(lb *types.LightBlock) {
+				expected = lb.ValidatorSet.Copy()
+				switch field {
+				case "threshold":
+					lb.ValidatorSet.VotingPowerThreshold = uint64(lb.ValidatorSet.TotalVotingPower())
+				case "membership":
+					replacement, _ := types.RandValidatorSet(len(lb.ValidatorSet.Validators))
+					lb.ValidatorSet.Validators = replacement.Validators
+					for _, val := range lb.ValidatorSet.Validators {
+						val.PubKey = nil
+					}
+					lb.ValidatorSet.HasPublicKeys = false
+					require.NoError(t, lb.ValidatorSet.SetProposer(replacement.Validators[0].ProTxHash))
+				case "proposer":
+					require.NoError(t, lb.ValidatorSet.SetProposer(lb.ValidatorSet.Validators[1].ProTxHash))
+				case "public_keys":
+					lb.ValidatorSet.HasPublicKeys = false
+				}
+			}, func(rts *reactorTestSuite) {
+				rts.stateStore.On("SaveValidatorSets", mock.Anything, mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						vals := args.Get(2).(*types.ValidatorSet)
+						if !vals.QuorumHash.Equal(expected.QuorumHash) {
+							return
+						}
+						saved = true
+						require.Zero(t, vals.VotingPowerThreshold)
+						require.Equal(t, expected.GetProTxHashesOrdered(), vals.GetProTxHashesOrdered())
+						require.Equal(t, expected.Proposer().ProTxHash, vals.Proposer().ProTxHash)
+						require.True(t, vals.HasPublicKeys)
+					}).Return(nil)
+			})
+			require.NoError(t, err)
+			require.True(t, saved)
+		})
+	}
+}
+
+func TestBackfillRequiresCoreBeforePersistence(t *testing.T) {
+	blocks, _, err := backfillTamperedBlock(context.Background(), t, func(*types.LightBlock) {}, func(rts *reactorTestSuite) {
+		rts.reactor.dashCoreClient = nil
+	})
+	require.ErrorContains(t, err, "without a Dash Core client")
+	require.Zero(t, blocks.Height())
 }

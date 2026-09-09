@@ -146,6 +146,7 @@ func TestCommitAfterDroppedProposalAppliesCompleteBlock(t *testing.T) {
 				if tc.differentBlock {
 					require.Equal(t, block.Height, stateData.Height, "the retained block must not be applied")
 					require.Equal(t, commit, stateData.Commit)
+					require.Nil(t, stateData.ProposalBlock, "a new part set must discard the previous block")
 					require.False(t, stateData.ProposalBlockParts.IsComplete())
 					require.True(t, stateData.ProposalBlockParts.HasHeader(committedParts.Header()))
 					for i := 0; i < int(committedParts.Total()); i++ {

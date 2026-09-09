@@ -391,22 +391,42 @@ func authenticateStateSyncValidatorSet(
 	lightBlock *types.LightBlock,
 	dashCoreClient dashcore.Client,
 ) (*types.ValidatorSet, error) {
+	return (&stateSyncValidatorSetAuthenticator{client: dashCoreClient}).authenticate(lightBlock)
+}
+
+// Keep only the last quorum; backfill walks consecutive heights with the same
+// membership, and an unbounded cache would grow with the history being restored.
+type stateSyncValidatorSetAuthenticator struct {
+	client     dashcore.Client
+	quorumInfo *btcjson.QuorumInfoResult
+}
+
+func (a *stateSyncValidatorSetAuthenticator) authenticate(lightBlock *types.LightBlock) (*types.ValidatorSet, error) {
 	if lightBlock == nil || lightBlock.ValidatorSet == nil || lightBlock.Header == nil {
 		return nil, errors.New("light block is missing header or validator set")
 	}
-	if dashCoreClient == nil {
+	if a.client == nil {
 		return nil, errors.New("cannot authenticate validator membership without a Dash Core client")
 	}
 
 	wireSet := lightBlock.ValidatorSet
-	info, err := dashCoreClient.QuorumInfo(wireSet.QuorumType, wireSet.QuorumHash)
+	info := a.quorumInfo
+	if info == nil || info.Type != wireSet.QuorumType.Name() || info.QuorumHash != hex.EncodeToString(wireSet.QuorumHash) {
+		var err error
+		info, err = a.client.QuorumInfo(wireSet.QuorumType, wireSet.QuorumHash)
+		if err != nil {
+			return nil, fmt.Errorf("querying quorum info: %w", err)
+		}
+		if info == nil {
+			return nil, errors.New("received nil quorum info from Dash Core")
+		}
+	}
+	authenticated, err := authenticateStateSyncValidatorSetWithQuorumInfo(lightBlock, info)
 	if err != nil {
-		return nil, fmt.Errorf("querying quorum info: %w", err)
+		return nil, err
 	}
-	if info == nil {
-		return nil, errors.New("received nil quorum info from Dash Core")
-	}
-	return authenticateStateSyncValidatorSetWithQuorumInfo(lightBlock, info)
+	a.quorumInfo = info
+	return authenticated, nil
 }
 
 func authenticateStateSyncValidatorSetWithQuorumInfo(

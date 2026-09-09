@@ -129,6 +129,7 @@ func (suite *BlockP2PMessageHandlerTestSuite) TestHandleBlockRequest() {
 }
 
 func (suite *BlockP2PMessageHandlerTestSuite) TestServeBlockRequestReportsMissingCommit() {
+	suite.handler.handlePeerUpdate(p2p.PeerUpdate{NodeID: "peer", Status: p2p.PeerStatusUp, ConnID: 1})
 	block := &types.Block{Header: types.Header{Height: 1001}}
 	suite.fakeStore.On("LoadBlock", int64(1001)).Once().Return(block)
 	suite.fakeStore.On("LoadSeenCommitAt", int64(1001)).Once().Return(nil)
@@ -137,6 +138,7 @@ func (suite *BlockP2PMessageHandlerTestSuite) TestServeBlockRequestReportsMissin
 		ctx: context.Background(),
 		envelope: p2p.Envelope{
 			From:    types.NodeID("peer"),
+			ConnID:  1,
 			Message: &bcproto.BlockRequest{Height: 1001},
 		},
 	})
@@ -223,12 +225,13 @@ func (suite *BlockP2PMessageHandlerTestSuite) TestBlockResponseQueueHasGlobalBou
 	for i := 0; i < maxQueuedBlockResponses; i++ {
 		handler.enqueueBlockResponse(blockResponseJob{
 			envelope: p2p.Envelope{
-				From: types.NodeID(fmt.Sprintf("peer-%d", i/maxPendingRequestsPerPeer)),
+				From:   types.NodeID(fmt.Sprintf("peer-%d", i/maxPendingRequestsPerPeer)),
+				ConnID: 1,
 			},
 		})
 	}
 	handler.enqueueBlockResponse(blockResponseJob{
-		envelope: p2p.Envelope{From: types.NodeID("new-peer")},
+		envelope: p2p.Envelope{From: types.NodeID("new-peer"), ConnID: 1},
 	})
 	suite.Equal(maxQueuedBlockResponses, handler.queuedResponses)
 	suite.Len(handler.responseQueues["new-peer"], 1)
@@ -411,11 +414,13 @@ func (suite *BlockP2PMessageHandlerTestSuite) handleMessage(
 	msg proto.Message,
 	peerID types.NodeID,
 ) error {
+	suite.handler.handlePeerUpdate(p2p.PeerUpdate{NodeID: peerID, Status: p2p.PeerStatusUp, ConnID: 1})
 	return suite.handler.Handle(ctx, suite.fakeClient, &p2p.Envelope{
 		Attributes: map[string]string{
 			client.RequestIDAttribute: suite.reqID,
 		},
 		From:      peerID,
+		ConnID:    1,
 		Message:   msg,
 		ChannelID: p2p.BlockSyncChannel,
 	})
@@ -456,4 +461,53 @@ func newMockPeerAdder(t *testing.T) *mockPeerAdder {
 	fake.Mock.Test(t)
 	t.Cleanup(func() { mock.AssertExpectationsForObjects(t) })
 	return fake
+}
+
+func (suite *BlockP2PMessageHandlerTestSuite) TestRequestWaitsForConnectionUpdate() {
+	peerID := types.NodeID("early-peer")
+	suite.fakeStore.On("LoadBlock", int64(1001)).Once().Return(nil)
+	delivered := make(chan struct{}, 1)
+	suite.fakeP2PChannel.On("Send", mock.Anything, mock.Anything).Once().Run(func(mock.Arguments) { delivered <- struct{}{} }).Return(nil)
+	suite.Require().NoError(suite.handler.Handle(context.Background(), suite.fakeClient, &p2p.Envelope{
+		From: peerID, ConnID: 9, ChannelID: p2p.BlockSyncChannel,
+		Attributes: map[string]string{client.RequestIDAttribute: suite.reqID},
+		Message:    &bcproto.BlockRequest{Height: 1001},
+	}))
+	suite.handler.responseMtx.Lock()
+	suite.Equal(1, suite.handler.queuedResponses)
+	suite.handler.responseMtx.Unlock()
+	suite.handler.handlePeerUpdate(p2p.PeerUpdate{NodeID: peerID, Status: p2p.PeerStatusUp, ConnID: 9})
+	select {
+	case <-delivered:
+	case <-time.After(time.Second):
+		suite.Fail("request preceding peer update was lost")
+	}
+}
+
+func (suite *BlockP2PMessageHandlerTestSuite) TestUnidentifiedConnectionIsRejected() {
+	suite.False(suite.handler.connectionIsCurrent("unknown-peer", 0))
+}
+
+func (suite *BlockP2PMessageHandlerTestSuite) TestReconnectRequestSurvivesEarlierDisconnectUpdate() {
+	h := &blockP2PMessageHandler{
+		logger: suite.logger, responseQueues: make(map[types.NodeID][]blockResponseJob),
+		activePeers: make(map[types.NodeID]bool), responseWake: make(chan struct{}, 1),
+		peerConnections: make(map[types.NodeID]peerConnectionState),
+	}
+	peer := types.NodeID("reconnected-peer")
+	h.handlePeerUpdate(p2p.PeerUpdate{NodeID: peer, Status: p2p.PeerStatusUp, ConnID: 10})
+	for _, id := range []uint64{11, 10} {
+		h.enqueueBlockResponse(blockResponseJob{envelope: p2p.Envelope{From: peer, ConnID: id}})
+	}
+	h.handlePeerUpdate(p2p.PeerUpdate{NodeID: peer, Status: p2p.PeerStatusDown})
+	h.enqueueBlockResponse(blockResponseJob{envelope: p2p.Envelope{From: peer, ConnID: 10}})
+	suite.Equal(1, h.queuedResponses)
+	_, _, ready := h.nextBlockResponse()
+	suite.False(ready)
+	h.handlePeerUpdate(p2p.PeerUpdate{NodeID: peer, Status: p2p.PeerStatusUp, ConnID: 11})
+	gotPeer, job, ready := h.nextBlockResponse()
+	suite.True(ready)
+	suite.Equal(peer, gotPeer)
+	suite.Equal(uint64(11), job.envelope.ConnID)
+	suite.Zero(h.queuedResponses)
 }
