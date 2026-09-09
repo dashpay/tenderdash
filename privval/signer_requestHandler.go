@@ -2,6 +2,7 @@ package privval
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/dashpay/dashd-go/btcjson"
@@ -65,6 +66,13 @@ func DefaultValidationRequestHandler(
 		voteQuorumHash := r.SignVoteRequest.QuorumHash
 		voteQuorumType := r.SignVoteRequest.QuorumType
 
+		if vote == nil {
+			return signedVoteError(errors.New("vote is missing"))
+		}
+		if err := ValidateQuorumParams(voteQuorumType, voteQuorumHash); err != nil {
+			return signedVoteError(err)
+		}
+
 		err = privVal.SignVote(ctx, chainID, btcjson.LLMQType(voteQuorumType), voteQuorumHash, vote, nil)
 		if err != nil {
 			res = mustWrapMsg(&privvalproto.SignedVoteResponse{
@@ -86,6 +94,14 @@ func DefaultValidationRequestHandler(
 
 		proposalQuorumHash := r.SignProposalRequest.QuorumHash
 		proposalQuorumType := r.SignProposalRequest.QuorumType
+
+		if proposal == nil {
+			return signedProposalError(errors.New("proposal is missing"))
+		}
+		if err := ValidateQuorumParams(proposalQuorumType, proposalQuorumHash); err != nil {
+			return signedProposalError(err)
+		}
+
 		_, err = privVal.SignProposal(ctx, chainID, btcjson.LLMQType(proposalQuorumType), proposalQuorumHash, proposal)
 		if err != nil {
 			res = mustWrapMsg(&privvalproto.SignedProposalResponse{
@@ -101,6 +117,20 @@ func DefaultValidationRequestHandler(
 	}
 
 	return res, err
+}
+
+// signedVoteError renders a rejected vote request as the response its client
+// expects, next to the error the endpoint reports locally.
+func signedVoteError(err error) (privvalproto.Message, error) {
+	return mustWrapMsg(&privvalproto.SignedVoteResponse{
+		Vote: tmproto.Vote{}, Error: &privvalproto.RemoteSignerError{Code: 0, Description: err.Error()}}), err
+}
+
+// signedProposalError renders a rejected proposal request as the response its
+// client expects, next to the error the endpoint reports locally.
+func signedProposalError(err error) (privvalproto.Message, error) {
+	return mustWrapMsg(&privvalproto.SignedProposalResponse{
+		Proposal: tmproto.Proposal{}, Error: &privvalproto.RemoteSignerError{Code: 0, Description: err.Error()}}), err
 }
 
 // computeKeyResponse is a function type for key response generation

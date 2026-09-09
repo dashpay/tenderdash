@@ -52,6 +52,46 @@ func TestPeerCatchupRounds(t *testing.T) {
 	}
 }
 
+func TestHeightVoteSetAddVoteWithVerificationBudget_DeniedBeforeSignatureCheck(t *testing.T) {
+	cfg, err := config.ResetTestRoot(t.TempDir(), "consensus_height_vote_set_budget_test")
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	valSet, privVals := types.RandValidatorSet(1)
+	chainID := cfg.ChainID()
+	hvs := NewHeightVoteSet(chainID, 1, valSet)
+	vote := makeVoteHR(
+		ctx,
+		t,
+		1,
+		0,
+		0,
+		privVals,
+		chainID,
+		valSet.QuorumType,
+		valSet.QuorumHash,
+		tmproto.StateID{Height: 1},
+	)
+	budget := &recordingBudget{allow: false}
+
+	added, err := hvs.AddVoteWithVerificationBudget(vote, budget)
+
+	require.False(t, added)
+	require.ErrorIs(t, err, types.ErrVerificationBudgetExhausted)
+	require.Equal(t, []int{1}, budget.costs)
+	require.Nil(t, hvs.GetVoteSet(0, tmproto.PrecommitType).GetByIndex(0))
+}
+
+type recordingBudget struct {
+	allow bool
+	costs []int
+}
+
+func (b *recordingBudget) Allow(cost int) bool {
+	b.costs = append(b.costs, cost)
+	return b.allow
+}
+
 func makeVoteHR(
 	ctx context.Context,
 	t *testing.T,

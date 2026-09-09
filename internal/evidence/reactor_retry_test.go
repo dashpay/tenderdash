@@ -114,6 +114,7 @@ func TestSyncEvidenceRetries(t *testing.T) {
 	require.NoError(t, err)
 	evidenceTime := time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)
 	blockStore.On("Base").Return(int64(1))
+	blockStore.On("Height").Return(state.LastBlockHeight)
 	blockStore.On("LoadBlockMeta", mock.AnythingOfType("int64")).Return(
 		func(h int64) *types.BlockMeta {
 			if h <= state.LastBlockHeight {

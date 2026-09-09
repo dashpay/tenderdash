@@ -62,6 +62,11 @@ func (c *blockExecutor) create(ctx context.Context, rs *cstypes.RoundState, roun
 
 func (c *blockExecutor) ensureProcess(ctx context.Context, rs *cstypes.RoundState, round int32) error {
 	block := rs.ProposalBlock
+	// Above the condition, not inside it: either operand can reach the block,
+	// depending on whether the first short-circuits the second.
+	if block == nil {
+		return fmt.Errorf("%w: height %d, round %d", ErrProposalBlockNotSet, rs.Height, round)
+	}
 	crs := rs.CurrentRoundState
 	if crs.Params.Source != sm.ProcessProposalSource || !crs.MatchesBlock(block.Header, round) {
 		c.logger.Trace("CurrentRoundState is outdated, executing ProcessProposal", "crs", crs)

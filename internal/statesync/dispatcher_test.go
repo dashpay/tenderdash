@@ -92,6 +92,53 @@ func TestDispatcherReturnsNoBlock(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestDispatcherDeliversUndecodableResponse pins the contract the backfill loop
+// depends on to tell a peer's bad answer from a slow one: a response that cannot be
+// decoded is handed to the waiting caller, marked as such, rather than dropped.
+//
+// Dropping it is indistinguishable from silence, and the caller can only resolve
+// silence by waiting out its own deadline - so the assertion is not just that an
+// error comes back, but that it comes back well before the deadline the caller set.
+func TestDispatcherDeliversUndecodableResponse(t *testing.T) {
+	t.Cleanup(leaktest.Check(t))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	chans, ch := testChannel(100)
+	d := NewDispatcher(ch, log.NewTestingLogger(t))
+	peer := factory.NodeID(t, "a")
+
+	go func() {
+		<-chans.Out
+		resp := mockLBResp(ctx, t, peer, 1, time.Now())
+		block, err := resp.block.ToProto()
+		require.NoError(t, err)
+		// Survives ToProto and the header hashes, and is refused by the
+		// ValidatorSet.ValidateBasic that decoding runs.
+		block.ValidatorSet.QuorumType = int32(outOfRangeQuorumType)
+		require.Error(t, d.Respond(ctx, block, peer),
+			"Respond must still report an undecodable response to its own caller")
+	}()
+
+	const deadline = 5 * time.Second
+	callCtx, callCancel := context.WithTimeout(ctx, deadline)
+	defer callCancel()
+
+	started := time.Now()
+	lb, err := d.LightBlock(callCtx, 1, peer)
+	elapsed := time.Since(started)
+
+	require.Nil(t, lb)
+	require.ErrorIs(t, err, errMalformedLightBlock,
+		"the caller must be able to tell an unusable answer from a peer that said nothing")
+	require.ErrorContains(t, err, "unsupported quorum type",
+		"and must be told why, so the reason can reach the operator")
+	require.NotErrorIs(t, err, context.DeadlineExceeded)
+	require.Less(t, elapsed, deadline/2,
+		"the refusal must arrive when the response does, not when the caller gives up")
+}
+
 func TestDispatcherTimeOutWaitingOnLightBlock(t *testing.T) {
 	t.Cleanup(leaktest.Check(t))
 

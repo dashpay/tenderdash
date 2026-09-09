@@ -559,16 +559,24 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 		{height: 10, count: 2, operation: addValsOp},
 		{height: 17, count: 2, operation: removeValsOp},
 	}
+	// The network needs a real timeout ticker: it recovers from a missing or late
+	// proposal only through the timeoutPropose / timeoutPrecommitWait round change,
+	// and mockTicker discards every timeout but the first.
 	gen := consensusNetGen{
 		cfg:              cfg,
 		nPeers:           nPeers,
 		nVals:            nVals,
 		appFunc:          newKVStoreFunc(t),
-		tickerFun:        newMockTickerFunc(true),
+		tickerFun:        newTickerFunc(),
 		validatorUpdates: updates,
 		consensusParams: factory.ConsensusParams(func(cp *types.ConsensusParams) {
-			cp.Timeout.Propose = 2 * time.Second
-			cp.Timeout.Vote = 1 * time.Second
+			// Seven nodes gossiping in one process under the race detector need far
+			// more wall clock per round than production does. These timeouts only
+			// fire when the network stalls; tighter ones make a loaded runner
+			// abandon rounds it would have completed, so it churns instead of
+			// converging.
+			cp.Timeout.Propose = 5 * time.Second
+			cp.Timeout.Vote = 2 * time.Second
 		}),
 	}
 	states, genDoc, _, validatorSetUpdates := gen.generate(ctx, t)
@@ -799,4 +807,30 @@ func generatePrivValUpdate(proTxHashes []crypto.ProTxHash) (*quorumData, error) 
 	}
 	qd.validatorSetUpdate = *vsu
 	return &qd, nil
+}
+
+// Peer updates are processed one at a time on a single goroutine, so a down must
+// finish deleting and canceling the peer state before the next update — an up
+// for a reconnecting NodeID — is handled. When the delete ran in a separate
+// goroutine, a fast reconnect could reuse a state a pending down still owned, and
+// have that down later delete or cancel the reconnection's state. Deleting
+// synchronously closes that race.
+func TestReactorPeerDownDeletesPeerStateSynchronously(t *testing.T) {
+	r := &Reactor{
+		logger:  log.NewNopLogger(),
+		peers:   map[types.NodeID]*PeerState{},
+		state:   &State{msgInfoQueue: newMsgInfoQueue()},
+		Metrics: NopMetrics(),
+	}
+	ps := NewPeerState(log.NewNopLogger(), "peer")
+	_, ps.cancel = context.WithCancel(context.Background())
+	ps.SetRunning(true)
+	r.peers["peer"] = ps
+
+	r.peerDown(context.Background(), p2p.PeerUpdate{NodeID: "peer", Status: p2p.PeerStatusDown}, channelBundle{})
+
+	_, ok := r.GetPeerState("peer")
+	require.False(t, ok,
+		"peerDown must delete the peer state before returning, so a fast reconnect cannot reuse it")
+	require.False(t, ps.IsRunning(), "peerDown must stop the peer state before returning")
 }

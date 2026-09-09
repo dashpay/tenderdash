@@ -163,12 +163,18 @@ type Router struct {
 	peerChannels     map[types.NodeID]ChannelIDSet
 	queueFactory     func(int) queue
 	nodeInfoProducer func() *types.NodeInfo
+	deliveryMtx      sync.Mutex
+	deliveries       map[types.NodeID]*deliverySet
 
 	// FIXME: We don't strictly need to use a mutex for this if we seal the
 	// channels on router start. This depends on whether we want to allow
 	// dynamic channels in the future.
 	channelMtx    sync.RWMutex
 	channelQueues map[ChannelID]queue // inbound messages from all peers to a single channel
+}
+
+type deliverySet struct {
+	items map[*deliveryNotification]struct{}
 }
 
 // NewRouter creates a new Router. The given Transports must already be
@@ -334,22 +340,26 @@ func (r *Router) routeChannel(
 
 					// check whether the peer is receiving on that channel
 					_, contains = peerChs[chID]
+					if contains {
+						r.trackDelivery(envelope.To, &envelope)
+					}
 				}
 				r.peerMtx.RUnlock()
 
 				if !ok {
+					envelope.NotifyDelivery()
 					r.logger.Debug("dropping message for unconnected peer", "peer", envelope.To, "channel", chID)
 					continue
 				}
 
 				if !contains {
+					envelope.NotifyDelivery()
 					// reactor tried to send a message across a channel that the
 					// peer doesn't have available. This is a known issue due to
 					// how peer subscriptions work:
 					// https://github.com/tendermint/tendermint/issues/6598
 					continue
 				}
-
 				queues = []queue{q}
 			}
 
@@ -362,6 +372,7 @@ func (r *Router) routeChannel(
 					r.metrics.RouterPeerQueueSend.Observe(time.Since(start).Seconds())
 
 				case <-q.closed():
+					envelope.NotifyDelivery()
 					r.logger.Debug("dropping message on closed channel", "peer", envelope.To, "channel", chID)
 
 				case <-ctx.Done():
@@ -370,17 +381,17 @@ func (r *Router) routeChannel(
 			}
 
 		case peerError := <-errCh:
-			maxPeerCapacity := r.peerManager.HasMaxPeerCapacity()
+			disconnect := r.peerManager.ShouldDisconnectOnError(peerError.NodeID, peerError.Fatal)
 			r.logger.Error("peer error",
 				"peer", peerError.NodeID,
 				"err", peerError.Err,
-				"disconnecting", peerError.Fatal || maxPeerCapacity,
+				"disconnecting", disconnect,
 			)
 
-			if peerError.Fatal || maxPeerCapacity {
-				// if the error is fatal or all peer
-				// slots are in use, we can error
-				// (disconnect) from the peer.
+			if disconnect {
+				// The error is fatal, or all peer slots
+				// are in use and this peer is one we may
+				// shed to relieve the pressure.
 				r.peerManager.Errored(peerError.NodeID, peerError.Err)
 			} else {
 				// this just decrements the peer
@@ -702,7 +713,11 @@ func (r *Router) handshakePeer(
 // they are closed elsewhere it will cause this method to shut down and return.
 func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connection, channels ChannelIDSet) {
 	r.metrics.PeersConnected.Add(1)
-	r.peerManager.Ready(ctx, peerID, channels)
+	// The generation minted for this connection is captured here, once, and
+	// stamped on every envelope it delivers, so an envelope carries the identity
+	// of the connection that produced it even after a reconnect under the same
+	// NodeID has advanced the peer's live generation.
+	connID := r.peerManager.Ready(ctx, peerID, channels)
 
 	// we use context to manage the lifecycle of the peer
 	// note that original ctx will be used in cleanup
@@ -715,6 +730,7 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 		delete(r.peerQueues, peerID)
 		delete(r.peerChannels, peerID)
 		r.peerMtx.Unlock()
+		r.completePeerDeliveries(peerID)
 
 		_ = conn.Close()
 		sendQueue.close()
@@ -731,7 +747,7 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 
 	go func() {
 		select {
-		case errCh <- r.receivePeer(ioCtx, peerID, conn):
+		case errCh <- r.receivePeer(ioCtx, peerID, conn, connID):
 		case <-ioCtx.Done():
 		}
 		wg.Done()
@@ -798,9 +814,56 @@ FOR:
 	}
 }
 
+func (r *Router) trackDelivery(peerID types.NodeID, envelope *Envelope) {
+	if envelope == nil || envelope.delivery == nil {
+		return
+	}
+	// The tracked set is the completion backstop when a connection closes;
+	// queue and transport notifications only shorten the normal success path.
+	delivery := envelope.delivery
+	r.deliveryMtx.Lock()
+	if r.deliveries == nil {
+		r.deliveries = make(map[types.NodeID]*deliverySet)
+	}
+	peerDeliveries := r.deliveries[peerID]
+	if peerDeliveries == nil {
+		peerDeliveries = &deliverySet{items: make(map[*deliveryNotification]struct{})}
+		r.deliveries[peerID] = peerDeliveries
+	}
+	peerDeliveries.items[delivery] = struct{}{}
+	r.deliveryMtx.Unlock()
+
+	delivery.setOnCompleted(func() {
+		r.deliveryMtx.Lock()
+		delete(peerDeliveries.items, delivery)
+		if len(peerDeliveries.items) == 0 && r.deliveries[peerID] == peerDeliveries {
+			delete(r.deliveries, peerID)
+		}
+		r.deliveryMtx.Unlock()
+	})
+}
+
+func (r *Router) completePeerDeliveries(peerID types.NodeID) {
+	r.deliveryMtx.Lock()
+	peerDeliveries := r.deliveries[peerID]
+	delete(r.deliveries, peerID)
+	deliveries := make([]*deliveryNotification, 0)
+	if peerDeliveries != nil {
+		deliveries = make([]*deliveryNotification, 0, len(peerDeliveries.items))
+		for delivery := range peerDeliveries.items {
+			deliveries = append(deliveries, delivery)
+		}
+	}
+	r.deliveryMtx.Unlock()
+
+	for _, delivery := range deliveries {
+		delivery.complete()
+	}
+}
+
 // receivePeer receives inbound messages from a peer, deserializes them and
 // passes them on to the appropriate channel.
-func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Connection) error {
+func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Connection, connID uint64) error {
 	timeout := time.NewTimer(0)
 	defer timeout.Stop()
 
@@ -829,11 +892,16 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 		}
 		envelope, err := EnvelopeFromProto(protoEnvelope)
 		if err != nil {
-			r.logger.Error("message decoding failed, dropping message", "peer", peerID, "err", err)
+			// A policy rejection of a peer-supplied value, not an unexpected decode
+			// failure: any peer can trigger it on demand, so it must not be Error.
+			r.logger.Debug("envelope rejected, dropping message", "peer", peerID, "err", err)
 			continue
 		}
 		envelope.From = peerID
 		envelope.ChannelID = chID
+		// Stamp the connection generation before the envelope enters the shared
+		// per-channel queue, where it loses all connection identity but its NodeID.
+		envelope.ConnID = connID
 
 		// stop previous timeout counter and drain the timeout channel
 		timeout.Stop()
@@ -888,23 +956,43 @@ func (r *Router) sendPeer(ctx context.Context, peerID types.NodeID, conn Connect
 		case envelope := <-peerQueue.dequeue():
 			r.metrics.RouterPeerQueueRecv.Observe(time.Since(start).Seconds())
 			if envelope.Message == nil {
+				envelope.NotifyDelivery()
 				r.logger.Error("dropping nil message", "peer", peerID)
 				continue
 			}
 
 			protoEnvelope, err := envelope.ToProto()
 			if err != nil {
+				envelope.NotifyDelivery()
 				r.logger.Error("failed to marshal message", "peer", peerID, "err", err)
 				continue
 			}
 			bz, err := proto.Marshal(protoEnvelope)
 			if err != nil {
+				envelope.NotifyDelivery()
 				r.logger.Error("failed to marshal message", "peer", peerID, "err", err)
 				continue
 			}
 
-			if err = conn.SendMessage(ctx, envelope.ChannelID, bz); err != nil {
+			deliveryConn, reportsDelivery := conn.(DeliveryConnection)
+			reportsDelivery = reportsDelivery && envelope.delivery != nil
+			if reportsDelivery {
+				err = deliveryConn.SendMessageWithCompletion(
+					ctx,
+					envelope.ChannelID,
+					bz,
+					envelope.NotifyDeliveryProgress,
+					envelope.NotifyDelivery,
+				)
+			} else {
+				err = conn.SendMessage(ctx, envelope.ChannelID, bz)
+			}
+			if err != nil {
+				envelope.NotifyDelivery()
 				return err
+			}
+			if !reportsDelivery {
+				envelope.NotifyDelivery()
 			}
 
 			// r.logger.Debug("sent message", "peer", envelope.To, "message", envelope.Message)

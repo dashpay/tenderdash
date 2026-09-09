@@ -10,6 +10,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/encoding"
 	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/privval"
 	privvalproto "github.com/dashpay/tenderdash/proto/tendermint/privval"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -121,9 +122,18 @@ func (ss *SignerServer) GetProTxHash(ctx context.Context, req *privvalproto.ProT
 
 // SignVote receives a vote sign requests, attempts to sign it
 // returns SignedVoteResponse on success and error on failure
+//
+//nolint:dupl // parallel to SignProposal by design: same validation order over a different request type
 func (ss *SignerServer) SignVote(ctx context.Context, req *privvalproto.SignVoteRequest) (*privvalproto.SignedVoteResponse, error) {
 	if err := ss.validateChainID(req.ChainId); err != nil {
 		return nil, err
+	}
+
+	if req.Vote == nil {
+		return nil, status.Error(codes.InvalidArgument, "error signing vote: vote is missing")
+	}
+	if err := privval.ValidateQuorumParams(req.QuorumType, req.QuorumHash); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "error signing vote: %v", err)
 	}
 
 	vote := req.Vote
@@ -140,9 +150,18 @@ func (ss *SignerServer) SignVote(ctx context.Context, req *privvalproto.SignVote
 
 // SignProposal receives a proposal sign requests, attempts to sign it
 // returns SignedProposalResponse on success and error on failure
+//
+//nolint:dupl // parallel to SignVote by design: same validation order over a different request type
 func (ss *SignerServer) SignProposal(ctx context.Context, req *privvalproto.SignProposalRequest) (*privvalproto.SignedProposalResponse, error) {
 	if err := ss.validateChainID(req.ChainId); err != nil {
 		return nil, err
+	}
+
+	if req.Proposal == nil {
+		return nil, status.Error(codes.InvalidArgument, "error signing proposal: proposal is missing")
+	}
+	if err := privval.ValidateQuorumParams(req.QuorumType, req.QuorumHash); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "error signing proposal: %v", err)
 	}
 
 	proposal := req.Proposal

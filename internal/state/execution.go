@@ -578,14 +578,21 @@ func (blockExec *BlockExecutor) ApplyBlock(
 // ExtendVote gets vote-extensions from ABCI and updates vote.VoteExtensions with this value
 func (blockExec *BlockExecutor) ExtendVote(ctx context.Context, vote *types.Vote) {
 	resp, err := blockExec.appClient.ExtendVote(ctx, &abci.RequestExtendVote{
-		Hash:   vote.BlockID.Hash,
+		Hash:   bytes.Clone(vote.BlockID.Hash),
 		Height: vote.Height,
 		Round:  vote.Round,
 	})
 	if err != nil {
 		panic(fmt.Errorf("ExtendVote call failed: %w", err))
 	}
-	vote.VoteExtensions = types.NewVoteExtensionsFromABCIExtended(resp.VoteExtensions)
+	// INTENTIONAL(abci-panic-on-unknown-extension-type): ABCI app/tenderdash type-set mismatch
+	// is treated as a local bug, not a network fault — panic gives the strongest signal so the
+	// app/tenderdash mismatch is caught immediately rather than silently degrading consensus.
+	extensions, err := types.NewVoteExtensionsFromABCIExtended(resp.VoteExtensions)
+	if err != nil {
+		panic(fmt.Errorf("ExtendVote returned an invalid vote extension: %w", err))
+	}
+	vote.VoteExtensions = extensions
 }
 
 func (blockExec *BlockExecutor) VerifyVoteExtension(ctx context.Context, vote *types.Vote) error {
@@ -594,11 +601,15 @@ func (blockExec *BlockExecutor) VerifyVoteExtension(ctx context.Context, vote *t
 		extensions = vote.VoteExtensions.ToExtendProto()
 	}
 
+	// The byte fields are copied rather than shared. An application reached
+	// through the in-process client gets the request struct itself, so anything
+	// it writes through these slices would land in the vote — a vote that is on
+	// its way to being stored, and whose signatures have already been checked.
 	resp, err := blockExec.appClient.VerifyVoteExtension(ctx, &abci.RequestVerifyVoteExtension{
-		Hash:               vote.BlockID.Hash,
+		Hash:               bytes.Clone(vote.BlockID.Hash),
 		Height:             vote.Height,
 		Round:              vote.Round,
-		ValidatorProTxHash: vote.ValidatorProTxHash,
+		ValidatorProTxHash: bytes.Clone(vote.ValidatorProTxHash),
 		VoteExtensions:     extensions,
 	})
 	if err != nil {

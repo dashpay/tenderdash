@@ -1,10 +1,12 @@
 package consensus
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/cosmos/gogoproto/proto"
 
@@ -36,6 +38,9 @@ type AddProposalBlockPartAction struct {
 	blockExec      *blockExecutor
 	eventPublisher *EventPublisher
 	statsQueue     *chanQueue[msgInfo]
+	// partProofBudget bounds the leaf hashing a peer can force with block parts
+	// whose proof does not check out.
+	partProofBudget *blockPartProofBudget
 }
 
 // Execute ...
@@ -53,7 +58,7 @@ func (c *AddProposalBlockPartAction) Execute(ctx context.Context, stateEvent Sta
 		}
 	}()
 	// if the proposal is complete, we'll enterPrevote or tryFinalizeCommit
-	added, err = c.addProposalBlockPart(ctx, stateEvent.Ctrl, stateData, event.Msg, event.PeerID)
+	added, err = c.addProposalBlockPart(ctx, stateEvent.Ctrl, stateData, event.Msg, event.PeerID, event.FromReplay)
 	if err != nil {
 		return err
 	}
@@ -73,6 +78,7 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 	stateData *StateData,
 	msg *BlockPartMessage,
 	peerID types.NodeID,
+	fromReplay bool,
 ) (bool, error) {
 	height, round, part := msg.Height, msg.Round, msg.Part
 	c.logger.Trace(
@@ -112,12 +118,35 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 		return false, nil
 	}
 
+	// Verifying the part's proof hashes the whole leaf before it can tell
+	// whether the proof holds, and a proof that does not hold leaves the slot
+	// empty for the next copy to be hashed all over again. Refusing to spend
+	// more on a sender whose proofs keep failing is a silent local drop: it says
+	// nothing about the sender, so it is neither reported nor an error.
+	partSize := len(part.Bytes)
+	if !c.partProofBudget.allow(peerID, fromReplay, partSize) {
+		c.metrics.BlockPartProofDrops.Add(1)
+		c.logger.Debug("dropping block part from a peer over its invalid-proof budget",
+			"peer", peerID, "height", height, "round", round, "index", part.Index)
+		return false, nil
+	}
+
 	added, err := stateData.ProposalBlockParts.AddPart(part)
 	if err != nil {
+		if errors.Is(err, types.ErrPartSetInvalidProof) {
+			c.partProofBudget.chargeFailure(peerID, fromReplay, partSize)
+		}
 		if errors.Is(err, types.ErrPartSetInvalidProof) || errors.Is(err, types.ErrPartSetUnexpectedIndex) {
 			c.metrics.BlockGossipPartsReceived.With("matches_current", "false").Add(1)
 		}
 		return added, err
+	}
+	if added {
+		// A part that verifies pays for the next one, so a peer that spent its
+		// allowance while its view of our part set was behind is back at full
+		// rate one refill after it catches up — without a valid part buying it a
+		// whole fresh burst to waste.
+		c.partProofBudget.accepted(peerID, fromReplay, partSize)
 	}
 
 	c.metrics.BlockGossipPartsReceived.With("matches_current", "true").Add(1)
@@ -145,10 +174,34 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 			return added, err
 		}
 
-		if stateData.RoundState.Proposal != nil &&
-			block.Header.CoreChainLockedHeight != stateData.RoundState.Proposal.CoreChainLockedHeight {
-			return added, fmt.Errorf("core chain lock height of block %d does not match proposal %d",
-				block.Header.CoreChainLockedHeight, stateData.RoundState.Proposal.CoreChainLockedHeight)
+		// CoreChainLockedHeight and BlockID.StateID are not covered by the legacy
+		// proposal signature. A relay can therefore alter them without invalidating
+		// the proposer signature. Once the block is complete, derive those fields
+		// from the authenticated block bytes instead of allowing the relay's copy to
+		// erase the proposal slot. Hash and PartSetHeader are signed; a disagreement
+		// in either still proves that the proposal describes different bytes.
+		if proposal := stateData.Proposal; proposal != nil {
+			derived := block.BlockID(stateData.ProposalBlockParts)
+			if !bytes.Equal(derived.Hash, proposal.BlockID.Hash) ||
+				!derived.PartSetHeader.Equals(proposal.BlockID.PartSetHeader) {
+				c.logger.Error("proposal block ID does not describe the proposed block; dropping the proposal",
+					"height", stateData.Height,
+					"round", stateData.Round,
+					"proposer_pro_tx_hash", stateData.Validators.Proposer().ProTxHash.ShortString(),
+					"proposal_block_id", proposal.BlockID,
+					"block_id", derived,
+					"peer", peerID,
+				)
+				stateData.Proposal = nil
+				stateData.ProposalReceiveTime = time.Time{}
+			} else {
+				// RoundState snapshots may still expose this proposal to gossip workers.
+				// Publish a corrected copy so those readers keep an immutable value.
+				correctedProposal := *proposal
+				correctedProposal.CoreChainLockedHeight = block.CoreChainLockedHeight
+				correctedProposal.BlockID = derived.Copy()
+				stateData.Proposal = &correctedProposal
+			}
 		}
 
 		stateData.ProposalBlock = block

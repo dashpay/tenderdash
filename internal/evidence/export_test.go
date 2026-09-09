@@ -58,3 +58,13 @@ func (r *Reactor) PeerRoutineID(peerID types.NodeID) uint64 {
 func (r *Reactor) HandleEvidenceMessageForTest(ctx context.Context, envelope *p2p.Envelope) error {
 	return r.handleEvidenceMessage(ctx, envelope)
 }
+
+// AdmissionBudgetsForTesting reports the evidence channel's admission budgets:
+// what one verification costs, what every peer together may spend at once, and
+// what they may spend per second. External tests measure a flood against these
+// rather than restating them, so a retuned budget cannot leave a load test
+// asserting a number the node no longer uses.
+// Test-only accessor for the unexported admission constants.
+func AdmissionBudgetsForTesting() (verifyCost int, nodeBurst int, nodeRate float64) {
+	return evidenceVerifyCost, nodeEvidenceBurst, nodeEvidenceRate
+}

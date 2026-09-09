@@ -56,7 +56,7 @@ func RootCommand(conf *config.Config, logger log.Logger) *cobra.Command {
 				return err
 			}
 			if warning := pconf.DeprecatedFieldWarning(); warning != nil {
-				logger.Info("WARNING", "deprecated field warning", warning)
+				logger.Warn("deprecated configuration", "warning", warning)
 			}
 
 			node.SetupDeadlockDetection(&conf.BaseConfig)

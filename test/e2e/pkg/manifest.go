@@ -88,6 +88,14 @@ type Manifest struct {
 	// testnet via the RPC endpoint of a random node. Default is 0
 	Evidence int `toml:"evidence"`
 
+	// EvidenceAgeHeight and EvidenceAgeTime set the genesis evidence age
+	// parameters. They also fix how far a state syncing node backfills, since
+	// backfill walks back one evidence window from the snapshot height. Defaults
+	// are deliberately tiny so that ordinary testnets finish quickly; a testnet
+	// that measures the backfill itself needs a window wide enough to observe.
+	EvidenceAgeHeight int64         `toml:"evidence_age_height"`
+	EvidenceAgeTime   time.Duration `toml:"evidence_age_time"`
+
 	// LogLevel sets the log level of the entire testnet. This can be overridden
 	// by individual nodes.
 	LogLevel string `toml:"log_level"`

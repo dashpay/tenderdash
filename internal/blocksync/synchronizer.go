@@ -37,6 +37,63 @@ const (
 	maxPendingRequestsPerPeer           = 20
 	defaultSyncRateIntervalBlocks int64 = 100
 
+	// maxPendingApplyBytes is how much block data block sync may hold waiting for
+	// a lower height to arrive, summed from the serialized size recorded while
+	// each response was decoded. It is the limit that decides what the backlog
+	// costs once blocks are large, because a count of blocks says nothing about
+	// that when one block may be tens of megabytes.
+	//
+	// Serialized bytes understate the heap actually retained. The size covers the
+	// block alone, not the commit held alongside it, and a decoded block costs
+	// more than its wire form - several times more for blocks small enough that
+	// fixed per-response overhead dominates. Read this as a budget for block
+	// data, not as the memory the backlog occupies.
+	maxPendingApplyBytes = 256 << 20
+
+	// maxOutstandingHeights is how many heights may be requested and not yet
+	// applied. It is the second half of the bound, not a restatement of it: the
+	// byte budget can only be spent by a response that has already arrived, so a
+	// height still in flight costs it nothing. Without a limit on those, an
+	// empty backlog would let the producer run as far ahead as the peers and the
+	// worker pool allow, and every one of those requests would land in the
+	// backlog the moment a height below them went missing.
+	//
+	// Which of the two binds depends on block size, and they cross at
+	// maxPendingApplyBytes/maxOutstandingHeights, 4 MiB a block. Below that the
+	// count binds and the budget is never approached - sixty-four 2 KiB blocks
+	// are 128 KiB of block data - so the common case is bounded by this limit
+	// and not by the budget at all. Above it the budget binds first and stops
+	// the backlog at 256 MiB however few blocks that is. Neither limit can see
+	// the case the other covers.
+	//
+	// What the two bound together is
+	//
+	//	held <= maxPendingApplyBytes + maxOutstandingHeights * largest block accepted
+	//
+	// The last term is not the chain's configured maximum. The block sync
+	// channel accepts a message up to types.MaxBlockSizeBytes, 100 MiB,
+	// whatever the chain's own parameters say, and a block is not rejected for
+	// exceeding those parameters until it is applied - which is precisely what
+	// does not happen while a lower height is missing. The ceiling is therefore
+	// unconditional, about 6.98 GB, and configuring a chain for smaller blocks
+	// does not lower it.
+	//
+	// Lowering maxOutstandingHeights does, in proportion, and it is the only
+	// lever on it here. 64 is the balance struck: holding that term to the
+	// budget itself would mean a window of two, and even a 1 GiB allowance for
+	// it gives ten, either of which throttles every chain whose peers never
+	// actually send a block near the ingress limit. At a tenth of a second per
+	// round trip, 64 in flight fetch several hundred blocks a second, far more
+	// than applying them can consume.
+	//
+	// The second term is the fetch pipeline's footprint rather than the
+	// backlog's, and it is not the only one of its kind: the block sync
+	// channel's receive queue is sized from a RecvBufferCapacity of 1024, which
+	// the default simple-priority queue squares into a limit of 1,048,576
+	// messages, each able to carry a whole block. That is outside what these
+	// limits cover.
+	maxOutstandingHeights = 64
+
 	// maxConsecutiveFailures is how many block requests in a row a peer may fail
 	// before we drop it. Requests time out under load, and a peer serves its
 	// requests one at a time, so a single failure says very little about the
@@ -185,7 +242,7 @@ func (s *Synchronizer) OnStop() {
 }
 
 func (s *Synchronizer) produceJob(ctx context.Context) error {
-	if !s.jobGen.shouldJobBeGenerated() {
+	if !s.jobGen.shouldJobBeGenerated(s.backlog()) {
 		// TODO need to come up with a smarter way how to produce jobs without sleeping
 		select {
 		case <-ctx.Done():
@@ -300,6 +357,29 @@ func (s *Synchronizer) consumeJobResult(ctx context.Context) error {
 	return nil
 }
 
+// backlog reports what block sync is holding: the height it is waiting to
+// apply, which is the lowest height not applied yet, and the serialized size of
+// the responses held above it. That size is what the blocks measured on the
+// wire, which is less than what holding them decoded costs; see
+// maxPendingApplyBytes. Both are read under one lock, so the pair describes a
+// single state and a job cannot be admitted against a height from one moment
+// and a backlog from another.
+//
+// The size is summed on read rather than carried as a counter. pendingToApply
+// holds at most maxOutstandingHeights entries, so the sum costs less than the
+// two full peer scans the producing loop already runs for every job, and a
+// counter would have to be kept correct by addBlock, advance and dropPeer
+// independently - which is how an aggregate comes to disagree with what it
+// aggregates.
+func (s *Synchronizer) backlog() (applyHeight int64, pendingBytes int) {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+	for _, resp := range s.pendingToApply {
+		pendingBytes += resp.Size
+	}
+	return s.height, pendingBytes
+}
+
 // GetStatus returns synchronizer's height, count of in progress requests
 func (s *Synchronizer) GetStatus() (int64, int32) {
 	cnt := s.jobProgressCounter.Load()
@@ -326,47 +406,54 @@ func (s *Synchronizer) IsCaughtUp() bool {
 // A stall on its own is not a reason to stop. Handing over to consensus is a
 // one-way door - only the state sync path ever switches back to block sync - and
 // consensus catch-up is far slower than block sync, so a node that gives up
-// while it is still thousands of blocks behind stays behind. As long as peers
-// report heights above ours there are blocks left to fetch and something to
-// retry, so keep going and say so loudly. Give up on the stall only once no peer
-// can help us, or once the stall has outlasted maxSyncStall, so that a wedged
+// while it is still thousands of blocks behind stays behind. As long as some
+// peer holds the block we are waiting for there is something to retry, so keep
+// going and say so loudly. Give up on the stall only once no peer can serve that
+// block, or once the stall has outlasted maxSyncStall, so that a wedged
 // synchronizer can still hand over rather than blocking forever.
 func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool) {
-	ticker := time.NewTicker(switchToConsensusIntervalSeconds * time.Second)
+	ticker := s.clock.NewTicker(switchToConsensusIntervalSeconds * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return s.IsCaughtUp()
-		case <-ticker.C:
+		case <-ticker.Chan():
 			if s.IsCaughtUp() {
 				return true
 			}
-			var (
-				height, _     = s.GetStatus()
-				maxPeerHeight = s.MaxPeerHeight()
-				stalledFor    = time.Since(s.LastAdvance())
-				behind        = maxPeerHeight - height
-			)
-			switch stallVerdictFor(behind, stalledFor) {
+			height, stalledFor, servable := s.stallSnapshot()
+			// read separately because nothing is decided on it: it only gives the
+			// log lines below the number an operator compares against
+			maxPeerHeight := s.MaxPeerHeight()
+			switch stallVerdictFor(servable, stalledFor) {
 			case stopNothingToFetch:
+				if maxPeerHeight > height {
+					// Peers claim to be ahead yet none of them holds the block we
+					// need. Worth saying: the node stops while apparently behind,
+					// which otherwise looks like it gave up for no reason.
+					s.logger.Error(
+						"no peer can serve the next block, handing over to consensus",
+						"height", height,
+						"max_peer_height", maxPeerHeight,
+						"stalled_for", stalledFor,
+					)
+				}
 				return false
 			case stopStalledTooLong:
 				s.logger.Error(
 					"block sync stalled for too long, handing over to consensus while still behind",
 					"height", height,
 					"max_peer_height", maxPeerHeight,
-					"behind", behind,
 					"stalled_for", stalledFor,
 				)
 				return false
 			}
 			if stalledFor > syncTimeout {
 				s.logger.Error(
-					"block sync has stalled but peers report higher blocks, still trying",
+					"block sync has stalled but a peer still holds the block we need, still trying",
 					"height", height,
 					"max_peer_height", maxPeerHeight,
-					"behind", behind,
 					"stalled_for", stalledFor,
 					"giving_up_in", maxSyncStall-stalledFor,
 				)
@@ -382,31 +469,62 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool) {
 	}
 }
 
+// stallSnapshot reads everything the stall verdict is formed from as one
+// observation: the height block sync is waiting for, how long it has been
+// waiting for it, and whether any peer can serve it.
+//
+// Blocks are applied in order, so the current height is the only one that can
+// move us forward, and whether a peer can serve that one is what decides
+// whether waiting is worth anything. The highest height anyone claims decides
+// nothing: a peer whose blocks start above us has nothing we can use however
+// high it claims to be.
+//
+// The three are read under one lock because advance() stamps the height and the
+// advance time together under that same lock. A block applied concurrently
+// therefore lands either wholly inside the snapshot or wholly outside it, and
+// the verdict can never pair a height with a staleness or a servability
+// measured against a different one. Read separately, it could: a height read
+// before an advance, checked for servability after one, reports nothing to
+// fetch while the height we had by then moved on to is served. Ending block
+// sync is a one-way door, so a stop assembled from two inconsistent readings
+// leaves the node in consensus catch-up it cannot leave.
+func (s *Synchronizer) stallSnapshot() (height int64, stalledFor time.Duration, servable bool) {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+	return s.height, s.clock.Since(s.lastAdvance), s.peerStore.HasPeerForHeight(s.height)
+}
+
 // stallVerdict says what a lack of progress in block sync means.
 type stallVerdict int
 
 const (
 	// keepSyncing means the stall is not a reason to stop yet
 	keepSyncing stallVerdict = iota
-	// stopNothingToFetch means no peer has a block we are missing
+	// stopNothingToFetch means no peer holds the block we are waiting for
 	stopNothingToFetch
-	// stopStalledTooLong means we are still behind but have to hand over anyway
+	// stopStalledTooLong means a peer still holds it but we have to hand over anyway
 	stopStalledTooLong
 )
 
 // stallVerdictFor decides what to do when block sync has made no progress for
-// stalledFor, given how many blocks the best peer is ahead of us.
+// stalledFor, given whether any peer holds the block we are waiting for.
 //
-// Being behind with peers that can serve us is a reason to keep retrying, not to
-// stop: handing over to consensus is effectively irreversible, so stopping while
+// Waiting on a block someone has is a reason to keep retrying, not to stop:
+// handing over to consensus is effectively irreversible, so stopping while
 // behind leaves the node grinding through consensus catch-up instead. Only a
-// stall with nothing left to fetch, or one long enough to look like a wedge,
-// ends block sync.
-func stallVerdictFor(behind int64, stalledFor time.Duration) stallVerdict {
+// stall on a block nobody has, or one long enough to look like a wedge, ends
+// block sync.
+//
+// servable is judged from what peers advertise about themselves, so it cannot
+// distinguish a peer that has the block from one that says it does and never
+// answers. maxSyncStall stays as the wall-clock backstop for that case, and for
+// a synchronizer wedged on our own side, where peers are willing and able and
+// no block arrives anyway.
+func stallVerdictFor(servable bool, stalledFor time.Duration) stallVerdict {
 	switch {
 	case stalledFor <= syncTimeout:
 		return keepSyncing
-	case behind <= 0:
+	case !servable:
 		return stopNothingToFetch
 	case stalledFor > maxSyncStall:
 		return stopStalledTooLong
@@ -428,9 +546,11 @@ func (s *Synchronizer) LastAdvance() time.Time {
 	return s.lastAdvance
 }
 
-// AddPeer adds the peer's alleged blockchain base and height
+// AddPeer records the peer's alleged blockchain base and height. Peers report
+// their range repeatedly, so for a peer we already track this only moves that
+// range and leaves everything we know about its outstanding requests intact.
 func (s *Synchronizer) AddPeer(peer PeerData) {
-	s.peerStore.Put(peer.peerID, peer)
+	s.peerStore.Upsert(peer)
 }
 
 // RemovePeer removes the peer with peerID from the synchronizer. If there's no peer

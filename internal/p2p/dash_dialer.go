@@ -35,6 +35,9 @@ type DashDialer interface {
 	IsDialingOrConnected(types.NodeID) bool
 	// DisconnectAsync schedules asynchronous job to disconnect from the provided node.
 	DisconnectAsync(types.NodeID) error
+	// SetProtectedPeers replaces the set of nodes whose connection slot is reserved,
+	// so that they cannot be displaced by other nodes competing for a slot.
+	SetProtectedPeers([]types.NodeID) error
 }
 
 type routerDashDialer struct {
@@ -70,6 +73,11 @@ func (cm *routerDashDialer) setPeerScore(nodeID types.NodeID, newScore PeerScore
 		peer.MutableScore = int64(newScore)
 		return cm.peerManager.configurePeer(peer)
 	})
+}
+
+// SetProtectedPeers implements DashDialer
+func (cm *routerDashDialer) SetProtectedPeers(nodeIDs []types.NodeID) error {
+	return cm.peerManager.SetProtectedPeers(nodeIDs)
 }
 
 // IsDialingOrConnected implements DashDialer

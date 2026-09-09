@@ -1,0 +1,42 @@
+# Statesync backfill measurement network.
+#
+# Sized for observing the backfill itself rather than for covering features: the
+# evidence window is wide enough that a state syncing node walks back thousands of
+# blocks instead of the handful an ordinary testnet needs. Both state sync providers
+# are present, the RPC one being the default a node gets when use-p2p is left alone.
+#
+# The validator set is deliberately small. Block cadence falls off sharply with set
+# size on a single host, and the chain has to be taller than the evidence window
+# before a syncing node can walk back across it, so set size is traded for chain
+# height here.
+#
+# The two syncing nodes are started by hand once the chain is tall enough, so their
+# start_at heights are a floor rather than a schedule.
+
+evidence_age_height = 3000
+
+[node.validator01]
+snapshot_interval = 500
+
+[node.validator02]
+snapshot_interval = 500
+
+[node.validator03]
+snapshot_interval = 500
+
+[node.validator04]
+
+# A full node needs the Dash Core privval protocol even though it never signs:
+# without it the node builds its light-client core client from a validator key it
+# does not have. networks/ci.toml carries the same gap.
+[node.full01]
+mode = "full"
+state_sync = "rpc"
+privval_protocol = "dashcore"
+start_at = 3400
+
+[node.full02]
+mode = "full"
+state_sync = "p2p"
+privval_protocol = "dashcore"
+start_at = 3400

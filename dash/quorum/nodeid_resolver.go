@@ -3,6 +3,7 @@ package quorum
 import (
 	"fmt"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/dashpay/tenderdash/internal/p2p"
@@ -37,7 +38,7 @@ func (resolver tcpNodeIDResolver) connect(host string, port uint16) (net.Conn, e
 	dialer := net.Dialer{
 		Timeout: resolver.DialerTimeout,
 	}
-	connection, err := dialer.Dial("tcp4", fmt.Sprintf("%s:%d", host, port))
+	connection, err := dialer.Dial("tcp4", net.JoinHostPort(host, strconv.Itoa(int(port))))
 	if err != nil {
 		return nil, fmt.Errorf("cannot lookup node ID: %w", err)
 	}

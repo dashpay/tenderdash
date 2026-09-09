@@ -16,11 +16,17 @@ import (
 // - it is internally consistent with state
 // - it was properly signed by the alleged equivocator and meets the individual evidence verification requirements
 //
+// It also reports whether the signatures were actually checked. They are not
+// when the validator set at the evidence height carries no public keys, in
+// which case the evidence is accepted on its structure alone — so a caller that
+// wants to treat acceptance as proof of misbehavior must consult this and not
+// merely the absence of an error.
+//
 // NOTE: Evidence may be provided that we do not have the block or validator
 // set for. In these cases, we do not return a ErrInvalidEvidence as not to have
 // the sending peer disconnect. All other errors are treated as invalid evidence
 // (i.e. ErrInvalidEvidence).
-func (evpool *Pool) verify(ctx context.Context, evidence types.Evidence) error {
+func (evpool *Pool) verify(ctx context.Context, evidence types.Evidence) (bool, error) {
 	var (
 		state          = evpool.State()
 		height         = state.LastBlockHeight
@@ -36,7 +42,7 @@ func (evpool *Pool) verify(ctx context.Context, evidence types.Evidence) error {
 	// disconnect or signal an error in this particular case.
 	blockMeta := evpool.blockStore.LoadBlockMeta(evidence.Height())
 	if blockMeta == nil {
-		return fmt.Errorf("failed to verify evidence; missing block for height %d", evidence.Height())
+		return false, fmt.Errorf("failed to verify evidence; missing block for height %d", evidence.Height())
 	}
 
 	// verify the time of the evidence
@@ -45,7 +51,7 @@ func (evpool *Pool) verify(ctx context.Context, evidence types.Evidence) error {
 
 	// check that the evidence hasn't expired
 	if ageDuration > evidenceParams.MaxAgeDuration && ageNumBlocks > evidenceParams.MaxAgeNumBlocks {
-		return types.NewErrInvalidEvidence(
+		return false, types.NewErrInvalidEvidence(
 			evidence,
 			fmt.Errorf(
 				"evidence from height %d (created at: %v) is too old; min height is %d and evidence can not be older than %v",
@@ -62,28 +68,39 @@ func (evpool *Pool) verify(ctx context.Context, evidence types.Evidence) error {
 	case *types.DuplicateVoteEvidence:
 		valSet, err := evpool.stateDB.LoadValidators(evidence.Height(), evpool.blockStore)
 		if err != nil {
-			return err
+			return false, err
 		}
 
 		if err := VerifyDuplicateVote(ev, state.ChainID, valSet, evpool.logger); err != nil {
-			return types.NewErrInvalidEvidence(evidence, err)
+			return false, types.NewErrInvalidEvidence(evidence, err)
 		}
 
 		_, val := valSet.GetByProTxHash(ev.VoteA.ValidatorProTxHash)
+		verified := signaturesCheckable(val)
 
 		if err := ev.ValidateABCI(val, valSet, evTime); err != nil {
 			ev.GenerateABCI(val, valSet, evTime)
 			if addErr := evpool.addPendingEvidence(ctx, ev); addErr != nil {
 				evpool.logger.Error("adding pending duplicate vote evidence failed", "err", addErr)
+			} else {
+				evpool.rememberIdentity(ev, verified)
 			}
-			return err
+			return verified, err
 		}
 
-		return nil
+		return verified, nil
 
 	default:
-		return types.NewErrInvalidEvidence(evidence, fmt.Errorf("unrecognized evidence type: %T", evidence))
+		return false, types.NewErrInvalidEvidence(evidence, fmt.Errorf("unrecognized evidence type: %T", evidence))
 	}
+}
+
+// signaturesCheckable reports whether we hold the public key needed to check an
+// accused validator's signatures. VerifyDuplicateVote checks signatures exactly
+// when this holds; when it does not, it can only confirm the evidence is
+// well-formed. The two must never drift apart, which is why both ask here.
+func signaturesCheckable(val *types.Validator) bool {
+	return val != nil && val.PubKey != nil
 }
 
 // VerifyDuplicateVote verifies DuplicateVoteEvidence against the state of full node. This involves the
@@ -135,7 +152,7 @@ func VerifyDuplicateVote(e *types.DuplicateVoteEvidence, chainID string, valSet 
 
 	pubKey := val.PubKey
 
-	if pubKey != nil {
+	if signaturesCheckable(val) {
 		va := e.VoteA.ToProto()
 		vb := e.VoteB.ToProto()
 		// Signatures must be valid

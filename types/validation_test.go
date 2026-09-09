@@ -53,6 +53,17 @@ func TestValidatorSet_VerifyCommit_All(t *testing.T) {
 		},
 	)
 
+	t.Run("global verification budget is checked before commit signature verification", func(t *testing.T) {
+		budget := &recordingVerificationBudget{decisions: []bool{false}}
+
+		err := vset.VerifyCommitWithBudget(chainID, vote.BlockID, vote.Height, commit, budget)
+
+		require.ErrorIs(t, err, ErrVerificationBudgetExhausted)
+		require.NotErrorAs(t, err, &ErrInvalidCommitSignature{},
+			"local overload must not be classified as forged commit evidence")
+		require.Equal(t, []int{1}, budget.costs)
+	})
+
 	vote2 := *vote
 	signBytes, err := v.SignBytes("EpsilonEridani")
 	require.NoError(t, err)

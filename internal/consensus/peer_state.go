@@ -9,8 +9,10 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/rs/zerolog"
 
+	"github.com/dashpay/tenderdash/config"
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	"github.com/dashpay/tenderdash/libs/bits"
 	"github.com/dashpay/tenderdash/libs/log"
@@ -44,6 +46,12 @@ func (pss peerStateStats) String() string {
 type PeerState struct {
 	peerID types.NodeID
 	logger log.Logger
+	// clock is the time source the majority-claim answer memory is dated
+	// against; the wall clock unless a test overrides it.
+	clock clockwork.Clock
+	// maj23AnswerTTL is how long an answer keeps the same majority claim from
+	// being answered again.
+	maj23AnswerTTL time.Duration
 
 	// NOTE: Modify below using setters, never directly.
 	mtx     sync.RWMutex
@@ -52,15 +60,53 @@ type PeerState struct {
 	PRS     cstypes.PeerRoundState `json:"round_state"`
 	Stats   *peerStateStats        `json:"stats"`
 
+	// answeredMaj23 records the majority claims this node has most recently
+	// answered for the peer, and how many of our own votes each answer carried.
+	// Together they decide whether repeating a claim can tell the peer anything
+	// new.
+	answeredMaj23     [maj23AnswerMemory]maj23Answer
+	answeredMaj23Next int
+
 	// ProTxHash is accessible only for the validator
 	ProTxHash types.ProTxHash
+
+	// connID is the generation of the connection this peer state currently stands
+	// for, and laneSession the scheduler session it was admitted under. They are
+	// set together at peer-up and read together, so a message is matched against
+	// the connection that produced it (by the immutable generation the router
+	// stamped on it) and, only if that connection is still live, admitted under
+	// its session.
+	connID      uint64
+	laneSession uint64
+}
+
+// PeerStateOptionFunc overrides a default of a PeerState.
+type PeerStateOptionFunc func(*PeerState)
+
+// WithPeerStateClock sets the time source the peer state meters against. The
+// default is the wall clock; a test injects a fake clock to advance time
+// explicitly.
+func WithPeerStateClock(clock clockwork.Clock) PeerStateOptionFunc {
+	return func(ps *PeerState) {
+		ps.clock = clock
+	}
+}
+
+// WithMaj23AnswerTTL sets how long an answered majority claim keeps the same
+// claim from being answered again, which is counted in the gossip passes the
+// peer makes.
+func WithMaj23AnswerTTL(ttl time.Duration) PeerStateOptionFunc {
+	return func(ps *PeerState) {
+		ps.maj23AnswerTTL = ttl
+	}
 }
 
 // NewPeerState returns a new PeerState for the given node ID.
-func NewPeerState(logger log.Logger, peerID types.NodeID) *PeerState {
-	return &PeerState{
+func NewPeerState(logger log.Logger, peerID types.NodeID, opts ...PeerStateOptionFunc) *PeerState {
+	ps := &PeerState{
 		peerID: peerID,
 		logger: logger.With("peer", peerID),
+		clock:  clockwork.NewRealClock(),
 		PRS: cstypes.PeerRoundState{
 			Round:              -1,
 			ProposalPOLRound:   -1,
@@ -69,6 +115,48 @@ func NewPeerState(logger log.Logger, peerID types.NodeID) *PeerState {
 		},
 		Stats: &peerStateStats{},
 	}
+	for _, opt := range opts {
+		opt(ps)
+	}
+	if ps.maj23AnswerTTL <= 0 {
+		ps.maj23AnswerTTL = maj23AnswerTTLFor(0)
+	}
+	return ps
+}
+
+// SetLaneAdmission records the connection generation and scheduler session this
+// peer's current connection was admitted under, together, so a later message can
+// be matched against the connection that produced it.
+func (ps *PeerState) SetLaneAdmission(connID, session uint64) {
+	ps.mtx.Lock()
+	defer ps.mtx.Unlock()
+
+	ps.connID = connID
+	ps.laneSession = session
+}
+
+// laneSessionForConn returns the scheduler session under which to admit a message
+// that its connection stamped with connID, and whether that connection is still
+// this peer's live one.
+//
+// A message carrying the generation currently admitted resolves to that
+// connection's session; a message an earlier connection left in flight carries an
+// older generation and is refused, so a reconnect under the same NodeID cannot
+// let it inherit the standing of the connection that replaced it. Because the
+// generation and the session are read together, the session returned is always
+// the one the matched connection was admitted under, never a later reconnect's.
+//
+// A message with no generation (connID == 0) — a path that predates ingress
+// stamping, or this node's own work — matches a peer that likewise has none,
+// preserving the former admission behavior.
+func (ps *PeerState) laneSessionForConn(connID uint64) (uint64, bool) {
+	ps.mtx.RLock()
+	defer ps.mtx.RUnlock()
+
+	if connID != ps.connID {
+		return 0, false
+	}
+	return ps.laneSession, true
 }
 
 // SetRunning sets the running state of the peer.
@@ -599,8 +687,144 @@ func (ps *PeerState) ApplyHasCommitMessage(msg *HasCommitMessage) {
 	ps.setHasCommit(msg.Height, msg.Round)
 }
 
+// maj23AnswerMemory is how many distinct majority claims per peer are
+// remembered as answered.
+//
+// A peer's gossip loop offers up to four claims on every tick — a prevote
+// majority for its round, one for the proposal's POL round, a precommit
+// majority, and a catch-up commit — so remembering only the last would be
+// overwritten before the same claim came round again and would suppress
+// nothing in steady state.
+const maj23AnswerMemory = 4
+
+// maj23AnswerTicks is how many majority-claim gossip passes an answer keeps the
+// same claim from the same peer from being answered again.
+//
+// The answer is not only a report of our own vote set — it is the only thing
+// that corrects the claimant's picture of what we hold. A claimant records a
+// vote as delivered the moment it hands it to the router, and offers it once;
+// nothing inside a round restores it to the offer except our answer. So when a
+// vote is dropped between us, the claimant learns of it only by being told
+// again which votes we lack — and that answer necessarily carries an unchanged
+// count, because the vote is still missing. An answer withheld for being
+// unchanged is therefore withheld exactly when it is needed.
+//
+// Counting the peer's own passes rather than fixing a duration is what makes
+// that trade the same wherever the cadence is tuned: every second repeat costs
+// nothing, and the one after it reopens the repair. A fixed duration would be
+// most of a round at a fast cadence, and longer than any repeat at a slow one,
+// where it would suppress nothing at all.
+const maj23AnswerTicks = 2
+
+// maj23AnswerTTLFor returns how long an answer suppresses the same claim, given
+// the cadence at which a gossip loop repeats it.
+func maj23AnswerTTLFor(sleep time.Duration) time.Duration {
+	if sleep <= 0 {
+		// Nothing throttles the gossip loop, so there is no cadence to count
+		// passes of. The default is what the rest of these ceilings are sized
+		// against.
+		sleep = config.DefaultConsensusConfig().PeerQueryMaj23SleepDuration
+	}
+	return maj23AnswerTicks * sleep
+}
+
+// maj23Answer is one majority claim this node has answered, the number of our
+// own votes the answer carried, and when it went out.
+type maj23Answer struct {
+	key  string
+	bits int
+	at   time.Time
+}
+
+// ShouldAnswerVoteSetMaj23 reports whether a majority claim from this peer is
+// worth answering.
+//
+// A peer's gossip loop repeats the same claims on every tick for as long as
+// they hold, and the answer — which votes we have for that block — is drawn
+// from our own vote set alone. Answering every copy costs a bit array over
+// every validator, on the goroutine that serves every peer's state messages,
+// so a repeat that has just been answered is passed over.
+//
+// A grown vote count reopens the answer at once, since it is new information
+// the peer is waiting for. An unchanged count does not mean the answer is
+// worthless: it is what the claimant has to hear to notice that a vote it
+// believes it delivered never arrived. That is what maj23AnswerTTL bounds —
+// the repeats cost nothing for a while, and then the repair runs again.
+//
+// It saves this node work in normal gossip. It is not what bounds a sender who
+// wants an answer: a claim naming a round we track no votes for is a new key
+// every time, and rounds are free to name. The ceilings on the channel are what
+// bound that.
+func (ps *PeerState) ShouldAnswerVoteSetMaj23(
+	height int64,
+	round int32,
+	voteType tmproto.SignedMsgType,
+	blockID types.BlockID,
+	ourVotes *bits.BitArray,
+) bool {
+	key := maj23Key(height, round, voteType, blockID)
+	count := countTrueBits(ourVotes)
+	now := ps.clock.Now()
+
+	ps.mtx.RLock()
+	defer ps.mtx.RUnlock()
+
+	for _, answered := range ps.answeredMaj23 {
+		if answered.key == key && answered.bits == count && now.Sub(answered.at) < ps.maj23AnswerTTL {
+			return false
+		}
+	}
+	return true
+}
+
+// RecordVoteSetMaj23Answer notes that this peer has been told what votes we
+// have for a majority claim, so repeating the claim is not answered again until
+// the answer would differ.
+//
+// It is recorded only once the answer has actually gone out. Recording an
+// answer this node then failed to deliver would suppress the peer's next ask
+// and leave it waiting for votes it was never told about.
+func (ps *PeerState) RecordVoteSetMaj23Answer(
+	height int64,
+	round int32,
+	voteType tmproto.SignedMsgType,
+	blockID types.BlockID,
+	ourVotes *bits.BitArray,
+) {
+	answer := maj23Answer{
+		key:  maj23Key(height, round, voteType, blockID),
+		bits: countTrueBits(ourVotes),
+		at:   ps.clock.Now(),
+	}
+
+	ps.mtx.Lock()
+	defer ps.mtx.Unlock()
+
+	for i, answered := range ps.answeredMaj23 {
+		if answered.key == answer.key {
+			// The same claim, answered again.
+			ps.answeredMaj23[i] = answer
+			return
+		}
+	}
+	ps.answeredMaj23[ps.answeredMaj23Next] = answer
+	ps.answeredMaj23Next = (ps.answeredMaj23Next + 1) % maj23AnswerMemory
+}
+
+func maj23Key(height int64, round int32, voteType tmproto.SignedMsgType, blockID types.BlockID) string {
+	return fmt.Sprintf("%d/%d/%d/%s", height, round, voteType, blockID.Key())
+}
+
+func countTrueBits(bA *bits.BitArray) int {
+	if bA == nil {
+		return 0
+	}
+	return bA.CountTrueBits()
+}
+
 // ApplyVoteSetBitsMessage updates the peer state for the bit-array of votes
 // it claims to have for the corresponding BlockID.
+//
 // `ourVotes` is a BitArray of votes we have for msg.BlockID
 // NOTE: if ourVotes is nil (e.g. msg.Height < rs.Height),
 // we conservatively overwrite ps's votes w/ msg.Votes.

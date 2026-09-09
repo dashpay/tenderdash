@@ -39,7 +39,7 @@ func examplePrevote(t *testing.T) *Vote {
 func examplePrecommit(t testing.TB) *Vote {
 	t.Helper()
 	vote := exampleVote(t, byte(tmproto.PrecommitType))
-	vote.VoteExtensions = VoteExtensionsFromProto(&tmproto.VoteExtension{
+	vote.VoteExtensions = MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
 		Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
 		Extension: []byte("extension"),
 		Signature: make([]byte, SignatureSize),
@@ -183,7 +183,7 @@ func TestVoteSignBytesTestVectors(t *testing.T) {
 			"test_chain_id", &Vote{
 				Height:         1,
 				Round:          1,
-				VoteExtensions: VoteExtensionsFromProto(&tmproto.VoteExtension{Extension: []byte("extension")}),
+				VoteExtensions: MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{Extension: []byte("extension")}),
 			},
 			[]byte{
 				0x0, 0x0, 0x0, 0x0, //type
@@ -332,7 +332,7 @@ func TestVoteExtension(t *testing.T) {
 	}{
 		{
 			name: "valid THRESHOLD_RECOVER",
-			extensions: VoteExtensionsFromProto(&tmproto.VoteExtension{
+			extensions: MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
 				Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
 				Extension: []byte("extension")}),
 			includeSignature: true,
@@ -340,7 +340,7 @@ func TestVoteExtension(t *testing.T) {
 		},
 		{
 			name: "valid THRESHOLD_RECOVER_RAW plwdtx",
-			extensions: VoteExtensionsFromProto(&tmproto.VoteExtension{
+			extensions: MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
 				Type: tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
 				XSignRequestId: &tmproto.VoteExtension_SignRequestId{
 					SignRequestId: []byte("\x06plwdtx"),
@@ -351,7 +351,7 @@ func TestVoteExtension(t *testing.T) {
 		},
 		{
 			name: "valid THRESHOLD_RECOVER_RAW dpevote",
-			extensions: VoteExtensionsFromProto(&tmproto.VoteExtension{
+			extensions: MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
 				Type: tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
 				XSignRequestId: &tmproto.VoteExtension_SignRequestId{
 					SignRequestId: []byte("dpevote"),
@@ -362,7 +362,7 @@ func TestVoteExtension(t *testing.T) {
 		},
 		{
 			name: "no extension signature",
-			extensions: VoteExtensionsFromProto(&tmproto.VoteExtension{
+			extensions: MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
 				Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
 				Extension: []byte("extension")}),
 			includeSignature: false,
@@ -534,11 +534,11 @@ func TestValidVotes(t *testing.T) {
 		{
 			"good precommit with vote extension",
 			examplePrecommit(t), func(v *Vote) {
-				v.VoteExtensions[0] = VoteExtensionFromProto(tmproto.VoteExtension{
+				v.VoteExtensions[0] = MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
 					Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
 					Extension: []byte("extension"),
 					Signature: make([]byte, SignatureSize),
-				})
+				})[0]
 			},
 		},
 	}
@@ -602,13 +602,13 @@ func TestInvalidPrevotes(t *testing.T) {
 		{
 			"vote extension present",
 			func(v *Vote) {
-				v.VoteExtensions = VoteExtensionsFromProto(&tmproto.VoteExtension{Extension: []byte("extension")})
+				v.VoteExtensions = MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{Extension: []byte("extension")})
 			},
 		},
 		{
 			"vote extension signature present",
 			func(v *Vote) {
-				v.VoteExtensions = VoteExtensionsFromProto(&tmproto.VoteExtension{Signature: []byte("signature")})
+				v.VoteExtensions = MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{Signature: []byte("signature")})
 			},
 		},
 	}
@@ -633,7 +633,7 @@ func TestInvalidPrecommitExtensions(t *testing.T) {
 	}{
 		{
 			"vote extension present without signature", func(v *Vote) {
-				v.VoteExtensions = VoteExtensionsFromProto(&tmproto.VoteExtension{Extension: []byte("extension")})
+				v.VoteExtensions = MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{Extension: []byte("extension")})
 			},
 		},
 		// TODO(thane): Re-enable once https://github.com/tendermint/tendermint/issues/8272 is resolved
@@ -641,7 +641,7 @@ func TestInvalidPrecommitExtensions(t *testing.T) {
 		{
 			"oversized vote extension signature",
 			func(v *Vote) {
-				v.VoteExtensions = VoteExtensionsFromProto(&tmproto.VoteExtension{
+				v.VoteExtensions = MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
 					Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
 					Signature: make([]byte, SignatureSize+1)})
 			},
@@ -669,7 +669,9 @@ func TestVoteExtensionsSignBytes(t *testing.T) {
 		Signature: []byte{},
 		Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
 	}
-	signItem, err := VoteExtensionFromProto(ve).SignItem("some-chain", 1, 2, btcjson.LLMQType_TEST_PLATFORM, crypto.RandQuorumHash())
+	ext, err := VoteExtensionFromProto(ve)
+	require.NoError(t, err)
+	signItem, err := ext.SignItem("some-chain", 1, 2, btcjson.LLMQType_TEST_PLATFORM, crypto.RandQuorumHash())
 	assert.NoError(t, err)
 
 	actual := signItem.Msg
@@ -698,7 +700,9 @@ func TestVoteExtensionsSignBytesRaw(t *testing.T) {
 		},
 	}
 
-	signItem, err := VoteExtensionFromProto(ve).SignItem("some-chain", 1, 2, btcjson.LLMQType_TEST_PLATFORM, quorumHash)
+	ext, err := VoteExtensionFromProto(ve)
+	require.NoError(t, err)
+	signItem, err := ext.SignItem("some-chain", 1, 2, btcjson.LLMQType_TEST_PLATFORM, quorumHash)
 	assert.NoError(t, err)
 
 	actual := signItem.SignHash
@@ -770,4 +774,164 @@ func BenchmarkVoteSignBytes(b *testing.B) {
 
 	// Reset the sink.
 	sink = (interface{})(nil)
+}
+
+// signPrecommitWithExtensions builds a precommit carrying two
+// threshold-recoverable extensions, signed for real, plus everything needed to
+// verify it.
+func signPrecommitWithExtensions(ctx context.Context, t *testing.T) (
+	vote *Vote, pubKey crypto.PubKey, quorumHash crypto.QuorumHash, quorumType btcjson.LLMQType, chainID string,
+) {
+	t.Helper()
+
+	chainID = "test_chain_id"
+	quorumType = btcjson.LLMQType_5_60
+	quorumHash = crypto.RandQuorumHash()
+
+	privVal := NewMockPVForQuorum(quorumHash)
+	proTxHash, err := privVal.GetProTxHash(ctx)
+	require.NoError(t, err)
+	pubKey, err = privVal.GetPubKey(ctx, quorumHash)
+	require.NoError(t, err)
+
+	vote = &Vote{
+		ValidatorProTxHash: proTxHash,
+		ValidatorIndex:     0,
+		Height:             1,
+		Round:              0,
+		Type:               tmproto.PrecommitType,
+		BlockID:            makeBlockID(rand.Bytes(crypto.HashSize), 1, rand.Bytes(crypto.HashSize), nil),
+		VoteExtensions: MustVoteExtensionsFromProto(t,
+			&tmproto.VoteExtension{
+				Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+				Extension: []byte("first"),
+			},
+			&tmproto.VoteExtension{
+				Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+				Extension: []byte("second"),
+			},
+		),
+	}
+
+	v := vote.ToProto()
+	require.NoError(t, privVal.SignVote(ctx, chainID, quorumType, quorumHash, v, nil))
+	vote.BlockSignature = v.BlockSignature
+	for i, ext := range v.VoteExtensions {
+		vote.VoteExtensions[i].SetSignature(ext.Signature)
+	}
+
+	return vote, pubKey, quorumHash, quorumType, chainID
+}
+
+// A precommit whose block signature does not authenticate must be rejected on
+// that signature alone. Verifying extensions first would let a peer who holds no
+// valid key force one BLS pairing per extension before the vote is thrown away.
+//
+// The short-circuit is asserted by construction: BOTH the block signature and an
+// extension signature are forged. Extension verification reports which extension
+// failed, so that detail appearing in the error would prove the per-extension
+// pairings ran. Getting only the block-signature error proves they did not.
+func TestVerifyBlockAndExtensionSigns_ShortCircuitsOnBadBlockSignature(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	vote, pubKey, quorumHash, quorumType, chainID := signPrecommitWithExtensions(ctx, t)
+
+	// Forge the block signature.
+	vote.BlockSignature[0] = ^vote.BlockSignature[0]
+
+	// Forge an extension signature too. If extensions were verified first, this
+	// is what would be reported instead.
+	sigs := vote.VoteExtensions.GetSignatures()
+	require.NotEmpty(t, sigs)
+	forged := append([]byte(nil), sigs[0]...)
+	forged[0] = ^forged[0]
+	vote.VoteExtensions[0].SetSignature(forged)
+
+	err := vote.VerifyBlockAndExtensionSigns(chainID, pubKey, quorumType, quorumHash)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrVoteInvalidBlockSignature,
+		"a forged block signature must be the rejection reason")
+	assert.NotContains(t, err.Error(), "vote-extension",
+		"no per-extension verification may happen after the block signature has failed")
+}
+
+// The short-circuit must not weaken the gate: with an authentic block signature,
+// extension signatures are still fully verified. This is what keeps the ABCI
+// VerifyVoteExtension call in the consensus middleware unreachable to a peer
+// that cannot produce valid extension signatures.
+func TestVerifyBlockAndExtensionSigns_StillVerifiesExtensions(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	vote, pubKey, quorumHash, quorumType, chainID := signPrecommitWithExtensions(ctx, t)
+
+	// Leave the block signature authentic; forge only an extension signature.
+	sigs := vote.VoteExtensions.GetSignatures()
+	require.NotEmpty(t, sigs)
+	forged := append([]byte(nil), sigs[0]...)
+	forged[0] = ^forged[0]
+	vote.VoteExtensions[0].SetSignature(forged)
+
+	err := vote.VerifyBlockAndExtensionSigns(chainID, pubKey, quorumType, quorumHash)
+
+	require.Error(t, err, "a forged extension signature must still be rejected")
+	assert.NotErrorIs(t, err, ErrVoteInvalidBlockSignature,
+		"the block signature was authentic; the failure must come from the extension")
+}
+
+// A fully valid precommit is accepted exactly as before the reordering.
+func TestVerifyBlockAndExtensionSigns_ValidVoteAccepted(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	vote, pubKey, quorumHash, quorumType, chainID := signPrecommitWithExtensions(ctx, t)
+
+	require.NoError(t, vote.VerifyBlockAndExtensionSigns(chainID, pubKey, quorumType, quorumHash))
+
+	// The ordered check must agree with the unconditional full verification on
+	// every vote, so that reordering cannot change which votes are admitted.
+	require.NoError(t, vote.Verify(chainID, quorumType, quorumHash, pubKey, vote.ValidatorProTxHash))
+}
+
+// Admission parity: for the same vote, the ordered check and the unconditional
+// full check must agree on accept/reject. Only the work done differs.
+func TestVerifyBlockAndExtensionSigns_MatchesFullVerifyAdmission(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	testCases := []struct {
+		name   string
+		modify func(*Vote)
+	}{
+		{"untouched", func(*Vote) {}},
+		{"bad block signature", func(v *Vote) { v.BlockSignature[0] = ^v.BlockSignature[0] }},
+		{"bad extension signature", func(v *Vote) {
+			sigs := v.VoteExtensions.GetSignatures()
+			forged := append([]byte(nil), sigs[0]...)
+			forged[0] = ^forged[0]
+			v.VoteExtensions[0].SetSignature(forged)
+		}},
+		{"both bad", func(v *Vote) {
+			v.BlockSignature[0] = ^v.BlockSignature[0]
+			sigs := v.VoteExtensions.GetSignatures()
+			forged := append([]byte(nil), sigs[0]...)
+			forged[0] = ^forged[0]
+			v.VoteExtensions[0].SetSignature(forged)
+		}},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			vote, pubKey, quorumHash, quorumType, chainID := signPrecommitWithExtensions(ctx, t)
+			tc.modify(vote)
+
+			ordered := vote.VerifyBlockAndExtensionSigns(chainID, pubKey, quorumType, quorumHash)
+			full := vote.Verify(chainID, quorumType, quorumHash, pubKey, vote.ValidatorProTxHash)
+
+			assert.Equal(t, full == nil, ordered == nil,
+				"ordered verification must admit exactly the votes full verification admits")
+		})
+	}
 }

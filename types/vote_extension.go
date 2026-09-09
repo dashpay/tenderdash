@@ -21,25 +21,48 @@ import (
 
 var (
 	errUnableCopySigns = errors.New("unable to copy signatures: the sizes of extensions are not equal")
+
+	// ErrUnknownVoteExtensionType is returned for a vote-extension type outside the
+	// defined enum values. proto3 enums are open, so this indicates peer misbehavior
+	// on the network paths.
+	ErrUnknownVoteExtensionType = errors.New("unknown vote extension type")
+
+	// ErrNilVoteExtension is returned for a nil element of a vote-extension slice. A
+	// decoder can produce one for an empty repeated-field entry, so every site that
+	// dereferences such a slice must reject it rather than trust the slice is dense.
+	ErrNilVoteExtension = errors.New("nil vote extension")
 )
 
 // VoteExtensions is a container where the key is vote-extension type and value is a list of VoteExtension
 type VoteExtensions []VoteExtensionIf
 
-// NewVoteExtensionsFromABCIExtended returns vote-extensions container for given ExtendVoteExtension
-func NewVoteExtensionsFromABCIExtended(exts []*abci.ExtendVoteExtension) VoteExtensions {
+// NewVoteExtensionsFromABCIExtended returns vote-extensions container for given ExtendVoteExtension.
+//
+// The input is application-supplied. Returns an error if an extension type is not a
+// defined enum value.
+func NewVoteExtensionsFromABCIExtended(exts []*abci.ExtendVoteExtension) (VoteExtensions, error) {
 	voteExtensions := make(VoteExtensions, 0, len(exts))
 
 	for _, ext := range exts {
 		ve := ext.ToVoteExtension()
-		voteExtensions.Add(ve)
+		if err := voteExtensions.Add(ve); err != nil {
+			return nil, err
+		}
 	}
-	return voteExtensions
+	return voteExtensions, nil
 }
 
-// Add creates and adds protobuf VoteExtension into a container by vote-extension type
-func (e *VoteExtensions) Add(ext tmproto.VoteExtension) {
-	*e = append(*e, VoteExtensionFromProto(ext))
+// Add creates and adds protobuf VoteExtension into a container by vote-extension type.
+//
+// Returns an error if the extension type is not a defined enum value; the container is
+// left unmodified.
+func (e *VoteExtensions) Add(ext tmproto.VoteExtension) error {
+	added, err := VoteExtensionFromProto(ext)
+	if err != nil {
+		return err
+	}
+	*e = append(*e, added)
+	return nil
 }
 
 // MakeVoteExtensionSignItems  creates a list SignItem structs for a vote extensions
@@ -121,8 +144,11 @@ func (e VoteExtensions) ToExtendProto() []*abci.ExtendVoteExtension {
 	for _, ext := range e {
 		pb := ext.ToProto()
 		eve := &abci.ExtendVoteExtension{
-			Type:      pb.Type,
-			Extension: pb.Extension,
+			Type: pb.Type,
+			// Copied, not shared: this crosses into the application, and an
+			// in-process application writing through the slice would be writing
+			// into the vote the extension came from.
+			Extension: bytes.Clone(pb.Extension),
 		}
 
 		if pb.XSignRequestId != nil {
@@ -179,17 +205,27 @@ func (e VoteExtensions) Len() int {
 	return len(e)
 }
 
-// VoteExtensionsFromProto creates VoteExtensions container from VoteExtensions's protobuf
-func VoteExtensionsFromProto(pve ...*tmproto.VoteExtension) VoteExtensions {
+// VoteExtensionsFromProto creates VoteExtensions container from VoteExtensions's protobuf.
+//
+// Returns an error if an element is nil or its extension type is not a defined enum
+// value; returns (nil, nil) for an empty input.
+func VoteExtensionsFromProto(pve ...*tmproto.VoteExtension) (VoteExtensions, error) {
 	if len(pve) == 0 {
-		return nil
+		return nil, nil
 	}
 	voteExtensions := make(VoteExtensions, 0, len(pve))
-	for _, ext := range pve {
-		voteExtensions = append(voteExtensions, VoteExtensionFromProto(*ext))
+	for i, ext := range pve {
+		if ext == nil {
+			return nil, fmt.Errorf("%w at index %d", ErrNilVoteExtension, i)
+		}
+		converted, err := VoteExtensionFromProto(*ext)
+		if err != nil {
+			return nil, err
+		}
+		voteExtensions = append(voteExtensions, converted)
 	}
 
-	return voteExtensions
+	return voteExtensions, nil
 }
 
 // Copy creates a deep copy of VoteExtensions
@@ -298,18 +334,25 @@ type ThresholdVoteExtensionIf interface {
 	ThresholdRecover() ([]byte, error)
 }
 
-func VoteExtensionFromProto(ve tmproto.VoteExtension) VoteExtensionIf {
+// VoteExtensionFromProto creates a vote-extension from its protobuf representation.
+//
+// It returns an error for a type outside the defined enum values. proto3 enums are
+// open, so this is reachable from untrusted network input (a Commit's
+// ThresholdVoteExtensions or a precommit's VoteExtensions); it must neither panic,
+// which would terminate the consensus goroutine, nor substitute a default type,
+// which would silently change the sign-hash derived from the extension.
+func VoteExtensionFromProto(ve tmproto.VoteExtension) (VoteExtensionIf, error) {
 	switch ve.Type {
 	case tmproto.VoteExtensionType_DEFAULT:
-		return &GenericVoteExtension{VoteExtension: ve}
+		return &GenericVoteExtension{VoteExtension: ve}, nil
 	case tmproto.VoteExtensionType_THRESHOLD_RECOVER:
 		ext := newThresholdVoteExtension(ve)
-		return &ext
+		return &ext, nil
 	case tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW:
 		ext := newThresholdVoteExtension(ve)
-		return &ThresholdRawVoteExtension{ThresholdVoteExtension: ext}
+		return &ThresholdRawVoteExtension{ThresholdVoteExtension: ext}, nil
 	default:
-		panic(fmt.Errorf("unknown vote extension type: %s", ve.Type.String()))
+		return nil, fmt.Errorf("%w: %d", ErrUnknownVoteExtensionType, ve.Type)
 	}
 }
 
@@ -337,14 +380,18 @@ func (e GenericVoteExtension) SignItem(chainID string, height int64, round int32
 	if err != nil {
 		return SignItem{}, err
 	}
+	// CanonicalizeVoteExtension keeps its own list of the types it can canonicalize,
+	// separate from the conversion dispatch. A type that gains a dispatch arm but no
+	// canonical form reaches here from a peer-supplied commit, so this returns the
+	// error rather than panicking on the consensus goroutine.
 	canonical, err := CanonicalizeVoteExtension(chainID, &e.VoteExtension, height, round)
 	if err != nil {
-		panic(err)
+		return SignItem{}, err
 	}
 
 	signBytes, err := protoio.MarshalDelimited(&canonical)
 	if err != nil {
-		panic(err)
+		return SignItem{}, err
 	}
 
 	si := NewSignItem(quorumType, quorumHash, requestID, signBytes)
@@ -468,6 +515,8 @@ func (e ThresholdRawVoteExtension) SignItem(_ string, height int64, round int32,
 
 	ext := &e.VoteExtension
 
+	// An app-supplied SignRequestId carries no height or round binding, so a
+	// signature over it stays valid at other heights for the lifetime of the quorum.
 	if ext.XSignRequestId != nil && ext.XSignRequestId.Size() > 0 {
 		receivedReqID := ext.GetSignRequestId()
 		signRequestID = crypto.Checksum(crypto.Checksum(receivedReqID)) // reverse ext.GetSignRequestId()?

@@ -1450,3 +1450,47 @@ func TestHeaderHashVector(t *testing.T) {
 		require.Equal(t, tc.expBytes, hex.EncodeToString(hash))
 	}
 }
+
+// proto3 enums are open, so an undefined varint lands in the generated enum field
+// without complaint. ValidateBasic is the boundary that rejects it: every other field
+// of a Commit is either checked there or covered by the threshold signature, and the
+// extension type is neither.
+func TestCommit_ValidateBasic_RejectsUnknownExtensionType(t *testing.T) {
+	base := func(exts []*tmproto.VoteExtension) *Commit {
+		return &Commit{
+			Height: 100,
+			Round:  0,
+			BlockID: BlockID{
+				Hash:          crypto.Checksum([]byte("block")),
+				PartSetHeader: PartSetHeader{Total: 1, Hash: crypto.Checksum([]byte("parts"))},
+				StateID:       crypto.Checksum([]byte("state")),
+			},
+			ThresholdBlockSignature: make([]byte, SignatureSize),
+			ThresholdVoteExtensions: exts,
+		}
+	}
+
+	require.NoError(t, base(nil).ValidateBasic(), "a commit without extensions is unaffected")
+
+	for _, valid := range []tmproto.VoteExtensionType{
+		tmproto.VoteExtensionType_DEFAULT,
+		tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+		tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
+	} {
+		require.NoError(t, base([]*tmproto.VoteExtension{{Type: valid}}).ValidateBasic(),
+			"defined type %v must be accepted", valid)
+	}
+
+	err := base([]*tmproto.VoteExtension{
+		{Type: tmproto.VoteExtensionType_THRESHOLD_RECOVER},
+		{Type: tmproto.VoteExtensionType(42)},
+	}).ValidateBasic()
+	require.ErrorIs(t, err, ErrUnknownVoteExtensionType, "an undefined extension type must be rejected")
+	require.EqualError(t, err, "vote extension 1: unknown vote extension type: 42",
+		"the rejection must name the offending index and type")
+
+	nilErr := base([]*tmproto.VoteExtension{nil}).ValidateBasic()
+	require.ErrorIs(t, nilErr, ErrNilVoteExtension,
+		"a nil extension must not reach a consumer that will dereference it")
+	require.EqualError(t, nilErr, "nil vote extension at index 0")
+}

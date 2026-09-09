@@ -54,6 +54,34 @@ func TestVoteSet_AddVote_Good(t *testing.T) {
 	assert.False(t, ok || !blockID.IsNil(), "there should be no 2/3 majority")
 }
 
+func TestVoteSet_AddVoteWithVerificationBudget_DenialIsNotInvalidSignature(t *testing.T) {
+	ctx := context.Background()
+	const (
+		height = int64(1)
+		round  = int32(0)
+	)
+	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 1)
+	proTxHash, err := privValidators[0].GetProTxHash(ctx)
+	require.NoError(t, err)
+	vote := &Vote{
+		ValidatorProTxHash: proTxHash,
+		ValidatorIndex:     0,
+		Height:             height,
+		Round:              round,
+		Type:               tmproto.PrevoteType,
+	}
+	budget := &recordingVerificationBudget{decisions: []bool{false}}
+
+	added, err := voteSet.AddVoteWithVerificationBudget(vote, budget)
+
+	require.False(t, added)
+	require.ErrorIs(t, err, ErrVerificationBudgetExhausted)
+	require.NotErrorIs(t, err, ErrVoteInvalidSignature)
+	require.Equal(t, ErrVerificationBudgetExhausted, err,
+		"local overload must be returned directly rather than classified as an invalid vote signature")
+	require.Equal(t, []int{1}, budget.costs)
+}
+
 func TestVoteSet_AddVote_Bad(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -840,13 +868,13 @@ func TestSetPeerMaj23Cap(t *testing.T) {
 }
 
 // thresholdVoteExtensionsOfLen returns n (0..2) threshold-recoverable vote
-// extensions. It is used by the SEC-001 tests to simulate the honest extension
-// count (2) versus a Byzantine validator offering a different count (0 or 1).
-func thresholdVoteExtensionsOfLen(n int) VoteExtensions {
+// extensions. It simulates the honest extension count (2) versus a Byzantine
+// validator offering a different count (0 or 1).
+func thresholdVoteExtensionsOfLen(t testing.TB, n int) VoteExtensions {
 	if n <= 0 {
 		return nil
 	}
-	all := VoteExtensionsFromProto(
+	all := MustVoteExtensionsFromProto(t,
 		&tmproto.VoteExtension{
 			Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
 			Extension: crypto.Checksum([]byte("raw")),
@@ -871,6 +899,19 @@ func signAddPrecommitWithExtCount(
 	idx, extCount int,
 	blockID BlockID,
 ) (bool, error) {
+	return signAddPrecommitWithExtensions(ctx, t, voteSet, privVal, idx, blockID,
+		thresholdVoteExtensionsOfLen(t, extCount))
+}
+
+func signAddPrecommitWithExtensions(
+	ctx context.Context,
+	t testing.TB,
+	voteSet *VoteSet,
+	privVal PrivValidator,
+	idx int,
+	blockID BlockID,
+	extensions VoteExtensions,
+) (bool, error) {
 	t.Helper()
 	proTxHash, err := privVal.GetProTxHash(ctx)
 	require.NoError(t, err)
@@ -881,13 +922,85 @@ func signAddPrecommitWithExtCount(
 		Round:              voteSet.GetRound(),
 		Type:               tmproto.PrecommitType,
 		BlockID:            blockID,
-		VoteExtensions:     thresholdVoteExtensionsOfLen(extCount),
+		VoteExtensions:     extensions,
 	}
 	return signAddVote(ctx, privVal, vote, voteSet)
 }
 
-// TestVoteSet_AddVote_InconsistentVoteExtensionCountDoesNotHalt is the SEC-001
-// regression test.
+func TestVoteSet_AddVote_IgnoresNonRecoverableExtensionsWhenGrouping(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const numValidators = 10
+	voteSet, valSet, privValidators := randVoteSet(ctx, t, 10, 0, tmproto.PrecommitType, numValidators)
+	blockID := makeBlockIDRandom()
+
+	for i := 0; i < numValidators; i++ {
+		extensions := thresholdVoteExtensionsOfLen(t, 2)
+		extensions = append(extensions, MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
+			Type:      tmproto.VoteExtensionType_DEFAULT,
+			Extension: []byte(strconv.Itoa(i)),
+		})...)
+		added, err := signAddPrecommitWithExtensions(
+			ctx, t, voteSet, privValidators[i], i, blockID, extensions,
+		)
+		require.NoError(t, err)
+		require.True(t, added)
+	}
+
+	require.True(t, voteSet.HasTwoThirdsMajority())
+	commit := voteSet.MakeCommit()
+	require.Len(t, commit.ThresholdVoteExtensions, 2)
+	require.NoError(t, valSet.VerifyCommit(voteSet.ChainID(), blockID, 10, commit))
+}
+
+func TestVoteSet_AddVote_DistinguishesEquivalentExtensionTypes(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const numValidators = 10
+	voteSet, _, privValidators := randVoteSet(ctx, t, 10, 0, tmproto.PrecommitType, numValidators)
+	blockID := makeBlockIDRandom()
+	canonical := MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
+		Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+		Extension: []byte("canonical"),
+	})
+	item, err := canonical[0].SignItem(
+		voteSet.chainID, 10, 0, voteSet.valSet.QuorumType, voteSet.valSet.QuorumHash,
+	)
+	require.NoError(t, err)
+	rawPayload := append([]byte(nil), item.MsgHash...)
+	for left, right := 0, len(rawPayload)-1; left < right; left, right = left+1, right-1 {
+		rawPayload[left], rawPayload[right] = rawPayload[right], rawPayload[left]
+	}
+	raw := MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
+		Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
+		Extension: rawPayload,
+	})
+	rawItem, err := raw[0].SignItem(
+		voteSet.chainID, 10, 0, voteSet.valSet.QuorumType, voteSet.valSet.QuorumHash,
+	)
+	require.NoError(t, err)
+	require.Equal(t, item.SignHash, rawItem.SignHash, "fixture must exercise equivalent signing data")
+
+	for i := 0; i < numValidators; i++ {
+		extensions := raw.Copy()
+		if i < 4 {
+			extensions = canonical.Copy()
+		}
+		added, err := signAddPrecommitWithExtensions(
+			ctx, t, voteSet, privValidators[i], i, blockID, extensions,
+		)
+		require.NoError(t, err)
+		require.True(t, added)
+	}
+
+	require.False(t, voteSet.HasTwoThirdsMajority(),
+		"different extension types must not combine into a recovery-threshold group")
+}
+
+// TestVoteSet_AddVote_InconsistentVoteExtensionCountDoesNotHalt is a regression
+// test for an inconsistent vote-extension count halting the node.
 //
 // A single Byzantine validator can broadcast a precommit for the about-to-commit
 // block carrying an extension count that differs from the honest count - either
@@ -960,7 +1073,7 @@ func TestVoteSet_AddVote_InconsistentVoteExtensionCountDoesNotHalt(t *testing.T)
 					require.NoError(t, err)
 					require.True(t, added)
 				}
-			}, "an inconsistent vote-extension count must not halt the node (SEC-001)")
+			}, "an inconsistent vote-extension count must not halt the node")
 
 			// (b) recovery succeeded using the count-consistent honest votes: the
 			// block has a 2/3 majority and a valid commit can be produced.
@@ -980,7 +1093,7 @@ func TestVoteSet_AddVote_InconsistentVoteExtensionCountDoesNotHalt(t *testing.T)
 // TestVoteSet_AddVote_SubThirdCommitGateUsesRecoveryThreshold guards against
 // keying the canonical vote-extension count off the configurable commit gate.
 //
-// The VotingPowerThreshold override (GO-003) may set the commit gate below 1/3 of
+// The VotingPowerThreshold override may set the commit gate below 1/3 of
 // the total voting power. If the canonical count were chosen as the count backed
 // by that gate, a Byzantine minority's count could clear the low bar and be
 // selected (the smallest-count tie-break would even prefer it), starving recovery
@@ -1018,7 +1131,7 @@ func TestVoteSet_AddVote_SubThirdCommitGateUsesRecoveryThreshold(t *testing.T) {
 			require.NoError(t, err)
 			require.True(t, added)
 		}
-	}, "a sub-1/3 commit gate must not let a Byzantine count starve recovery (SEC-001)")
+	}, "a sub-1/3 commit gate must not let a Byzantine count starve recovery")
 
 	require.True(t, voteSet.HasTwoThirdsMajority())
 
@@ -1028,13 +1141,10 @@ func TestVoteSet_AddVote_SubThirdCommitGateUsesRecoveryThreshold(t *testing.T) {
 	require.NoError(t, valSet.VerifyCommit(voteSet.ChainID(), blockID, height, commit))
 }
 
-// TestVoteSet_AddVote_NoRecoverableExtensionCountPanics verifies that the
-// retained hard-fail backstop still fires for the genuinely unattributable case:
-// every validator has voted yet no extension count is backed by the recovery
-// threshold voting power (here a > 1/3 split, 4 vs 6 of 10, with the recovery
-// threshold at 7). This is a BFT-safety violation, so there is no safe way to
-// continue and the node must fail hard rather than silently stall forever.
-func TestVoteSet_AddVote_NoRecoverableExtensionCountPanics(t *testing.T) {
+// If no extension vector has recovery-threshold support, the round must time
+// out without crashing the process. Remote votes can cause this split, so a
+// panic would turn a recoverable liveness failure into a node-wide DoS.
+func TestVoteSet_AddVote_NoRecoverableExtensionVectorDoesNotPanic(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -1056,26 +1166,19 @@ func TestVoteSet_AddVote_NoRecoverableExtensionCountPanics(t *testing.T) {
 		return 2
 	}
 
-	sawPanic := false
-	for i := 0; i < numValidators && !sawPanic; i++ {
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					sawPanic = true
-				}
-			}()
+	require.NotPanics(t, func() {
+		for i := 0; i < numValidators; i++ {
 			added, err := signAddPrecommitWithExtCount(ctx, t, voteSet, privValidators[i], i, extCountFor(i), blockID)
 			require.NoError(t, err)
 			require.True(t, added)
-		}()
-	}
+		}
+	})
 
-	require.True(t, sawPanic, "the backstop hard-fail must fire when no count reaches the recovery threshold and all have voted")
 	require.False(t, voteSet.HasTwoThirdsMajority(), "no commit may be produced when recovery is impossible")
 }
 
-// TestVoteSet_AddVote_ByzantineLastWithGateAboveRecovery is the SEC-001 regression
-// test for the thepastaclaw finding: when VotingPowerThreshold (the commit gate)
+// TestVoteSet_AddVote_ByzantineLastWithGateAboveRecovery is a regression test for
+// a Byzantine-ordering attack: when VotingPowerThreshold (the commit gate)
 // is configured above the fixed BLS recovery threshold, a Byzantine attacker can
 // place its votes last so that every post-gate triggering vote carries a
 // non-canonical extension count. Before the fix, recoverThresholdSignsAndVerify
@@ -1143,7 +1246,7 @@ func TestVoteSet_AddVote_ByzantineLastWithGateAboveRecovery(t *testing.T) {
 			require.NoError(t, err)
 			require.True(t, added)
 		}
-	}, "Byzantine-last gate>recovery attack must not panic (SEC-001 liveness)")
+	}, "Byzantine-last gate>recovery attack must not panic")
 
 	require.True(t, voteSet.HasTwoThirdsMajority(),
 		"quorum must be reached: 7 honest (ext=2) votes have 700 power >= recovery threshold")

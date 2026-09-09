@@ -1,0 +1,116 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "Prometheus scraping the Tenderdash nodes",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "tags": ["tenderdash", "consensus", "dos"],
+  "title": "Tenderdash — Consensus DoS throttle",
+  "uid": "tenderdash-dos-throttle",
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {}
+      },
+      {
+        "name": "instance",
+        "type": "query",
+        "datasource": "${datasource}",
+        "query": "label_values(drive_tenderdash_consensus_rounds, instance)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "15s",
+  "panels": [
+    { "type": "row", "title": "Is the chain healthy?", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "collapsed": false },
+    {
+      "type": "timeseries", "title": "Block production (blocks/min)", "datasource": "${datasource}",
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "cpm" } },
+      "targets": [ { "expr": "rate(drive_tenderdash_consensus_latest_block_height{instance=~\"$instance\"}[1m]) * 60", "legendFormat": "{{instance}}" } ]
+    },
+    {
+      "type": "timeseries", "title": "Rounds (0 = first-round commit)", "datasource": "${datasource}",
+      "description": "A round above 0 means the node struggled to reach 2/3. Chronic climbing under flood is the starvation signal.",
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 1 },
+      "fieldConfig": { "defaults": { "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 3 } ] } } },
+      "targets": [ { "expr": "drive_tenderdash_consensus_rounds{instance=~\"$instance\"}", "legendFormat": "{{instance}}" } ]
+    },
+    {
+      "type": "timeseries", "title": "Prevote delay (s)", "datasource": "${datasource}",
+      "description": "Stock proxy for honest-vote health: seconds from proposal to the prevotes that reach quorum.",
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        { "expr": "drive_tenderdash_consensus_quorum_prevote_delay{instance=~\"$instance\"}", "legendFormat": "quorum {{instance}}" },
+        { "expr": "drive_tenderdash_consensus_full_prevote_delay{instance=~\"$instance\"}", "legendFormat": "full {{instance}}" }
+      ]
+    },
+
+    { "type": "row", "title": "Is the throttle firing, and where?", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 8 }, "collapsed": false },
+    {
+      "type": "timeseries", "title": "Drops by mechanism (per sec)", "datasource": "${datasource}",
+      "description": "Rising under attack is expected and good — this is the throttle working. Read against the honest-service row below.",
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "cps" } },
+      "targets": [
+        { "expr": "sum(rate(drive_tenderdash_consensus_verification_budget_drops{instance=~\"$instance\"}[1m]))", "legendFormat": "verification budget" },
+        { "expr": "sum(rate(drive_tenderdash_consensus_peer_lane_drops{instance=~\"$instance\"}[1m]))", "legendFormat": "peer lane" },
+        { "expr": "sum(rate(drive_tenderdash_consensus_block_part_proof_drops{instance=~\"$instance\"}[1m]))", "legendFormat": "block-part proof" },
+        { "expr": "sum(rate(drive_tenderdash_consensus_state_channel_drops{instance=~\"$instance\"}[1m]))", "legendFormat": "state / votesetbits" },
+        { "expr": "sum(rate(drive_tenderdash_consensus_proposal_verify_failures{instance=~\"$instance\"}[1m]))", "legendFormat": "proposal verify fail" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Evidence dropped by reason (per sec)", "datasource": "${datasource}",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "cps" } },
+      "targets": [ { "expr": "sum by (reason) (rate(drive_tenderdash_evidence_pool_dropped_evidence{instance=~\"$instance\"}[1m]))", "legendFormat": "{{reason}}" } ]
+    },
+
+    { "type": "row", "title": "Is honest service still landing?", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 }, "collapsed": false },
+    {
+      "type": "timeseries", "title": "Accepted peer-vote latency (p50 / p99)", "datasource": "${datasource}",
+      "description": "THE key panel. If p99 stays low while drops climb, the node is shedding the attack. If p99 climbs toward the vote timeout (1s) / propose timeout (3s), honest service is being starved.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 18 },
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 3 } ] }, "custom": { "thresholdsStyle": { "mode": "line" } } } },
+      "targets": [
+        { "expr": "histogram_quantile(0.99, sum(rate(drive_tenderdash_consensus_peer_vote_verify_latency_seconds_bucket{instance=~\"$instance\"}[1m])) by (le))", "legendFormat": "p99" },
+        { "expr": "histogram_quantile(0.50, sum(rate(drive_tenderdash_consensus_peer_vote_verify_latency_seconds_bucket{instance=~\"$instance\"}[1m])) by (le))", "legendFormat": "p50" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Verification budget saturation", "datasource": "${datasource}",
+      "description": "1.0 = budget idle/full; 0.0 = drained and the bottleneck. Pinned near 0 alongside rising latency = verification-bound starvation.",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 18 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } },
+      "targets": [ { "expr": "avg(drive_tenderdash_consensus_verification_budget_saturation{instance=~\"$instance\"})", "legendFormat": "{{instance}}" } ]
+    },
+    {
+      "type": "timeseries", "title": "Peer lanes (active / max depth)", "datasource": "${datasource}",
+      "description": "Active count climbing with low depth = identity-rotation churn. Max depth near lane capacity (512) = a peer delivering as fast as the node accepts.",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 18 },
+      "targets": [
+        { "expr": "max(drive_tenderdash_consensus_peer_lane_active_count{instance=~\"$instance\"})", "legendFormat": "active lanes" },
+        { "expr": "max(drive_tenderdash_consensus_peer_lane_max_depth{instance=~\"$instance\"})", "legendFormat": "max depth" }
+      ]
+    }
+  ]
+}

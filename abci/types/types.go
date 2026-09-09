@@ -377,8 +377,11 @@ func (m *RequestFinalizeBlock) ToCanonicalVote() (types.CanonicalVote, error) {
 // Signature field will be nil, as ExtendVoteExtension doesn't have it.
 func (m *ExtendVoteExtension) ToVoteExtension() types.VoteExtension {
 	ve := types.VoteExtension{
-		Type:      m.Type,
-		Extension: m.Extension,
+		Type: m.Type,
+		// Copied, like the request identifier below: an in-process application
+		// keeps a reference to the response it returned, and the extension
+		// bytes go on to be signed and gossiped as this node's own vote.
+		Extension: bytes.Clone(m.Extension),
 	}
 
 	// workaround for a bug in gogoproto

@@ -74,8 +74,7 @@ func (info NodeInfo) GetProTxHash() crypto.ProTxHash {
 // Validate checks the self-reported DefaultNodeInfo is safe.
 // It returns an error if there
 // are too many Channels, if there are any duplicate Channels,
-// if the ListenAddr is malformed, or if the ListenAddr is a host name
-// that can not be resolved to some IP.
+// or if the ListenAddr is malformed.
 // TODO: constraints for Moniker/Other? Or is that for the UI ?
 // JAE: It needs to be done on the client, but to prevent ambiguous
 // unicode characters, maybe it's worth sanitizing it here.
@@ -85,7 +84,13 @@ func (info NodeInfo) GetProTxHash() crypto.ProTxHash {
 // url-encoding), and we just need to be careful with how we handle that in our
 // clients. (e.g. off by default).
 func (info NodeInfo) Validate() error {
-	if _, err := ParseAddressString(info.ID().AddressString(info.ListenAddr)); err != nil {
+	// Deliberately does not resolve: ListenAddr comes from an unauthenticated peer
+	// and this runs after conn.Handshake returns, outside HandshakeTimeout.
+	// INTENTIONAL(ipv4-literal-deployments): the RFC 1123 rule rejects underscore,
+	// IPv6-zone and IDN hostnames, whether a peer reports them or an operator
+	// configures them (node.makeNodeInfo and node.makeSeedNodeInfo both validate
+	// through here). Accepted: deployments address nodes by a single IPv4 literal.
+	if err := validateAddressString(info.ID().AddressString(info.ListenAddr)); err != nil {
 		return err
 	}
 
@@ -258,31 +263,13 @@ func NodeInfoFromProto(pb *tmp2p.NodeInfo) (NodeInfo, error) {
 
 // ParseAddressString reads an address string, and returns the NetAddress struct
 // with ip address, port and nodeID information, returning an error for any validation
-// errors.
+// errors. The host must pass ValidateHostname before it is resolved.
 func ParseAddressString(addr string) (*NetAddress, error) {
-	addrWithoutProtocol := removeProtocolIfDefined(addr)
-	spl := strings.Split(addrWithoutProtocol, "@")
-	if len(spl) != 2 {
-		return nil, errors.New("invalid address")
-	}
-
-	id, err := NewNodeID(spl[0])
+	id, host, port, err := splitAddressString(addr)
 	if err != nil {
 		return nil, err
 	}
-
-	if err := id.Validate(); err != nil {
-		return nil, err
-	}
-
-	addrWithoutProtocol = spl[1]
-
-	// get host and port
-	host, portStr, err := net.SplitHostPort(addrWithoutProtocol)
-	if err != nil {
-		return nil, err
-	}
-	if len(host) == 0 {
+	if err := ValidateHostname(host); err != nil {
 		return nil, err
 	}
 
@@ -292,18 +279,60 @@ func ParseAddressString(addr string) (*NetAddress, error) {
 		if err != nil {
 			return nil, err
 		}
+		if len(ips) == 0 {
+			return nil, fmt.Errorf("no IP address found for host %q", host)
+		}
 		ip = ips[0]
 	}
 
-	port, err := strconv.ParseUint(portStr, 10, 16)
-	if err != nil {
-		return nil, err
-	}
-
-	na := NewNetAddressIPPort(ip, uint16(port))
+	na := NewNetAddressIPPort(ip, port)
 	na.ID = id
 
 	return na, nil
+}
+
+// splitAddressString splits an address string into its node ID, host and port,
+// validating the node ID and port. The host is checked only for emptiness; the
+// caller decides whether to validate or resolve it.
+func splitAddressString(addr string) (id NodeID, host string, port uint16, err error) {
+	spl := strings.Split(removeProtocolIfDefined(addr), "@")
+	if len(spl) != 2 {
+		return "", "", 0, errors.New("invalid address")
+	}
+
+	id, err = NewNodeID(spl[0])
+	if err != nil {
+		return "", "", 0, err
+	}
+	if err = id.Validate(); err != nil {
+		return "", "", 0, err
+	}
+
+	host, portStr, err := net.SplitHostPort(spl[1])
+	if err != nil {
+		return "", "", 0, err
+	}
+	if len(host) == 0 {
+		return "", "", 0, fmt.Errorf("invalid address %q: empty host", addr)
+	}
+
+	parsedPort, err := strconv.ParseUint(portStr, 10, 16)
+	if err != nil {
+		return "", "", 0, err
+	}
+
+	return id, host, uint16(parsedPort), nil
+}
+
+// validateAddressString checks an address string without resolving its host.
+// Unlike ParseAddressString it never performs a DNS lookup, so it is safe to run on
+// input supplied by an unauthenticated peer.
+func validateAddressString(addr string) error {
+	_, host, _, err := splitAddressString(addr)
+	if err != nil {
+		return err
+	}
+	return ValidateHostname(host)
 }
 
 func removeProtocolIfDefined(addr string) string {

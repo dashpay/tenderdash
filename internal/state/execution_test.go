@@ -1248,6 +1248,59 @@ func TestPrepareProposalErrorOnPrepareProposalError(t *testing.T) {
 	mp.AssertExpectations(t)
 }
 
+// ExtendVote panics on an undefined vote-extension type, and that is deliberate:
+// the response comes from our own ABCI application, not from a peer, so a type
+// outside the enum is a local app/tenderdash mismatch rather than a network
+// fault. Panicking gives the strongest possible signal instead of letting the
+// mismatch silently degrade consensus. This test pins that contract so the
+// behavior cannot be softened by accident.
+func TestExtendVotePanicsOnUnknownExtensionType(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const height = int64(1)
+	logger := log.NewNopLogger()
+	state, stateDB, _ := makeState(t, 1, int(height))
+	stateStore := sm.NewStore(stateDB)
+
+	app := abcimocks.NewApplication(t)
+	app.On("ExtendVote", mock.Anything, mock.Anything).Return(&abci.ResponseExtendVote{
+		VoteExtensions: []*abci.ExtendVoteExtension{{
+			Type:      tmtypes.VoteExtensionType(42),
+			Extension: []byte("extension"),
+		}},
+	}, nil)
+
+	cc := abciclient.NewLocalClient(logger, app)
+	proxyApp := proxy.New(cc, logger, proxy.NopMetrics())
+	require.NoError(t, proxyApp.Start(ctx))
+
+	eventBus := eventbus.NewDefault(logger)
+	require.NoError(t, eventBus.Start(ctx))
+
+	blockExec := sm.NewBlockExecutor(
+		stateStore,
+		proxyApp,
+		&mpmocks.Mempool{},
+		sm.EmptyEvidencePool{},
+		nil,
+		eventBus,
+	)
+
+	vote := &types.Vote{
+		Type:               tmtypes.PrecommitType,
+		Height:             height,
+		Round:              0,
+		ValidatorProTxHash: state.Validators.Validators[0].ProTxHash,
+		ValidatorIndex:     0,
+		BlockID:            types.BlockID{Hash: crypto.Checksum([]byte("block"))},
+	}
+
+	require.Panics(t, func() {
+		blockExec.ExtendVote(ctx, vote)
+	}, "an undefined extension type from our own application must fail loudly, not be accepted")
+}
+
 func txsToTxRecords(txs []types.Tx) []*abci.TxRecord {
 	trs := make([]*abci.TxRecord, len(txs))
 	for i, tx := range txs {

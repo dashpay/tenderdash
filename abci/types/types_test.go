@@ -9,6 +9,7 @@ import (
 
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto/merkle"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -104,4 +105,28 @@ func TestValidatorSetUpdateMarshalJSON_Nil(t *testing.T) {
 			assert.NotEmpty(t, json)
 		})
 	}
+}
+
+// An application returning vote extensions keeps whatever slices it built them
+// from, and the node signs and gossips those bytes as its own vote. Carrying the
+// application's arrays forward would let it rewrite a vote this node has already
+// committed to, so the conversion has to take a copy — the mirror of the copy
+// the request side already takes.
+func TestVoteExtensionDoesNotSharetheApplicationsBytes(t *testing.T) {
+	extension := []byte("returned by the application")
+	signRequestID := []byte("also returned by the application")
+
+	converted := (&abci.ExtendVoteExtension{
+		Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+		Extension: extension,
+		XSignRequestId: &abci.ExtendVoteExtension_SignRequestId{
+			SignRequestId: signRequestID,
+		},
+	}).ToVoteExtension()
+
+	extension[0] ^= 0xff
+	signRequestID[0] ^= 0xff
+
+	require.Equal(t, []byte("returned by the application"), converted.Extension)
+	require.Equal(t, []byte("also returned by the application"), converted.GetSignRequestId())
 }

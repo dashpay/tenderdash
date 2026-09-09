@@ -79,15 +79,16 @@ func TestChanMsgSender(t *testing.T) {
 	}
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("test-case #%d", i), func(t *testing.T) {
+			lanes := newPeerLanes()
 			sender := chanMsgSender{
 				internalQueue: newChanQueue[msgInfo](),
-				peerQueue:     newChanQueue[msgInfo](),
+				peerQueue:     lanes,
 			}
 			var mi Message
 			err := sender.send(tc.ctx, mi, types.NodeID(tc.peerID))
 			require.NoError(t, err)
 			require.Len(t, sender.internalQueue.ch, tc.wantInternalLen)
-			require.Len(t, sender.peerQueue.ch, tc.wantPeerLen)
+			require.Equal(t, tc.wantPeerLen, lanes.buffered())
 		})
 	}
 }
@@ -98,7 +99,7 @@ func TestChanMsgReader(t *testing.T) {
 	queue1 := newChanQueue[Message]()
 	queue2 := newChanQueue[Message]()
 	queue3 := newChanQueue[Message]()
-	queues := []*chanQueue[Message]{queue1, queue2, queue3}
+	queues := []msgSource[Message]{queue1, queue2, queue3}
 	var msg Message
 	testCases := []struct {
 		queues []*chanQueue[Message]
@@ -138,7 +139,7 @@ func TestChanMsgReader(t *testing.T) {
 			close(stoppedCh)
 			reader.stop()
 			require.Equal(t, tc.n, actualCnt)
-			for _, queue := range queues {
+			for _, queue := range []*chanQueue[Message]{queue1, queue2, queue3} {
 				require.Len(t, queue.ch, 0)
 			}
 		})

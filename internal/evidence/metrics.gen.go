@@ -20,11 +20,18 @@ func PrometheusMetrics(namespace string, labelsAndValues ...string) *Metrics {
 			Name:      "num_evidence",
 			Help:      "Number of pending evidence in the evidence pool.",
 		}, labels).With(labelsAndValues...),
+		DroppedEvidence: prometheus.NewCounterFrom(stdprometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: MetricsSubsystem,
+			Name:      "dropped_evidence",
+			Help:      "Number of inbound evidence messages refused before verification, by reason. Evidence is a safety mechanism, so refusing it silently is the wrong default: this is how an operator sees a flood being shed, and how they would notice a limit tuned so tightly that genuine evidence is struggling to get through.",
+		}, append(labels, "reason")).With(labelsAndValues...),
 	}
 }
 
 func NopMetrics() *Metrics {
 	return &Metrics{
-		NumEvidence: discard.NewGauge(),
+		NumEvidence:     discard.NewGauge(),
+		DroppedEvidence: discard.NewCounter(),
 	}
 }

@@ -758,7 +758,7 @@ func mustDecodeCommit(bz []byte) *types.Commit {
 	}
 	commit, err := types.CommitFromProto(pbc)
 	if err != nil {
-		panic(fmt.Errorf("converting commit to proto: %w", err))
+		panic(fmt.Errorf("converting commit from proto: %w", err))
 	}
 	return commit
 }

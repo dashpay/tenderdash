@@ -54,7 +54,7 @@ func makeTestCommit(t *testing.T, state sm.State, height int64) *types.Commit {
 	require.NoError(t, err)
 
 	goodVote.BlockSignature = g.BlockSignature
-	goodVote.VoteExtensions = types.VoteExtensionsFromProto(g.VoteExtensions...)
+	goodVote.VoteExtensions = types.MustVoteExtensionsFromProto(t, g.VoteExtensions...)
 	signsRecoverer, err := types.NewSignsRecoverer([]*types.Vote{goodVote})
 	require.NoError(t, err)
 	thresholdSigns, err := signsRecoverer.Recover()

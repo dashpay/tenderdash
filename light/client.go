@@ -1,7 +1,6 @@
 package light
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -280,7 +279,14 @@ func (c *Client) initializeAtHeight(ctx context.Context, height int64) error {
 	}
 
 	// 3) Ensure that the commit is valid based on validator set we got back.
-	// Todo: we will want to remove validator sets entirely from light blocks and just have quorum hashes
+	//
+	// The quorum type is checked first because ValidateBasic never bounds it and the
+	// BLS sign-hash path reached by VerifyCommit converts it to a uint8, panicking on
+	// any value outside that range. The provider supplying this light block is not
+	// trusted, so an out-of-range value must be an error rather than a crash.
+	if err := l.ValidatorSet.QuorumType.Validate(); err != nil {
+		return fmt.Errorf("invalid commit: unsupported quorum type: %w", err)
+	}
 	err = l.ValidatorSet.VerifyCommit(c.chainID, l.Commit.BlockID, l.Height, l.Commit)
 	if err != nil {
 		return fmt.Errorf("invalid commit: %w", err)
@@ -444,8 +450,9 @@ func (c *Client) VerifyHeader(ctx context.Context, newHeader *types.Header, now 
 	// Check if newHeader already verified.
 	l, err := c.TrustedLightBlock(newHeader.Height)
 	if err == nil {
-		// Make sure it's the same header.
-		if !bytes.Equal(l.Hash(), newHeader.Hash()) {
+		// Hash equality alone is insufficient for legacy headers because fields
+		// whose codec type was unsupported did not affect Header.Hash.
+		if !l.Equals(newHeader) {
 			return fmt.Errorf("existing trusted header %X does not match newHeader %X", l.Hash(), newHeader.Hash())
 		}
 		c.logger.Debug("header has already been verified",
@@ -460,7 +467,7 @@ func (c *Client) VerifyHeader(ctx context.Context, newHeader *types.Header, now 
 		return fmt.Errorf("failed to retrieve light block from primary to verify against: %w", err)
 	}
 
-	if !bytes.Equal(l.Hash(), newHeader.Hash()) {
+	if !l.Equals(newHeader) {
 		return fmt.Errorf("header from primary %X does not match newHeader %X", l.Hash(), newHeader.Hash())
 	}
 
@@ -519,7 +526,11 @@ func (c *Client) verifyBlockSignatureWithDashCore(_ctx context.Context, newLight
 	quorumHash := newLightBlock.ValidatorSet.QuorumHash
 	quorumType := newLightBlock.ValidatorSet.QuorumType
 
-	protoVote := newLightBlock.Commit.GetCanonicalVote().ToProto()
+	canonVote, err := newLightBlock.Commit.GetCanonicalVote()
+	if err != nil {
+		return err
+	}
+	protoVote := canonVote.ToProto()
 	blockSignBytes, err := protoVote.SignBytes(c.chainID)
 	if err != nil {
 		return err

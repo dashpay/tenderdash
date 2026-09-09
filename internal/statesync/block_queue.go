@@ -23,6 +23,13 @@ type blockQueue struct {
 	fetchHeight  int64
 	verifyHeight int64
 
+	// maxFetchAhead bounds how many heights may be allocated for fetching but not
+	// yet verified. Fetching a light block is cheap beside verifying one, which
+	// pays a BLS commit check on a single serialized loop, so a peer set serving
+	// faster than this node verifies would otherwise grow pending across the whole
+	// backfill span.
+	maxFetchAhead int64
+
 	// termination conditions
 	initialHeight int64
 	stopHeight    int64
@@ -34,6 +41,11 @@ type blockQueue struct {
 	// also count retries to know when to give up
 	retries    int
 	maxRetries int
+
+	// terminalErr records a definitive failure reason (e.g. an unverifiable
+	// commit that exhausted every usable peer) so error() can surface it in
+	// preference to the generic retry-budget message.
+	terminalErr error
 
 	// store inbound blocks and serve them to a verifying thread via a channel
 	pending  map[int64]lightBlockResponse
@@ -50,13 +62,17 @@ func newBlockQueue(
 	startHeight, stopHeight, initialHeight int64,
 	stopTime time.Time,
 	maxRetries int,
+	maxFetchAhead int64,
 ) *blockQueue {
+	// A bound below one would allocate nothing and stall the run outright.
+	maxFetchAhead = max(maxFetchAhead, 1)
 	return &blockQueue{
 		stopHeight:    stopHeight,
 		initialHeight: initialHeight,
 		stopTime:      stopTime,
 		fetchHeight:   startHeight,
 		verifyHeight:  startHeight,
+		maxFetchAhead: maxFetchAhead,
 		pending:       make(map[int64]lightBlockResponse),
 		failed:        &maxIntHeap{},
 		retries:       0,
@@ -111,28 +127,66 @@ func (q *blockQueue) nextHeight() <-chan int64 {
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
 	ch := make(chan int64, 1)
-	// if a previous process failed then we pick up this one
-	if q.failed.Len() > 0 {
-		failedHeight := heap.Pop(q.failed)
-		ch <- failedHeight.(int64)
+
+	if height, ok := q._allocate(); ok {
+		ch <- height
 		close(ch)
 		return ch
+	}
+
+	// at this point there is no height this fetcher may take, so we create a
+	// waiter to hold out for an outgoing request to fail, a block to fail
+	// verification, or verification to make room for another fetch
+	q.waiters = append(q.waiters, ch)
+	return ch
+}
+
+// _allocate returns the next height a fetcher should request, and whether there
+// is one it may take.
+//
+// A height that needs re-fetching comes first and is never withheld by the bound:
+// it is already counted against it, and the verify loop cannot advance past it,
+// so holding it back would deadlock the run.
+//
+// A fresh height is handed out only while the fetched-but-unverified backlog
+// leaves room for it. That is what stops fetching - which costs a round trip -
+// from racing ahead of verification - which costs a BLS commit check on one
+// serialized loop - across the whole backfill span.
+// CONTRACT: must have a write lock.
+func (q *blockQueue) _allocate() (int64, bool) {
+	// if a previous process failed then we pick up this one
+	if q.failed.Len() > 0 {
+		return heap.Pop(q.failed).(int64), true
 	}
 
 	// we check initialHeight instead of startHeight as also need to address the startTime which we don't have here
-	if q.terminal == nil && q.fetchHeight >= q.initialHeight {
-		// return and decrement the fetch height
-		ch <- q.fetchHeight
-		q.fetchHeight--
-		close(ch)
-		return ch
+	if q.terminal != nil || q.fetchHeight < q.initialHeight {
+		return 0, false
+	}
+	// heights descend, so this difference is the count allocated but not yet verified
+	if q.verifyHeight-q.fetchHeight >= q.maxFetchAhead {
+		return 0, false
 	}
 
-	// at this point there is no height that we know we need so we create a
-	// waiter to hold out for either an outgoing request to fail or a block to
-	// fail verification
-	q.waiters = append(q.waiters, ch)
-	return ch
+	// return and decrement the fetch height
+	height := q.fetchHeight
+	q.fetchHeight--
+	return height, true
+}
+
+// _resumeFetchers hands parked fetchers the heights that verification progress
+// has just made room for.
+// CONTRACT: must have a write lock.
+func (q *blockQueue) _resumeFetchers() {
+	for len(q.waiters) > 0 {
+		height, ok := q._allocate()
+		if !ok {
+			return
+		}
+		q.waiters[0] <- height
+		close(q.waiters[0])
+		q.waiters = q.waiters[1:]
+	}
 }
 
 // Finished returns true when the block queue has has all light blocks retrieved,
@@ -174,10 +228,8 @@ func (q *blockQueue) retry(height int64) {
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
 
-	select {
-	case <-q.doneCh:
+	if q._closed() {
 		return
-	default:
 	}
 
 	// we don't need to retry if this is below the terminal height
@@ -191,12 +243,64 @@ func (q *blockQueue) retry(height int64) {
 		return
 	}
 
+	q._requeue(height)
+}
+
+// requeue schedules a height to be fetched again without charging the retry
+// budget. The budget bounds transient network failure; work attributed to a peer
+// that has been evicted for supplying an unverifiable commit must not consume the
+// share that belongs to honest peers.
+func (q *blockQueue) requeue(height int64) {
+	q.mtx.Lock()
+	defer q.mtx.Unlock()
+
+	if q._closed() {
+		return
+	}
+	q._requeue(height)
+}
+
+// discardPeer drops every fetched-but-unverified response supplied by peer and
+// schedules those heights to be fetched again. Fetching runs ahead of the
+// serialized verify loop, so by the time one forged commit is caught the same
+// peer may already have several more queued behind it.
+func (q *blockQueue) discardPeer(peer types.NodeID) {
+	q.mtx.Lock()
+	defer q.mtx.Unlock()
+
+	if q._closed() {
+		return
+	}
+	for height, resp := range q.pending {
+		if resp.peer == peer {
+			delete(q.pending, height)
+			q._requeue(height)
+		}
+	}
+}
+
+// CONTRACT: must have a write lock.
+func (q *blockQueue) _requeue(height int64) {
+	if q.terminal != nil && height < q.terminal.Height {
+		return
+	}
 	if len(q.waiters) > 0 {
 		q.waiters[0] <- height
 		close(q.waiters[0])
 		q.waiters = q.waiters[1:]
 	} else {
 		heap.Push(q.failed, height)
+	}
+}
+
+// _closed reports whether the queue has already terminated.
+// CONTRACT: must have a write lock.
+func (q *blockQueue) _closed() bool {
+	select {
+	case <-q.doneCh:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -209,11 +313,36 @@ func (q *blockQueue) success() {
 		q._closeChannels()
 	}
 	q.verifyHeight--
+	// one fewer height outstanding, so the bound now has room for another fetch
+	q._resumeFetchers()
+}
+
+// fail terminates the queue with a definitive error. It is used when backfill
+// can make no further progress - e.g. every peer able to serve a height has been
+// quarantined for supplying an unverifiable commit - so the run ends promptly
+// with the underlying reason instead of blocking until the context is canceled.
+func (q *blockQueue) fail(err error) {
+	q.mtx.Lock()
+	defer q.mtx.Unlock()
+
+	select {
+	case <-q.doneCh:
+		return
+	default:
+	}
+
+	if q.terminalErr == nil {
+		q.terminalErr = err
+	}
+	q._closeChannels()
 }
 
 func (q *blockQueue) error() error {
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
+	if q.terminalErr != nil {
+		return q.terminalErr
+	}
 	if q.retries >= q.maxRetries {
 		return fmt.Errorf("max retries to fetch valid blocks exceeded (%d); "+
 			"target height: %d, height reached: %d", q.maxRetries, q.stopHeight, q.verifyHeight)
@@ -228,23 +357,16 @@ func (q *blockQueue) close() {
 	q._closeChannels()
 }
 
+// Termination is idempotent: retry, success, fail and close all reach here, from
+// the verify loop and from fetcher goroutines, so a second call must be a no-op
+// rather than a close-of-closed-channel panic. Waiters and the verify channel are
+// left alone; every consumer of theirs selects on done() as well.
 // CONTRACT: must have a write lock. Use close instead
 func (q *blockQueue) _closeChannels() {
-	close(q.doneCh)
-
-	// wait for the channel to be drained
-	select {
-	case <-q.doneCh:
+	if q._closed() {
 		return
-	default:
 	}
-
-	for _, ch := range q.waiters {
-		close(ch)
-	}
-	if q.verifyCh != nil {
-		close(q.verifyCh)
-	}
+	close(q.doneCh)
 }
 
 // A max-heap of ints.

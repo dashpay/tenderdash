@@ -201,8 +201,8 @@ func TestSigsRecoverer_UsingVoteSet(t *testing.T) {
 func TestSignsRecovererErrors(t *testing.T) {
 	blockID := makeBlockID([]byte("blockhash"), 1000, []byte("partshash"), nil)
 
-	// DEFAULT (non-threshold) extensions exercise the count/type guards without
-	// requiring recoverable threshold signatures.
+	// DEFAULT extensions are ignored because they do not carry recoverable
+	// threshold signature shares.
 	twoExts := func() VoteExtensions {
 		return mockVoteExtensions(t,
 			tmproto.VoteExtensionType_DEFAULT, "a",
@@ -227,12 +227,12 @@ func TestSignsRecovererErrors(t *testing.T) {
 			expectErr: false,
 		},
 		{
-			name: "mismatched extension counts",
+			name: "non-recoverable extension counts are ignored",
 			votes: []*Vote{
 				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: twoExts()},
 				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: oneExt()},
 			},
-			expectErr: true,
+			expectErr: false,
 		},
 		{
 			name: "non-precommit vote carrying extensions",
@@ -242,10 +242,10 @@ func TestSignsRecovererErrors(t *testing.T) {
 			expectErr: true,
 		},
 		{
-			// SEC-001: a precommit with 0 extensions arriving after a non-zero
-			// extension count was established is tolerated - its (absent) extension
-			// share is skipped, not treated as an error. Erroring here is what let a
-			// single Byzantine zero-extension precommit halt the whole network.
+			// A precommit with 0 extensions arriving after a non-zero extension count
+			// was established is tolerated - its (absent) extension share is skipped,
+			// not treated as an error. Erroring here is what let a single Byzantine
+			// zero-extension precommit halt the whole network.
 			name: "zero extensions after non-zero established count are skipped",
 			votes: []*Vote{
 				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: twoExts()},
@@ -254,9 +254,9 @@ func TestSignsRecovererErrors(t *testing.T) {
 			expectErr: false,
 		},
 		{
-			// SEC-001, reverse order: a 0-ext precommit arrives first and is skipped,
-			// so the canonical extension set is seeded from the first vote that
-			// actually carries extensions; the later N-ext vote is consistent with it.
+			// Reverse order: a 0-ext precommit arrives first and is skipped, so the
+			// canonical extension set is seeded from the first vote that actually
+			// carries extensions; the later N-ext vote is consistent with it.
 			name: "zero extensions first are skipped, non-zero seeds the canonical set",
 			votes: []*Vote{
 				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: nil},
@@ -308,7 +308,7 @@ func mockVoteExtensions(t *testing.T, pairs ...interface{}) VoteExtensions {
 		default:
 			t.Fatalf("given unsupported type %T", pairs[i+1])
 		}
-		ve.Add(ext)
+		require.NoError(t, ve.Add(ext))
 
 	}
 	return ve

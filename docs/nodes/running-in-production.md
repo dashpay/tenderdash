@@ -298,24 +298,10 @@ Setting this to false will stop the mempool from relaying transactions
 to other peers until they are included in a block. It means only the
 peer you send the tx to will see it until it is included in a block.
 
-- `consensus.skip-timeout-commit`
-
-We want `skip-timeout-commit=false` when there is economics on the line
-because proposers should wait to hear for more votes. But if you don't
-care about that and want the fastest consensus, you can skip it. It will
-be kept false by default for public deployments (e.g. [Cosmos
-Hub](https://hub.cosmos.network/main/hub-overview/overview.html)) while for enterprise
-applications, setting it to true is not a problem.
-
 - `consensus.peer-gossip-sleep-duration`
 
 You can try to reduce the time your node sleeps before checking if
 theres something to send its peers.
-
-- `consensus.timeout-commit`
-
-You can also try lowering `timeout-commit` (time we sleep before
-proposing the next block).
 
 - `p2p.addr-book-strict`
 

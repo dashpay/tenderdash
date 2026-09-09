@@ -442,12 +442,19 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 	}
 	if app.shouldCommitVerify {
 		vsu := app.getActiveValidatorSetUpdates()
-		qsd := types.QuorumSignData{
-			Block:                  makeBlockSignItem(req, btcjson.LLMQType_5_60, vsu.QuorumHash),
-			VoteExtensionSignItems: makeVoteExtensionSignItems(req, btcjson.LLMQType_5_60, vsu.QuorumHash),
-		}
-		err := app.verifyBlockCommit(qsd, req.Commit)
+		blockSignItem, err := makeBlockSignItem(req, btcjson.LLMQType_5_60, vsu.QuorumHash)
 		if err != nil {
+			return &abci.ResponseFinalizeBlock{}, err
+		}
+		voteExtensionSignItems, err := makeVoteExtensionSignItems(req, btcjson.LLMQType_5_60, vsu.QuorumHash)
+		if err != nil {
+			return &abci.ResponseFinalizeBlock{}, err
+		}
+		qsd := types.QuorumSignData{
+			Block:                  blockSignItem,
+			VoteExtensionSignItems: voteExtensionSignItems,
+		}
+		if err := app.verifyBlockCommit(qsd, req.Commit); err != nil {
 			return nil, err
 		}
 	}

@@ -100,6 +100,63 @@ func (suite *AddVoteTestSuite) TestAddVoteAction() {
 	}
 }
 
+func TestAddVoteActionRecordsPeerVerificationBudgetDrop(t *testing.T) {
+	testCases := []struct {
+		name            string
+		peerID          types.NodeID
+		fromReplay      bool
+		verificationErr error
+		wantDrops       float64
+	}{
+		{
+			name:            "remote vote",
+			peerID:          "peer",
+			verificationErr: types.ErrVerificationBudgetExhausted,
+			wantDrops:       1,
+		},
+		{
+			name:            "remote non-budget error",
+			peerID:          "peer",
+			verificationErr: errors.New("signature verification failed"),
+		},
+		{
+			name:            "local vote",
+			verificationErr: types.ErrVerificationBudgetExhausted,
+		},
+		{
+			name:            "replayed vote",
+			peerID:          "peer",
+			fromReplay:      true,
+			verificationErr: types.ErrVerificationBudgetExhausted,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			counter := &recordingCounter{}
+			metrics := NopMetrics()
+			metrics.VerificationBudgetDrops = counter
+			action := AddVoteAction{
+				metrics: metrics,
+				prevote: func(context.Context, *StateData, *types.Vote) (bool, error) {
+					return false, tc.verificationErr
+				},
+			}
+
+			err := action.Execute(context.Background(), StateEvent{
+				Data: &AddVoteEvent{
+					Vote:       &types.Vote{Type: tmproto.PrevoteType},
+					PeerID:     tc.peerID,
+					FromReplay: tc.fromReplay,
+				},
+			})
+
+			require.ErrorIs(t, err, tc.verificationErr)
+			require.Equal(t, tc.wantDrops, counter.value)
+		})
+	}
+}
+
 func (suite *AddVoteTestSuite) TestAddVoteToVoteSet() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

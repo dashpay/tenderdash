@@ -1,0 +1,33 @@
+# Consensus DoS scenarios that need a live network rather than a long chain:
+# genuine double-sign evidence under an evidence flood, honest-vote latency from
+# inside the validator set while a flood runs, and the consensus-step-gated
+# proposal/blockpart floods, which only bite while the chain is busy.
+#
+# The validator set is declared as an explicit height-0 update rather than left to
+# the genesis default. The application keeps the set InitChain hands it in memory
+# only, so a validator that restarts recovers it from this config or not at all.
+#
+# The evidence window is widened well past the default 7 blocks so that genuine
+# evidence injected under a flood has time to be gossiped and committed before it
+# ages out; at the default window the flood's own gossip throttling can push some
+# genuine evidence past expiry, which confounds the "is real evidence suppressed"
+# question this network exists to answer.
+evidence_age_height = 100000
+evidence_age_time = "48h"
+
+[validators]
+validator01 = 100
+validator02 = 100
+validator03 = 100
+validator04 = 100
+
+[validator_update.0]
+validator01 = 100
+validator02 = 100
+validator03 = 100
+validator04 = 100
+
+[node.validator01]
+[node.validator02]
+[node.validator03]
+[node.validator04]

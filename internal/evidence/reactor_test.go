@@ -32,6 +32,11 @@ import (
 )
 
 var (
+	// numEvidence exceeds what one peer's admission burst pays for, so the
+	// broadcast tests below deliver the remainder through the sync retries
+	// rather than in one go. That is deliberate — it is how a real peer hands
+	// over a pool larger than a burst — and it is why those tests take seconds
+	// rather than milliseconds. waitForEvidence allows 30 s for it.
 	numEvidence = 10
 
 	rng = rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -82,6 +87,7 @@ func setup(ctx context.Context, t *testing.T, stateStores []sm.Store) *reactorTe
 		blockStore := &mocks.BlockStore{}
 		state, _ := stateStores[idx].Load()
 		blockStore.On("Base").Return(int64(1))
+		blockStore.On("Height").Return(state.LastBlockHeight)
 		blockStore.On("LoadBlockMeta", mock.AnythingOfType("int64")).Return(func(h int64) *types.BlockMeta {
 			if h <= state.LastBlockHeight {
 				return makeBlockMeta(h, evidenceTime, state.Validators)
@@ -722,6 +728,7 @@ func TestReactorPeerFlapNoGoroutineEviction(t *testing.T) {
 	require.NoError(t, err)
 	evidenceTime := time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)
 	blockStore.On("Base").Return(int64(1))
+	blockStore.On("Height").Return(state.LastBlockHeight)
 	blockStore.On("LoadBlockMeta", mock.AnythingOfType("int64")).Return(
 		func(h int64) *types.BlockMeta {
 			if h <= state.LastBlockHeight {
@@ -833,6 +840,7 @@ func TestReactorNoRebroadcastOnNonInvalidEvidenceError(t *testing.T) {
 	evidenceDB := dbm.NewMemDB()
 	blockStore := &mocks.BlockStore{}
 	blockStore.On("Base").Return(int64(1))
+	blockStore.On("Height").Return(height)
 	blockStore.On("LoadBlockMeta", mock.AnythingOfType("int64")).Return(
 		func(int64) *types.BlockMeta { return nil },
 	)

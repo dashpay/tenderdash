@@ -439,6 +439,28 @@ func (c *mConnConnection) String() string {
 
 // SendMessage implements Connection.
 func (c *mConnConnection) SendMessage(ctx context.Context, chID ChannelID, msg []byte) error {
+	return c.sendMessage(ctx, chID, msg, nil, nil)
+}
+
+// SendMessageWithCompletion reports each packet write and calls onSent after
+// MConnection writes its final packet.
+func (c *mConnConnection) SendMessageWithCompletion(
+	ctx context.Context,
+	chID ChannelID,
+	msg []byte,
+	onProgress func(),
+	onSent func(),
+) error {
+	return c.sendMessage(ctx, chID, msg, onProgress, onSent)
+}
+
+func (c *mConnConnection) sendMessage(
+	ctx context.Context,
+	chID ChannelID,
+	msg []byte,
+	onProgress func(),
+	onSent func(),
+) error {
 	if chID > math.MaxUint8 {
 		return fmt.Errorf("MConnection only supports 1-byte channel IDs (got %v)", chID)
 	}
@@ -450,7 +472,7 @@ func (c *mConnConnection) SendMessage(ctx context.Context, chID ChannelID, msg [
 	case <-c.doneCh:
 		return io.EOF
 	default:
-		if ok := c.mconn.Send(chID, msg); !ok {
+		if ok := c.mconn.SendWithCompletion(chID, msg, onProgress, onSent); !ok {
 			return errors.New("sending message timed out")
 		}
 

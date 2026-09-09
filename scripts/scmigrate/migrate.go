@@ -53,6 +53,11 @@ func makeToMigrate(val []byte) (*types.Commit, error) {
 	}
 
 	commit, err := types.CommitFromProto(pbc)
+	// INTENTIONAL(scmigrate-unmaintained): gating on the value rather than err swallows
+	// Commit.ValidateBasic's rejections — CommitFromProto returns a populated commit
+	// alongside its error — so a poison commit is re-persisted. Accepted: this legacy
+	// migration (`tenderdash key-migrate`) rewrites seen-commit records already in the
+	// block store, so it adds no exposure beyond what the node hits loading them.
 	if commit == nil {
 		// theoretically we should error for all errors, but
 		// there's no reason to keep junk data in the

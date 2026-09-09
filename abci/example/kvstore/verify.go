@@ -37,31 +37,34 @@ func makeBlockSignItem(
 	req *abci.RequestFinalizeBlock,
 	quorumType btcjson.LLMQType,
 	quorumHash []byte,
-) types.SignItem {
+) (types.SignItem, error) {
 	reqID := types.BlockRequestID(req.Height, req.Round)
 	cv, err := req.ToCanonicalVote()
 	if err != nil {
-		panic(fmt.Errorf("block sign item: %w", err))
+		return types.SignItem{}, fmt.Errorf("block sign item: %w", err)
 	}
 	raw, err := tmbytes.MarshalFixedSize(cv)
 	if err != nil {
-		panic(fmt.Errorf("block sign item: %w", err))
+		return types.SignItem{}, fmt.Errorf("block sign item: %w", err)
 	}
-	return types.NewSignItem(quorumType, quorumHash, reqID, raw)
+	return types.NewSignItem(quorumType, quorumHash, reqID, raw), nil
 }
 
 func makeVoteExtensionSignItems(
 	req *abci.RequestFinalizeBlock,
 	quorumType btcjson.LLMQType,
 	quorumHash []byte,
-) []types.SignItem {
+) ([]types.SignItem, error) {
 
-	extensions := types.VoteExtensionsFromProto(req.Commit.ThresholdVoteExtensions...)
+	extensions, err := types.VoteExtensionsFromProto(req.Commit.ThresholdVoteExtensions...)
+	if err != nil {
+		return nil, fmt.Errorf("vote extensions from proto: %w", err)
+	}
 	chainID := req.Block.Header.ChainID
 
 	items, err := extensions.SignItems(chainID, quorumType, quorumHash, req.Height, req.Round)
 	if err != nil {
-		panic(fmt.Errorf("vote extension sign items: %w", err))
+		return nil, fmt.Errorf("vote extension sign items: %w", err)
 	}
-	return items
+	return items, nil
 }

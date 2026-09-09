@@ -1,0 +1,59 @@
+# Prometheus alerting rules for the consensus DoS throttle.
+#
+# These alert on HONEST symptoms — the chain struggling or honest votes being
+# delayed — not on drop counters, which are supposed to rise under attack. Drop
+# counters are for dashboards, not pages.
+#
+# Metric namespace assumes a dashmate/dash-network-deploy node (namespace
+# "drive_tenderdash"). Adjust the prefix for a differently-namespaced deployment.
+# Complements the two rules the deploy repo already ships (ChainHalt, RoundTooHigh).
+groups:
+  - name: tenderdash-consensus-dos
+    rules:
+      - alert: HonestVoteLatencyHigh
+        # Accepted peer votes taking longer than the vote timeout to be counted:
+        # the throttle is delaying honest service, not just shedding attack.
+        expr: histogram_quantile(0.99, sum(rate(drive_tenderdash_consensus_peer_vote_verify_latency_seconds_bucket[5m])) by (le, instance)) > 1
+        for: 3m
+        labels:
+          severity: warning
+          service: tenderdash
+        annotations:
+          summary: "Accepted peer-vote latency p99 above the vote timeout on {{ $labels.instance }}"
+          description: "p99 of accepted peer-vote verification latency has exceeded 1s for 3m. Honest votes are being delayed, not merely attack traffic shed. Cross-check consensus_rounds and verification_budget_saturation."
+
+      - alert: VerificationBudgetPinned
+        # The verification budget sitting drained is only a concern when the chain
+        # is also struggling; drained-but-progressing is healthy shedding.
+        expr: (avg by (instance) (drive_tenderdash_consensus_verification_budget_saturation) < 0.05) and (drive_tenderdash_consensus_rounds > 1)
+        for: 5m
+        labels:
+          severity: warning
+          service: tenderdash
+        annotations:
+          summary: "Verification budget drained while rounds are climbing on {{ $labels.instance }}"
+          description: "The node-wide verification budget has been effectively empty for 5m and consensus is taking multiple rounds. The verifier is the bottleneck under load."
+
+      - alert: PeerLaneChurn
+        # A large, growing active-lane count with shallow depth is the signature of
+        # an attacker cycling free node IDs to grow the scheduler rotation.
+        expr: max by (instance) (drive_tenderdash_consensus_peer_lane_active_count) > 200
+        for: 10m
+        labels:
+          severity: info
+          service: tenderdash
+        annotations:
+          summary: "Unusually many active peer lanes on {{ $labels.instance }}"
+          description: "Active peer-lane count has stayed above the connection ceiling for 10m, which can indicate identity-rotation churn. Confirm the lane GC is reclaiming departed peers."
+
+      - alert: EvidenceFloodShedding
+        # Not a page — a signal that an evidence flood is in progress so operators
+        # can confirm genuine evidence is still landing.
+        expr: sum by (instance) (rate(drive_tenderdash_evidence_pool_dropped_evidence[5m])) > 5
+        for: 5m
+        labels:
+          severity: info
+          service: tenderdash
+        annotations:
+          summary: "Sustained evidence-channel shedding on {{ $labels.instance }}"
+          description: "Inbound evidence is being dropped at over 5/s for 5m. Confirm any genuine equivocation is still being accepted into blocks."

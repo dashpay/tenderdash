@@ -40,6 +40,17 @@ const (
 	aeadKeySize      = chacha20poly1305.KeySize
 	aeadNonceSize    = chacha20poly1305.NonceSize
 
+	// Read caps for the two handshake messages. Both are read before any
+	// authentication exists and protoio allocates the declared length eagerly, so
+	// these bound what an unauthenticated peer can make us allocate. They bound the
+	// message body, excluding the varint length prefix: a legitimate ephemeral-key
+	// message encodes its 32-byte key in a 34-byte body, and a legitimate
+	// AuthSigMessage encodes a public key plus a signature in 102 bytes for ed25519,
+	// or 150 for the largest key type a peer can send before the ed25519 check in
+	// MakeSecretConnection rejects it (BLS12-381).
+	maxEphemeralKeyMsgSize = 128
+	maxAuthSigMsgSize      = 1024
+
 	labelEphemeralLowerPublicKey = "EPHEMERAL_LOWER_PUBLIC_KEY"
 	labelEphemeralUpperPublicKey = "EPHEMERAL_UPPER_PUBLIC_KEY"
 	labelDHSecret                = "DH_SECRET"
@@ -318,7 +329,7 @@ func shareEphPubKey(conn io.ReadWriter, locEphPub *[32]byte) (remEphPub *[32]byt
 		},
 		func(_ int) (val interface{}, abort bool, err error) {
 			var bytes gogotypes.BytesValue
-			_, err = protoio.NewDelimitedReader(conn, 1024*1024).ReadMsg(&bytes)
+			_, err = protoio.NewDelimitedReader(conn, maxEphemeralKeyMsgSize).ReadMsg(&bytes)
 			if err != nil {
 				return nil, true, err // abort
 			}
@@ -428,7 +439,7 @@ func shareAuthSignature(sc io.ReadWriter, pubKey crypto.PubKey, signature []byte
 		},
 		func(_ int) (val interface{}, abort bool, err error) {
 			var pba tmp2p.AuthSigMessage
-			_, err = protoio.NewDelimitedReader(sc, 1024*1024).ReadMsg(&pba)
+			_, err = protoio.NewDelimitedReader(sc, maxAuthSigMsgSize).ReadMsg(&pba)
 			if err != nil {
 				return nil, true, err // abort
 			}

@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/crypto"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
@@ -12,6 +15,15 @@ import (
 )
 
 const StateIDVersion = 1
+
+// MustVoteExtensionsFromProto converts extensions of known types, failing the test
+// otherwise. For test cases that cannot handle a second return value.
+func MustVoteExtensionsFromProto(t testing.TB, pve ...*tmproto.VoteExtension) VoteExtensions {
+	t.Helper()
+	extensions, err := VoteExtensionsFromProto(pve...)
+	require.NoError(t, err)
+	return extensions
+}
 
 func RandStateID() tmproto.StateID {
 	return tmproto.StateID{
@@ -38,6 +50,17 @@ func makeCommit(
 		if err != nil {
 			return nil, fmt.Errorf("can't get proTxHash: %w", err)
 		}
+		extensions, err := VoteExtensionsFromProto(
+			&tmproto.VoteExtension{
+				Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
+				Extension: crypto.Checksum([]byte("raw"))},
+			&tmproto.VoteExtension{
+				Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+				Extension: []byte("threshold")},
+		)
+		if err != nil {
+			return nil, err
+		}
 		vote := &Vote{
 			ValidatorProTxHash: proTxHash,
 			ValidatorIndex:     int32(i),
@@ -45,14 +68,7 @@ func makeCommit(
 			Round:              round,
 			Type:               tmproto.PrecommitType,
 			BlockID:            blockID,
-			VoteExtensions: VoteExtensionsFromProto(
-				&tmproto.VoteExtension{
-					Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
-					Extension: crypto.Checksum([]byte("raw"))},
-				&tmproto.VoteExtension{
-					Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
-					Extension: []byte("threshold")},
-			),
+			VoteExtensions:     extensions,
 		}
 
 		_, err = signAddVote(ctx, validators[i], vote, voteSet)

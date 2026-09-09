@@ -2,6 +2,7 @@ package consensus
 
 import (
 	"context"
+	"runtime/debug"
 	"sync/atomic"
 	"time"
 
@@ -41,15 +42,17 @@ func newPeerGossipWorker(
 	state *State,
 	msgSender *p2pMsgSender,
 ) *peerGossipWorker {
+	clock := clockwork.NewRealClock()
 	gossiper := msgGossiper{
 		ps:         ps,
 		blockStore: &blockRepository{BlockStore: state.blockStore, logger: logger},
 		msgSender:  msgSender,
 		logger:     logger,
 		optimistic: true,
+		clock:      clock,
 	}
 	return &peerGossipWorker{
-		clock:          clockwork.NewRealClock(),
+		clock:          clock,
 		logger:         logger,
 		stopCh:         make(chan struct{}),
 		stateDataStore: state.stateDataStore,
@@ -98,11 +101,26 @@ func (g *peerGossipWorker) Wait() {
 	}
 }
 
+// runGossipHandler invokes a gossip handler, converting a panic into a logged
+// error. Handlers load historical records at heights chosen by the peer they
+// gossip to, and the block store panics rather than returning an error, so a
+// single unreadable record would otherwise terminate the process on demand.
+// Every other peer-facing path in the node recovers the same way.
+func (g *peerGossipWorker) runGossipHandler(ctx context.Context, hd gossipHandler) {
+	defer func() {
+		if e := recover(); e != nil {
+			g.logger.Error("panic in gossip handler",
+				"err", e, "stack", string(debug.Stack()))
+		}
+	}()
+	hd.handlerFunc(ctx, g.stateDataStore.Get())
+}
+
 func (g *peerGossipWorker) runHandler(ctx context.Context, hd gossipHandler) {
 	timer := g.clock.NewTimer(0)
 	defer timer.Stop()
 	for {
-		hd.handlerFunc(ctx, g.stateDataStore.Get())
+		g.runGossipHandler(ctx, hd)
 		timer.Reset(hd.sleepDuration)
 		select {
 		case <-timer.Chan():

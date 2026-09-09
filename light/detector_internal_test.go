@@ -90,6 +90,26 @@ func TestCompareNewHeaderWithWitness_Match(t *testing.T) {
 	require.NoError(t, msgs[0])
 }
 
+func TestCompareNewHeaderWithWitness_RejectsLegacyHashCollision(t *testing.T) {
+	primary := testLightBlock(5, []byte("shared-validators-hash"))
+	primary.CoreChainLockedHeight = 10
+	witnessBlock := *primary
+	witnessSignedHeader := *primary.SignedHeader
+	witnessBlock.SignedHeader = &witnessSignedHeader
+	witnessHeader := *primary.Header
+	witnessHeader.CoreChainLockedHeight++
+	witnessBlock.Header = &witnessHeader
+	require.Equal(t, primary.Hash(), witnessBlock.Hash())
+	require.False(t, primary.Equals(witnessBlock.Header))
+
+	c := &Client{logger: log.NewNopLogger()}
+	witness := mockWitness(&witnessBlock, "witness-1")
+	errCh := make(chan error, 1)
+	c.compareNewHeaderWithWitness(context.Background(), errCh, primary.SignedHeader, witness, 0)
+
+	require.IsType(t, errConflictingHeaders{}, <-errCh)
+}
+
 // TestCompareFirstHeaderWithWitnesses covers the witness cross-check flow: a
 // single conflicting witness is removed when corroborated, multiple conflicting
 // witnesses fail as fork evidence, a bad witness is removed, and full agreement

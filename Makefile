@@ -2,19 +2,23 @@
 
 OUTPUT ?= build/tenderdash
 BUILDDIR ?= $(CURDIR)/build
-REPO_NAME ?= github.com/dashevo/tenderdash
+REPO_NAME ?= github.com/dashpay/tenderdash
 BUILD_TAGS ?= tenderdash netgo osusergo
 # If building a release, please checkout the version tag to get the correct version setting
 ifneq ($(shell git symbolic-ref -q --short HEAD),)
 VERSION := unreleased-$(shell git symbolic-ref -q --short HEAD)-$(shell git rev-parse HEAD)
 else
-VERSION := $(shell git describe --tags)
+VERSION := $(patsubst v%,%,$(shell git describe --tags 2>/dev/null))
 endif
-LD_FLAGS = -X ${REPO_NAME}/version.TMCoreSemVer=$(VERSION) -linkmode 'external' -extldflags '-static'
+LD_FLAGS = -linkmode 'external' -extldflags '-static'
+# An empty -X value overrides version.TMVersionDefault with an empty string, so
+# only stamp the version when git actually produced one.
+ifneq ($(strip $(VERSION)),)
+LD_FLAGS += -X ${REPO_NAME}/version.TMCoreSemVer=$(VERSION)
+endif
 BUILD_FLAGS = -mod=readonly -ldflags "$(LD_FLAGS)"
 HTTPS_GIT := https://${REPO_NAME}.git
 BUILD_IMAGE := ghcr.io/tendermint/docker-build-proto
-BASE_BRANCH ?= v0.8-dev
 DOCKER_PROTO := docker run -v $(shell pwd):/workspace --workdir /workspace $(BUILD_IMAGE)
 CGO_ENABLED ?= 1
 # Fix for a gogoproto bug
@@ -269,10 +273,51 @@ format:
 	find . -name '*.go' -type f -not -path "*.git*"  -not -name '*.pb.go' -not -name '*pb_test.go' | xargs goimports -w -local ${REPO_NAME}
 .PHONY: format
 
+# Kept in step with .github/workflows/lint.yml, which pins the same floating
+# minor so both always resolve to the latest patch of it.
+GOLANGCI_LINT_VERSION ?= v2.13
+GOLANGCI_LINT := $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+
+# Use the newest fetched development branch by default. For another PR target,
+# override with: make lint LINT_BASE=origin/<target-branch>
+# Once the base advances past your branch point, its own commits enter the diff
+# and can raise findings you did not write. Rebase; changing the flag would make
+# this a different gate from the one CI enforces.
+LINT_BASE ?= $(shell git for-each-ref --sort=-version:refname --format='%(refname:short)' 'refs/remotes/origin/v[0-9]*-dev' | head -n 1)
+
+# What CI enforces: findings on lines this branch changed. The repository carries
+# several hundred pre-existing findings, so an unfiltered run can never exit 0 --
+# use `make lint-all` to see those.
 lint:
-	@echo "--> Running linter"
-	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.8 run
+	@test -n "$(LINT_BASE)" || { \
+		echo "make lint: no development branch found; run 'git fetch origin' or set LINT_BASE=origin/<branch>."; \
+		exit 1; }
+	@echo "--> Running linter (new findings vs $(LINT_BASE))"
+	@git rev-parse --verify --quiet "$(LINT_BASE)^{commit}" >/dev/null || { \
+		echo "make lint: base ref '$(LINT_BASE)' not found."; \
+		echo "  fetch it with 'git fetch origin', or pick another: make lint LINT_BASE=origin/<branch>"; \
+		exit 1; }
+	@git merge-base "$(LINT_BASE)" HEAD >/dev/null 2>&1 || { \
+		echo "make lint: no common history with '$(LINT_BASE)' -- shallow clone?"; \
+		echo "  deepen it with 'git fetch --unshallow'"; \
+		exit 1; }
+	$(GOLANGCI_LINT) run --timeout 10m --new-from-rev="$(LINT_BASE)"
 .PHONY: lint
+
+lint-all:
+	@echo "--> Running linter (whole repository, including pre-existing findings)"
+	$(GOLANGCI_LINT) run --timeout 10m
+.PHONY: lint-all
+
+# Covers every package, including those the Test workflow skips for having no
+# tests: `go test` vets only what it builds, so those are otherwise unchecked.
+# `go build` is deliberately absent -- vet typechecks in order to analyse, so it
+# reports compile errors too and adding build would only advertise coverage this
+# gate does not separately have.
+vet:
+	@echo "--> Running go vet"
+	$(GO) vet ./...
+.PHONY: vet
 
 vulncheck:
 	@echo "--> Running vulnerability scanner"

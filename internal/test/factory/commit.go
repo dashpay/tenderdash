@@ -7,6 +7,10 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
+// MakeCommit builds a signed commit for blockID. Any voteExtensions supplied are
+// attached to every vote and signed, so the resulting commit carries genuine
+// (recovered) threshold vote-extension signatures - use this to exercise code
+// paths that authenticate vote extensions.
 func MakeCommit(
 	ctx context.Context,
 	blockID types.BlockID,
@@ -15,6 +19,7 @@ func MakeCommit(
 	voteSet *types.VoteSet,
 	validatorSet *types.ValidatorSet,
 	validators []types.PrivValidator,
+	voteExtensions ...tmproto.VoteExtension,
 ) (*types.Commit, error) {
 	// all sign
 	for i := 0; i < len(validators); i++ {
@@ -29,6 +34,11 @@ func MakeCommit(
 			Round:              round,
 			Type:               tmproto.PrecommitType,
 			BlockID:            blockID,
+		}
+		for _, ext := range voteExtensions {
+			if err := vote.VoteExtensions.Add(ext); err != nil {
+				return nil, err
+			}
 		}
 
 		v := vote.ToProto()
