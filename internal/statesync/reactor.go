@@ -843,6 +843,17 @@ func (r *Reactor) backfill(
 				// by backfill or by any other path.
 				rejectErr = fmt.Errorf("received light block with invalid commit: %w", verr)
 				rejectSeverity = disconnectPeer
+
+				if errors.As(verr, &types.ErrVoteExtensionCountMismatch{}) {
+					// The one commit failure an honest peer produces: it relays a commit
+					// whose extension configuration differs from this node's, which is an
+					// application disagreement and not a forged signature. VerifyCommit
+					// leaves this error untyped for that reason, and internal/consensus
+					// evicts only on the typed ErrInvalidCommitSignature. Backfill is the
+					// error's only untrusted-input path, so disconnecting here would be
+					// the whole of that carve-out's effect.
+					rejectSeverity = penalizePeer
+				}
 			}
 			if rejectErr != nil {
 				r.logger.Info("backfill: refused the commit on a light block",
