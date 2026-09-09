@@ -250,11 +250,16 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	r.initStateProvider = func(ctx context.Context, chainID string, initialHeight int64) error {
 		spLogger := r.logger.With("module", "stateprovider")
 		spLogger.Debug("initializing state sync state provider", "useP2P", r.cfg.UseP2P)
-		trustedParams, err := r.stateStore.LoadConsensusParams(initialHeight)
+		// The current state contains locally accepted InitChain params even when
+		// the historical parameter index has no entry for the next height yet.
+		localState, err := r.stateStore.Load()
 		if err != nil {
-			return fmt.Errorf("loading locally trusted consensus params: %w", err)
+			return fmt.Errorf("loading locally trusted state: %w", err)
 		}
-		trustedThreshold := trustedParams.Validator.VotingPowerThreshold
+		if localState.IsEmpty() {
+			return errors.New("cannot initialize state provider without locally trusted state")
+		}
+		trustedThreshold := localState.ConsensusParams.Validator.VotingPowerThreshold
 
 		if r.cfg.UseP2P {
 			if err := r.waitForEnoughPeers(ctx, minPeers); err != nil {

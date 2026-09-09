@@ -24,6 +24,7 @@ import (
 
 	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/internal/proxy"
+	sm "github.com/dashpay/tenderdash/internal/state"
 	smmocks "github.com/dashpay/tenderdash/internal/state/mocks"
 	"github.com/dashpay/tenderdash/internal/statesync/mocks"
 	"github.com/dashpay/tenderdash/internal/store"
@@ -151,9 +152,9 @@ func setup(
 
 	rts.stateStore = smmocks.NewStore(t)
 	rts.stateStore.
-		On("LoadConsensusParams", int64(1)).
+		On("Load").
 		Maybe().
-		Return(*types.DefaultConsensusParams(), nil)
+		Return(sm.State{Validators: types.NewEmptyValidatorSet(), ConsensusParams: *types.DefaultConsensusParams()}, nil)
 	rts.blockStore = store.NewBlockStore(dbm.NewMemDB())
 
 	cfg := config.DefaultStateSyncConfig()
@@ -1693,4 +1694,38 @@ func TestBackfillRequiresCoreBeforePersistence(t *testing.T) {
 	})
 	require.ErrorContains(t, err, "without a Dash Core client")
 	require.Zero(t, blocks.Height())
+}
+
+func TestStateProviderUsesCurrentLocalParamsAfterInitChain(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	rts := setup(ctx, t, nil, nil, nil, 2)
+	genesis, _ := factory.RandGenesisDoc(4, types.DefaultConsensusParams())
+	genesis.InitialHeight = 1000
+	state, err := sm.MakeGenesisState(genesis)
+	require.NoError(t, err)
+	// InitChain can update the params before the first block has been committed.
+	threshold := uint64(300)
+	state.ConsensusParams.Validator.VotingPowerThreshold = &threshold
+	state.LastHeightConsensusParamsChanged = state.InitialHeight + 1
+	localStore := sm.NewStore(dbm.NewMemDB())
+	require.NoError(t, localStore.Save(state))
+	_, err = localStore.LoadConsensusParams(state.InitialHeight)
+	require.Error(t, err, "fixture must cover unavailable historical params")
+	rts.reactor.stateStore = localStore
+	rts.reactor.cfg.UseP2P = false
+	rts.reactor.cfg.RPCServers = []string{"http://127.0.0.1:26657", "http://127.0.0.1:26658"}
+	require.NoError(t, rts.reactor.initStateProvider(ctx, state.ChainID, state.InitialHeight))
+	sp, ok := rts.reactor.getStateProvider().(*stateProviderRPC)
+	require.True(t, ok)
+	require.Equal(t, &threshold, sp.trustedVotingPowerThreshold)
+}
+
+func TestStateProviderRejectsMissingLocalState(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	rts := setup(ctx, t, nil, nil, nil, 2)
+	rts.reactor.stateStore = sm.NewStore(dbm.NewMemDB())
+	require.ErrorContains(t, rts.reactor.initStateProvider(ctx, factory.DefaultTestChainID, 1000), "without locally trusted state")
+	require.Nil(t, rts.reactor.getStateProvider())
 }
