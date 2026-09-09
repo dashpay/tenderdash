@@ -14,6 +14,12 @@ func randByte() byte {
 	return byte(rand.Intn(math.MaxUint8))
 }
 
+// randLocalIPv4 returns a random 127.0.0.0/8 address. Its three random octets
+// span only 255^3 addresses, so a loop drawing many of them collides at a rate
+// that matters: 100 draws collide once in ~3400 runs. connTrackerImpl keys its
+// cache by address, so a collision silently costs an entry and fails a Len()
+// assertion. Use it only where a single address is needed; loops that need
+// distinct addresses must use seqIPv4.
 func randLocalIPv4() net.IP {
 	return net.IPv4(127, randByte(), randByte(), randByte())
 }
@@ -50,14 +56,14 @@ func TestConnTracker(t *testing.T) {
 			t.Run("AddingMany", func(t *testing.T) {
 				ct := factory()
 				for i := 0; i < 100; i++ {
-					_ = ct.AddConn(randLocalIPv4())
+					_ = ct.AddConn(seqIPv4(i))
 				}
 				require.Equal(t, 100, ct.Len())
 			})
 			t.Run("Cycle", func(t *testing.T) {
 				ct := factory()
 				for i := 0; i < 100; i++ {
-					ip := randLocalIPv4()
+					ip := seqIPv4(i)
 					require.NoError(t, ct.AddConn(ip))
 					ct.RemoveConn(ip)
 				}
@@ -68,7 +74,7 @@ func TestConnTracker(t *testing.T) {
 	t.Run("VeryShort", func(t *testing.T) {
 		ct := newConnTracker(10, time.Microsecond)
 		for i := 0; i < 10; i++ {
-			ip := randLocalIPv4()
+			ip := seqIPv4(i)
 			require.NoError(t, ct.AddConn(ip))
 			time.Sleep(2 * time.Microsecond)
 			require.NoError(t, ct.AddConn(ip))

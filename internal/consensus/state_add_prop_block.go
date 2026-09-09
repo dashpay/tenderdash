@@ -1,6 +1,7 @@
 package consensus
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -173,20 +174,16 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 			return added, err
 		}
 
-		if stateData.RoundState.Proposal != nil &&
-			block.Header.CoreChainLockedHeight != stateData.RoundState.Proposal.CoreChainLockedHeight {
-			return added, fmt.Errorf("core chain lock height of block %d does not match proposal %d",
-				block.Header.CoreChainLockedHeight, stateData.RoundState.Proposal.CoreChainLockedHeight)
-		}
-
-		// A Proposal carries a BlockID the proposer signed before anyone had seen
-		// the block. Now that the block is assembled the claim is checkable, and a
-		// proposer that builds one honestly derives it from exactly these bytes and
-		// these parts, so any difference is a signed statement about a block this
-		// is not. The block is kept -- it is the bytes, and they are what they are;
-		// the Proposal is discarded, so nothing downstream signs its BlockID.
+		// CoreChainLockedHeight and BlockID.StateID are not covered by the legacy
+		// proposal signature. A relay can therefore alter them without invalidating
+		// the proposer signature. Once the block is complete, derive those fields
+		// from the authenticated block bytes instead of allowing the relay's copy to
+		// erase the proposal slot. Hash and PartSetHeader are signed; a disagreement
+		// in either still proves that the proposal describes different bytes.
 		if proposal := stateData.Proposal; proposal != nil {
-			if derived := block.BlockID(stateData.ProposalBlockParts); !derived.Equals(proposal.BlockID) {
+			derived := block.BlockID(stateData.ProposalBlockParts)
+			if !bytes.Equal(derived.Hash, proposal.BlockID.Hash) ||
+				!derived.PartSetHeader.Equals(proposal.BlockID.PartSetHeader) {
 				c.logger.Error("proposal block ID does not describe the proposed block; dropping the proposal",
 					"height", stateData.Height,
 					"round", stateData.Round,
@@ -197,6 +194,13 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 				)
 				stateData.Proposal = nil
 				stateData.ProposalReceiveTime = time.Time{}
+			} else {
+				// RoundState snapshots may still expose this proposal to gossip workers.
+				// Publish a corrected copy so those readers keep an immutable value.
+				correctedProposal := *proposal
+				correctedProposal.CoreChainLockedHeight = block.CoreChainLockedHeight
+				correctedProposal.BlockID = derived.Copy()
+				stateData.Proposal = &correctedProposal
 			}
 		}
 

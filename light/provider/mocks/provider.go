@@ -118,7 +118,7 @@ type Provider_LightBlock_Call struct {
 // LightBlock is a helper method to define mock.On call
 //   - ctx context.Context
 //   - height int64
-func (_e *Provider_Expecter) LightBlock(ctx interface{}, height interface{}) *Provider_LightBlock_Call {
+func (_e *Provider_Expecter) LightBlock(ctx any, height any) *Provider_LightBlock_Call {
 	return &Provider_LightBlock_Call{Call: _e.mock.On("LightBlock", ctx, height)}
 }
 
@@ -175,7 +175,7 @@ type Provider_ReportEvidence_Call struct {
 // ReportEvidence is a helper method to define mock.On call
 //   - context1 context.Context
 //   - evidence types.Evidence
-func (_e *Provider_Expecter) ReportEvidence(context1 interface{}, evidence interface{}) *Provider_ReportEvidence_Call {
+func (_e *Provider_Expecter) ReportEvidence(context1 any, evidence any) *Provider_ReportEvidence_Call {
 	return &Provider_ReportEvidence_Call{Call: _e.mock.On("ReportEvidence", context1, evidence)}
 }
 

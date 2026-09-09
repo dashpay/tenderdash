@@ -7,8 +7,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	"github.com/dashpay/tenderdash/dash"
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	sf "github.com/dashpay/tenderdash/internal/state/test/factory"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
@@ -72,10 +74,7 @@ func TestCommitIsCheckedAgainstEveryFieldOfTheBlockID(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// blockExec is deliberately nil: every rejection under test must be
-			// reached before the block is handed to the application, so a test that
-			// starts passing by reaching it would panic rather than pass quietly.
-			action := &TryAddCommitAction{logger: log.NewNopLogger()}
+			logger := log.NewNopLogger()
 			stateData := StateData{
 				logger: log.NewNopLogger(),
 				RoundState: cstypes.RoundState{
@@ -86,12 +85,70 @@ func TestCommitIsCheckedAgainstEveryFieldOfTheBlockID(t *testing.T) {
 			}
 			commit := &types.Commit{Height: 10, Round: 0, BlockID: tc.blockID()}
 
-			verified, err := action.verifyCommitBlock(ctx, &stateData, commit)
+			verified, err := verifyCommitBlock(ctx, logger, &stateData, commit)
 
 			assert.False(t, verified, "a commit whose block ID misdescribes the block must not be applied")
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.wantErr,
 				"the operator must be told which field disagreed")
+		})
+	}
+}
+
+func TestParkedCommitChecksStateIDBeforeSavingBlock(t *testing.T) {
+	chainID := t.Name()
+	for _, mismatch := range []bool{false, true} {
+		name := "matching state ID"
+		if mismatch {
+			name = "different state ID"
+		}
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			css := makeConsensusState(ctx, t, configSetup(t), 2, chainID, newTickerFunc())
+			privVals := make([]types.PrivValidator, 0, len(css))
+			for _, node := range css {
+				privVals = append(privVals, node.privValidator.PrivValidator)
+			}
+			proposer := css[0].GetStateData()
+			node := css[1]
+			stateData := node.GetStateData()
+			ctx = dash.ContextWithProTxHash(ctx, node.privValidator.ProTxHash)
+			block, err := sf.MakeBlock(proposer.state, 1, &types.Commit{}, kvstore.ProtocolVersion)
+			require.NoError(t, err)
+			block.CoreChainLockedHeight = 1
+			parts, err := block.MakePartSet(types.BlockPartSizeBytes)
+			require.NoError(t, err)
+			blockID := block.BlockID(parts)
+			if mismatch {
+				blockID = forgeField(t, blockID, "state_id")
+			}
+			commit, err := factory.MakeCommit(ctx, blockID, block.Height, 0,
+				proposer.Votes.Precommits(0), proposer.Validators, privVals)
+			require.NoError(t, err)
+			peerID := proposer.Validators.Proposer().NodeAddress.NodeID
+			stateData.updateRoundStep(0, cstypes.RoundStepPrevote)
+			commitCtx := msgInfoWithCtx(ctx, msgInfo{Msg: &CommitMessage{commit}, PeerID: peerID})
+			require.NoError(t, node.ctrl.Dispatch(commitCtx,
+				&TryAddCommitEvent{Commit: commit, PeerID: peerID}, &stateData))
+			require.NotNil(t, stateData.Commit, "a signed commit is parked before its block arrives")
+			for i := 0; i < int(parts.Total()); i++ {
+				msg := &BlockPartMessage{Height: block.Height, Round: 0, Part: parts.GetPart(i)}
+				partCtx := msgInfoWithCtx(ctx, msgInfo{Msg: msg, PeerID: peerID})
+				err = node.ctrl.Dispatch(partCtx, &AddProposalBlockPartEvent{Msg: msg, PeerID: peerID}, &stateData)
+				if mismatch && i == int(parts.Total())-1 {
+					require.ErrorContains(t, err, "state ID does not match")
+				} else {
+					require.NoError(t, err)
+				}
+			}
+			if mismatch {
+				assert.Equal(t, block.Height, stateData.Height)
+				assert.Zero(t, node.blockStore.Height(), "a mismatching commit must never be persisted")
+			} else {
+				assert.Equal(t, block.Height+1, stateData.Height)
+				assert.True(t, stateData.state.LastBlockID.Equals(blockID))
+			}
 		})
 	}
 }

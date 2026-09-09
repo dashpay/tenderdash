@@ -8,7 +8,6 @@ import (
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
 	"github.com/dashpay/tenderdash/dash"
-	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -86,11 +85,6 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 
 	stateData.Commit = commit
 
-	// We need to make sure we are past the Propose step
-	if stateData.Step <= cstypes.RoundStepPropose {
-		// In this case we need to apply the commit after the proposal block comes in
-		return nil
-	}
 	return stateEvent.Ctrl.Dispatch(ctx, &AddCommitEvent{Commit: commit}, stateData)
 }
 
@@ -133,8 +127,9 @@ func (cs *TryAddCommitAction) handleCommitVerifyError(err error, peerID types.No
 //
 // A false return with a nil error means the block has not arrived yet, which is
 // the ordinary case for a commit that overtook it.
-func (cs *TryAddCommitAction) verifyCommitBlock(
+func verifyCommitBlock(
 	ctx context.Context,
+	logger log.Logger,
 	stateData *StateData,
 	commit *types.Commit,
 ) (bool, error) {
@@ -147,7 +142,7 @@ func (cs *TryAddCommitAction) verifyCommitBlock(
 	}
 	proTxHash := dash.MustProTxHashFromContext(ctx)
 	if !block.HashesTo(commit.BlockID.Hash) {
-		cs.logger.Error("proposal block does not hash to commit hash",
+		logger.Error("proposal block does not hash to commit hash",
 			"height", commit.Height,
 			"node_proTxHash", proTxHash.ShortString(),
 			"block", block,
@@ -162,7 +157,7 @@ func (cs *TryAddCommitAction) verifyCommitBlock(
 	// next height compares that record against the state this block produced;
 	// they disagree, and no proposer at any round can satisfy both.
 	if !bytes.Equal(block.StateID().Hash(), commit.BlockID.StateID) {
-		cs.logger.Error("commit state ID does not match the block it commits",
+		logger.Error("commit state ID does not match the block it commits",
 			"height", commit.Height,
 			"node_proTxHash", proTxHash.ShortString(),
 			"block_state_id", block.StateID().Hash(),
@@ -186,7 +181,7 @@ func (cs *TryAddCommitAction) verifyCommit(ctx context.Context, stateData *State
 	if ignoreProposalBlock {
 		return true, nil
 	}
-	if verified, err := cs.verifyCommitBlock(ctx, stateData, commit); !verified || err != nil {
+	if verified, err := verifyCommitBlock(ctx, cs.logger, stateData, commit); !verified || err != nil {
 		return verified, err
 	}
 	// We have a correct block, let's process it before applying the commit
