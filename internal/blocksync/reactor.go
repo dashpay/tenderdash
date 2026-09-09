@@ -29,8 +29,13 @@ const (
 	// check if we should switch to consensus reactor
 	switchToConsensusIntervalSeconds = 1
 
-	// switch to consensus after this duration of inactivity
+	// consider block sync stalled after this duration of inactivity
 	syncTimeout = 60 * time.Second
+
+	// hand over to consensus after this duration of inactivity even when peers
+	// still report higher blocks, so that a wedged synchronizer cannot keep the
+	// node out of consensus forever
+	maxSyncStall = 10 * time.Minute
 )
 
 type ReactorOption func(*Reactor)
@@ -286,11 +291,13 @@ func (r *Reactor) requestRoutine(ctx context.Context, p2pClient *client.Client) 
 //
 // NOTE: Don't sleep in the FOR_LOOP or otherwise slow it down!
 func (r *Reactor) poolRoutine(ctx context.Context, stateSynced bool) {
-	r.synchronizer.WaitForSync(ctx)
+	caughtUp := r.synchronizer.WaitForSync(ctx)
 	r.synchronizer.Stop()
 	r.blockSyncFlag.Store(false)
 	if r.consReactor != nil {
-		r.consReactor.SwitchToConsensus(ctx, r.executor.State(), r.synchronizer.IsCaughtUp() || stateSynced)
+		// caughtUp is what WaitForSync actually decided on, rather than a second
+		// IsCaughtUp call that races the synchronizer we just stopped
+		r.consReactor.SwitchToConsensus(ctx, r.executor.State(), caughtUp || stateSynced)
 	}
 }
 

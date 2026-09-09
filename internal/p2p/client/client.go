@@ -167,7 +167,7 @@ func (c *Client) GetBlock(ctx context.Context, height int64, peerID types.NodeID
 	if err != nil {
 		return nil, err
 	}
-	return newPromise[*bcproto.BlockResponse](ctx, peerID, reqID, respCh, c), nil
+	return newPromise[*bcproto.BlockResponse](ctx, reqID, respCh, c), nil
 }
 
 // GetChunk requests a chunk from a peer and returns promise.Promise which resolve the result
@@ -184,7 +184,7 @@ func (c *Client) GetChunk(
 	if err != nil {
 		return nil, err
 	}
-	return newPromise[*statesync.ChunkResponse](ctx, peerID, reqID, respCh, c), nil
+	return newPromise[*statesync.ChunkResponse](ctx, reqID, respCh, c), nil
 }
 
 // GetSnapshots requests snapshots from a peer
@@ -208,7 +208,7 @@ func (c *Client) GetParams(
 	if err != nil {
 		return nil, err
 	}
-	return newPromise[*statesync.ParamsResponse](ctx, peerID, reqID, respCh, c), nil
+	return newPromise[*statesync.ParamsResponse](ctx, reqID, respCh, c), nil
 }
 
 // GetLightBlock returns a promise.Promise which resolve the result if response received in time otherwise reject
@@ -223,7 +223,7 @@ func (c *Client) GetLightBlock(
 	if err != nil {
 		return nil, err
 	}
-	return newPromise[*statesync.LightBlockResponse](ctx, peerID, reqID, respCh, c), nil
+	return newPromise[*statesync.LightBlockResponse](ctx, reqID, respCh, c), nil
 }
 
 // GetSyncStatus requests a block synchronization status from all connected peers
@@ -397,7 +397,6 @@ func (c *Client) timeout() <-chan time.Time {
 
 func newPromise[T proto.Message](
 	ctx context.Context,
-	peerID types.NodeID,
 	reqID string,
 	respCh chan result,
 	client *Client,
@@ -415,10 +414,13 @@ func newPromise[T proto.Message](
 			}
 			resolve(res.Value.(T))
 		case <-client.timeout():
-			_ = client.Send(ctx, p2p.PeerError{
-				NodeID: peerID,
-				Err:    ErrPeerNotResponded,
-			})
+			// Reject and let the caller decide what a timeout is worth. Reporting
+			// the peer here evicts it on a single slow request, which is a poor
+			// signal: peers answer requests one at a time, so a busy peer times
+			// out long before it is unhealthy, and evicting it also fails every
+			// other request already in flight to it. Callers that want to act on
+			// repeated timeouts can count them, and a genuinely dead connection
+			// is still caught by the transport's ping/pong.
 			reject(ErrPeerNotResponded)
 		}
 	})

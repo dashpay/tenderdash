@@ -3,6 +3,7 @@ package blocksync
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
@@ -105,10 +106,37 @@ func (p *jobGenerator) nextJob(ctx context.Context) (*workerpool.Job, error) {
 	return workerpool.NewJob(blockFetchJobHandler(p.client, peer, height)), nil
 }
 
-func (p *jobGenerator) pushBack(height int64) {
+// pushBack schedules heights to be fetched again, skipping those already queued so
+// a queued height is not fetched twice. Heights already handed to a worker are not
+// tracked here, so an in-flight height can still be queued and fetched again.
+//
+// The queue is kept sorted because nextHeight pops from the front and callers hand
+// us heights in arbitrary order - dropPeer collects them by ranging a map. Only the
+// lowest missing height unblocks applyBlock, so retrying in arrival order can spend
+// the whole no-progress window fetching heights that cannot be applied yet.
+//
+// Membership is built once per call rather than rescanning the queue per height,
+// which would be quadratic in the size of a batch.
+func (p *jobGenerator) pushBack(heights ...int64) {
+	if len(heights) == 0 {
+		return
+	}
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
-	p.pushedBack = append(p.pushedBack, height)
+
+	queued := make(map[int64]struct{}, len(p.pushedBack)+len(heights))
+	for _, height := range p.pushedBack {
+		queued[height] = struct{}{}
+	}
+	p.pushedBack = slices.Grow(p.pushedBack, len(heights))
+	for _, height := range heights {
+		if _, ok := queued[height]; ok {
+			continue
+		}
+		queued[height] = struct{}{}
+		p.pushedBack = append(p.pushedBack, height)
+	}
+	slices.Sort(p.pushedBack)
 }
 
 func (p *jobGenerator) getPeer(ctx context.Context, height int64) (PeerData, error) {

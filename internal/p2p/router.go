@@ -849,10 +849,13 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 
 		select {
 		case queue.enqueue() <- envelope:
+			// len(bz) is the exact wire size we just read. Deriving it with
+			// proto.Size means walking the whole decoded message again, which for a
+			// block-sized message is a full extra pass on the receive hot path.
 			r.metrics.PeerReceiveBytesTotal.With(
 				"chID", fmt.Sprint(chID),
 				"peer_id", string(peerID),
-				"message_type", r.lc.ValueToMetricLabel(envelope.Message)).Add(float64(proto.Size(&protoEnvelope)))
+				"message_type", r.lc.ValueToMetricLabel(envelope.Message)).Add(float64(len(bz)))
 			r.metrics.RouterChannelQueueSend.Observe(time.Since(start).Seconds())
 			// r.logger.Debug("received message", "peer", peerID, "msg", msg)
 

@@ -37,6 +37,12 @@ const (
 	maxPendingRequestsPerPeer           = 20
 	defaultSyncRateIntervalBlocks int64 = 100
 
+	// maxConsecutiveFailures is how many block requests in a row a peer may fail
+	// before we drop it. Requests time out under load, and a peer serves its
+	// requests one at a time, so a single failure says very little about the
+	// peer. Dropping one costs the rest of its in-flight requests too.
+	maxConsecutiveFailures int32 = 5
+
 	// Minimum recv rate to ensure we're receiving blocks from a peer fast
 	// enough. If a peer is not sending us data at at least that rate, we
 	// consider them to have timed out and we disconnect.
@@ -45,6 +51,11 @@ const (
 	// sending data across atlantic ~ 7.5 KB/s.
 	minRecvRate = 7680
 )
+
+// errDuplicateBlock reports a block response for a height that is already pending
+// or already applied. Requesting a height twice causes it, so the peer that
+// answered is not at fault and must not be reported to the p2p layer.
+var errDuplicateBlock = errors.New("block response already exists")
 
 /*
 	Peers self report their heights when we join the block synchronizer.
@@ -231,25 +242,60 @@ func (s *Synchronizer) consumeJobResult(ctx context.Context) error {
 			return nil
 		}
 		s.jobGen.pushBack(bfErr.height)
+		// One failed request is usually a timeout under load, not a bad peer.
+		// Dropping the peer also fails its other in-flight requests, each of
+		// which drops another peer in turn, so react only to a sustained run of
+		// failures.
+		if !s.peerStore.AddFailure(bfErr.peerID, maxConsecutiveFailures) {
+			s.logger.Debug("block request failed, keeping peer",
+				"peer", bfErr.peerID,
+				"height", bfErr.height,
+				"error", bfErr.err)
+			return nil
+		}
+		s.logger.Error("removing peer after too many consecutive failed block requests",
+			"peer", bfErr.peerID,
+			"height", bfErr.height,
+			"failures", maxConsecutiveFailures,
+			"error", bfErr.err)
 		s.RemovePeer(bfErr.peerID)
 		_ = s.client.Send(ctx, p2p.PeerError{NodeID: bfErr.peerID, Err: bfErr})
 		return nil
 	}
 	resp := res.Value.(*BlockResponse)
-	s.peerStore.Update(resp.PeerID, AddNumPending(-1), UpdateMonitor(resp.Block.Size()))
+	s.peerStore.Update(resp.PeerID, AddNumPending(-1), ResetFailures(), UpdateMonitor(resp.Size))
 	err = s.addBlock(*resp)
 	if err != nil {
-		s.logger.Error("cannot add a block to the pending list",
+		if !errors.Is(err, errDuplicateBlock) {
+			s.logger.Error("cannot add a block to the pending list",
+				"height", resp.Block.Height,
+				"error", err.Error())
+			_ = s.client.Send(ctx, p2p.PeerError{NodeID: resp.PeerID, Err: err})
+			return nil
+		}
+		// A duplicate is not the sending peer's fault, we asked more than one peer for
+		// this height. Info level: a healthy sync produces none, so this is the only
+		// signal an operator gets that heights are being re-requested.
+		s.logger.Info("dropping duplicate block response",
 			"height", resp.Block.Height,
-			"error", err.Error())
-		_ = s.client.Send(ctx, p2p.PeerError{NodeID: resp.PeerID, Err: err})
-		return nil
+			"peer", resp.PeerID,
+			"reason", err.Error())
 	}
-	err = s.applyBlock(ctx)
+	failed, err := s.applyBlock(ctx)
 	if err != nil {
-		s.logger.Error("cannot apply a block", "height", resp.Block.Height, "error", err.Error())
-		s.RemovePeer(resp.PeerID)
-		_ = s.client.Send(ctx, p2p.PeerError{NodeID: resp.PeerID, Err: err})
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			// Cancellation is our own doing, so no peer is at fault. The response stays
+			// pending and is retried when the next result arrives.
+			return err
+		}
+		// Charge the failure to the peer that supplied the failing block: removing it
+		// also drops its pending entry, so the height is fetched from someone else.
+		s.logger.Error("cannot apply a block",
+			"height", failed.Block.Height,
+			"peer", failed.PeerID,
+			"error", err.Error())
+		s.RemovePeer(failed.PeerID)
+		_ = s.client.Send(ctx, p2p.PeerError{NodeID: failed.PeerID, Err: err})
 	}
 	return nil
 }
@@ -274,29 +320,98 @@ func (s *Synchronizer) IsCaughtUp() bool {
 	return s.height >= maxHeight
 }
 
-func (s *Synchronizer) WaitForSync(ctx context.Context) {
+// WaitForSync blocks until block sync is finished, and reports whether the node
+// actually caught up.
+//
+// A stall on its own is not a reason to stop. Handing over to consensus is a
+// one-way door - only the state sync path ever switches back to block sync - and
+// consensus catch-up is far slower than block sync, so a node that gives up
+// while it is still thousands of blocks behind stays behind. As long as peers
+// report heights above ours there are blocks left to fetch and something to
+// retry, so keep going and say so loudly. Give up on the stall only once no peer
+// can help us, or once the stall has outlasted maxSyncStall, so that a wedged
+// synchronizer can still hand over rather than blocking forever.
+func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool) {
 	ticker := time.NewTicker(switchToConsensusIntervalSeconds * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return s.IsCaughtUp()
 		case <-ticker.C:
+			if s.IsCaughtUp() {
+				return true
+			}
 			var (
-				height, _   = s.GetStatus()
-				lastAdvance = s.LastAdvance()
-				isCaughtUp  = s.IsCaughtUp()
+				height, _     = s.GetStatus()
+				maxPeerHeight = s.MaxPeerHeight()
+				stalledFor    = time.Since(s.LastAdvance())
+				behind        = maxPeerHeight - height
 			)
-			if isCaughtUp || time.Since(lastAdvance) > syncTimeout {
-				return
+			switch stallVerdictFor(behind, stalledFor) {
+			case stopNothingToFetch:
+				return false
+			case stopStalledTooLong:
+				s.logger.Error(
+					"block sync stalled for too long, handing over to consensus while still behind",
+					"height", height,
+					"max_peer_height", maxPeerHeight,
+					"behind", behind,
+					"stalled_for", stalledFor,
+				)
+				return false
+			}
+			if stalledFor > syncTimeout {
+				s.logger.Error(
+					"block sync has stalled but peers report higher blocks, still trying",
+					"height", height,
+					"max_peer_height", maxPeerHeight,
+					"behind", behind,
+					"stalled_for", stalledFor,
+					"giving_up_in", maxSyncStall-stalledFor,
+				)
+				continue
 			}
 			s.logger.Info(
 				"not caught up yet",
 				"height", height,
-				"max_peer_height", s.MaxPeerHeight(),
-				"timeout_in", syncTimeout-time.Since(lastAdvance),
+				"max_peer_height", maxPeerHeight,
+				"timeout_in", syncTimeout-stalledFor,
 			)
 		}
+	}
+}
+
+// stallVerdict says what a lack of progress in block sync means.
+type stallVerdict int
+
+const (
+	// keepSyncing means the stall is not a reason to stop yet
+	keepSyncing stallVerdict = iota
+	// stopNothingToFetch means no peer has a block we are missing
+	stopNothingToFetch
+	// stopStalledTooLong means we are still behind but have to hand over anyway
+	stopStalledTooLong
+)
+
+// stallVerdictFor decides what to do when block sync has made no progress for
+// stalledFor, given how many blocks the best peer is ahead of us.
+//
+// Being behind with peers that can serve us is a reason to keep retrying, not to
+// stop: handing over to consensus is effectively irreversible, so stopping while
+// behind leaves the node grinding through consensus catch-up instead. Only a
+// stall with nothing left to fetch, or one long enough to look like a wedge,
+// ends block sync.
+func stallVerdictFor(behind int64, stalledFor time.Duration) stallVerdict {
+	switch {
+	case stalledFor <= syncTimeout:
+		return keepSyncing
+	case behind <= 0:
+		return stopNothingToFetch
+	case stalledFor > maxSyncStall:
+		return stopStalledTooLong
+	default:
+		return keepSyncing
 	}
 }
 
@@ -321,29 +436,41 @@ func (s *Synchronizer) AddPeer(peer PeerData) {
 // RemovePeer removes the peer with peerID from the synchronizer. If there's no peer
 // with peerID, function is a no-op.
 func (s *Synchronizer) RemovePeer(peerID types.NodeID) {
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
-	s.removePeer(peerID)
+	heights := s.dropPeer(peerID)
+	// Re-queue once dropPeer released s.mtx: pushBack takes the job generator lock,
+	// and holding both serializes every status read behind a peer removal.
+	s.jobGen.pushBack(heights...)
 }
 
-func (s *Synchronizer) removePeer(peerID types.NodeID) {
-	for _, resp := range s.pendingToApply {
+// dropPeer deletes the peer along with its pending responses and returns the heights
+// that have to be fetched again. A dropped response must not be kept: it would make
+// addBlock reject the block re-fetched in its place as a duplicate.
+func (s *Synchronizer) dropPeer(peerID types.NodeID) []int64 {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+	var heights []int64
+	for height, resp := range s.pendingToApply {
 		if resp.PeerID == peerID {
-			s.jobGen.pushBack(resp.Block.Height)
+			delete(s.pendingToApply, height)
+			heights = append(heights, height)
 		}
 	}
 	s.peerStore.Delete(peerID)
+	return heights
 }
 
-func (s *Synchronizer) applyBlock(ctx context.Context) error {
+// applyBlock applies pending responses in height order until the next height is
+// missing. On failure it returns the response that failed to apply, so the caller
+// can charge the peer that supplied it rather than an arbitrary one.
+func (s *Synchronizer) applyBlock(ctx context.Context) (BlockResponse, error) {
 	for {
 		resp, ok := s.getPendingResponse()
 		if !ok {
-			return nil
+			return BlockResponse{}, nil
 		}
 		err := s.applier.Apply(ctx, resp.Block, resp.Commit)
 		if err != nil {
-			return fmt.Errorf("cannot apply block: %w", err)
+			return resp, fmt.Errorf("cannot apply block: %w", err)
 		}
 		s.advance()
 		s.updateMonitor()
@@ -366,21 +493,54 @@ func (s *Synchronizer) advance() {
 }
 
 func (s *Synchronizer) updateMonitor() {
-	// get the current max peer height before locking to avoid deadlock
+	height, syncRate, ok := s.recordSyncRate()
+	if !ok {
+		return
+	}
+	// read after recordSyncRate has released the lock, and only once we know we
+	// are going to report: this is called for every applied block
 	maxPeerHeight := s.peerStore.MaxHeight()
+	keyvals := []interface{}{
+		"height", height,
+		"max_peer_height", maxPeerHeight,
+		"blocks/s", syncRate,
+	}
+	// blocks are applied one at a time, so the per-stage averages say whether the
+	// rate above is limited by serialization, signature verification, disk or the
+	// ABCI application
+	if timings, measured := s.applier.Timings(); measured {
+		// logged as durations rather than whole milliseconds: part set building
+		// and commit verification are often sub-millisecond, and truncating them
+		// to 0 would hide exactly the stages this is here to measure
+		keyvals = append(keyvals,
+			"partset", timings.PartSet,
+			"verify", timings.Verify,
+			"save", timings.Save,
+			// exec, not abci: the span also covers SaveABCIResponses, the state
+			// store write and the mempool update, which are ours, not the app's
+			"exec", timings.Exec,
+		)
+	}
+	s.logger.Info("block sync rate", keyvals...)
+}
+
+// recordSyncRate updates the smoothed block sync rate, once every
+// monitorInterval blocks. It reports false when the current height is not a
+// reporting point, in which case nothing was updated.
+func (s *Synchronizer) recordSyncRate() (height int64, rate float64, ok bool) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
 	if s.monitorInterval <= 0 {
-		return
+		return 0, 0, false
 	}
 	progress := s.height - s.startHeight
 	if progress <= 0 || progress%s.monitorInterval != 0 {
-		return
+		return 0, 0, false
 	}
 	elapsed := s.clock.Since(s.lastMonitorUpdate).Seconds()
 	if elapsed <= 0 {
-		return
+		return 0, 0, false
 	}
 	// lastSyncRate is updated every monitorInterval blocks using an adaptive filter
 	// to smooth the block sync rate. The value represents blocks per second.
@@ -390,32 +550,26 @@ func (s *Synchronizer) updateMonitor() {
 	} else {
 		s.lastSyncRate = 0.9*s.lastSyncRate + 0.1*newSyncRate
 	}
-	s.logger.Info(
-		"block sync rate",
-		"height", s.height,
-		"max_peer_height", maxPeerHeight,
-		"blocks/s", s.lastSyncRate,
-	)
 	s.lastMonitorUpdate = s.clock.Now()
+	return s.height, s.lastSyncRate, true
 }
 
-// addBlock validates that the block comes from the peer it was expected from
-// and calls the requester to store it.
-//
-// This requires an extended commit at the same height as the supplied block -
-// the block contains the last commit, but we need the latest commit in case we
-// need to switch over from block sync to consensus at this height. If the
-// height of the extended commit and the height of the block do not match, we
-// do not add the block and return an error.
+// addBlock stores a block response until every lower height has been applied.
+// Only heights from the current one up are ever read again, so a response for an
+// already applied or already pending height is rejected with errDuplicateBlock.
 // TODO: ensure that blocks come in order for each peer.
 func (s *Synchronizer) addBlock(resp BlockResponse) error {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
 	block := resp.Block
+	if block.Height < s.height {
+		return fmt.Errorf("%w (peer: %s, block height: %d already applied)",
+			errDuplicateBlock, resp.PeerID, block.Height)
+	}
 	_, ok := s.pendingToApply[block.Height]
 	if ok {
-		return fmt.Errorf("block response already exists (peer: %s, block height: %d)", resp.PeerID, block.Height)
+		return fmt.Errorf("%w (peer: %s, block height: %d)", errDuplicateBlock, resp.PeerID, block.Height)
 	}
 	s.pendingToApply[block.Height] = resp
 	return nil
@@ -466,6 +620,10 @@ type BlockResponse struct {
 	PeerID types.NodeID
 	Block  *types.Block
 	Commit *types.Commit
+	// Size is the serialized size of Block in bytes, measured while decoding the
+	// response. Deriving it from Block again means re-serializing the whole
+	// block, which is too expensive to do on the block apply path.
+	Size int
 }
 
 func (r *BlockResponse) Validate() error {
@@ -503,5 +661,8 @@ func BlockResponseFromProto(resp *bcproto.BlockResponse, peerID types.NodeID) (*
 		PeerID: peerID,
 		Block:  block,
 		Commit: commit,
+		// measured here, on a worker goroutine, rather than on the single
+		// goroutine that applies blocks
+		Size: resp.Block.Size(),
 	}, nil
 }

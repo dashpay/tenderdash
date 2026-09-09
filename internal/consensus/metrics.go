@@ -138,10 +138,14 @@ type Metrics struct {
 }
 
 // RecordConsMetrics uses for recording the block related metrics during fast-sync.
-func (m *Metrics) RecordConsMetrics(block *types.Block) {
+//
+// blockSize is the size of the serialized block in bytes. It is passed in rather
+// than derived from block, because callers on the block sync path have already
+// serialized the block and recomputing it there is expensive.
+func (m *Metrics) RecordConsMetrics(block *types.Block, blockSize int64) {
 	m.NumTxs.Set(float64(len(block.Data.Txs)))
 	m.TotalTxs.Add(float64(len(block.Data.Txs)))
-	m.BlockSizeBytes.Observe(float64(block.Size()))
+	m.BlockSizeBytes.Observe(float64(blockSize))
 	m.CommittedHeight.Set(float64(block.Height))
 }
 

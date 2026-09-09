@@ -1258,3 +1258,60 @@ func txsToTxRecords(txs []types.Tx) []*abci.TxRecord {
 	}
 	return trs
 }
+
+// TestApplyBlockValidatesBlock pins the invariant that ApplyBlock rejects an
+// invalid block.
+//
+// ApplyBlock calls ProcessProposal with verify=false and relies solely on the
+// ValidateBlockWithRoundState inside FinalizeBlock. That coupling is invisible
+// from either function on its own, so removing FinalizeBlock's validation as
+// "redundant" would silently leave the block sync apply path with no validation
+// at all. This test fails if that happens.
+func TestApplyBlockValidatesBlock(t *testing.T) {
+	app := &testApp{}
+	logger := log.NewNopLogger()
+	cc := abciclient.NewLocalClient(logger, app)
+	proxyApp := proxy.New(cc, logger, proxy.NopMetrics())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	require.NoError(t, proxyApp.Start(ctx))
+
+	eventBus := eventbus.NewDefault(logger)
+	require.NoError(t, eventBus.Start(ctx))
+
+	state, stateDB, _ := makeState(t, 1, 1)
+	stateStore := sm.NewStore(stateDB)
+	nodeProTxHash := state.Validators.Validators[0].ProTxHash
+	ctx = dash.ContextWithProTxHash(ctx, nodeProTxHash)
+	app.ValidatorSetUpdate = state.Validators.ABCIEquivalentValidatorUpdates()
+
+	blockStore := store.NewBlockStore(dbm.NewMemDB())
+	mp := &mpmocks.Mempool{}
+	mp.On("Lock").Return()
+	mp.On("Unlock").Return()
+	mp.On("FlushAppConn", mock.Anything).Return(nil)
+	mp.On("Update", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+	blockExec := sm.NewBlockExecutor(stateStore, proxyApp, mp, sm.EmptyEvidencePool{}, blockStore, eventBus)
+
+	block, err := sf.MakeBlock(state, 1, new(types.Commit), 2)
+	require.NoError(t, err)
+	// corrupt a header field that ValidateBlockWithRoundState checks against the
+	// round state, so only that validation can catch it
+	block.AppHash = rand.Bytes(crypto.DefaultAppHashSize)
+	bps, err := block.MakePartSet(testPartSize)
+	require.NoError(t, err)
+	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: bps.Header()}
+
+	_, err = blockExec.ApplyBlock(ctx, state, blockID, block, new(types.Commit))
+	require.Error(t, err, "ApplyBlock must reject a block that fails validation")
+	require.ErrorAs(t, err, &sm.ErrInvalidBlock{})
+
+	// and it must be rejected before the state store is advanced
+	loaded, err := stateStore.Load()
+	require.NoError(t, err)
+	require.Equal(t, state.LastBlockHeight, loaded.LastBlockHeight,
+		"an invalid block must not advance the state store")
+}

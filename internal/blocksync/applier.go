@@ -3,6 +3,7 @@ package blocksync
 import (
 	"context"
 	"fmt"
+	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
 
@@ -21,6 +22,7 @@ type (
 		store     sm.BlockStore
 		state     sm.State
 		metrics   *consensus.Metrics
+		stats     applyStats
 	}
 )
 
@@ -59,26 +61,49 @@ func newBlockApplier(blockExec sm.Executor, store sm.BlockStore, opts ...applier
 func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *types.Commit) error {
 	e.mtx.Lock()
 	defer e.mtx.Unlock()
-	blockID := block.BlockID(nil)
 
-	err := e.verify(ctx, blockID, block, commit)
-	if err != nil {
-		return err
-	}
-
+	// The part set is needed twice: to derive the block ID and to persist the
+	// block. Building it serializes the whole block and builds a Merkle tree over
+	// the parts, so build it once and pass it to both.
+	start := time.Now()
 	blockParts, err := block.MakePartSet(types.BlockPartSizeBytes)
 	if err != nil {
 		return err
 	}
-	e.store.SaveBlock(block, blockParts, commit)
+	blockID := block.BlockID(blockParts)
+	partSetTime := time.Since(start)
 
+	start = time.Now()
+	err = e.verify(ctx, blockID, block, commit)
+	if err != nil {
+		return err
+	}
+	verifyTime := time.Since(start)
+
+	start = time.Now()
+	e.store.SaveBlock(block, blockParts, commit)
+	saveTime := time.Since(start)
+
+	start = time.Now()
 	// TODO: Same thing for app - but we would need a way to get the hash without persisting the state.
 	e.state, err = e.blockExec.ApplyBlock(ctx, e.state, blockID, block, commit)
 	if err != nil {
 		panic(fmt.Sprintf("failed to process committed block (%d:%X): %v", block.Height, block.Hash(), err))
 	}
-	e.metrics.RecordConsMetrics(block)
+	execTime := time.Since(start)
+
+	e.stats.add(partSetTime, verifyTime, saveTime, execTime)
+	// ByteSize is the size of the serialized block we just built, so the metric
+	// costs nothing extra here
+	e.metrics.RecordConsMetrics(block, blockParts.ByteSize())
 	return nil
+}
+
+// Timings returns the average per-block cost of each stage of the apply
+// pipeline since the previous call, and resets the counters. It reports false
+// when no block was applied since then.
+func (e *blockApplier) Timings() (applyTimings, bool) {
+	return e.stats.take()
 }
 
 // State safely returns the last version of a state
@@ -121,4 +146,61 @@ func (e *blockApplier) verify(ctx context.Context, blockID types.BlockID, block 
 		return err
 	}
 	return nil
+}
+
+// applyTimings is the average time a single block spends in each stage of the
+// apply pipeline.
+type applyTimings struct {
+	// PartSet is block serialization plus the Merkle tree over its parts
+	PartSet time.Duration
+	// Verify is commit signature verification and block validation
+	Verify time.Duration
+	// Save is persisting the block to the block store
+	Save time.Duration
+	// Exec is the ABCI round trip and the state store writes that follow it
+	Exec time.Duration
+}
+
+// applyStats accumulates per-stage timings of the block apply pipeline. Block
+// sync applies blocks one at a time, so this is where a slow sync shows up; the
+// breakdown attributes it to serialization, signature verification, disk or the
+// ABCI application without needing a profiler.
+type applyStats struct {
+	mtx     sync.Mutex
+	blocks  int64
+	partSet time.Duration
+	verify  time.Duration
+	save    time.Duration
+	exec    time.Duration
+}
+
+// add records the timings of a single applied block
+func (s *applyStats) add(partSet, verify, save, exec time.Duration) {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+	s.blocks++
+	s.partSet += partSet
+	s.verify += verify
+	s.save += save
+	s.exec += exec
+}
+
+// take returns the per-block averages accumulated so far and resets the
+// counters, so each caller sees the interval since the previous call
+func (s *applyStats) take() (applyTimings, bool) {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+	if s.blocks == 0 {
+		return applyTimings{}, false
+	}
+	blocks := time.Duration(s.blocks)
+	timings := applyTimings{
+		PartSet: s.partSet / blocks,
+		Verify:  s.verify / blocks,
+		Save:    s.save / blocks,
+		Exec:    s.exec / blocks,
+	}
+	s.blocks = 0
+	s.partSet, s.verify, s.save, s.exec = 0, 0, 0, 0
+	return timings, true
 }
