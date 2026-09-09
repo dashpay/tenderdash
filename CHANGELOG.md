@@ -6,6 +6,7 @@
 - Check complete block IDs before applying commits and validate proposals arriving after their blocks (#1439).
 - Bound how far statesync backfill fetches ahead of verification, so peers serving faster than this node verifies cannot grow the fetched-but-unverified backlog across the whole backfill span.
 - Don't disconnect a backfill peer over a vote-extension count mismatch, which an honest peer running a different extension configuration produces.
+- Update `google.golang.org/grpc` to v1.83.2, fixing heap exhaustion via HTTP/2 DATA frame fragmentation (CVE-2026-84304).
 
 ## [1.7.0] - 2026-08-17
 
