@@ -33,7 +33,10 @@ func TestLoadRouterSharedQueueOccupancyAndDrops(t *testing.T) {
 	// queue the router builds, at a size small enough to reach its ceiling.
 	const capacity = 8
 	q := newSimplePriorityQueue(ctx, capacity)
-	ceiling := capacity * capacity
+	// Account for the queue's heap and both channel buffers. Depending on
+	// scheduling, draining can make every one of these retained envelopes
+	// observable before the queue gets another chance to trim its heap.
+	ceiling := q.maxSize + cap(q.input) + cap(q.output)
 
 	// Nothing drains while this runs, which is the case that matters: a
 	// consumer keeping up leaves the queue empty whatever arrives.
@@ -51,7 +54,7 @@ func TestLoadRouterSharedQueueOccupancyAndDrops(t *testing.T) {
 		"(ceiling %d), %d discarded without a metric or a peer error",
 		capacity, offered, held, ceiling, offered-held)
 
-	require.LessOrEqual(t, held, ceiling+capacity,
+	require.LessOrEqual(t, held, ceiling,
 		"the shared inbound queue retained more than its ceiling, so its memory is unbounded")
 	require.Positive(t, held, "the queue retained nothing, so it was never exercised")
 
