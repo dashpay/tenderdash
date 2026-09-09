@@ -276,30 +276,32 @@ format:
 # Kept in step with .github/workflows/lint.yml, which pins the same floating
 # minor so both always resolve to the latest patch of it.
 GOLANGCI_LINT_VERSION ?= v2.12
-GOLANGCI_LINT := go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+GOLANGCI_LINT := $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
-# Ref that `make lint` reports new findings against; CI uses the pull request's
-# target branch. Override it when working off another release line:
-#   make lint LINT_BASE=origin/v1.6-dev
+# Use the newest fetched development branch by default. For another PR target,
+# override with: make lint LINT_BASE=origin/<target-branch>
 # Once the base advances past your branch point, its own commits enter the diff
 # and can raise findings you did not write. Rebase; changing the flag would make
 # this a different gate from the one CI enforces.
-LINT_BASE ?= origin/v1.7-dev
+LINT_BASE ?= $(shell git for-each-ref --sort=-version:refname --format='%(refname:short)' 'refs/remotes/origin/v[0-9]*-dev' | head -n 1)
 
 # What CI enforces: findings on lines this branch changed. The repository carries
 # several hundred pre-existing findings, so an unfiltered run can never exit 0 --
 # use `make lint-all` to see those.
 lint:
+	@test -n "$(LINT_BASE)" || { \
+		echo "make lint: no development branch found; run 'git fetch origin' or set LINT_BASE=origin/<branch>."; \
+		exit 1; }
 	@echo "--> Running linter (new findings vs $(LINT_BASE))"
-	@git rev-parse --verify --quiet $(LINT_BASE) >/dev/null || { \
+	@git rev-parse --verify --quiet "$(LINT_BASE)^{commit}" >/dev/null || { \
 		echo "make lint: base ref '$(LINT_BASE)' not found."; \
 		echo "  fetch it with 'git fetch origin', or pick another: make lint LINT_BASE=origin/<branch>"; \
 		exit 1; }
-	@git merge-base $(LINT_BASE) HEAD >/dev/null 2>&1 || { \
+	@git merge-base "$(LINT_BASE)" HEAD >/dev/null 2>&1 || { \
 		echo "make lint: no common history with '$(LINT_BASE)' -- shallow clone?"; \
 		echo "  deepen it with 'git fetch --unshallow'"; \
 		exit 1; }
-	$(GOLANGCI_LINT) run --timeout 10m --new-from-rev=$(LINT_BASE)
+	$(GOLANGCI_LINT) run --timeout 10m --new-from-rev="$(LINT_BASE)"
 .PHONY: lint
 
 lint-all:
@@ -314,7 +316,7 @@ lint-all:
 # gate does not separately have.
 vet:
 	@echo "--> Running go vet"
-	go vet ./...
+	$(GO) vet ./...
 .PHONY: vet
 
 vulncheck:
