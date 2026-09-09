@@ -34,7 +34,7 @@ func securityThresholdExtensions(t *testing.T, values ...string) types.VoteExten
 // one Byzantine validator signs a different, application-accepted value at
 // the same extension index. Recovery nevertheless combines all shares by
 // count/index and panics when the final vote arrives.
-func TestSecurityRemoteExtensionMismatchDoesNotPanicConsensusDispatcher(t *testing.T) {
+func TestRemoteExtensionMismatchDoesNotPanicConsensusDispatcher(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

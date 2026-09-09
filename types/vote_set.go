@@ -435,30 +435,11 @@ func (voteSet *VoteSet) addVerifiedVote(
 		voteSet.maj23 = &maj23BlockID
 		if voteSet.signedMsgType == tmproto.PrecommitType {
 			if err := voteSet.recoverThresholdSignsAndVerify(votesByBlock); err != nil {
-				// SEC-001: do NOT halt the whole process on a recovery/verification
-				// failure here. Recovery uses only the complete ordered extension
-				// vector backed by the recovery threshold, so a differing minority
-				// cannot contaminate it. The remaining reason to fail is timing -
-				// the just-crossed minimal quorum may not yet contain enough honest,
-				// count-consistent extension shares to reach the threshold - in which
-				// case we roll back maj23 and retry as more honest votes arrive. Once the
-				// honest count-consistent group reaches the threshold, recovery succeeds
-				// and the block is finalized; if it never does, the round simply times
-				// out and consensus advances - no fork, no crash.
-				//
+				// Keep the vote and retry when a complete extension group crosses the
+				// recovery threshold; remote input must not turn failure into a panic.
 				voteSet.maj23 = nil
-				// Roll back the threshold signatures derived from this attempt too:
-				// recoverThresholdSigns may have populated thresholdBlockSig/
-				// thresholdVoteExtSigs before the later verification failed, and
-				// leaving them set would expose stale, unverified signatures keyed
-				// off a now-nil maj23. They are recomputed on the next successful
-				// recovery (and all external readers gate on maj23 anyway).
 				voteSet.thresholdBlockSig = nil
 				voteSet.thresholdVoteExtSigs = nil
-				// Debug, not Warn/Error: this is an expected, benign retry that fires
-				// on every post-gate vote while maj23 is unset (see the SEC-001 note
-				// above). It is the only place err is observable on the soft-retry
-				// path; the panic path above already wraps it.
 				voteSet.logger.Debug("threshold signature recovery not yet possible; rolling back maj23 and retrying as more votes arrive",
 					"height", voteSet.height,
 					"round", voteSet.round,
@@ -560,8 +541,9 @@ type voteExtensionGroup struct {
 }
 
 // canonicalVoteExtensionGroup selects the complete ordered signed extension
-// vector backed by threshold voting power. Sign hashes bind type, payload and
-// effective request ID, so equal length alone is never treated as agreement.
+// vector backed by threshold voting power. An empty vector sorts first. For
+// quorum types with a 50% recovery threshold, two groups can qualify only at or
+// beyond the fault model; production quorum types use a threshold above 50%.
 func (voteSet *VoteSet) canonicalVoteExtensionGroup(
 	blockVotes *blockVotes,
 ) (*Vote, map[string]struct{}, bool, error) {

@@ -32,16 +32,19 @@ const (
 	ResponseIDAttribute = "ResponseID"
 )
 
-const peerTimeout = 60 * time.Second
-
-var (
-	ErrPeerNotResponded      = errors.New("peer did not send us anything")
-	ErrCannotResolveResponse = errors.New("cannot resolve a result")
+const (
+	// peerTimeout leaves ample room for bounded stall detection and cleanup.
+	peerTimeout            = 60 * time.Second
+	deliveryStallTimeout   = 10 * time.Second
+	deliveryCleanupTimeout = 5 * time.Second
 )
 
-// Keep enough request lifetime for one stalled delivery wave to be evicted and
-// a maximum-size response to finish at the default transport send rate.
-const deliveryTimeout = 30 * time.Second
+var (
+	ErrPeerNotResponded         = errors.New("peer did not send us anything")
+	ErrCannotResolveResponse    = errors.New("cannot resolve a result")
+	ErrDeliveryStalled          = errors.New("outbound delivery stalled")
+	ErrTargetedDeliveryRequired = errors.New("delivery notification requires a targeted envelope")
+)
 
 type (
 	// Sender is the interface that wraps Send method
@@ -290,32 +293,55 @@ func (c *Client) Send(ctx context.Context, msg any) error {
 // SendAndWaitForDelivery sends a targeted envelope and waits until the
 // transport completes the message or the router drops it.
 func (c *Client) SendAndWaitForDelivery(ctx context.Context, envelope p2p.Envelope) error {
+	if envelope.To == "" || envelope.Broadcast {
+		return ErrTargetedDeliveryRequired
+	}
 	delivered := envelope.EnableDeliveryNotification()
+	progress := envelope.DeliveryProgress()
 	if err := c.Send(ctx, envelope); err != nil {
 		return err
 	}
-	timer := c.clock.NewTimer(deliveryTimeout)
-	defer timer.Stop()
-	select {
-	case <-delivered:
-		return nil
-	case <-timer.Chan():
-		if err := c.Send(ctx, p2p.PeerError{
-			NodeID: envelope.To,
-			Err:    fmt.Errorf("outbound delivery exceeded %s", deliveryTimeout),
-			Fatal:  true,
-		}); err != nil {
-			return err
-		}
+	stallTimer := c.clock.NewTimer(deliveryStallTimeout)
+	defer stallTimer.Stop()
+	for {
 		select {
 		case <-delivered:
 			return nil
+		case <-progress:
+			resetTimer(stallTimer, deliveryStallTimeout)
+		case <-stallTimer.Chan():
+			stallErr := fmt.Errorf("%w: no transport progress for %s", ErrDeliveryStalled, deliveryStallTimeout)
+			if err := c.Send(ctx, p2p.PeerError{
+				NodeID: envelope.To,
+				Err:    stallErr,
+				Fatal:  true,
+			}); err != nil {
+				return errors.Join(stallErr, err)
+			}
+			cleanupTimer := c.clock.NewTimer(deliveryCleanupTimeout)
+			defer cleanupTimer.Stop()
+			select {
+			case <-delivered:
+				return stallErr
+			case <-cleanupTimer.Chan():
+				return fmt.Errorf("%w: peer cleanup did not complete within %s", stallErr, deliveryCleanupTimeout)
+			case <-ctx.Done():
+				return errors.Join(stallErr, ctx.Err())
+			}
 		case <-ctx.Done():
 			return ctx.Err()
 		}
-	case <-ctx.Done():
-		return ctx.Err()
 	}
+}
+
+func resetTimer(timer clockwork.Timer, d time.Duration) {
+	if !timer.Stop() {
+		select {
+		case <-timer.Chan():
+		default:
+		}
+	}
+	timer.Reset(d)
 }
 
 // SendN sends p2p message to a peer, consuming `nTokens` from rate limiter.

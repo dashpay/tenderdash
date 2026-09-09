@@ -32,6 +32,24 @@ func TestCompletePeerDeliveriesReleasesPendingWaiters(t *testing.T) {
 	require.Empty(t, router.deliveries)
 }
 
+func TestDeliveryProgressIsCoalesced(t *testing.T) {
+	envelope := &Envelope{}
+	envelope.EnableDeliveryNotification()
+	envelope.NotifyDeliveryProgress()
+	envelope.NotifyDeliveryProgress()
+
+	select {
+	case <-envelope.DeliveryProgress():
+	default:
+		t.Fatal("delivery progress was not reported")
+	}
+	select {
+	case <-envelope.DeliveryProgress():
+		t.Fatal("duplicate progress notification was not coalesced")
+	default:
+	}
+}
+
 func TestSimplePriorityQueueDoesNotPopWhenOutputIsFull(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

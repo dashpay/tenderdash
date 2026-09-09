@@ -12,8 +12,8 @@ import (
 
 // Light-block validation rejects fields that can be checked against the signed
 // header or the threshold public key without changing the v1.7 block hash.
-func TestSecurityLightBlockRejectsValidatorSetForgery(t *testing.T) {
-	const chainID = "security-validator-set-binding"
+func TestLightBlockRejectsValidatorSetForgery(t *testing.T) {
+	const chainID = "validator-set-binding"
 	headers, validatorSets, _ := genLightBlocksWithValidatorsRotatingEveryBlock(
 		t, chainID, 1, 10, time.Now().Add(-time.Hour),
 	)
@@ -32,6 +32,10 @@ func TestSecurityLightBlockRejectsValidatorSetForgery(t *testing.T) {
 			forged.Validators = replacement.Validators
 			forged.HasPublicKeys = false
 			require.NoError(t, forged.SetProposer(forged.Validators[0].ProTxHash))
+		}},
+		{"partial public keys", func(_ *testing.T, forged *types.ValidatorSet) {
+			forged.Validators[len(forged.Validators)-1].PubKey = nil
+			forged.HasPublicKeys = false
 		}},
 	}
 

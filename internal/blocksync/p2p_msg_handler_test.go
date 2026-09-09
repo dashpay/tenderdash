@@ -8,7 +8,6 @@ import (
 
 	"github.com/cosmos/gogoproto/proto"
 	"github.com/google/uuid"
-	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
@@ -56,6 +55,7 @@ func (suite *BlockP2PMessageHandlerTestSuite) SetupTest() {
 			return suite.fakeP2PChannel, nil
 		})
 	suite.handler = newBlockP2PMessageHandler(handlerCtx, suite.logger, suite.fakeStore, suite.fakePeerAdder)
+	suite.T().Cleanup(suite.handler.stop)
 }
 
 func (suite *BlockP2PMessageHandlerTestSuite) TestHandleBlockRequest() {
@@ -117,7 +117,7 @@ func (suite *BlockP2PMessageHandlerTestSuite) TestHandleBlockRequest() {
 			}
 			if tc.wantResp != nil {
 				suite.fakeP2PChannel.
-					On("Send", ctx, mock.MatchedBy(suite.envelopeArg(peerID, tc.wantResp))).
+					On("Send", mock.Anything, mock.MatchedBy(suite.envelopeArg(peerID, tc.wantResp))).
 					Once().
 					Run(notifyDelivery).
 					Return(nil)
@@ -133,55 +133,14 @@ func (suite *BlockP2PMessageHandlerTestSuite) TestServeBlockRequestReportsMissin
 	suite.fakeStore.On("LoadBlock", int64(1001)).Once().Return(block)
 	suite.fakeStore.On("LoadSeenCommitAt", int64(1001)).Once().Return(nil)
 
-	err := suite.handler.serveBlockRequest(blockResponseJob{
+	_, _, err := suite.handler.prepareBlockResponse(blockResponseJob{
 		ctx: context.Background(),
 		envelope: p2p.Envelope{
 			From:    types.NodeID("peer"),
 			Message: &bcproto.BlockRequest{Height: 1001},
 		},
 	})
-	suite.Require().ErrorContains(err, "found block in store with no commit")
-}
-
-func (suite *BlockP2PMessageHandlerTestSuite) TestBlockRequestAmplificationIsRateLimitedPerPeer() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	peerID := types.NodeID("amplifying-peer")
-	request := &bcproto.BlockRequest{Height: 1001}
-	processed := make(chan struct{}, blockRequestBurst)
-
-	suite.fakeStore.
-		On("LoadBlock", int64(1001)).
-		Times(blockRequestBurst).
-		Return(nil)
-	suite.fakeP2PChannel.
-		On("Send", ctx, mock.MatchedBy(suite.envelopeArg(peerID, &bcproto.NoBlockResponse{Height: 1001}))).
-		Times(blockRequestBurst).
-		Run(func(args mock.Arguments) {
-			notifyDelivery(args)
-			processed <- struct{}{}
-		}).
-		Return(nil)
-
-	params, handler := consumerHandler(ctx, suite.logger, suite.fakeStore, suite.fakePeerAdder,
-		client.WithRateLimitClock(clockwork.NewFakeClock()))
-	envelope := &p2p.Envelope{
-		Attributes: map[string]string{client.RequestIDAttribute: suite.reqID},
-		From:       peerID,
-		Message:    request,
-		ChannelID:  p2p.BlockSyncChannel,
-	}
-	for range blockRequestBurst + 1 {
-		suite.Require().NoError(params.Handler.Handle(ctx, suite.fakeClient, envelope))
-	}
-	for range blockRequestBurst {
-		select {
-		case <-processed:
-		case <-time.After(time.Second):
-			suite.FailNow("timed out waiting for accepted block requests")
-		}
-	}
-	suite.Eventually(handler.blockResponsesIdle, time.Second, time.Millisecond)
+	suite.Require().ErrorIs(err, errStoredBlockMissingCommit)
 }
 
 func (suite *BlockP2PMessageHandlerTestSuite) TestBlockResponseBackpressureAppliesBeforeLoad() {
@@ -218,7 +177,7 @@ func (suite *BlockP2PMessageHandlerTestSuite) TestBlockResponseBackpressureAppli
 	suite.Eventually(suite.handler.blockResponsesIdle, time.Second, time.Millisecond)
 }
 
-func (suite *BlockP2PMessageHandlerTestSuite) TestBlockResponseBackpressureHasGlobalBound() {
+func (suite *BlockP2PMessageHandlerTestSuite) TestStalledPeerDeliveryDoesNotBlockOtherPeers() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -240,16 +199,17 @@ func (suite *BlockP2PMessageHandlerTestSuite) TestBlockResponseBackpressureHasGl
 		peerID := types.NodeID(fmt.Sprintf("peer-%d", i))
 		suite.Require().NoError(suite.handleMessage(ctx, request, peerID))
 	}
-	pending := make([]p2p.Envelope, maxInFlightBlockResponses)
+	pending := make([]p2p.Envelope, totalRequests)
 	for i := range pending {
-		pending[i] = <-delivery
+		select {
+		case pending[i] = <-delivery:
+		case <-time.After(time.Second):
+			suite.FailNow("a stalled peer occupied the global block preparation workers")
+		}
 	}
-	suite.Never(func() bool { return len(delivery) > 0 }, 20*time.Millisecond, time.Millisecond)
 	for _, envelope := range pending {
 		envelope.NotifyDelivery()
 	}
-	last := <-delivery
-	last.NotifyDelivery()
 	suite.Eventually(suite.handler.blockResponsesIdle, time.Second, time.Millisecond)
 }
 

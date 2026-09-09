@@ -10,6 +10,12 @@ State sync will continuously work in the background to supply nodes with chunked
 
 Under the state sync section in `config.toml` you will find multiple settings that need to be configured in order for your node to use state sync.
 
+State sync also requires access to Dash Core. Tenderdash uses Dash Core to
+authenticate quorum membership and public keys before installing validator
+state received from peers. If genesis configures `VotingPowerThreshold`, the
+threshold received during state sync must match that locally stored genesis
+value; it cannot be learned safely from a remote state-sync provider.
+
 Lets breakdown the settings:
 
 - `enable`: Enable is to inform the node that you will be using state sync to bootstrap your node.

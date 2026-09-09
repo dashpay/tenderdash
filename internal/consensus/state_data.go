@@ -419,6 +419,8 @@ func (s *StateData) verifyCommit(
 		return false, fmt.Errorf("error validating commit: %w", err)
 	}
 
+	// Keep a stable snapshot for the checks below; authenticated commit handling
+	// may clear proposal metadata on the live StateData.
 	rs := s.RoundState
 	stateHeight := s.Height
 
@@ -495,7 +497,7 @@ func (s *StateData) verifyCommit(
 	}
 
 	// Lets verify that the threshold signature matches the current validator set
-	if err := s.verifyCommitSignatures(rs.Proposal.BlockID, commit, budget); err != nil {
+	if err := s.verifyCommitSignatures(commit.BlockID, commit, budget); err != nil {
 		return false, fmt.Errorf("error verifying commit: %w", err)
 	}
 

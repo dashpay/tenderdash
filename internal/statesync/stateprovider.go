@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"strconv"
 	"strings"
 	"time"
 
@@ -51,12 +50,13 @@ type StateProvider interface {
 // stateProviderRPC is a state provider using RPC to communicate with light clients.
 // Deprecated, will be removed in future.
 type stateProviderRPC struct {
-	sync.Mutex     // light.Client is not concurrency-safe
-	lc             *light.Client
-	initialHeight  int64
-	providers      map[lightprovider.Provider]string
-	logger         log.Logger
-	dashCoreClient dashcore.Client
+	sync.Mutex                  // light.Client is not concurrency-safe
+	lc                          *light.Client
+	initialHeight               int64
+	providers                   map[lightprovider.Provider]string
+	logger                      log.Logger
+	dashCoreClient              dashcore.Client
+	trustedVotingPowerThreshold *uint64
 }
 
 // NewRPCStateProvider creates a new StateProvider using a light client and RPC clients.
@@ -68,6 +68,18 @@ func NewRPCStateProvider(
 	servers []string,
 	logger log.Logger,
 	dashCoreClient dashcore.Client,
+) (StateProvider, error) {
+	return newRPCStateProvider(ctx, chainID, initialHeight, servers, logger, dashCoreClient, nil)
+}
+
+func newRPCStateProvider(
+	ctx context.Context,
+	chainID string,
+	initialHeight int64,
+	servers []string,
+	logger log.Logger,
+	dashCoreClient dashcore.Client,
+	trustedVotingPowerThreshold *uint64,
 ) (StateProvider, error) {
 	if len(servers) < 2 {
 		return nil, fmt.Errorf("at least 2 RPC servers are required, got %d", len(servers))
@@ -92,11 +104,12 @@ func NewRPCStateProvider(
 		return nil, err
 	}
 	return &stateProviderRPC{
-		logger:         logger,
-		lc:             lc,
-		initialHeight:  initialHeight,
-		providers:      providerRemotes,
-		dashCoreClient: dashCoreClient,
+		logger:                      logger,
+		lc:                          lc,
+		initialHeight:               initialHeight,
+		providers:                   providerRemotes,
+		dashCoreClient:              dashCoreClient,
+		trustedVotingPowerThreshold: cloneUint64Ptr(trustedVotingPowerThreshold),
 	}, nil
 }
 
@@ -199,10 +212,12 @@ func (s *stateProviderRPC) State(ctx context.Context, height uint64) (sm.State, 
 		result.ConsensusParams,
 		currentLightBlock.ConsensusHash,
 		currentLightBlock.Height,
+		s.trustedVotingPowerThreshold,
 	); err != nil {
 		return sm.State{}, err
 	}
 	state.ConsensusParams = result.ConsensusParams
+	applyVotingPowerThreshold(&state)
 	state.LastHeightConsensusParamsChanged = currentLightBlock.Height
 
 	return state, nil
@@ -217,12 +232,13 @@ func rpcClient(server string) (*rpchttp.HTTP, error) {
 }
 
 type stateProviderP2P struct {
-	sync.Mutex     // light.Client is not concurrency-safe
-	lc             *light.Client
-	initialHeight  int64
-	paramsSendCh   p2p.Channel
-	paramsRecvCh   chan types.ConsensusParams
-	dashCoreClient dashcore.Client
+	sync.Mutex                  // light.Client is not concurrency-safe
+	lc                          *light.Client
+	initialHeight               int64
+	paramsSendCh                p2p.Channel
+	paramsRecvCh                chan types.ConsensusParams
+	dashCoreClient              dashcore.Client
+	trustedVotingPowerThreshold *uint64
 }
 
 // NewP2PStateProvider creates a light client state
@@ -236,6 +252,19 @@ func NewP2PStateProvider(
 	logger log.Logger,
 	dashCoreClient dashcore.Client,
 ) (StateProvider, error) {
+	return newP2PStateProvider(ctx, chainID, initialHeight, providers, paramsSendCh, logger, dashCoreClient, nil)
+}
+
+func newP2PStateProvider(
+	ctx context.Context,
+	chainID string,
+	initialHeight int64,
+	providers []lightprovider.Provider,
+	paramsSendCh p2p.Channel,
+	logger log.Logger,
+	dashCoreClient dashcore.Client,
+	trustedVotingPowerThreshold *uint64,
+) (StateProvider, error) {
 	if len(providers) < minPeers {
 		return nil, fmt.Errorf("at least %d peers are required, got %d", minPeers, len(providers))
 	}
@@ -247,11 +276,12 @@ func NewP2PStateProvider(
 	}
 
 	return &stateProviderP2P{
-		lc:             lc,
-		initialHeight:  initialHeight,
-		paramsSendCh:   paramsSendCh,
-		paramsRecvCh:   make(chan types.ConsensusParams),
-		dashCoreClient: dashCoreClient,
+		lc:                          lc,
+		initialHeight:               initialHeight,
+		paramsSendCh:                paramsSendCh,
+		paramsRecvCh:                make(chan types.ConsensusParams),
+		dashCoreClient:              dashCoreClient,
+		trustedVotingPowerThreshold: cloneUint64Ptr(trustedVotingPowerThreshold),
 	}, nil
 }
 
@@ -338,9 +368,15 @@ func (s *stateProviderP2P) State(ctx context.Context, height uint64) (sm.State, 
 	if err != nil {
 		return sm.State{}, fmt.Errorf("fetching consensus params: %w", err)
 	}
-	if err := verifyConsensusParams(state.ConsensusParams, currentLightBlock.ConsensusHash, currentLightBlock.Height); err != nil {
+	if err := verifyConsensusParams(
+		state.ConsensusParams,
+		currentLightBlock.ConsensusHash,
+		currentLightBlock.Height,
+		s.trustedVotingPowerThreshold,
+	); err != nil {
 		return sm.State{}, err
 	}
+	applyVotingPowerThreshold(&state)
 	// set the last height changed to the current height
 	state.LastHeightConsensusParamsChanged = currentLightBlock.Height
 
@@ -382,12 +418,6 @@ func authenticateStateSyncValidatorSetWithQuorumInfo(
 	}
 	wireSet := lightBlock.ValidatorSet
 	quorumType := btcjson.GetLLMQType(info.Type)
-	if quorumType == 0 {
-		numericType, parseErr := strconv.Atoi(info.Type)
-		if parseErr == nil {
-			quorumType = btcjson.LLMQType(numericType)
-		}
-	}
 	if quorumType.Validate() != nil || quorumType != wireSet.QuorumType {
 		return nil, fmt.Errorf("quorum type %q returned by Dash Core does not match light block %d", info.Type, wireSet.QuorumType)
 	}
@@ -466,11 +496,14 @@ func authenticateStateSyncValidatorSetWithQuorumInfo(
 }
 
 // verifyConsensusParams checks peer-supplied consensus params before Bootstrap
-// persists them. ConsensusParamsFromProto validates nothing and expectedHash covers
-// only Block.MaxBytes, Block.MaxGas and Version.ConsensusVersion, so validation runs
-// first and on the whole set — though it only rejects non-positive Synchrony,
-// Timeout and Evidence values, not positive but absurd ones.
-func verifyConsensusParams(params types.ConsensusParams, expectedHash tmbytes.HexBytes, height int64) error {
+// persists them. The legacy consensus hash covers only block and version fields,
+// so the validator threshold must match the value stored from local genesis.
+func verifyConsensusParams(
+	params types.ConsensusParams,
+	expectedHash tmbytes.HexBytes,
+	height int64,
+	trustedVotingPowerThreshold *uint64,
+) error {
 	if err := params.ValidateConsensusParams(); err != nil {
 		return fmt.Errorf("invalid consensus params at height %d: %w", height, err)
 	}
@@ -478,10 +511,35 @@ func verifyConsensusParams(params types.ConsensusParams, expectedHash tmbytes.He
 		return fmt.Errorf("consensus params hash mismatch at height %d. Expected %v, got %v",
 			height, expectedHash, params.HashConsensusParams())
 	}
-	if params.Validator.VotingPowerThreshold != nil {
-		return fmt.Errorf("consensus params at height %d contain an unauthenticated voting power threshold", height)
+	if !equalUint64Ptr(params.Validator.VotingPowerThreshold, trustedVotingPowerThreshold) {
+		return fmt.Errorf("consensus params voting power threshold at height %d does not match trusted local state", height)
 	}
 	return nil
+}
+
+func equalUint64Ptr(a, b *uint64) bool {
+	return a == nil && b == nil || a != nil && b != nil && *a == *b
+}
+
+func cloneUint64Ptr(value *uint64) *uint64 {
+	if value == nil {
+		return nil
+	}
+	copy := *value
+	return &copy
+}
+
+func applyVotingPowerThreshold(state *sm.State) {
+	threshold := state.ConsensusParams.Validator.VotingPowerThreshold
+	if threshold == nil {
+		return
+	}
+	if state.LastValidators != nil {
+		state.LastValidators.VotingPowerThreshold = *threshold
+	}
+	if state.Validators != nil {
+		state.Validators.VotingPowerThreshold = *threshold
+	}
 }
 
 // addProvider dynamically adds a peer as a new witness. A limit of 6 providers is kept as a

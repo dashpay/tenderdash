@@ -300,12 +300,12 @@ func (c *MConnection) stopForError(ctx context.Context, r interface{}) {
 
 // Queues a message to be sent to channel.
 func (c *MConnection) Send(chID ChannelID, msgBytes []byte) bool {
-	return c.SendWithCompletion(chID, msgBytes, nil)
+	return c.SendWithCompletion(chID, msgBytes, nil, nil)
 }
 
-// SendWithCompletion queues a message and calls onSent after its final packet
-// has been written to the buffered connection.
-func (c *MConnection) SendWithCompletion(chID ChannelID, msgBytes []byte, onSent func()) bool {
+// SendWithCompletion queues a message, reports each packet write, and calls
+// onSent after its final packet has been written to the buffered connection.
+func (c *MConnection) SendWithCompletion(chID ChannelID, msgBytes []byte, onProgress, onSent func()) bool {
 	if !c.IsRunning() {
 		return false
 	}
@@ -319,7 +319,7 @@ func (c *MConnection) SendWithCompletion(chID ChannelID, msgBytes []byte, onSent
 		return false
 	}
 
-	success := channel.sendBytesWithCompletion(msgBytes, onSent)
+	success := channel.sendBytesWithCompletion(msgBytes, onProgress, onSent)
 	if success {
 		// Wake up sendRoutine if necessary
 		select {
@@ -669,8 +669,9 @@ type channel struct {
 }
 
 type outboundMessage struct {
-	bytes  []byte
-	onSent func()
+	bytes      []byte
+	onProgress func()
+	onSent     func()
 }
 
 func newChannel(conn *MConnection, desc ChannelDescriptor) *channel {
@@ -688,16 +689,9 @@ func newChannel(conn *MConnection, desc ChannelDescriptor) *channel {
 	}
 }
 
-// Queues message to send to this channel.
-// Goroutine-safe
-// Times out (and returns false) after defaultSendTimeout
-func (ch *channel) sendBytes(bytes []byte) bool {
-	return ch.sendBytesWithCompletion(bytes, nil)
-}
-
-func (ch *channel) sendBytesWithCompletion(bytes []byte, onSent func()) bool {
+func (ch *channel) sendBytesWithCompletion(bytes []byte, onProgress, onSent func()) bool {
 	select {
-	case ch.sendQueue <- outboundMessage{bytes: bytes, onSent: onSent}:
+	case ch.sendQueue <- outboundMessage{bytes: bytes, onProgress: onProgress, onSent: onSent}:
 		atomic.AddInt32(&ch.sendQueueSize, 1)
 		return true
 	case <-time.After(defaultSendTimeout):
@@ -743,6 +737,9 @@ func (ch *channel) writePacketMsgTo(w io.Writer) (n int, err error) {
 	packet := ch.nextPacketMsg()
 	n, err = protoio.NewDelimitedWriter(w).WriteMsg(mustWrapPacket(&packet))
 	atomic.AddInt64(&ch.recentlySent, int64(n))
+	if err == nil && ch.sending.onProgress != nil {
+		ch.sending.onProgress()
+	}
 	if err == nil && packet.EOF && ch.sending.onSent != nil {
 		onSent := ch.sending.onSent
 		ch.sending.onSent = nil

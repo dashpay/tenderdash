@@ -51,6 +51,7 @@ type Envelope struct {
 type deliveryNotification struct {
 	mu          sync.Mutex
 	done        chan struct{}
+	progress    chan struct{}
 	completed   bool
 	onCompleted func()
 }
@@ -59,9 +60,31 @@ type deliveryNotification struct {
 // envelope is completely sent by the transport or dropped by the router.
 func (e *Envelope) EnableDeliveryNotification() <-chan struct{} {
 	if e.delivery == nil {
-		e.delivery = &deliveryNotification{done: make(chan struct{})}
+		e.delivery = &deliveryNotification{
+			done:     make(chan struct{}),
+			progress: make(chan struct{}, 1),
+		}
 	}
 	return e.delivery.done
+}
+
+// DeliveryProgress reports transport progress for a delivery-enabled envelope.
+func (e *Envelope) DeliveryProgress() <-chan struct{} {
+	if e == nil || e.delivery == nil {
+		return nil
+	}
+	return e.delivery.progress
+}
+
+// NotifyDeliveryProgress reports that the transport wrote another message packet.
+func (e *Envelope) NotifyDeliveryProgress() {
+	if e == nil || e.delivery == nil {
+		return
+	}
+	select {
+	case e.delivery.progress <- struct{}{}:
+	default:
+	}
 }
 
 // NotifyDelivery unblocks a sender waiting for outbound delivery completion.

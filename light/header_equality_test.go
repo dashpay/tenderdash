@@ -13,33 +13,35 @@ import (
 	"github.com/dashpay/tenderdash/version"
 )
 
-type securityTrustedStore struct{ block *types.LightBlock }
+type headerEqualityTrustedStore struct{ block *types.LightBlock }
 
-type securityHeaderProvider struct{ block *types.LightBlock }
+type headerEqualityProvider struct{ block *types.LightBlock }
 
-func (p securityHeaderProvider) LightBlock(context.Context, int64) (*types.LightBlock, error) {
+func (p headerEqualityProvider) LightBlock(context.Context, int64) (*types.LightBlock, error) {
 	return p.block, nil
 }
-func (p securityHeaderProvider) ReportEvidence(context.Context, types.Evidence) error { return nil }
-func (p securityHeaderProvider) ID() string                                           { return "security-provider" }
+func (p headerEqualityProvider) ReportEvidence(context.Context, types.Evidence) error { return nil }
+func (p headerEqualityProvider) ID() string                                           { return "header-provider" }
 
-func (s securityTrustedStore) SaveLightBlock(*types.LightBlock) error { return nil }
-func (s securityTrustedStore) DeleteLightBlock(int64) error           { return nil }
-func (s securityTrustedStore) LightBlock(int64) (*types.LightBlock, error) {
+func (s headerEqualityTrustedStore) SaveLightBlock(*types.LightBlock) error { return nil }
+func (s headerEqualityTrustedStore) DeleteLightBlock(int64) error           { return nil }
+func (s headerEqualityTrustedStore) LightBlock(int64) (*types.LightBlock, error) {
 	return s.block, nil
 }
-func (s securityTrustedStore) LastLightBlockHeight() (int64, error)  { return s.block.Height, nil }
-func (s securityTrustedStore) FirstLightBlockHeight() (int64, error) { return s.block.Height, nil }
-func (s securityTrustedStore) LightBlockBefore(int64) (*types.LightBlock, error) {
+func (s headerEqualityTrustedStore) LastLightBlockHeight() (int64, error) { return s.block.Height, nil }
+func (s headerEqualityTrustedStore) FirstLightBlockHeight() (int64, error) {
+	return s.block.Height, nil
+}
+func (s headerEqualityTrustedStore) LightBlockBefore(int64) (*types.LightBlock, error) {
 	return s.block, nil
 }
-func (s securityTrustedStore) Prune(uint16) error { return nil }
-func (s securityTrustedStore) Size() uint16       { return 1 }
+func (s headerEqualityTrustedStore) Prune(uint16) error { return nil }
+func (s headerEqualityTrustedStore) Size() uint16       { return 1 }
 
 // VerifyHeader treats Header.Hash as the complete identity of an already
 // trusted header, so every consensus-relevant header field must affect it.
-func TestSecurityVerifyHeaderRejectsChangedCoreChainLockedHeight(t *testing.T) {
-	const chainID = "security-header-hash"
+func TestVerifyHeaderRejectsChangedCoreChainLockedHeight(t *testing.T) {
+	const chainID = "header-equality"
 	vals, _ := types.RandValidatorSet(1)
 	header := &types.Header{
 		Version:               version.Consensus{Block: version.BlockProtocol, App: 1},
@@ -62,7 +64,7 @@ func TestSecurityVerifyHeaderRejectsChangedCoreChainLockedHeight(t *testing.T) {
 		SignedHeader: &types.SignedHeader{Header: header, Commit: commit},
 		ValidatorSet: vals,
 	}
-	trustedStore := securityTrustedStore{block: trusted}
+	trustedStore := headerEqualityTrustedStore{block: trusted}
 
 	client := &Client{chainID: chainID, trustedStore: trustedStore, logger: log.NewNopLogger()}
 	forged := *header
@@ -72,8 +74,8 @@ func TestSecurityVerifyHeaderRejectsChangedCoreChainLockedHeight(t *testing.T) {
 		"trusted-header identity must reject changed consensus metadata even when legacy hashes collide")
 }
 
-func TestSecurityVerifyHeaderRejectsMetadataDifferentFromPrimary(t *testing.T) {
-	const chainID = "security-header-primary"
+func TestVerifyHeaderRejectsMetadataDifferentFromPrimary(t *testing.T) {
+	const chainID = "header-primary"
 	vals, _ := types.RandValidatorSet(1)
 	trustedHeader := &types.Header{
 		Version:            version.Consensus{Block: version.BlockProtocol, App: 1},
@@ -98,8 +100,8 @@ func TestSecurityVerifyHeaderRejectsMetadataDifferentFromPrimary(t *testing.T) {
 	}
 	client := &Client{
 		chainID:            chainID,
-		primary:            securityHeaderProvider{block: primaryBlock},
-		trustedStore:       securityTrustedStore{block: trustedBlock},
+		primary:            headerEqualityProvider{block: primaryBlock},
+		trustedStore:       headerEqualityTrustedStore{block: trustedBlock},
 		latestTrustedBlock: trustedBlock,
 		logger:             log.NewNopLogger(),
 	}

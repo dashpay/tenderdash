@@ -10,7 +10,7 @@ import (
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
-func TestSecurityRemoteExtensionRecovery(t *testing.T) {
+func TestRemoteExtensionRecovery(t *testing.T) {
 	for _, mode := range []string{"control", "signed_same_count_different_content", "reorder_signed_extensions"} {
 		t.Run(mode, func(t *testing.T) {
 			ctx := context.Background()

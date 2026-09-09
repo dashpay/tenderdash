@@ -150,7 +150,7 @@ func (suite *ChannelTestSuite) TestRetirePendingKeepsChannelSendable() {
 	}
 }
 
-func (suite *ChannelTestSuite) TestSendAndWaitForDeliveryEvictsStalledPeerBeforeReturning() {
+func (suite *ChannelTestSuite) TestSendAndWaitForDeliveryReportsStalledPeerAfterCleanup() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -178,20 +178,84 @@ func (suite *ChannelTestSuite) TestSendAndWaitForDeliveryEvictsStalledPeerBefore
 	}()
 	envelope := <-sent
 	suite.Require().NoError(suite.fakeClock.BlockUntilContext(ctx, 1))
-	suite.fakeClock.Advance(deliveryTimeout)
+	suite.fakeClock.Advance(deliveryStallTimeout)
 	select {
 	case <-evicted:
 	case <-time.After(time.Second):
 		suite.FailNow("timed out waiting for stalled peer eviction")
 	}
-	suite.Never(func() bool { return len(result) > 0 }, 20*time.Millisecond, time.Millisecond)
+	envelope.NotifyDelivery()
+	suite.Require().ErrorIs(<-result, ErrDeliveryStalled)
+}
 
+func (suite *ChannelTestSuite) TestSendAndWaitForDeliveryProgressPreventsFalseStall() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sent := make(chan p2p.Envelope, 1)
+	suite.p2pChannel.
+		On("Send", mock.Anything, mock.Anything).
+		Once().
+		Run(func(args mock.Arguments) { sent <- args.Get(1).(p2p.Envelope) }).
+		Return(nil)
+
+	result := make(chan error, 1)
+	go func() {
+		result <- suite.client.SendAndWaitForDelivery(ctx, p2p.Envelope{
+			To:      suite.peerID,
+			Message: &bcproto.BlockResponse{},
+		})
+	}()
+	envelope := <-sent
+	suite.Require().NoError(suite.fakeClock.BlockUntilContext(ctx, 1))
+	for range 3 {
+		suite.fakeClock.Advance(deliveryStallTimeout - time.Second)
+		envelope.NotifyDeliveryProgress()
+		suite.Never(func() bool { return len(result) > 0 }, 20*time.Millisecond, time.Millisecond)
+	}
 	envelope.NotifyDelivery()
 	suite.Require().NoError(<-result)
 }
 
-func (suite *ChannelTestSuite) TestRequestTimeoutCoversStalledDeliveryWave() {
-	suite.GreaterOrEqual(peerTimeout, 2*deliveryTimeout)
+func (suite *ChannelTestSuite) TestSendAndWaitForDeliveryCleanupIsBounded() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sent := make(chan p2p.Envelope, 1)
+	evicted := make(chan struct{}, 1)
+	suite.p2pChannel.
+		On("Send", mock.Anything, mock.Anything).
+		Once().
+		Run(func(args mock.Arguments) { sent <- args.Get(1).(p2p.Envelope) }).
+		Return(nil)
+	suite.p2pChannel.
+		On("SendError", mock.Anything, mock.Anything).
+		Once().
+		Run(func(mock.Arguments) { evicted <- struct{}{} }).
+		Return(nil)
+
+	result := make(chan error, 1)
+	go func() {
+		result <- suite.client.SendAndWaitForDelivery(ctx, p2p.Envelope{
+			To:      suite.peerID,
+			Message: &bcproto.BlockResponse{},
+		})
+	}()
+	<-sent
+	suite.Require().NoError(suite.fakeClock.BlockUntilContext(ctx, 1))
+	suite.fakeClock.Advance(deliveryStallTimeout)
+	<-evicted
+	suite.Require().NoError(suite.fakeClock.BlockUntilContext(ctx, 1))
+	suite.fakeClock.Advance(deliveryCleanupTimeout)
+	suite.Require().ErrorIs(<-result, ErrDeliveryStalled)
+}
+
+func (suite *ChannelTestSuite) TestSendAndWaitForDeliveryRejectsBroadcast() {
+	err := suite.client.SendAndWaitForDelivery(context.Background(), p2p.Envelope{
+		Broadcast: true,
+		Message:   &bcproto.StatusRequest{},
+	})
+	suite.Require().ErrorIs(err, ErrTargetedDeliveryRequired)
 }
 
 // A peer that answers a request we have already given up on is slow, not

@@ -150,6 +150,10 @@ func setup(
 	)
 
 	rts.stateStore = smmocks.NewStore(t)
+	rts.stateStore.
+		On("LoadConsensusParams", int64(1)).
+		Maybe().
+		Return(*types.DefaultConsensusParams(), nil)
 	rts.blockStore = store.NewBlockStore(dbm.NewMemDB())
 
 	cfg := config.DefaultStateSyncConfig()

@@ -12,25 +12,14 @@ import (
 
 // A state-sync provider must not be able to install validator membership or
 // live consensus controls that the legacy ValidatorsHash does not authenticate.
-func TestSecurityStateSyncAuthenticatesValidatorSetWithDashCore(t *testing.T) {
+func TestStateSyncAuthenticatesValidatorSetWithDashCore(t *testing.T) {
 	honest, _ := types.RandValidatorSet(4)
 	header := &types.Header{
 		Height:            10,
 		ValidatorsHash:    honest.Hash(),
 		ProposerProTxHash: honest.Proposer().ProTxHash,
 	}
-	quorumInfo := &btcjson.QuorumInfoResult{
-		Type:            honest.QuorumType.Name(),
-		QuorumHash:      hex.EncodeToString(honest.QuorumHash),
-		QuorumPublicKey: hex.EncodeToString(honest.ThresholdPublicKey.Bytes()),
-	}
-	for _, validator := range honest.Validators {
-		quorumInfo.Members = append(quorumInfo.Members, btcjson.QuorumMember{
-			ProTxHash:   hex.EncodeToString(validator.ProTxHash),
-			PubKeyShare: hex.EncodeToString(validator.PubKey.Bytes()),
-			Valid:       true,
-		})
-	}
+	quorumInfo := quorumInfoFromValidatorSet(honest, true)
 
 	tests := []struct {
 		name   string
@@ -87,7 +76,7 @@ func TestSecurityStateSyncAuthenticatesValidatorSetWithDashCore(t *testing.T) {
 	})
 }
 
-func TestSecurityStateSyncDoesNotTrustWireValidatorAddresses(t *testing.T) {
+func TestStateSyncDoesNotTrustWireValidatorAddresses(t *testing.T) {
 	honest, _ := types.RandValidatorSet(4)
 	for _, validator := range honest.Validators {
 		validator.NodeAddress = types.ValidatorAddress{
@@ -113,7 +102,7 @@ func TestSecurityStateSyncDoesNotTrustWireValidatorAddresses(t *testing.T) {
 	}
 }
 
-func TestSecurityStateSyncAcceptsMissingCorePublicKeyShares(t *testing.T) {
+func TestStateSyncAcceptsMissingCorePublicKeyShares(t *testing.T) {
 	honest, _ := types.RandValidatorSet(4)
 	header := &types.Header{
 		Height:            10,

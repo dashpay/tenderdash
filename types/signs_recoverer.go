@@ -21,6 +21,7 @@ type SignsRecoverer struct {
 	// this set still contribute their block signature, but their extension shares
 	// are not mixed into threshold recovery.
 	canonicalVoteExtVoters map[string]struct{}
+	canonicalVoteExtCount  *int
 
 	// true when the recovery of vote extensions was already executed
 	voteExtensionsRecovered bool
@@ -44,11 +45,21 @@ func WithCanonicalVoteExtensionVoters(voters map[string]struct{}) func(*SignsRec
 	}
 }
 
+// WithCanonicalVoteExtensionCount restricts vote-extension recovery to votes
+// carrying count extensions. Prefer WithCanonicalVoteExtensionVoters, which
+// also binds the extension contents selected by the recovery threshold.
+// Deprecated: use WithCanonicalVoteExtensionVoters.
+func WithCanonicalVoteExtensionCount(count int) func(*SignsRecoverer) {
+	return func(r *SignsRecoverer) {
+		r.canonicalVoteExtCount = &count
+	}
+}
+
 // NewSignsRecoverer creates and returns a new instance of SignsRecoverer
 // the state fills with signatures from the votes.
 //
 // When canonical voters are supplied, only their extension shares contribute to
-// recovery. Without that option, callers must supply already-consistent votes.
+// recovery. Non-recoverable extensions are ignored for every caller.
 func NewSignsRecoverer(votes []*Vote, opts ...func(*SignsRecoverer)) (*SignsRecoverer, error) {
 	sigs := SignsRecoverer{
 		quorumReached: true,
@@ -133,6 +144,8 @@ func (v *SignsRecoverer) addVoteExtensionSigs(vote *Vote) error {
 		if _, ok := v.canonicalVoteExtVoters[string(vote.ValidatorProTxHash)]; !ok {
 			return nil
 		}
+	} else if v.canonicalVoteExtCount != nil && len(vote.VoteExtensions) != *v.canonicalVoteExtCount {
+		return nil
 	}
 
 	if len(vote.VoteExtensions) == 0 {

@@ -818,6 +818,8 @@ func (r *Router) trackDelivery(peerID types.NodeID, envelope *Envelope) {
 	if envelope == nil || envelope.delivery == nil {
 		return
 	}
+	// The tracked set is the completion backstop when a connection closes;
+	// queue and transport notifications only shorten the normal success path.
 	delivery := envelope.delivery
 	r.deliveryMtx.Lock()
 	if r.deliveries == nil {
@@ -972,19 +974,25 @@ func (r *Router) sendPeer(ctx context.Context, peerID types.NodeID, conn Connect
 				continue
 			}
 
-			if deliveryConn, ok := conn.(interface {
-				SendMessageWithCompletion(context.Context, ChannelID, []byte, func()) error
-			}); ok && envelope.delivery != nil {
+			deliveryConn, reportsDelivery := conn.(DeliveryConnection)
+			reportsDelivery = reportsDelivery && envelope.delivery != nil
+			if reportsDelivery {
 				err = deliveryConn.SendMessageWithCompletion(
-					ctx, envelope.ChannelID, bz, envelope.NotifyDelivery,
+					ctx,
+					envelope.ChannelID,
+					bz,
+					envelope.NotifyDeliveryProgress,
+					envelope.NotifyDelivery,
 				)
 			} else {
 				err = conn.SendMessage(ctx, envelope.ChannelID, bz)
-				envelope.NotifyDelivery()
 			}
 			if err != nil {
 				envelope.NotifyDelivery()
 				return err
+			}
+			if !reportsDelivery {
+				envelope.NotifyDelivery()
 			}
 
 			// r.logger.Debug("sent message", "peer", envelope.To, "message", envelope.Message)

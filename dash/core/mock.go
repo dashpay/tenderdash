@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
-	"strconv"
 	"sync"
 
 	"github.com/dashpay/dashd-go/btcjson"
@@ -21,7 +20,12 @@ type MockClient struct {
 	localPV  types.PrivValidator
 	canSign  bool
 	mu       sync.RWMutex
-	quorums  map[string]*btcjson.QuorumInfoResult
+	quorums  map[mockQuorumKey]*btcjson.QuorumInfoResult
+}
+
+type mockQuorumKey struct {
+	quorumType btcjson.LLMQType
+	quorumHash string
 }
 
 func NewMockClient(chainID string, llmqType btcjson.LLMQType, localPV types.PrivValidator, canSign bool) *MockClient {
@@ -33,7 +37,7 @@ func NewMockClient(chainID string, llmqType btcjson.LLMQType, localPV types.Priv
 		llmqType: llmqType,
 		localPV:  localPV,
 		canSign:  canSign,
-		quorums:  make(map[string]*btcjson.QuorumInfoResult),
+		quorums:  make(map[mockQuorumKey]*btcjson.QuorumInfoResult),
 	}
 }
 
@@ -42,10 +46,10 @@ func NewMockClient(chainID string, llmqType btcjson.LLMQType, localPV types.Priv
 // valid member rather than only the local mock validator.
 func (mc *MockClient) SetValidatorSet(vals *types.ValidatorSet) {
 	if vals == nil {
-		return
+		panic("validator set must be set")
 	}
 	info := &btcjson.QuorumInfoResult{
-		Type:            strconv.Itoa(int(vals.QuorumType)),
+		Type:            vals.QuorumType.Name(),
 		QuorumHash:      vals.QuorumHash.String(),
 		QuorumPublicKey: vals.ThresholdPublicKey.HexString(),
 		Members:         make([]btcjson.QuorumMember, 0, len(vals.Validators)),
@@ -58,7 +62,7 @@ func (mc *MockClient) SetValidatorSet(vals *types.ValidatorSet) {
 		})
 	}
 	mc.mu.Lock()
-	mc.quorums[vals.QuorumHash.String()] = info
+	mc.quorums[mockQuorumKey{quorumType: vals.QuorumType, quorumHash: vals.QuorumHash.String()}] = info
 	mc.mu.Unlock()
 }
 
@@ -77,7 +81,7 @@ func (mc *MockClient) QuorumInfo(
 	quorumHash crypto.QuorumHash,
 ) (*btcjson.QuorumInfoResult, error) {
 	mc.mu.RLock()
-	info := mc.quorums[quorumHash.String()]
+	info := mc.quorums[mockQuorumKey{quorumType: quorumType, quorumHash: quorumHash.String()}]
 	mc.mu.RUnlock()
 	if info != nil {
 		return info, nil
@@ -110,7 +114,7 @@ func (mc *MockClient) QuorumInfo(
 	}
 	return &btcjson.QuorumInfoResult{
 		Height:          uint32(height),
-		Type:            strconv.Itoa(int(quorumType)),
+		Type:            quorumType.Name(),
 		QuorumHash:      quorumHash.String(),
 		Members:         members,
 		QuorumPublicKey: tpk.HexString(),

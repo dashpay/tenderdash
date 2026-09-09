@@ -56,11 +56,12 @@ type Reactor struct {
 	// store
 	stateStore sm.Store
 
-	blockExec     *sm.BlockExecutor
-	store         sm.BlockStore
-	synchronizer  *Synchronizer
-	consReactor   consensusReactor
-	blockSyncFlag *atomic.Bool
+	blockExec      *sm.BlockExecutor
+	store          sm.BlockStore
+	synchronizer   *Synchronizer
+	messageHandler *blockP2PMessageHandler
+	consReactor    consensusReactor
+	blockSyncFlag  *atomic.Bool
 
 	p2pClient  *client.Client
 	peerEvents p2p.PeerEventSubscriber
@@ -176,6 +177,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 		go r.poolRoutine(ctx, false)
 	}
 	consumer, messageHandler := consumerHandler(ctx, r.logger, r.store, r.synchronizer)
+	r.messageHandler = messageHandler
 	go func() {
 		err := r.p2pClient.Consume(ctx, consumer)
 		if err != nil {
@@ -190,6 +192,9 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 // OnStop stops the reactor by signaling to all spawned goroutines to exit and
 // blocking until they all exit.
 func (r *Reactor) OnStop() {
+	if r.messageHandler != nil {
+		r.messageHandler.stop()
+	}
 	if r.blockSyncFlag.Load() {
 		r.synchronizer.Stop()
 	}

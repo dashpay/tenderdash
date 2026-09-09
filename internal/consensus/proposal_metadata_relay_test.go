@@ -14,12 +14,12 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
-func TestSecurityProposalMetadataRelay(t *testing.T) {
+func TestProposalMetadataRelay(t *testing.T) {
 	for _, field := range []string{"control", "core_height", "state_id"} {
 		t.Run(field, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			css := makeConsensusState(ctx, t, configSetup(t), 2, "security-proposal-metadata", newTickerFunc())
+			css := makeConsensusState(ctx, t, configSetup(t), 2, "proposal-metadata", newTickerFunc())
 			node := css[1]
 			ctx = dash.ContextWithProTxHash(ctx, node.privValidator.ProTxHash)
 			sd := node.GetStateData()

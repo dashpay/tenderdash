@@ -2,6 +2,7 @@ package blocksync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -20,14 +21,11 @@ import (
 const maxPlausiblePeerHeight = int64(1) << 60
 
 const (
-	// Honest block sync pipelines up to maxPendingRequestsPerPeer requests to a
-	// peer and can issue replacements every few milliseconds. Allow that initial
-	// window and normal refill rate while bounding unsolicited request floods.
-	blockRequestsPerSecond    = 1000
-	blockRequestBurst         = maxPendingRequestsPerPeer
 	maxInFlightBlockResponses = 2
 	maxQueuedBlockResponses   = 128
 )
+
+var errStoredBlockMissingCommit = errors.New("stored block has no commit")
 
 type (
 	response func(ctx context.Context, msg proto.Message) error
@@ -40,9 +38,13 @@ type (
 	}
 
 	blockP2PMessageHandler struct {
-		logger    log.Logger
-		store     sm.BlockStore
-		peerAdder PeerAdder
+		logger     log.Logger
+		store      sm.BlockStore
+		peerAdder  PeerAdder
+		ctx        context.Context
+		cancel     context.CancelFunc
+		workers    sync.WaitGroup
+		deliveries sync.WaitGroup
 
 		responseMtx     sync.Mutex
 		responseQueues  map[types.NodeID][]blockResponseJob
@@ -65,28 +67,12 @@ func consumerHandler(
 	logger log.Logger,
 	store sm.BlockStore,
 	peerAdder PeerAdder,
-	rateLimitOptions ...client.RateLimitOptionFunc,
 ) (client.ConsumerParams, *blockP2PMessageHandler) {
-	requestCost := func(envelope *p2p.Envelope) uint {
-		if _, ok := envelope.Message.(*bcproto.BlockRequest); ok {
-			return 1
-		}
-		return 0
-	}
 	handler := newBlockP2PMessageHandler(ctx, logger, store, peerAdder)
 	return client.ConsumerParams{
 		ReadChannels: []p2p.ChannelID{p2p.BlockSyncChannel},
 		Handler: client.HandlerWithMiddlewares(
 			handler,
-			client.WithRecvRateLimitPerPeerHandlerWithBurst(
-				ctx,
-				blockRequestsPerSecond,
-				blockRequestBurst,
-				requestCost,
-				true,
-				logger,
-				rateLimitOptions...,
-			),
 			client.WithValidateMessageHandler([]p2p.ChannelID{p2p.BlockSyncChannel}),
 			client.WithErrorLoggerMiddleware(logger),
 			client.WithRecoveryMiddleware(logger),
@@ -100,19 +86,32 @@ func newBlockP2PMessageHandler(
 	store sm.BlockStore,
 	peerAdder PeerAdder,
 ) *blockP2PMessageHandler {
+	workerCtx, cancel := context.WithCancel(ctx)
 	h := &blockP2PMessageHandler{
 		logger:          logger,
 		store:           store,
 		peerAdder:       peerAdder,
+		ctx:             workerCtx,
+		cancel:          cancel,
 		responseQueues:  make(map[types.NodeID][]blockResponseJob),
 		activePeers:     make(map[types.NodeID]bool),
 		responseWake:    make(chan struct{}, 1),
 		peerConnections: make(map[types.NodeID]peerConnectionState),
 	}
 	for range maxInFlightBlockResponses {
-		go h.runBlockResponseWorker(ctx)
+		h.workers.Add(1)
+		go func() {
+			defer h.workers.Done()
+			h.runBlockResponseWorker(workerCtx)
+		}()
 	}
 	return h
+}
+
+func (h *blockP2PMessageHandler) stop() {
+	h.cancel()
+	h.workers.Wait()
+	h.deliveries.Wait()
 }
 
 // Handle handles a message from a block-sync message set
@@ -121,7 +120,7 @@ func (h *blockP2PMessageHandler) Handle(ctx context.Context, p2pClient *client.C
 	switch msg := envelope.Message.(type) {
 	case *bcproto.BlockRequest:
 		h.enqueueBlockResponse(blockResponseJob{
-			ctx:          ctx,
+			ctx:          h.ctx,
 			envelope:     *envelope,
 			resp:         resp,
 			deliveryResp: client.DeliveryResponseFuncFromEnvelope(p2pClient, envelope),
@@ -151,30 +150,29 @@ func (h *blockP2PMessageHandler) Handle(ctx context.Context, p2pClient *client.C
 	return nil
 }
 
-func (h *blockP2PMessageHandler) serveBlockRequest(job blockResponseJob) error {
+func (h *blockP2PMessageHandler) prepareBlockResponse(job blockResponseJob) (proto.Message, bool, error) {
 	envelope := &job.envelope
 	msg := envelope.Message.(*bcproto.BlockRequest)
 	block := h.store.LoadBlock(msg.Height)
 	if !h.connectionIsCurrent(envelope.From, envelope.ConnID) {
-		return nil
+		return nil, false, nil
 	}
 	if block == nil {
 		h.logger.Debug("peer requesting a block we do not have", "peer", envelope.From, "height", msg.Height)
-		return job.resp(job.ctx, &bcproto.NoBlockResponse{Height: msg.Height})
+		return &bcproto.NoBlockResponse{Height: msg.Height}, false, nil
 	}
 	commit := h.store.LoadSeenCommitAt(msg.Height)
 	if commit == nil {
-		return fmt.Errorf("found block in store with no commit: %v", block)
+		return nil, false, fmt.Errorf("%w at height %d", errStoredBlockMissingCommit, msg.Height)
 	}
 	blockProto, err := block.ToProto()
 	if err != nil {
-		return fmt.Errorf("failed to convert block to protobuf: %w", err)
+		return nil, false, fmt.Errorf("failed to convert block to protobuf: %w", err)
 	}
-	response := &bcproto.BlockResponse{
+	return &bcproto.BlockResponse{
 		Block:  blockProto,
 		Commit: commit.ToProto(),
-	}
-	return job.deliveryResp(job.ctx, response)
+	}, true, nil
 }
 
 func (h *blockP2PMessageHandler) enqueueBlockResponse(job blockResponseJob) {
@@ -212,8 +210,15 @@ func (h *blockP2PMessageHandler) runBlockResponseWorker(ctx context.Context) {
 		peerID, job, ok := h.nextBlockResponse()
 		if ok {
 			if job.ctx.Err() == nil && h.connectionIsCurrent(peerID, job.envelope.ConnID) {
-				if err := h.serveBlockRequest(job); err != nil {
-					h.logger.Debug("failed to serve block request", "peer", peerID, "err", err)
+				message, waitForDelivery, err := h.prepareBlockResponse(job)
+				if err != nil {
+					h.logBlockResponseError(peerID, err)
+				} else if message != nil && waitForDelivery && job.ctx.Err() == nil {
+					h.deliveries.Add(1)
+					go h.deliverBlockResponse(peerID, job, message)
+					continue
+				} else if message != nil {
+					h.logBlockResponseError(peerID, job.resp(job.ctx, message))
 				}
 			}
 			h.finishBlockResponse(peerID)
@@ -224,6 +229,30 @@ func (h *blockP2PMessageHandler) runBlockResponseWorker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		}
+	}
+}
+
+func (h *blockP2PMessageHandler) deliverBlockResponse(
+	peerID types.NodeID,
+	job blockResponseJob,
+	message proto.Message,
+) {
+	defer h.deliveries.Done()
+	defer h.finishBlockResponse(peerID)
+	h.logBlockResponseError(peerID, job.deliveryResp(job.ctx, message))
+}
+
+func (h *blockP2PMessageHandler) logBlockResponseError(peerID types.NodeID, err error) {
+	if err == nil {
+		return
+	}
+	switch {
+	case errors.Is(err, errStoredBlockMissingCommit):
+		h.logger.Error("cannot serve block because its commit is missing", "peer", peerID, "err", err)
+	case errors.Is(err, client.ErrDeliveryStalled):
+		h.logger.Warn("stopped serving a peer after outbound delivery stalled", "peer", peerID, "err", err)
+	default:
+		h.logger.Debug("failed to serve block request", "peer", peerID, "err", err)
 	}
 }
 

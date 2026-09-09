@@ -187,6 +187,19 @@ func (vals *ValidatorSet) HasCompletePublicKeys() bool {
 	return true
 }
 
+// HasAnyPublicKeys reports whether at least one validator carries a public-key share.
+func (vals *ValidatorSet) HasAnyPublicKeys() bool {
+	if vals == nil {
+		return false
+	}
+	for _, val := range vals.Validators {
+		if val != nil && val.PubKey != nil && len(val.PubKey.Bytes()) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // validateThreshold sanity-checks the quorum voting threshold against the total
 // voting power.
 //
@@ -312,20 +325,42 @@ func (vals *ValidatorSet) IsNilOrEmpty() bool {
 
 // ThresholdPublicKeyValid returns true if threshold public key is valid.
 func (vals *ValidatorSet) ThresholdPublicKeyValid() error {
+	return vals.thresholdPublicKeyValid(vals.HasPublicKeys)
+}
+
+// ValidatePublicKeys validates every share and reconstructs the threshold key.
+// It is independent of HasPublicKeys so callers can validate network data before
+// trusting that serialized availability flag.
+func (vals *ValidatorSet) ValidatePublicKeys() error {
+	if vals.IsNilOrEmpty() {
+		return ErrValidatorSetNilOrEmpty
+	}
+	for idx, val := range vals.Validators {
+		if val == nil {
+			return fmt.Errorf("invalid validator pub key #%d: validator is nil", idx)
+		}
+		if err := val.ValidatePubKey(); err != nil {
+			return fmt.Errorf("invalid validator pub key #%d: %w", idx, err)
+		}
+	}
+	return vals.thresholdPublicKeyValid(true)
+}
+
+func (vals *ValidatorSet) thresholdPublicKeyValid(hasPublicKeys bool) error {
 	if vals.ThresholdPublicKey == nil {
 		return errors.New("threshold public key is not set")
 	}
 	if len(vals.ThresholdPublicKey.Bytes()) != bls12381.PubKeySize {
 		return errors.New("threshold public key is wrong size")
 	}
-	if len(vals.Validators) == 1 && vals.HasPublicKeys {
+	if len(vals.Validators) == 1 && hasPublicKeys {
 		if vals.Validators[0].PubKey == nil {
 			return errors.New("validator public key is not set")
 		}
 		if !vals.Validators[0].PubKey.Equals(vals.ThresholdPublicKey) {
 			return errors.New("incorrect threshold public key")
 		}
-	} else if len(vals.Validators) > 1 && vals.HasPublicKeys {
+	} else if len(vals.Validators) > 1 && hasPublicKeys {
 		// if we have validators and our node is in the validator set then verify the recovered threshold public key
 		recoveredThresholdPublicKey, err := bls12381.RecoverThresholdPublicKeyFromPublicKeys(
 			vals.GetPublicKeys(),
