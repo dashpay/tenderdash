@@ -53,7 +53,7 @@ type Gossiper_GossipBlockPartsForCatchup_Call struct {
 //   - ctx context.Context
 //   - rs types.RoundState
 //   - prs *types.PeerRoundState
-func (_e *Gossiper_Expecter) GossipBlockPartsForCatchup(ctx interface{}, rs interface{}, prs interface{}) *Gossiper_GossipBlockPartsForCatchup_Call {
+func (_e *Gossiper_Expecter) GossipBlockPartsForCatchup(ctx any, rs any, prs any) *Gossiper_GossipBlockPartsForCatchup_Call {
 	return &Gossiper_GossipBlockPartsForCatchup_Call{Call: _e.mock.On("GossipBlockPartsForCatchup", ctx, rs, prs)}
 }
 
@@ -105,7 +105,7 @@ type Gossiper_GossipCommit_Call struct {
 //   - ctx context.Context
 //   - rs types.RoundState
 //   - prs *types.PeerRoundState
-func (_e *Gossiper_Expecter) GossipCommit(ctx interface{}, rs interface{}, prs interface{}) *Gossiper_GossipCommit_Call {
+func (_e *Gossiper_Expecter) GossipCommit(ctx any, rs any, prs any) *Gossiper_GossipCommit_Call {
 	return &Gossiper_GossipCommit_Call{Call: _e.mock.On("GossipCommit", ctx, rs, prs)}
 }
 
@@ -157,7 +157,7 @@ type Gossiper_GossipProposal_Call struct {
 //   - ctx context.Context
 //   - rs types.RoundState
 //   - prs *types.PeerRoundState
-func (_e *Gossiper_Expecter) GossipProposal(ctx interface{}, rs interface{}, prs interface{}) *Gossiper_GossipProposal_Call {
+func (_e *Gossiper_Expecter) GossipProposal(ctx any, rs any, prs any) *Gossiper_GossipProposal_Call {
 	return &Gossiper_GossipProposal_Call{Call: _e.mock.On("GossipProposal", ctx, rs, prs)}
 }
 
@@ -209,7 +209,7 @@ type Gossiper_GossipProposalBlockParts_Call struct {
 //   - ctx context.Context
 //   - rs types.RoundState
 //   - prs *types.PeerRoundState
-func (_e *Gossiper_Expecter) GossipProposalBlockParts(ctx interface{}, rs interface{}, prs interface{}) *Gossiper_GossipProposalBlockParts_Call {
+func (_e *Gossiper_Expecter) GossipProposalBlockParts(ctx any, rs any, prs any) *Gossiper_GossipProposalBlockParts_Call {
 	return &Gossiper_GossipProposalBlockParts_Call{Call: _e.mock.On("GossipProposalBlockParts", ctx, rs, prs)}
 }
 
@@ -261,7 +261,7 @@ type Gossiper_GossipVote_Call struct {
 //   - ctx context.Context
 //   - rs types.RoundState
 //   - prs *types.PeerRoundState
-func (_e *Gossiper_Expecter) GossipVote(ctx interface{}, rs interface{}, prs interface{}) *Gossiper_GossipVote_Call {
+func (_e *Gossiper_Expecter) GossipVote(ctx any, rs any, prs any) *Gossiper_GossipVote_Call {
 	return &Gossiper_GossipVote_Call{Call: _e.mock.On("GossipVote", ctx, rs, prs)}
 }
 
@@ -313,7 +313,7 @@ type Gossiper_GossipVoteSetMaj23_Call struct {
 //   - ctx context.Context
 //   - rs types.RoundState
 //   - prs *types.PeerRoundState
-func (_e *Gossiper_Expecter) GossipVoteSetMaj23(ctx interface{}, rs interface{}, prs interface{}) *Gossiper_GossipVoteSetMaj23_Call {
+func (_e *Gossiper_Expecter) GossipVoteSetMaj23(ctx any, rs any, prs any) *Gossiper_GossipVoteSetMaj23_Call {
 	return &Gossiper_GossipVoteSetMaj23_Call{Call: _e.mock.On("GossipVoteSetMaj23", ctx, rs, prs)}
 }
 

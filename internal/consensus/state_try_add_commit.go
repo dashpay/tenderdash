@@ -1,6 +1,7 @@
 package consensus
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -157,6 +158,54 @@ func commitVerifyFailureReason(err error) string {
 	}
 }
 
+// verifyCommitBlock checks that commit.BlockID describes the block this round
+// holds. A BlockID has three fields and each is asked separately, so an operator
+// is told which one disagreed; a single combined comparison would report only
+// that something did.
+//
+// A false return with a nil error means the block has not arrived yet, which is
+// the ordinary case for a commit that overtook it.
+func verifyCommitBlock(
+	ctx context.Context,
+	logger log.Logger,
+	stateData *StateData,
+	commit *types.Commit,
+) (bool, error) {
+	block, blockParts := stateData.ProposalBlock, stateData.ProposalBlockParts
+	if block == nil {
+		return false, nil
+	}
+	if !blockParts.HasHeader(commit.BlockID.PartSetHeader) {
+		return false, fmt.Errorf("expected ProposalBlockParts header to be commit header")
+	}
+	proTxHash := dash.MustProTxHashFromContext(ctx)
+	if !block.HashesTo(commit.BlockID.Hash) {
+		logger.Error("proposal block does not hash to commit hash",
+			"height", commit.Height,
+			"node_proTxHash", proTxHash.ShortString(),
+			"block", block,
+			"commit", commit,
+			"complete_proposal", stateData.isProposalComplete(),
+		)
+		return false, fmt.Errorf("cannot finalize commit; proposal block does not hash to commit hash")
+	}
+	// The third field, and the only one nothing else here would notice. A commit
+	// agreeing on hash and part set header while naming a different state ID is
+	// applied against this block and then recorded carrying its own BlockID. The
+	// next height compares that record against the state this block produced;
+	// they disagree, and no proposer at any round can satisfy both.
+	if !bytes.Equal(block.StateID().Hash(), commit.BlockID.StateID) {
+		logger.Error("commit state ID does not match the block it commits",
+			"height", commit.Height,
+			"node_proTxHash", proTxHash.ShortString(),
+			"block_state_id", block.StateID().Hash(),
+			"commit_state_id", commit.BlockID.StateID,
+		)
+		return false, fmt.Errorf("cannot finalize commit; proposal block state ID does not match commit state ID")
+	}
+	return true, nil
+}
+
 // prepareCommitForApply verifies the commit and, unless ignoreProposalBlock, the
 // block it names: it runs that block through the application, so a true return
 // means the block is processed and validated, not merely that a signature checked
@@ -180,23 +229,8 @@ func (cs *TryAddCommitAction) prepareCommitForApply(
 	if ignoreProposalBlock {
 		return true, nil
 	}
-	block, blockParts := stateData.ProposalBlock, stateData.ProposalBlockParts
-	if block == nil {
-		return false, nil
-	}
-	if !blockParts.HasHeader(commit.BlockID.PartSetHeader) {
-		return false, errors.New("expected ProposalBlockParts header to be commit header")
-	}
-	proTxHash := dash.MustProTxHashFromContext(ctx)
-	if !block.HashesTo(commit.BlockID.Hash) {
-		cs.logger.Error("proposal block does not hash to commit hash",
-			"height", commit.Height,
-			"node_proTxHash", proTxHash.ShortString(),
-			"block", block,
-			"commit", commit,
-			"complete_proposal", stateData.isProposalComplete(),
-		)
-		return false, errors.New("cannot finalize commit; proposal block does not hash to commit hash")
+	if verified, err := verifyCommitBlock(ctx, cs.logger, stateData, commit); !verified || err != nil {
+		return verified, err
 	}
 	// We have a correct block, let's process it before applying the commit
 	err = cs.blockExec.ensureProcess(ctx, &stateData.RoundState, commit.Round)

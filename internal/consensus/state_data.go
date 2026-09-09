@@ -437,6 +437,8 @@ func (s *StateData) readyToApplyCommit(
 		return false, fmt.Errorf("error validating commit: %w", err)
 	}
 
+	// Keep a stable snapshot for the checks below; authenticated commit handling
+	// may clear proposal metadata on the live StateData.
 	rs := s.RoundState
 	stateHeight := s.Height
 
@@ -487,8 +489,8 @@ func (s *StateData) readyToApplyCommit(
 	}
 
 	// A Proposal attests which block the round is collecting, not that it has
-	// arrived, so holding the block is the whole question. StateID needs no
-	// separate check: the signature above ran against the full commit.BlockID.
+	// arrived, so first check whether the block is held. The caller then checks
+	// every BlockID field against that block before processing it.
 	if s.holdsProposalBlock(commit.BlockID) {
 		return true, nil
 	}

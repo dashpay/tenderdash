@@ -111,6 +111,43 @@ func (suite *ProposalerTestSuite) TearDownTest() {
 	suite.msgInfoQueue.stop()
 }
 
+func (suite *ProposalerTestSuite) TestSetChecksAlreadyAssembledBlock() {
+	ctx := context.Background()
+	block := suite.blockH100R0
+	parts, err := block.MakePartSet(types.BlockPartSizeBytes)
+	suite.Require().NoError(err)
+	for _, field := range []string{"state_id", "hash", "part_set", "core_height"} {
+		suite.Run(field, func() {
+			proposal := makeProposal(block.Height, 0, -1, block, parts)
+			switch field {
+			case "state_id", "hash":
+				proposal.BlockID = forgeField(suite.T(), proposal.BlockID, field)
+			case "part_set":
+				proposal.BlockID.PartSetHeader.Total++
+			case "core_height":
+				proposal.CoreChainLockedHeight++
+			}
+			suite.signProposal(ctx, proposal)
+			rs := cstypes.RoundState{
+				Height:             block.Height,
+				Round:              0,
+				Validators:         suite.mockValSet,
+				ProposerSelector:   suite.proposerSelector,
+				ProposalBlock:      block,
+				ProposalBlockParts: parts,
+			}
+			suite.Require().Error(suite.proposer.Set(ctx, proposal, block.Time, &rs))
+			suite.Require().Nil(rs.Proposal, "a late proposal must pass the same checks as an early one")
+			suite.Require().True(rs.ProposalReceiveTime.IsZero())
+			suite.Require().Same(block, rs.ProposalBlock)
+			honest := makeProposal(block.Height, 0, -1, block, parts)
+			suite.signProposal(ctx, honest)
+			suite.Require().NoError(suite.proposer.Set(ctx, honest, block.Time, &rs))
+			suite.Require().Same(honest, rs.Proposal, "rejection must leave room for the matching proposal")
+		})
+	}
+}
+
 func (suite *ProposalerTestSuite) TestSet() {
 	ctx := context.Background()
 	blockID := suite.blockH100R0.BlockID(nil)
@@ -207,6 +244,21 @@ func (suite *ProposalerTestSuite) TestSet() {
 				Validators:       suite.mockValSet,
 				ProposerSelector: suite.proposerSelector,
 				Commit:           &types.Commit{Height: 100, Round: 1, BlockID: factory.MakeBlockID()},
+			},
+			proposal:        *proposalH100R0,
+			receivedAt:      receivedAt,
+			wantProposal:    proposalH100R0,
+			wantReceiveTime: receivedAt,
+		},
+		{
+			// A matching proposal remains admissible during committed-block download.
+			rs: cstypes.RoundState{
+				Height:             100,
+				Round:              0,
+				Validators:         suite.mockValSet,
+				ProposerSelector:   suite.proposerSelector,
+				Commit:             &types.Commit{Height: 100, BlockID: blockID},
+				ProposalBlockParts: types.NewPartSetFromHeader(blockID.PartSetHeader),
 			},
 			proposal:        *proposalH100R0,
 			receivedAt:      receivedAt,
