@@ -23,6 +23,13 @@ type blockQueue struct {
 	fetchHeight  int64
 	verifyHeight int64
 
+	// maxFetchAhead bounds how many heights may be allocated for fetching but not
+	// yet verified. Fetching a light block is cheap beside verifying one, which
+	// pays a BLS commit check on a single serialized loop, so a peer set serving
+	// faster than this node verifies would otherwise grow pending across the whole
+	// backfill span.
+	maxFetchAhead int64
+
 	// termination conditions
 	initialHeight int64
 	stopHeight    int64
@@ -55,13 +62,17 @@ func newBlockQueue(
 	startHeight, stopHeight, initialHeight int64,
 	stopTime time.Time,
 	maxRetries int,
+	maxFetchAhead int64,
 ) *blockQueue {
+	// A bound below one would allocate nothing and stall the run outright.
+	maxFetchAhead = max(maxFetchAhead, 1)
 	return &blockQueue{
 		stopHeight:    stopHeight,
 		initialHeight: initialHeight,
 		stopTime:      stopTime,
 		fetchHeight:   startHeight,
 		verifyHeight:  startHeight,
+		maxFetchAhead: maxFetchAhead,
 		pending:       make(map[int64]lightBlockResponse),
 		failed:        &maxIntHeap{},
 		retries:       0,
@@ -116,28 +127,66 @@ func (q *blockQueue) nextHeight() <-chan int64 {
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
 	ch := make(chan int64, 1)
-	// if a previous process failed then we pick up this one
-	if q.failed.Len() > 0 {
-		failedHeight := heap.Pop(q.failed)
-		ch <- failedHeight.(int64)
+
+	if height, ok := q._allocate(); ok {
+		ch <- height
 		close(ch)
 		return ch
+	}
+
+	// at this point there is no height this fetcher may take, so we create a
+	// waiter to hold out for an outgoing request to fail, a block to fail
+	// verification, or verification to make room for another fetch
+	q.waiters = append(q.waiters, ch)
+	return ch
+}
+
+// _allocate returns the next height a fetcher should request, and whether there
+// is one it may take.
+//
+// A height that needs re-fetching comes first and is never withheld by the bound:
+// it is already counted against it, and the verify loop cannot advance past it,
+// so holding it back would deadlock the run.
+//
+// A fresh height is handed out only while the fetched-but-unverified backlog
+// leaves room for it. That is what stops fetching - which costs a round trip -
+// from racing ahead of verification - which costs a BLS commit check on one
+// serialized loop - across the whole backfill span.
+// CONTRACT: must have a write lock.
+func (q *blockQueue) _allocate() (int64, bool) {
+	// if a previous process failed then we pick up this one
+	if q.failed.Len() > 0 {
+		return heap.Pop(q.failed).(int64), true
 	}
 
 	// we check initialHeight instead of startHeight as also need to address the startTime which we don't have here
-	if q.terminal == nil && q.fetchHeight >= q.initialHeight {
-		// return and decrement the fetch height
-		ch <- q.fetchHeight
-		q.fetchHeight--
-		close(ch)
-		return ch
+	if q.terminal != nil || q.fetchHeight < q.initialHeight {
+		return 0, false
+	}
+	// heights descend, so this difference is the count allocated but not yet verified
+	if q.verifyHeight-q.fetchHeight >= q.maxFetchAhead {
+		return 0, false
 	}
 
-	// at this point there is no height that we know we need so we create a
-	// waiter to hold out for either an outgoing request to fail or a block to
-	// fail verification
-	q.waiters = append(q.waiters, ch)
-	return ch
+	// return and decrement the fetch height
+	height := q.fetchHeight
+	q.fetchHeight--
+	return height, true
+}
+
+// _resumeFetchers hands parked fetchers the heights that verification progress
+// has just made room for.
+// CONTRACT: must have a write lock.
+func (q *blockQueue) _resumeFetchers() {
+	for len(q.waiters) > 0 {
+		height, ok := q._allocate()
+		if !ok {
+			return
+		}
+		q.waiters[0] <- height
+		close(q.waiters[0])
+		q.waiters = q.waiters[1:]
+	}
 }
 
 // Finished returns true when the block queue has has all light blocks retrieved,
@@ -264,6 +313,8 @@ func (q *blockQueue) success() {
 		q._closeChannels()
 	}
 	q.verifyHeight--
+	// one fewer height outstanding, so the bound now has room for another fetch
+	q._resumeFetchers()
 }
 
 // fail terminates the queue with a definitive error. It is used when backfill

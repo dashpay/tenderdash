@@ -1340,6 +1340,23 @@ func TestReactor_Backfill_ReportsRefusalsBySeverity(t *testing.T) {
 			why:       "the bound is this build's ceiling on its own work, not a rule the peer broke",
 		},
 		{
+			// A DEFAULT extension is dropped from the sign items, being no threshold
+			// type, while its signature is still counted - which is how a peer running
+			// a different extension configuration reaches this error.
+			name: "vote-extension count this build does not agree with",
+			tamper: func(lb *types.LightBlock) {
+				lb.Commit.ThresholdVoteExtensions = append(lb.Commit.ThresholdVoteExtensions,
+					&tmproto.VoteExtension{
+						Type:      tmproto.VoteExtensionType_DEFAULT,
+						Extension: []byte("an extension configuration this node does not share"),
+						Signature: make([]byte, types.SignatureSize),
+					})
+			},
+			wantIn:    "doesn't match recoverable vote extensions",
+			wantFatal: false,
+			why:       "an honest peer disagreeing about extension count must not be disconnected",
+		},
+		{
 			name: "forged threshold block signature",
 			tamper: func(lb *types.LightBlock) {
 				forged := make([]byte, len(lb.Commit.ThresholdBlockSignature))
