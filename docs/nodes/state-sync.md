@@ -30,6 +30,12 @@ be configured with a Dash Core RPC connection or it will refuse to start: set
 `[priv-validator]` section of `config.toml`. Validator nodes already have this
 connection configured.
 
+Dash Core is also what authenticates quorum membership and public key shares
+before validator state received from peers is installed. If genesis configures
+`VotingPowerThreshold`, the threshold received during state sync must match the
+locally stored genesis value; it cannot be learned safely from a remote
+state-sync provider.
+
 Under the `[statesync]` section in `config.toml` you will find the settings
 that need to be configured in order for your node to use state sync.
 
