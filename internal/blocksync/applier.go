@@ -64,6 +64,7 @@ func newBlockApplier(blockExec sm.Executor, store sm.BlockStore, opts ...applier
 func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *types.Commit) error {
 	e.mtx.Lock()
 	defer e.mtx.Unlock()
+	defer func() { e.lastDone = time.Now() }()
 
 	// Time between the end of the previous apply and the start of this one. With
 	// a fast application this is what the sync rate is actually limited by, and
@@ -106,7 +107,6 @@ func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *ty
 	// ByteSize is the size of the serialized block we just built, so the metric
 	// costs nothing extra here
 	e.metrics.RecordConsMetrics(block, blockParts.ByteSize())
-	e.lastDone = time.Now()
 	return nil
 }
 

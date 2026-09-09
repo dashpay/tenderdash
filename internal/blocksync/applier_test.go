@@ -155,8 +155,8 @@ func TestApplyStatsSubMillisecondPreserved(t *testing.T) {
 // TestBlockApplierRecordsStageMetrics checks that a successful apply records
 // one sample per stage of the pipeline, that the verify stage is split into
 // the commit signature check and block validation, and that the idle time
-// between blocks is only recorded once there is a previous block to measure
-// from.
+// between attempts excludes failed applies and is only recorded once there is
+// a previous attempt to measure from.
 func TestBlockApplierRecordsStageMetrics(t *testing.T) {
 	ctx := context.Background()
 	mockBlockExec := mocks.NewExecutor(t)
@@ -187,10 +187,24 @@ func TestBlockApplierRecordsStageMetrics(t *testing.T) {
 	}
 	require.Empty(t, hist.Samples["wait"], "there is no previous block to wait from on the first apply")
 
-	// the second apply has a previous block, so the idle time between the two
-	// is measured as well
-	require.NoError(t, applier.Apply(ctx, blockH1, commitH1))
+	// A failed attempt must advance the idle-time boundary as well, so a retry
+	// does not count the failed attempt's wait and verification time again.
+	failureStart := time.Now()
+	require.Error(t, applier.Apply(ctx, blockH1, new(types.Commit)))
+	failureEnd := time.Now()
+	failureDone := applier.lastDone
+	require.False(t, failureDone.Before(failureStart), "failed apply must advance lastDone")
+	require.False(t, failureDone.After(failureEnd), "lastDone must be set before Apply returns")
 	require.Len(t, hist.Samples["wait"], 1)
+
+	// The retry measures only the idle time after the failed attempt.
+	retryStart := time.Now()
+	require.NoError(t, applier.Apply(ctx, blockH1, commitH1))
+	retryEnd := time.Now()
+	require.Len(t, hist.Samples["wait"], 2)
+	wait := hist.Samples["wait"][1]
+	require.GreaterOrEqual(t, wait, float64(retryStart.Sub(failureDone))/float64(time.Millisecond))
+	require.LessOrEqual(t, wait, float64(retryEnd.Sub(failureDone))/float64(time.Millisecond))
 	require.Len(t, hist.Samples["exec"], 2)
 }
 

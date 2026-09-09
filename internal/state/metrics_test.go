@@ -19,15 +19,16 @@ func TestStageTimerAttributesEachIntervalOnce(t *testing.T) {
 	m.BlockApplyStageDuration = h
 
 	timer := m.startStages()
-	time.Sleep(20 * time.Millisecond)
+	start := timer.last
 	timer.done("first")
-	time.Sleep(2 * time.Millisecond)
+	firstDone := timer.last
 	timer.done("second")
+	secondDone := timer.last
 
 	require.Len(t, h.Samples["first"], 1)
 	require.Len(t, h.Samples["second"], 1)
-	require.GreaterOrEqual(t, h.Samples["first"][0], 20.0, "first stage covers its own sleep, in ms")
-	require.Less(t, h.Samples["second"][0], 20.0, "second stage must not include the first")
+	require.Equal(t, float64(firstDone.Sub(start))/float64(time.Millisecond), h.Samples["first"][0])
+	require.Equal(t, float64(secondDone.Sub(firstDone))/float64(time.Millisecond), h.Samples["second"][0])
 }
 
 // TestStageTimerNopMetricsIsSilent guards the default: with NopMetrics the
