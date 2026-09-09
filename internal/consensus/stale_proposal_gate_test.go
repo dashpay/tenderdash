@@ -99,9 +99,8 @@ func TestCompletingPartSetIsNotJudgedAgainstAnotherBlocksProposal(t *testing.T) 
 // the handling does not depend on the cause. That is the property being bought:
 // the outcome is safe without the diagnosis being complete.
 //
-// The block survives either way. It is authenticated by the part set header,
-// the completing part is spent by the time the comparison runs, and dropping
-// the proposal is what lets an honest copy be accepted afterwards.
+// The block survives either way. It is authenticated by the signed hash and
+// part set header, so the unsigned metadata is repaired from the block bytes.
 func TestProposalDisagreeingAboutChainLockDoesNotCostTheBlock(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -138,10 +137,11 @@ func TestProposalDisagreeingAboutChainLockDoesNotCostTheBlock(t *testing.T) {
 		"the block is authenticated by the part set header and must be kept")
 	assert.True(t, stateData.ProposalBlock.HashesTo(block.Hash()),
 		"the block kept must be the one the parts carried")
-	assert.Nil(t, stateData.Proposal,
-		"the proposal must be cleared, which is what lets an honest copy be accepted")
-	assert.True(t, stateData.ProposalReceiveTime.IsZero(),
-		"the receive time goes with the proposal it measures")
-	assert.False(t, stateData.isProposalComplete(),
-		"the round prevotes nil and advances rather than stalling on a spent part set")
+	require.NotNil(t, stateData.Proposal)
+	assert.Equal(t, block.CoreChainLockedHeight, stateData.Proposal.CoreChainLockedHeight,
+		"unsigned chain-lock metadata must be repaired from the block")
+	assert.True(t, stateData.Proposal.BlockID.Equals(block.BlockID(parts)),
+		"unsigned StateID must be repaired from the block")
+	assert.False(t, stateData.ProposalReceiveTime.IsZero())
+	assert.True(t, stateData.isProposalComplete())
 }

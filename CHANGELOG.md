@@ -2,6 +2,9 @@
 
 ### Bug Fixes
 
+- Bound stalled block-response cleanup while allowing actively progressing transfers to continue.
+- Authenticate state-sync validator thresholds against locally stored genesis parameters.
+- Reject partially populated validator public-key shares in light blocks.
 - Apply valid late commits when the complete block is retained after rejecting conflicting proposal metadata, and fetch the committed block if it differs from the retained one.
 - Check complete block IDs before applying commits and validate proposals arriving after their blocks (#1439).
 - Bound how far statesync backfill fetches ahead of verification, so peers serving faster than this node verifies cannot grow the fetched-but-unverified backlog across the whole backfill span.
@@ -625,4 +628,3 @@
 ### Build
 
 - Bump github.com/stretchr/testify from 1.8.2 to 1.9.0 (#817)
-

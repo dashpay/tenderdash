@@ -354,5 +354,25 @@ func (c *MemoryConnection) SendMessage(ctx context.Context, chID ChannelID, msg 
 	}
 }
 
+// SendMessageWithCompletion implements DeliveryConnection.
+func (c *MemoryConnection) SendMessageWithCompletion(
+	ctx context.Context,
+	chID ChannelID,
+	msg []byte,
+	onProgress func(),
+	onSent func(),
+) error {
+	if err := c.SendMessage(ctx, chID, msg); err != nil {
+		return err
+	}
+	if onProgress != nil {
+		onProgress()
+	}
+	if onSent != nil {
+		onSent()
+	}
+	return nil
+}
+
 // Close implements Connection.
 func (c *MemoryConnection) Close() error { c.closeFn(); return nil }

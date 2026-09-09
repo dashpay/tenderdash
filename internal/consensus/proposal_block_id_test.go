@@ -97,11 +97,10 @@ func TestRoundStateBlockIDPrefersTheBlockItHolds(t *testing.T) {
 	})
 }
 
-// TestCompletedBlockDropsAProposalThatMisdescribesIt covers the other half: the
-// round state must not go on holding a Proposal whose BlockID the assembled block
-// contradicts. Dropping it leaves isProposalComplete false, so the round prevotes
-// nil on timeoutPropose rather than voting for a block ID nothing verified.
-func TestCompletedBlockDropsAProposalThatMisdescribesIt(t *testing.T) {
+// TestCompletedBlockRepairsUnsignedProposalStateID covers the legacy proposal
+// format, where StateID is not in the proposer sign bytes. A relay may alter it,
+// so the completed block is the authority and repairs the proposal slot.
+func TestCompletedBlockRepairsUnsignedProposalStateID(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	config := configSetup(t)
@@ -118,6 +117,8 @@ func TestCompletedBlockDropsAProposalThatMisdescribesIt(t *testing.T) {
 		"an honest proposer derives the block ID from the block and its parts")
 
 	proposal.BlockID = forgeField(t, honest, "state_id")
+	receivedProposal := proposal
+	forged := proposal.BlockID.Copy()
 
 	stateData = cs.GetStateData()
 	stateData.Proposal = proposal
@@ -134,10 +135,13 @@ func TestCompletedBlockDropsAProposalThatMisdescribesIt(t *testing.T) {
 	}
 
 	require.NotNil(t, stateData.ProposalBlock, "the block is the bytes; it is kept")
-	assert.Nil(t, stateData.Proposal,
-		"a proposal whose block ID the assembled block contradicts must not survive")
-	assert.True(t, stateData.ProposalReceiveTime.IsZero(),
-		"the receive time goes with the proposal it measures")
-	assert.False(t, stateData.isProposalComplete(),
-		"without a proposal the round prevotes nil rather than a block ID nothing verified")
+	require.NotNil(t, stateData.Proposal)
+	assert.NotSame(t, receivedProposal, stateData.Proposal,
+		"repair must publish a copy because gossip workers may retain the original proposal")
+	assert.True(t, receivedProposal.BlockID.Equals(forged),
+		"repair must not mutate a proposal visible to concurrent readers")
+	assert.True(t, stateData.Proposal.BlockID.Equals(honest),
+		"unsigned metadata must be derived from the completed block")
+	assert.False(t, stateData.ProposalReceiveTime.IsZero())
+	assert.True(t, stateData.isProposalComplete())
 }
