@@ -4,6 +4,7 @@
 
 - Apply valid late commits when the complete block is retained after rejecting conflicting proposal metadata, and fetch the committed block if it differs from the retained one.
 - Check complete block IDs before applying commits and validate proposals arriving after their blocks (#1439).
+- Bound how far statesync backfill fetches ahead of verification, so peers serving faster than this node verifies cannot grow the fetched-but-unverified backlog across the whole backfill span.
 
 ## [1.7.0] - 2026-08-17
 

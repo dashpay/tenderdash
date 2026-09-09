@@ -67,6 +67,13 @@ const (
 	// the backfill process aborts
 	maxLightBlockRequestRetries = 20
 
+	// backfillFetchAheadPerFetcher scales the queue's fetch-ahead bound with the
+	// number of fetch workers. The bound has to exceed the worker count or workers
+	// sit idle; the slack above it is the buffer that keeps the verify loop fed
+	// while every worker is waiting on the network. Anything beyond that buys no
+	// throughput and only holds light blocks in memory.
+	backfillFetchAheadPerFetcher = 4
+
 	// backfillSleepTime uses to sleep if no connected peers to fetch light blocks
 	backfillSleepTime = 1 * time.Second
 
@@ -573,7 +580,14 @@ func (r *Reactor) backfill(
 		lastChangeHeight = startHeight
 	)
 
-	queue := newBlockQueue(startHeight, stopHeight, initialHeight, stopTime, maxLightBlockRequestRetries)
+	queue := newBlockQueue(
+		startHeight,
+		stopHeight,
+		initialHeight,
+		stopTime,
+		maxLightBlockRequestRetries,
+		int64(r.cfg.Fetchers)*backfillFetchAheadPerFetcher,
+	)
 
 	ctxWithCancel, cancel := context.WithCancel(ctx)
 	defer cancel()
