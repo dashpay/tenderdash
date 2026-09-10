@@ -180,6 +180,7 @@ for applications built w/ Cosmos SDK).
 			if err != nil {
 				return err
 			}
+			p.AllowedOrigins = conf.RPC.CORSAllowedOrigins
 
 			ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer cancel()

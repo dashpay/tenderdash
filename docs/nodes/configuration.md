@@ -135,6 +135,11 @@ laddr = "tcp://127.0.0.1:26657"
 # Use '["*"]' to allow any origin
 cors-allowed-origins = []
 
+# This list also permits browser WebSocket origins for `tenderdash light <chainID>`.
+# An empty list rejects all requests carrying Origin, including same-host requests.
+# Clients without Origin remain supported. Add explicit browser origins as needed;
+# wildcard matching follows RPC CORS rules, and ["*"] explicitly allows any origin.
+
 # A list of methods the client is allowed to use with cross-domain requests
 cors-allowed-methods = ["HEAD", "GET", "POST", ]
 

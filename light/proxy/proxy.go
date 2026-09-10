@@ -22,6 +22,11 @@ type Proxy struct {
 	Client   *lrpc.Client
 	Logger   log.Logger
 	Listener net.Listener
+
+	// AllowedOrigins permits browser WebSocket origins using RPC CORS matching
+	// rules. Empty rejects every Origin-bearing request; Origin-less clients
+	// are accepted. Set before serving; a "*" entry explicitly allows all origins.
+	AllowedOrigins []string
 }
 
 // NewProxy creates the struct used to run an HTTP server for serving light
@@ -105,13 +110,7 @@ func (p *Proxy) listen(ctx context.Context) (net.Listener, *http.ServeMux, error
 		}),
 		rpcserver.ReadLimit(p.Config.MaxBodyBytes),
 	)
-	// Preserve the light proxy's historic permissive websocket origin policy:
-	// allow every origin. The proxy is configured via rpcserver.Config, which
-	// exposes no CORS allow-list knob, so the WebsocketManager default
-	// (same-host/Origin-less only) would silently reject browser clients that
-	// worked before. Operators that need origin restrictions are expected to
-	// enforce AuthN/AuthZ in front of the proxy.
-	wm.CheckOrigin = func(*http.Request) bool { return true }
+	wm.CheckOrigin = rpcserver.OriginAllowlistChecker(p.Logger, p.AllowedOrigins)
 
 	mux.HandleFunc("/websocket", wm.WebsocketHandler)
 
