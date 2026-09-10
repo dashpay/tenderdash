@@ -94,7 +94,11 @@ func initDBs(
 		return nil, nil, func() error { return nil }, fmt.Errorf("unable to initialize blockstore: %w", err)
 	}
 	closers := []closer{}
-	blockStore := store.NewBlockStore(blockStoreDB)
+	var blockStoreOpts []store.Option
+	if cfg.UnsafeNoFsync {
+		blockStoreOpts = append(blockStoreOpts, store.WithUnsafeNoFsync())
+	}
+	blockStore := store.NewBlockStore(blockStoreDB, blockStoreOpts...)
 	closers = append(closers, blockStoreDB.Close)
 
 	stateDB, err := dbProvider(&config.DBContext{ID: "state", Config: cfg})

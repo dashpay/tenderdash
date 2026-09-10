@@ -209,6 +209,18 @@ type Metrics struct {
 	// fairness pressure is felt first.
 	//metrics:Largest number of messages queued in any single peer lane.
 	PeerLaneMaxDepth metrics.Gauge
+
+	// BlockSyncApplyStageDuration is the wall-clock cost of each stage the block
+	// sync applier takes a fetched block through, plus "wait": the idle time
+	// between blocks, which is block fetching holding the sync back.
+	//metrics:Time spent in each stage of applying a block during block sync, in milliseconds.
+	BlockSyncApplyStageDuration metrics.Histogram `metrics_labels:"stage" metrics_buckettype:"exprange" metrics_bucketsizes:"0.01, 1000, 12"`
+}
+
+// ObserveBlockSyncStage records the time a block spent in one stage of the
+// block sync apply pipeline.
+func (m *Metrics) ObserveBlockSyncStage(stage string, d time.Duration) {
+	m.BlockSyncApplyStageDuration.With("stage", stage).Observe(float64(d) / float64(time.Millisecond))
 }
 
 // RecordConsMetrics uses for recording the block related metrics during fast-sync.

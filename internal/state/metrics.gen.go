@@ -34,13 +34,22 @@ func PrometheusMetrics(namespace string, labelsAndValues ...string) *Metrics {
 			Name:      "validator_set_updates",
 			Help:      "Number of validator set updates returned by the application since process start.",
 		}, labels).With(labelsAndValues...),
+		BlockApplyStageDuration: prometheus.NewHistogramFrom(stdprometheus.HistogramOpts{
+			Namespace: namespace,
+			Subsystem: MetricsSubsystem,
+			Name:      "block_apply_stage_duration",
+			Help:      "Time spent in each stage of applying a committed block, in milliseconds.",
+
+			Buckets: stdprometheus.ExponentialBucketsRange(0.01, 1000, 12),
+		}, append(labels, "stage")).With(labelsAndValues...),
 	}
 }
 
 func NopMetrics() *Metrics {
 	return &Metrics{
-		BlockProcessingTime:   discard.NewHistogram(),
-		ConsensusParamUpdates: discard.NewCounter(),
-		ValidatorSetUpdates:   discard.NewCounter(),
+		BlockProcessingTime:     discard.NewHistogram(),
+		ConsensusParamUpdates:   discard.NewCounter(),
+		ValidatorSetUpdates:     discard.NewCounter(),
+		BlockApplyStageDuration: discard.NewHistogram(),
 	}
 }
