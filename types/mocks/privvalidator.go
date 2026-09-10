@@ -70,7 +70,7 @@ type PrivValidator_ExtractIntoValidator_Call struct {
 // ExtractIntoValidator is a helper method to define mock.On call
 //   - ctx context.Context
 //   - quorumHash crypto.QuorumHash
-func (_e *PrivValidator_Expecter) ExtractIntoValidator(ctx interface{}, quorumHash interface{}) *PrivValidator_ExtractIntoValidator_Call {
+func (_e *PrivValidator_Expecter) ExtractIntoValidator(ctx any, quorumHash any) *PrivValidator_ExtractIntoValidator_Call {
 	return &PrivValidator_ExtractIntoValidator_Call{Call: _e.mock.On("ExtractIntoValidator", ctx, quorumHash)}
 }
 
@@ -137,7 +137,7 @@ type PrivValidator_GetFirstQuorumHash_Call struct {
 
 // GetFirstQuorumHash is a helper method to define mock.On call
 //   - context1 context.Context
-func (_e *PrivValidator_Expecter) GetFirstQuorumHash(context1 interface{}) *PrivValidator_GetFirstQuorumHash_Call {
+func (_e *PrivValidator_Expecter) GetFirstQuorumHash(context1 any) *PrivValidator_GetFirstQuorumHash_Call {
 	return &PrivValidator_GetFirstQuorumHash_Call{Call: _e.mock.On("GetFirstQuorumHash", context1)}
 }
 
@@ -154,8 +154,8 @@ func (_c *PrivValidator_GetFirstQuorumHash_Call) Run(run func(context1 context.C
 	return _c
 }
 
-func (_c *PrivValidator_GetFirstQuorumHash_Call) Return(v crypto.QuorumHash, err error) *PrivValidator_GetFirstQuorumHash_Call {
-	_c.Call.Return(v, err)
+func (_c *PrivValidator_GetFirstQuorumHash_Call) Return(quorumHash crypto.QuorumHash, err error) *PrivValidator_GetFirstQuorumHash_Call {
+	_c.Call.Return(quorumHash, err)
 	return _c
 }
 
@@ -198,7 +198,7 @@ type PrivValidator_GetHeight_Call struct {
 // GetHeight is a helper method to define mock.On call
 //   - ctx context.Context
 //   - quorumHash crypto.QuorumHash
-func (_e *PrivValidator_Expecter) GetHeight(ctx interface{}, quorumHash interface{}) *PrivValidator_GetHeight_Call {
+func (_e *PrivValidator_Expecter) GetHeight(ctx any, quorumHash any) *PrivValidator_GetHeight_Call {
 	return &PrivValidator_GetHeight_Call{Call: _e.mock.On("GetHeight", ctx, quorumHash)}
 }
 
@@ -266,7 +266,7 @@ type PrivValidator_GetPrivateKey_Call struct {
 // GetPrivateKey is a helper method to define mock.On call
 //   - ctx context.Context
 //   - quorumHash crypto.QuorumHash
-func (_e *PrivValidator_Expecter) GetPrivateKey(ctx interface{}, quorumHash interface{}) *PrivValidator_GetPrivateKey_Call {
+func (_e *PrivValidator_Expecter) GetPrivateKey(ctx any, quorumHash any) *PrivValidator_GetPrivateKey_Call {
 	return &PrivValidator_GetPrivateKey_Call{Call: _e.mock.On("GetPrivateKey", ctx, quorumHash)}
 }
 
@@ -333,7 +333,7 @@ type PrivValidator_GetProTxHash_Call struct {
 
 // GetProTxHash is a helper method to define mock.On call
 //   - context1 context.Context
-func (_e *PrivValidator_Expecter) GetProTxHash(context1 interface{}) *PrivValidator_GetProTxHash_Call {
+func (_e *PrivValidator_Expecter) GetProTxHash(context1 any) *PrivValidator_GetProTxHash_Call {
 	return &PrivValidator_GetProTxHash_Call{Call: _e.mock.On("GetProTxHash", context1)}
 }
 
@@ -350,8 +350,8 @@ func (_c *PrivValidator_GetProTxHash_Call) Run(run func(context1 context.Context
 	return _c
 }
 
-func (_c *PrivValidator_GetProTxHash_Call) Return(v crypto.ProTxHash, err error) *PrivValidator_GetProTxHash_Call {
-	_c.Call.Return(v, err)
+func (_c *PrivValidator_GetProTxHash_Call) Return(proTxHash crypto.ProTxHash, err error) *PrivValidator_GetProTxHash_Call {
+	_c.Call.Return(proTxHash, err)
 	return _c
 }
 
@@ -396,7 +396,7 @@ type PrivValidator_GetPubKey_Call struct {
 // GetPubKey is a helper method to define mock.On call
 //   - ctx context.Context
 //   - quorumHash crypto.QuorumHash
-func (_e *PrivValidator_Expecter) GetPubKey(ctx interface{}, quorumHash interface{}) *PrivValidator_GetPubKey_Call {
+func (_e *PrivValidator_Expecter) GetPubKey(ctx any, quorumHash any) *PrivValidator_GetPubKey_Call {
 	return &PrivValidator_GetPubKey_Call{Call: _e.mock.On("GetPubKey", ctx, quorumHash)}
 }
 
@@ -464,7 +464,7 @@ type PrivValidator_GetThresholdPublicKey_Call struct {
 // GetThresholdPublicKey is a helper method to define mock.On call
 //   - ctx context.Context
 //   - quorumHash crypto.QuorumHash
-func (_e *PrivValidator_Expecter) GetThresholdPublicKey(ctx interface{}, quorumHash interface{}) *PrivValidator_GetThresholdPublicKey_Call {
+func (_e *PrivValidator_Expecter) GetThresholdPublicKey(ctx any, quorumHash any) *PrivValidator_GetThresholdPublicKey_Call {
 	return &PrivValidator_GetThresholdPublicKey_Call{Call: _e.mock.On("GetThresholdPublicKey", ctx, quorumHash)}
 }
 
@@ -535,7 +535,7 @@ type PrivValidator_SignProposal_Call struct {
 //   - quorumType btcjson.LLMQType
 //   - quorumHash crypto.QuorumHash
 //   - proposal *types0.Proposal
-func (_e *PrivValidator_Expecter) SignProposal(ctx interface{}, chainID interface{}, quorumType interface{}, quorumHash interface{}, proposal interface{}) *PrivValidator_SignProposal_Call {
+func (_e *PrivValidator_Expecter) SignProposal(ctx any, chainID any, quorumType any, quorumHash any, proposal any) *PrivValidator_SignProposal_Call {
 	return &PrivValidator_SignProposal_Call{Call: _e.mock.On("SignProposal", ctx, chainID, quorumType, quorumHash, proposal)}
 }
 
@@ -611,7 +611,7 @@ type PrivValidator_SignVote_Call struct {
 //   - quorumHash crypto.QuorumHash
 //   - vote *types0.Vote
 //   - logger log.Logger
-func (_e *PrivValidator_Expecter) SignVote(ctx interface{}, chainID interface{}, quorumType interface{}, quorumHash interface{}, vote interface{}, logger interface{}) *PrivValidator_SignVote_Call {
+func (_e *PrivValidator_Expecter) SignVote(ctx any, chainID any, quorumType any, quorumHash any, vote any, logger any) *PrivValidator_SignVote_Call {
 	return &PrivValidator_SignVote_Call{Call: _e.mock.On("SignVote", ctx, chainID, quorumType, quorumHash, vote, logger)}
 }
 
@@ -680,7 +680,7 @@ type PrivValidator_UpdatePrivateKey_Call struct {
 //   - quorumHash crypto.QuorumHash
 //   - thresholdPublicKey crypto.PubKey
 //   - height int64
-func (_e *PrivValidator_Expecter) UpdatePrivateKey(ctx interface{}, privateKey interface{}, quorumHash interface{}, thresholdPublicKey interface{}, height interface{}) *PrivValidator_UpdatePrivateKey_Call {
+func (_e *PrivValidator_Expecter) UpdatePrivateKey(ctx any, privateKey any, quorumHash any, thresholdPublicKey any, height any) *PrivValidator_UpdatePrivateKey_Call {
 	return &PrivValidator_UpdatePrivateKey_Call{Call: _e.mock.On("UpdatePrivateKey", ctx, privateKey, quorumHash, thresholdPublicKey, height)}
 }
 

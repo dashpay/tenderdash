@@ -40,6 +40,14 @@ func PrometheusMetrics(namespace string, labelsAndValues ...string) *Metrics {
 			Name:      "last_commit_verification_skipped",
 			Help:      "Number of LastCommit threshold verifications skipped because the same commit was already verified.",
 		}, labels).With(labelsAndValues...),
+		BlockApplyStageDuration: prometheus.NewHistogramFrom(stdprometheus.HistogramOpts{
+			Namespace: namespace,
+			Subsystem: MetricsSubsystem,
+			Name:      "block_apply_stage_duration",
+			Help:      "Time spent in each stage of applying a committed block, in milliseconds.",
+
+			Buckets: stdprometheus.ExponentialBucketsRange(0.01, 1000, 12),
+		}, append(labels, "stage")).With(labelsAndValues...),
 	}
 }
 
@@ -49,5 +57,6 @@ func NopMetrics() *Metrics {
 		ConsensusParamUpdates:         discard.NewCounter(),
 		ValidatorSetUpdates:           discard.NewCounter(),
 		LastCommitVerificationSkipped: discard.NewCounter(),
+		BlockApplyStageDuration:       discard.NewHistogram(),
 	}
 }

@@ -264,6 +264,14 @@ func PrometheusMetrics(namespace string, labelsAndValues ...string) *Metrics {
 			Name:      "peer_lane_max_depth",
 			Help:      "Largest number of messages queued in any single peer lane.",
 		}, labels).With(labelsAndValues...),
+		BlockSyncApplyStageDuration: prometheus.NewHistogramFrom(stdprometheus.HistogramOpts{
+			Namespace: namespace,
+			Subsystem: MetricsSubsystem,
+			Name:      "block_sync_apply_stage_duration",
+			Help:      "Time spent in each stage of applying a block during block sync, in milliseconds.",
+
+			Buckets: stdprometheus.ExponentialBucketsRange(0.01, 1000, 12),
+		}, append(labels, "stage")).With(labelsAndValues...),
 	}
 }
 
@@ -309,5 +317,6 @@ func NopMetrics() *Metrics {
 		VerificationBudgetSaturation: discard.NewGauge(),
 		PeerLaneActiveCount:          discard.NewGauge(),
 		PeerLaneMaxDepth:             discard.NewGauge(),
+		BlockSyncApplyStageDuration:  discard.NewHistogram(),
 	}
 }

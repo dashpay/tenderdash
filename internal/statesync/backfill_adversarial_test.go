@@ -161,6 +161,7 @@ func (run adversarialRun) exec(ctx context.Context, t *testing.T) (*reactorTestS
 		Return(nil)
 
 	chain := buildLightBlockChain(ctx, t, stopHeight-1, startHeight+1, stopTime, rts.privVal)
+	registerMockCoreQuorums(t, rts.dashcoreClient, chain)
 
 	closeCh := make(chan struct{})
 	defer close(closeCh)

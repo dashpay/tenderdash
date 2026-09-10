@@ -49,7 +49,7 @@ type (
 	TokenNumberFunc func(*p2p.Envelope) uint
 
 	recvRateLimitPerPeerHandler struct {
-		RateLimit
+		*RateLimit
 
 		// next is the next handler in the chain
 		next ConsumerHandler
@@ -92,9 +92,31 @@ func WithValidateMessageHandler(allowedChannelIDs []p2p.ChannelID) ConsumerMiddl
 }
 
 func WithRecvRateLimitPerPeerHandler(ctx context.Context, limit float64, nTokensFunc TokenNumberFunc, drop bool, logger log.Logger) ConsumerMiddlewareFunc {
+	return WithRecvRateLimitPerPeerHandlerWithBurst(
+		ctx,
+		limit,
+		int(DefaultRecvBurstMultiplier*limit),
+		nTokensFunc,
+		drop,
+		logger,
+	)
+}
+
+// WithRecvRateLimitPerPeerHandlerWithBurst is the receive limiter variant for
+// expensive messages whose instantaneous burst must be bounded independently
+// of their steady-state rate.
+func WithRecvRateLimitPerPeerHandlerWithBurst(
+	ctx context.Context,
+	limit float64,
+	burst int,
+	nTokensFunc TokenNumberFunc,
+	drop bool,
+	logger log.Logger,
+	opts ...RateLimitOptionFunc,
+) ConsumerMiddlewareFunc {
 	return func(next ConsumerHandler) ConsumerHandler {
 		hd := &recvRateLimitPerPeerHandler{
-			RateLimit:   *NewRateLimit(ctx, limit, drop, logger),
+			RateLimit:   NewRateLimitWithBurst(ctx, limit, burst, drop, logger, opts...),
 			nTokensFunc: nTokensFunc,
 		}
 

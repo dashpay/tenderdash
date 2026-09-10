@@ -76,7 +76,7 @@ type Executor_ApplyBlock_Call struct {
 //   - blockID types.BlockID
 //   - block *types.Block
 //   - commit *types.Commit
-func (_e *Executor_Expecter) ApplyBlock(ctx interface{}, state1 interface{}, blockID interface{}, block interface{}, commit interface{}) *Executor_ApplyBlock_Call {
+func (_e *Executor_Expecter) ApplyBlock(ctx any, state1 any, blockID any, block any, commit any) *Executor_ApplyBlock_Call {
 	return &Executor_ApplyBlock_Call{Call: _e.mock.On("ApplyBlock", ctx, state1, blockID, block, commit)}
 }
 
@@ -170,7 +170,7 @@ type Executor_CreateProposalBlock_Call struct {
 //   - commit *types.Commit
 //   - proposerProTxHash []byte
 //   - proposedAppVersion uint64
-func (_e *Executor_Expecter) CreateProposalBlock(ctx interface{}, height interface{}, round interface{}, state1 interface{}, commit interface{}, proposerProTxHash interface{}, proposedAppVersion interface{}) *Executor_CreateProposalBlock_Call {
+func (_e *Executor_Expecter) CreateProposalBlock(ctx any, height any, round any, state1 any, commit any, proposerProTxHash any, proposedAppVersion any) *Executor_CreateProposalBlock_Call {
 	return &Executor_CreateProposalBlock_Call{Call: _e.mock.On("CreateProposalBlock", ctx, height, round, state1, commit, proposerProTxHash, proposedAppVersion)}
 }
 
@@ -241,7 +241,7 @@ type Executor_ExtendVote_Call struct {
 // ExtendVote is a helper method to define mock.On call
 //   - ctx context.Context
 //   - vote *types.Vote
-func (_e *Executor_Expecter) ExtendVote(ctx interface{}, vote interface{}) *Executor_ExtendVote_Call {
+func (_e *Executor_Expecter) ExtendVote(ctx any, vote any) *Executor_ExtendVote_Call {
 	return &Executor_ExtendVote_Call{Call: _e.mock.On("ExtendVote", ctx, vote)}
 }
 
@@ -311,7 +311,7 @@ type Executor_FinalizeBlock_Call struct {
 //   - blockID types.BlockID
 //   - block *types.Block
 //   - commit *types.Commit
-func (_e *Executor_Expecter) FinalizeBlock(ctx interface{}, state1 interface{}, uncommittedState interface{}, blockID interface{}, block interface{}, commit interface{}) *Executor_FinalizeBlock_Call {
+func (_e *Executor_Expecter) FinalizeBlock(ctx any, state1 any, uncommittedState any, blockID any, block any, commit any) *Executor_FinalizeBlock_Call {
 	return &Executor_FinalizeBlock_Call{Call: _e.mock.On("FinalizeBlock", ctx, state1, uncommittedState, blockID, block, commit)}
 }
 
@@ -400,7 +400,7 @@ type Executor_ProcessProposal_Call struct {
 //   - round int32
 //   - state1 state.State
 //   - verify bool
-func (_e *Executor_Expecter) ProcessProposal(ctx interface{}, block interface{}, round interface{}, state1 interface{}, verify interface{}) *Executor_ProcessProposal_Call {
+func (_e *Executor_Expecter) ProcessProposal(ctx any, block any, round any, state1 any, verify any) *Executor_ProcessProposal_Call {
 	return &Executor_ProcessProposal_Call{Call: _e.mock.On("ProcessProposal", ctx, block, round, state1, verify)}
 }
 
@@ -473,7 +473,7 @@ type Executor_ValidateBlock_Call struct {
 //   - ctx context.Context
 //   - state1 state.State
 //   - block *types.Block
-func (_e *Executor_Expecter) ValidateBlock(ctx interface{}, state1 interface{}, block interface{}) *Executor_ValidateBlock_Call {
+func (_e *Executor_Expecter) ValidateBlock(ctx any, state1 any, block any) *Executor_ValidateBlock_Call {
 	return &Executor_ValidateBlock_Call{Call: _e.mock.On("ValidateBlock", ctx, state1, block)}
 }
 
@@ -537,7 +537,7 @@ type Executor_ValidateBlockWithRoundState_Call struct {
 //   - state1 state.State
 //   - uncommittedState state.CurrentRoundState
 //   - block *types.Block
-func (_e *Executor_Expecter) ValidateBlockWithRoundState(ctx interface{}, state1 interface{}, uncommittedState interface{}, block interface{}) *Executor_ValidateBlockWithRoundState_Call {
+func (_e *Executor_Expecter) ValidateBlockWithRoundState(ctx any, state1 any, uncommittedState any, block any) *Executor_ValidateBlockWithRoundState_Call {
 	return &Executor_ValidateBlockWithRoundState_Call{Call: _e.mock.On("ValidateBlockWithRoundState", ctx, state1, uncommittedState, block)}
 }
 
@@ -673,7 +673,7 @@ type Executor_VerifyVoteExtension_Call struct {
 // VerifyVoteExtension is a helper method to define mock.On call
 //   - ctx context.Context
 //   - vote *types.Vote
-func (_e *Executor_Expecter) VerifyVoteExtension(ctx interface{}, vote interface{}) *Executor_VerifyVoteExtension_Call {
+func (_e *Executor_Expecter) VerifyVoteExtension(ctx any, vote any) *Executor_VerifyVoteExtension_Call {
 	return &Executor_VerifyVoteExtension_Call{Call: _e.mock.On("VerifyVoteExtension", ctx, vote)}
 }
 
