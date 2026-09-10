@@ -23,6 +23,9 @@ type (
 		state     sm.State
 		metrics   *consensus.Metrics
 		stats     applyStats
+		// lastDone is when the previous Apply returned, so the time the applier
+		// sits idle waiting for the next block can be measured
+		lastDone time.Time
 	}
 )
 
@@ -61,6 +64,14 @@ func newBlockApplier(blockExec sm.Executor, store sm.BlockStore, opts ...applier
 func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *types.Commit) error {
 	e.mtx.Lock()
 	defer e.mtx.Unlock()
+	defer func() { e.lastDone = time.Now() }()
+
+	// Time between the end of the previous apply and the start of this one. With
+	// a fast application this is what the sync rate is actually limited by, and
+	// it is block fetching, not block execution.
+	if !e.lastDone.IsZero() {
+		e.observeSince("wait", e.lastDone)
+	}
 
 	// The part set is needed twice: to derive the block ID and to persist the
 	// block. Building it serializes the whole block and builds a Merkle tree over
@@ -71,7 +82,7 @@ func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *ty
 		return err
 	}
 	blockID := block.BlockID(blockParts)
-	partSetTime := time.Since(start)
+	partSetTime := e.observeSince("partset", start)
 
 	start = time.Now()
 	err = e.verify(ctx, blockID, block, commit)
@@ -82,7 +93,7 @@ func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *ty
 
 	start = time.Now()
 	e.store.SaveBlock(block, blockParts, commit)
-	saveTime := time.Since(start)
+	saveTime := e.observeSince("save", start)
 
 	start = time.Now()
 	// TODO: Same thing for app - but we would need a way to get the hash without persisting the state.
@@ -90,7 +101,7 @@ func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *ty
 	if err != nil {
 		panic(fmt.Sprintf("failed to process committed block (%d:%X): %v", block.Height, block.Hash(), err))
 	}
-	execTime := time.Since(start)
+	execTime := e.observeSince("exec", start)
 
 	e.stats.add(partSetTime, verifyTime, saveTime, execTime)
 	// ByteSize is the size of the serialized block we just built, so the metric
@@ -121,7 +132,12 @@ func (e *blockApplier) UpdateState(newState sm.State) {
 }
 
 func (e *blockApplier) verify(ctx context.Context, blockID types.BlockID, block *types.Block, commit *types.Commit) error {
+	// The two checks are timed separately: the commit check is a BLS threshold
+	// signature verification and is nearly the whole stage, block validation is
+	// free.
+	start := time.Now()
 	err := e.state.Validators.VerifyCommit(e.state.ChainID, blockID, block.Height, commit)
+	e.observeSince("verify_commit", start)
 
 	// If either of the checks failed we log the error and request for a new block
 	// at that height
@@ -135,7 +151,9 @@ func (e *blockApplier) verify(ctx context.Context, blockID types.BlockID, block 
 		return err
 	}
 	// validate the block before we persist it
+	start = time.Now()
 	err = e.blockExec.ValidateBlock(ctx, e.state, block)
+	e.observeSince("verify_block", start)
 	if err != nil {
 		err = fmt.Errorf("invalid block: %w", err)
 		e.logger.Error(err.Error(),
@@ -146,6 +164,14 @@ func (e *blockApplier) verify(ctx context.Context, blockID types.BlockID, block 
 		return err
 	}
 	return nil
+}
+
+// observeSince records the time since start under stage and returns it, so the
+// same measurement can also feed the per-block averages in applyStats.
+func (e *blockApplier) observeSince(stage string, start time.Time) time.Duration {
+	elapsed := time.Since(start)
+	e.metrics.ObserveBlockSyncStage(stage, elapsed)
+	return elapsed
 }
 
 // applyTimings is the average time a single block spends in each stage of the
