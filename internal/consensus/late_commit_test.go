@@ -137,18 +137,9 @@ func TestCommitAfterDroppedProposalAppliesCompleteBlock(t *testing.T) {
 						assert.True(t, stateData.ProposalBlockParts.HasHeader(commit.BlockID.PartSetHeader))
 						return
 					}
-					if tc.invalidCommit == "hash" {
-						// Commit handling parks an authenticated commit for another hash and
-						// discards the retained block, even when the part header agrees.
-						// It must never apply or persist that mismatching block.
-						assert.Equal(t, commit, stateData.Commit)
-						assert.Nil(t, stateData.ProposalBlock)
-						assert.True(t, stateData.ProposalBlockParts.IsComplete())
-						assert.True(t, stateData.ProposalBlockParts.HasHeader(parts.Header()))
-						assert.Zero(t, node.blockStore.Height())
-						return
-					}
 					assert.Nil(t, stateData.Commit)
+					assert.NotNil(t, stateData.ProposalBlock)
+					assert.Zero(t, node.blockStore.Height())
 					assert.True(t, stateData.ProposalBlockParts.IsComplete())
 					assert.True(t, stateData.ProposalBlockParts.HasHeader(parts.Header()))
 					return

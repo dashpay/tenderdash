@@ -480,6 +480,14 @@ func (s *StateData) readyToApplyCommit(
 		return false, fmt.Errorf("error verifying commit: %w", err)
 	}
 
+	// Matching complete parts already determine the block; a conflicting hash
+	// cannot be resolved by parking the commit and waiting for more parts.
+	if s.ProposalBlock != nil && s.ProposalBlockParts.IsComplete() &&
+		s.ProposalBlockParts.HasHeader(commit.BlockID.PartSetHeader) &&
+		!s.ProposalBlock.HashesTo(commit.BlockID.Hash) {
+		return false, errors.New("cannot accept commit; retained block does not hash to commit hash")
+	}
+
 	if ignoreProposalBlock {
 		// For a future round, a properly signed commit is all we need to know to go
 		// to that round.

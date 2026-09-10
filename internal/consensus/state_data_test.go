@@ -254,16 +254,14 @@ func TestReadyToApplyCommitUsesTheCommitBlockID(t *testing.T) {
 			)
 			if !tc.noProposal {
 				proposal = types.NewProposal(height, 1, round, -1, tc.proposalBlockID, time.Now())
-				// Chosen field by field, not as a pair. Selecting both from the whole
-				// BlockID makes every row either "the same block" or "a different
-				// block", and a BlockID that agrees on the part set header while
-				// disagreeing on the rest cannot be written down at all.
 				proposalBlock, parts = ourBlock, ourParts
 				if tc.proposalBlockID.Hash.Equal(committedBlockID.Hash) {
-					proposalBlock = committedBlock
+					proposalBlock, parts = committedBlock, committedParts
 				}
-				if tc.proposalBlockID.PartSetHeader.Equals(committedBlockID.PartSetHeader) {
-					parts = committedParts
+				if !parts.HasHeader(tc.proposalBlockID.PartSetHeader) {
+					// Retargeted parts cannot carry a block assembled from another set.
+					proposalBlock = nil
+					parts = types.NewPartSetFromHeader(tc.proposalBlockID.PartSetHeader)
 				}
 			}
 			stateData := newReadyToApplyCommitStateData(chainID, cstypes.RoundState{
