@@ -142,6 +142,13 @@ filter-peers = {{ .BaseConfig.FilterPeers }}
 # Default: 0
 deadlock-detection = "{{ .BaseConfig.DeadlockDetection }}"
 
+# If true, block store and state store writes return before they have reached
+# the disk. This exists to take the cost of fsync out of a block sync benchmark
+# and nothing else. Never enable it on a node whose data matters: a power loss
+# can leave the stores behind the application, and the node will refuse to start.
+# Default: false
+unsafe-no-fsync = {{ .BaseConfig.UnsafeNoFsync }}
+
 #######################################################
 ###       ABCI App Connection Options               ###
 #######################################################

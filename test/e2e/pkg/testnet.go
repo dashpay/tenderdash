@@ -382,7 +382,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 	for heightStr := range manifest.ValidatorUpdates {
 		height, err := strconv.Atoi(heightStr)
 		if err != nil {
-			return nil, fmt.Errorf("invalid validator update height %q: %w", height, err)
+			return nil, fmt.Errorf("invalid validator update height %q: %w", heightStr, err)
 		}
 		heights = append(heights, height)
 	}
@@ -447,7 +447,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 	for heightStr := range manifest.ChainLockUpdates {
 		height, err := strconv.Atoi(heightStr)
 		if err != nil {
-			return nil, fmt.Errorf("invalid validator update height %q: %w", height, err)
+			return nil, fmt.Errorf("invalid chain lock update height %q: %w", heightStr, err)
 		}
 		chainLockSetHeights = append(chainLockSetHeights, height)
 	}
@@ -465,7 +465,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 	for heightStr, cpUpdate := range manifest.ConsensusVersionUpdates {
 		height, err := strconv.Atoi(heightStr)
 		if err != nil {
-			return nil, fmt.Errorf("invalid consensus version update height %q: %w", height, err)
+			return nil, fmt.Errorf("invalid consensus version update height %q: %w", heightStr, err)
 		}
 		testnet.ConsensusVersionUpdates[int64(height)] = cpUpdate
 	}

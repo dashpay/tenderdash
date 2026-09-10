@@ -2,6 +2,7 @@ package consensus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	sm "github.com/dashpay/tenderdash/internal/state"
@@ -47,6 +48,17 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 	c.logger.Info("applying commit", "commit", commit, "height", height, "round", round)
 
 	block, blockParts := stateData.ProposalBlock, stateData.ProposalBlockParts
+
+	// Parked commits and locally assembled commits bypass TryAddCommit's block check.
+	if commit != nil {
+		ready, err := verifyCommitBlock(ctx, c.logger, stateData, commit)
+		if err != nil {
+			return err
+		}
+		if !ready {
+			return errors.New("cannot apply commit without its proposal block")
+		}
+	}
 
 	c.blockExec.mustEnsureProcess(ctx, &stateData.RoundState, round)
 	c.blockExec.mustValidate(ctx, stateData)

@@ -234,6 +234,15 @@ type BaseConfig struct { //nolint: maligned
 	// Default: 0
 	DeadlockDetection time.Duration `mapstructure:"deadlock-detection"`
 
+	// UnsafeNoFsync makes block store and state store writes return before
+	// they have reached the disk. It exists to take the cost of fsync out of a
+	// block sync benchmark. Never enable it on a node whose data matters: a
+	// power loss can leave the stores behind the application, and the node
+	// will refuse to start. See store.WithUnsafeNoFsync.
+	//
+	// Default: false
+	UnsafeNoFsync bool `mapstructure:"unsafe-no-fsync"`
+
 	Other map[string]interface{} `mapstructure:",remain"`
 }
 

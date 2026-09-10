@@ -172,9 +172,18 @@ func (rs *RoundState) NewRoundEvent() types.EventDataNewRound {
 	}
 }
 
-// BlockID returns block ID from proposal or constructs new block ID from ProposalBlock and ProposalBlockParts.
-// cs.Proposal is not guaranteed to be set when this function is called
+// BlockID returns the block ID this round state stands behind.
+//
+// A Proposal's BlockID is the proposer's claim about a block; the block and the
+// parts it was assembled from are the block itself. When both are available the
+// derived value is returned, because this BlockID reaches a vote signature and a
+// claim must not. The Proposal is used only when there is no block to derive
+// from, and cs.Proposal is not guaranteed to be set at all.
 func (rs *RoundState) BlockID() types.BlockID {
+	if rs.ProposalBlock != nil && rs.ProposalBlockParts != nil {
+		return rs.ProposalBlock.BlockID(rs.ProposalBlockParts)
+	}
+
 	if rs.Proposal != nil && rs.Height == rs.Proposal.Height && rs.Round == rs.Proposal.Round {
 		return rs.Proposal.BlockID
 	}

@@ -37,11 +37,13 @@ const (
 var (
 	ErrInvalidProposalNotSet     = errors.New("error invalid proposal not set")
 	ErrInvalidProposalForCommit  = errors.New("error invalid proposal for commit")
+	ErrInvalidProposalBlockID    = errors.New("proposal block ID does not describe the assembled block")
 	ErrUnableToVerifyProposal    = errors.New("error unable to verify proposal")
 	ErrInvalidProposalSignature  = errors.New("error invalid proposal signature")
 	ErrInvalidProposalCoreHeight = errors.New("error invalid proposal core height")
 	ErrInvalidProposalPOLRound   = errors.New("error invalid proposal POL round")
 	ErrAddingVote                = errors.New("error adding vote")
+	ErrProposalBlockNotSet       = errors.New("proposal block is not set")
 
 	ErrPrivValidatorNotSet = errors.New("priv-validator is not set")
 )

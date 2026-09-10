@@ -163,12 +163,18 @@ type Router struct {
 	peerChannels     map[types.NodeID]ChannelIDSet
 	queueFactory     func(int) queue
 	nodeInfoProducer func() *types.NodeInfo
+	deliveryMtx      sync.Mutex
+	deliveries       map[types.NodeID]*deliverySet
 
 	// FIXME: We don't strictly need to use a mutex for this if we seal the
 	// channels on router start. This depends on whether we want to allow
 	// dynamic channels in the future.
 	channelMtx    sync.RWMutex
 	channelQueues map[ChannelID]queue // inbound messages from all peers to a single channel
+}
+
+type deliverySet struct {
+	items map[*deliveryNotification]struct{}
 }
 
 // NewRouter creates a new Router. The given Transports must already be
@@ -334,22 +340,26 @@ func (r *Router) routeChannel(
 
 					// check whether the peer is receiving on that channel
 					_, contains = peerChs[chID]
+					if contains {
+						r.trackDelivery(envelope.To, &envelope)
+					}
 				}
 				r.peerMtx.RUnlock()
 
 				if !ok {
+					envelope.NotifyDelivery()
 					r.logger.Debug("dropping message for unconnected peer", "peer", envelope.To, "channel", chID)
 					continue
 				}
 
 				if !contains {
+					envelope.NotifyDelivery()
 					// reactor tried to send a message across a channel that the
 					// peer doesn't have available. This is a known issue due to
 					// how peer subscriptions work:
 					// https://github.com/tendermint/tendermint/issues/6598
 					continue
 				}
-
 				queues = []queue{q}
 			}
 
@@ -362,6 +372,7 @@ func (r *Router) routeChannel(
 					r.metrics.RouterPeerQueueSend.Observe(time.Since(start).Seconds())
 
 				case <-q.closed():
+					envelope.NotifyDelivery()
 					r.logger.Debug("dropping message on closed channel", "peer", envelope.To, "channel", chID)
 
 				case <-ctx.Done():
@@ -719,6 +730,7 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 		delete(r.peerQueues, peerID)
 		delete(r.peerChannels, peerID)
 		r.peerMtx.Unlock()
+		r.completePeerDeliveries(peerID)
 
 		_ = conn.Close()
 		sendQueue.close()
@@ -799,6 +811,53 @@ FOR:
 		r.logger.Info("peer disconnected", "peer", peerID, "endpoint", conn)
 	default:
 		r.logger.Error("peer failure", "peer", peerID, "endpoint", conn, "err", err)
+	}
+}
+
+func (r *Router) trackDelivery(peerID types.NodeID, envelope *Envelope) {
+	if envelope == nil || envelope.delivery == nil {
+		return
+	}
+	// The tracked set is the completion backstop when a connection closes;
+	// queue and transport notifications only shorten the normal success path.
+	delivery := envelope.delivery
+	r.deliveryMtx.Lock()
+	if r.deliveries == nil {
+		r.deliveries = make(map[types.NodeID]*deliverySet)
+	}
+	peerDeliveries := r.deliveries[peerID]
+	if peerDeliveries == nil {
+		peerDeliveries = &deliverySet{items: make(map[*deliveryNotification]struct{})}
+		r.deliveries[peerID] = peerDeliveries
+	}
+	peerDeliveries.items[delivery] = struct{}{}
+	r.deliveryMtx.Unlock()
+
+	delivery.setOnCompleted(func() {
+		r.deliveryMtx.Lock()
+		delete(peerDeliveries.items, delivery)
+		if len(peerDeliveries.items) == 0 && r.deliveries[peerID] == peerDeliveries {
+			delete(r.deliveries, peerID)
+		}
+		r.deliveryMtx.Unlock()
+	})
+}
+
+func (r *Router) completePeerDeliveries(peerID types.NodeID) {
+	r.deliveryMtx.Lock()
+	peerDeliveries := r.deliveries[peerID]
+	delete(r.deliveries, peerID)
+	deliveries := make([]*deliveryNotification, 0)
+	if peerDeliveries != nil {
+		deliveries = make([]*deliveryNotification, 0, len(peerDeliveries.items))
+		for delivery := range peerDeliveries.items {
+			deliveries = append(deliveries, delivery)
+		}
+	}
+	r.deliveryMtx.Unlock()
+
+	for _, delivery := range deliveries {
+		delivery.complete()
 	}
 }
 
@@ -897,23 +956,43 @@ func (r *Router) sendPeer(ctx context.Context, peerID types.NodeID, conn Connect
 		case envelope := <-peerQueue.dequeue():
 			r.metrics.RouterPeerQueueRecv.Observe(time.Since(start).Seconds())
 			if envelope.Message == nil {
+				envelope.NotifyDelivery()
 				r.logger.Error("dropping nil message", "peer", peerID)
 				continue
 			}
 
 			protoEnvelope, err := envelope.ToProto()
 			if err != nil {
+				envelope.NotifyDelivery()
 				r.logger.Error("failed to marshal message", "peer", peerID, "err", err)
 				continue
 			}
 			bz, err := proto.Marshal(protoEnvelope)
 			if err != nil {
+				envelope.NotifyDelivery()
 				r.logger.Error("failed to marshal message", "peer", peerID, "err", err)
 				continue
 			}
 
-			if err = conn.SendMessage(ctx, envelope.ChannelID, bz); err != nil {
+			deliveryConn, reportsDelivery := conn.(DeliveryConnection)
+			reportsDelivery = reportsDelivery && envelope.delivery != nil
+			if reportsDelivery {
+				err = deliveryConn.SendMessageWithCompletion(
+					ctx,
+					envelope.ChannelID,
+					bz,
+					envelope.NotifyDeliveryProgress,
+					envelope.NotifyDelivery,
+				)
+			} else {
+				err = conn.SendMessage(ctx, envelope.ChannelID, bz)
+			}
+			if err != nil {
+				envelope.NotifyDelivery()
 				return err
+			}
+			if !reportsDelivery {
+				envelope.NotifyDelivery()
 			}
 
 			// r.logger.Debug("sent message", "peer", envelope.To, "message", envelope.Message)

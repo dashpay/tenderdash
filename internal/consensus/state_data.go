@@ -419,6 +419,8 @@ func (s *StateData) verifyCommit(
 		return false, fmt.Errorf("error validating commit: %w", err)
 	}
 
+	// Keep a stable snapshot for the checks below; authenticated commit handling
+	// may clear proposal metadata on the live StateData.
 	rs := s.RoundState
 	stateHeight := s.Height
 
@@ -450,7 +452,8 @@ func (s *StateData) verifyCommit(
 		return false, nil
 	}
 
-	if rs.Proposal == nil || ignoreProposalBlock {
+	proposalMatchesCommit := rs.Proposal != nil && rs.Proposal.BlockID.Equals(commit.BlockID)
+	if !proposalMatchesCommit || ignoreProposalBlock {
 		if ignoreProposalBlock {
 			s.logger.Debug("Commit verified for future round", "height", commit.Height, "round", commit.Round)
 		} else {
@@ -462,9 +465,23 @@ func (s *StateData) verifyCommit(
 		if err := s.verifyCommitSignatures(commit.BlockID, commit, budget); err != nil {
 			return false, fmt.Errorf("error verifying commit: %w", err)
 		}
+		if rs.Proposal != nil && !proposalMatchesCommit {
+			// A valid threshold commit is stronger evidence than a proposal. Clear
+			// metadata for another block only after authenticating the commit, then
+			// use the ordinary commit-before-proposal download path below.
+			s.Proposal = nil
+			s.ProposalReceiveTime = time.Time{}
+		}
+
+		// A retained block with matching parts can be validated without its proposal.
+		if !ignoreProposalBlock && s.ProposalBlock != nil && s.ProposalBlockParts.IsComplete() &&
+			s.ProposalBlockParts.HasHeader(commit.BlockID.PartSetHeader) {
+			return true, nil
+		}
 
 		if !s.ProposalBlockParts.HasHeader(commit.BlockID.PartSetHeader) {
 			s.logger.Debug("setting proposal block parts from commit", "partSetHeader", commit.BlockID.PartSetHeader)
+			s.ProposalBlock = nil
 			s.ProposalBlockParts = types.NewPartSetFromHeader(commit.BlockID.PartSetHeader)
 		}
 
@@ -481,7 +498,7 @@ func (s *StateData) verifyCommit(
 	}
 
 	// Lets verify that the threshold signature matches the current validator set
-	if err := s.verifyCommitSignatures(rs.Proposal.BlockID, commit, budget); err != nil {
+	if err := s.verifyCommitSignatures(commit.BlockID, commit, budget); err != nil {
 		return false, fmt.Errorf("error verifying commit: %w", err)
 	}
 

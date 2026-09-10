@@ -67,11 +67,12 @@ type Reactor struct {
 	// store
 	stateStore sm.Store
 
-	blockExec     *sm.BlockExecutor
-	store         sm.BlockStore
-	synchronizer  *Synchronizer
-	consReactor   consensusReactor
-	blockSyncFlag *atomic.Bool
+	blockExec      *sm.BlockExecutor
+	store          sm.BlockStore
+	synchronizer   *Synchronizer
+	messageHandler *blockP2PMessageHandler
+	consReactor    consensusReactor
+	blockSyncFlag  *atomic.Bool
 
 	p2pClient  *client.Client
 	peerEvents p2p.PeerEventSubscriber
@@ -186,13 +187,15 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 		go r.requestRoutine(ctx, r.p2pClient)
 		go r.poolRoutine(ctx, false)
 	}
+	consumer, messageHandler := consumerHandler(ctx, r.logger, r.store, r.synchronizer)
+	r.messageHandler = messageHandler
 	go func() {
-		err := r.p2pClient.Consume(ctx, consumerHandler(r.logger, r.store, r.synchronizer))
+		err := r.p2pClient.Consume(ctx, consumer)
 		if err != nil {
 			r.logger.Error("failed to consume p2p blocksync messages", "error", err)
 		}
 	}()
-	go r.processPeerUpdates(ctx, r.peerEvents(ctx, "blocksync"), r.p2pClient)
+	go r.processPeerUpdates(ctx, r.peerEvents(ctx, "blocksync"), r.p2pClient, messageHandler)
 
 	return nil
 }
@@ -200,19 +203,28 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 // OnStop stops the reactor by signaling to all spawned goroutines to exit and
 // blocking until they all exit.
 func (r *Reactor) OnStop() {
+	if r.messageHandler != nil {
+		r.messageHandler.stop()
+	}
 	if r.blockSyncFlag.Load() {
 		r.synchronizer.Stop()
 	}
 }
 
 // processPeerUpdate processes a PeerUpdate.
-func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpdate, client *client.Client) {
+func (r *Reactor) processPeerUpdate(
+	ctx context.Context,
+	peerUpdate p2p.PeerUpdate,
+	client *client.Client,
+	messageHandler *blockP2PMessageHandler,
+) {
 	r.logger.Trace("received peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status)
 
 	// XXX: Pool#RedoRequest can sometimes give us an empty peer.
 	if len(peerUpdate.NodeID) == 0 {
 		return
 	}
+	messageHandler.handlePeerUpdate(peerUpdate)
 
 	switch peerUpdate.Status {
 	case p2p.PeerStatusUp:
@@ -242,13 +254,18 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 // processPeerUpdates initiates a blocking process where we listen for and handle
 // PeerUpdate messages. When the reactor is stopped, we will catch the signal and
 // close the p2p PeerUpdatesCh gracefully.
-func (r *Reactor) processPeerUpdates(ctx context.Context, peerUpdates *p2p.PeerUpdates, client *client.Client) {
+func (r *Reactor) processPeerUpdates(
+	ctx context.Context,
+	peerUpdates *p2p.PeerUpdates,
+	client *client.Client,
+	messageHandler *blockP2PMessageHandler,
+) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case peerUpdate := <-peerUpdates.Updates():
-			r.processPeerUpdate(ctx, peerUpdate, client)
+			r.processPeerUpdate(ctx, peerUpdate, client, messageHandler)
 		}
 	}
 }
