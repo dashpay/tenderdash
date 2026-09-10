@@ -63,12 +63,13 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 			return err
 		}
 		if verified {
-			_ = stateEvent.Ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height, Round: commit.Round}, stateData)
-			// We are now going to receive the block, so initialize the block parts.
-			if stateData.ProposalBlockParts == nil {
-				stateData.ProposalBlockParts = types.NewPartSetFromHeader(commit.BlockID.PartSetHeader)
+			if err := stateEvent.Ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height, Round: commit.Round}, stateData); err != nil {
+				return err
 			}
-
+			if stateData.holdsProposalBlock(commit.BlockID) {
+				// The retained block needs no further part to trigger application.
+				return stateEvent.Ctrl.Dispatch(ctx, &AddCommitEvent{Commit: commit}, stateData)
+			}
 			return nil
 		}
 	}
@@ -80,6 +81,9 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 		return err
 	}
 	if !verified {
+		if stateData.Commit != nil {
+			cs.eventPublisher.PublishValidBlockEvent(stateData.RoundState)
+		}
 		return nil
 	}
 

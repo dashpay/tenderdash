@@ -194,12 +194,7 @@ func TestTryAddCommitWithAssembledBlockAndStaleProposal(t *testing.T) {
 		"a commit for the block we hold must be applied rather than dropped over a proposal that outlived its own block")
 }
 
-// TestTryAddCommitForFutureRoundParksCommitAndPartSet drives a commit for a round
-// ahead of ours through the real Controller. adoptCommit retargets the part set,
-// EnterNewRound then wipes the whole proposal state for a round > 0, and
-// TryAddCommitAction rebuilds the part set from the same header afterwards. The
-// end state is correct only because of that ordering, and a one-sided change to
-// either half would go unnoticed without this test.
+// A future-round commit must leave its block ready to download after the round transition.
 func TestTryAddCommitForFutureRoundParksCommitAndPartSet(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

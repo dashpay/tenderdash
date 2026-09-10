@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -1087,7 +1088,7 @@ func newCommitFixture(
 ) commitFixture {
 	t.Helper()
 
-	css := makeConsensusState(ctx, t, cfg, 2, t.Name(), newTickerFunc())
+	css := makeConsensusState(ctx, t, cfg, 2, strings.ReplaceAll(t.Name(), "/", "_"), newTickerFunc())
 	privVals := make([]types.PrivValidator, 0, len(css))
 	for _, c := range css {
 		privVals = append(privVals, c.privValidator.PrivValidator)

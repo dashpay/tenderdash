@@ -511,10 +511,8 @@ func (s *StateData) readyToApplyCommit(
 	return false, nil
 }
 
-// adoptCommit keeps commit until the block it commits arrives and points the
-// round state at that block. Parts already collected for the committed block
-// survive, but on the same-round path only: EnterNewRound resets the whole
-// proposal state for any round > 0.
+// adoptCommit keeps the authenticated commit and its block's collected parts
+// until the block can be applied, including across round changes.
 func (s *StateData) adoptCommit(commit *types.Commit) {
 	s.retargetTo(commit.BlockID, retargetOnParkCommit)
 	s.Commit = commit
