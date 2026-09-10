@@ -49,7 +49,7 @@ func TestAllowVoteChannelMessage_DropsFloodFromSinglePeer(t *testing.T) {
 	defer cancel()
 
 	const limit = 5.0
-	r := newRateLimitedReactor(ctx, limit)
+	r := newRateLimitedReactor(ctx, limit, client.WithRateLimitClock(clockwork.NewFakeClock()))
 
 	// More than the bucket can ever hold, so the flood must run into the limit
 	// whatever the peer sends.
@@ -64,7 +64,7 @@ func TestAllowVoteChannelMessage_DropsFloodFromSinglePeer(t *testing.T) {
 	}
 
 	assert.Positive(t, dropped, "a burst well above the budget must have messages dropped")
-	assert.LessOrEqual(t, allowed, voteRateBurst+1,
+	assert.Equal(t, voteRateBurst, allowed,
 		"allowed count is bounded by the burst, not the flood size")
 	assert.Equal(t, n, allowed+dropped)
 }
@@ -75,7 +75,7 @@ func TestAllowVoteChannelMessage_PerPeerIndependent(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	r := newRateLimitedReactor(ctx, 5)
+	r := newRateLimitedReactor(ctx, 5, client.WithRateLimitClock(clockwork.NewFakeClock()))
 
 	// Exhaust the attacker's budget.
 	for i := 0; i < 2*voteRateBurst; i++ {
@@ -112,7 +112,8 @@ func TestAllowVoteChannelMessage_ChargesVerificationCost(t *testing.T) {
 	defer cancel()
 
 	admitted := func(env *p2p.Envelope) int {
-		r := newRateLimitedReactor(ctx, 600)
+		// Freeze time so the initial budget cannot refill while the loop runs.
+		r := newRateLimitedReactor(ctx, 600, client.WithRateLimitClock(clockwork.NewFakeClock()))
 		allowed := 0
 		for i := 0; i < 5000; i++ {
 			if r.allowVoteChannelMessage(ctx, env) {
@@ -130,7 +131,8 @@ func TestAllowVoteChannelMessage_ChargesVerificationCost(t *testing.T) {
 
 	// The bucket starts full, so an instantaneous flood admits at most
 	// burst/cost messages of that cost.
-	assert.LessOrEqual(t, precommits, voteRateBurst/maxPeerMessageCost+1,
+	assert.Equal(t, voteRateBurst, prevotes)
+	assert.Equal(t, voteRateBurst/maxPeerMessageCost, precommits,
 		"maximum-cost precommits admitted must be bounded by burst/cost")
 }
 
@@ -141,7 +143,7 @@ func TestAllowVoteChannelMessage_CostSharesOneBudget(t *testing.T) {
 	defer cancel()
 
 	const limit = 600.0
-	r := newRateLimitedReactor(ctx, limit)
+	r := newRateLimitedReactor(ctx, limit, client.WithRateLimitClock(clockwork.NewFakeClock()))
 
 	// Drain the bucket with maximum-cost precommits.
 	for i := 0; i < voteRateBurst/maxPeerMessageCost; i++ {
