@@ -112,9 +112,11 @@ func TestLaterRoundProposalDoesNotStrandTheParkedCommit(t *testing.T) {
 			require.NoError(t, node.ctrl.Dispatch(commitCtx, &TryAddCommitEvent{Commit: commit, PeerID: peerID}, &stateData))
 			require.NotNil(t, stateData.Commit, "the commit must be parked while its block is missing")
 
-			// The round advances; EnterNewRound discards the part set it was collecting.
+			// A new round must preserve the authenticated commit's download.
+			pendingParts := stateData.ProposalBlockParts
 			require.NoError(t, node.ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: block.Height, Round: 1}, &stateData))
 			require.Equal(t, int32(1), stateData.Round)
+			require.Same(t, pendingParts, stateData.ProposalBlockParts)
 
 			// A different block for round 1. Morphed in place rather than copied, since
 			// types.Block carries a mutex and copying it trips go vet's copylocks.
@@ -146,15 +148,16 @@ func TestLaterRoundProposalDoesNotStrandTheParkedCommit(t *testing.T) {
 
 			require.NoError(t, node.msgDispatcher.dispatch(ctx, &stateData, msgInfo{
 				Msg: &ProposalMessage{Proposal: proposal}, PeerID: peerID, ReceiveTime: tmtime.Now()}))
-			require.NotNil(t, stateData.Proposal, "a proposal for a later round is not the commit's to refuse")
+			require.Nil(t, stateData.Proposal, "a later-round proposal must not replace the committed-block download")
 
 			require.NotPanics(t, func() {
 				for i := 0; i < int(otherParts.Total()); i++ {
 					msg := &BlockPartMessage{Height: block.Height, Round: 1, Part: otherParts.GetPart(i)}
 					partCtx := msgInfoWithCtx(ctx, msgInfo{Msg: msg, PeerID: peerID})
-					require.NoError(t, node.ctrl.Dispatch(partCtx, &AddProposalBlockPartEvent{Msg: msg, PeerID: peerID}, &stateData))
+					require.ErrorIs(t, node.ctrl.Dispatch(partCtx, &AddProposalBlockPartEvent{Msg: msg, PeerID: peerID}, &stateData),
+						types.ErrPartSetInvalidProof, "parts for another block must not enter the committed part set")
 				}
-			}, "assembling a block other than the committed one must not crash the node")
+			}, "rejecting parts for another block must not crash the node")
 
 			assert.NotNil(t, stateData.Commit, "the commit must stay parked")
 			assert.Nil(t, stateData.Proposal, "the mismatching proposal must be discarded")
