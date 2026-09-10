@@ -418,15 +418,15 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHe
 	for {
 		select {
 		case <-ctx.Done():
-			height, _, _, peerHeight, hasPeers := s.stallSnapshot()
+			height, _, _, peerHeight, hasPeers, _ := s.stallSnapshot()
 			return hasPeers && height >= peerHeight, max(targetHeight, peerHeight)
 		case <-ticker.Chan():
-			height, stalledFor, servable, maxPeerHeight, hasPeers := s.stallSnapshot()
+			height, stalledFor, servable, maxPeerHeight, hasPeers, maxServableHeight := s.stallSnapshot()
 			targetHeight = max(targetHeight, maxPeerHeight)
 			if hasPeers && height >= maxPeerHeight {
 				return true, targetHeight
 			}
-			switch stallVerdictFor(servable, maxPeerHeight-height, stalledFor) {
+			switch stallVerdictFor(servable, maxServableHeight-height, stalledFor) {
 			case stopNothingToFetch:
 				if maxPeerHeight > height {
 					// Peers claim to be ahead yet none of them holds the block we
@@ -445,6 +445,7 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHe
 					"block sync stalled for too long, handing over to consensus while still behind",
 					"height", height,
 					"max_peer_height", maxPeerHeight,
+					"max_servable_height", maxServableHeight,
 					"stalled_for", stalledFor,
 				)
 				return false, targetHeight
@@ -455,7 +456,8 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHe
 					"height", height,
 					"max_peer_height", maxPeerHeight,
 					"stalled_for", stalledFor,
-					"behind_by", maxPeerHeight-height,
+					"max_servable_height", maxServableHeight,
+					"behind_by", maxServableHeight-height,
 				)
 				continue
 			}
@@ -471,14 +473,14 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHe
 
 // stallSnapshot reads everything the stall verdict is formed from as one
 // observation: the height block sync is waiting for, how long it has been
-// waiting for it, whether any peer can serve it, and the highest height any peer
-// claims.
+// waiting for it, and the highest advertised and servable peer heights.
 //
 // Blocks are applied in order, so the current height is the only one that can
 // move us forward, and whether a peer can serve that one is what decides whether
 // waiting is worth anything. The highest height anyone claims cannot decide that
 // - a peer whose blocks start above us has nothing we can use however high it
-// claims to be - it only says how far there is left to go.
+// claims to be. Only servable peers determine the stall gap; the overall maximum
+// remains the handover target so pruning cannot erase evidence of a higher tip.
 //
 // They are read under one lock because advance() stamps the height and the
 // advance time together under that same lock. A block applied concurrently
@@ -489,7 +491,9 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHe
 // fetch while the height we had by then moved on to is served. Ending block
 // sync is a one-way door, so a stop assembled from two inconsistent readings
 // leaves the node in consensus catch-up it cannot leave.
-func (s *Synchronizer) stallSnapshot() (height int64, stalledFor time.Duration, servable bool, maxPeerHeight int64, hasPeers bool) {
+func (s *Synchronizer) stallSnapshot() (
+	height int64, stalledFor time.Duration, servable bool, maxPeerHeight int64, hasPeers bool, maxServableHeight int64,
+) {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
 	peers := s.peerStore.All()
@@ -497,9 +501,12 @@ func (s *Synchronizer) stallSnapshot() (height int64, stalledFor time.Duration, 
 	responsive := ignoreTimedOutPeers(minRecvRate)
 	for _, peer := range peers {
 		maxPeerHeight = max(maxPeerHeight, peer.height)
-		servable = servable || (hasHeight(peer.peerID, peer) && responsive(peer.peerID, peer))
+		if hasHeight(peer.peerID, peer) && responsive(peer.peerID, peer) {
+			servable = true
+			maxServableHeight = max(maxServableHeight, peer.height)
+		}
 	}
-	return s.height, s.clock.Since(s.lastAdvance), servable, maxPeerHeight, len(peers) > 0
+	return s.height, s.clock.Since(s.lastAdvance), servable, maxPeerHeight, len(peers) > 0, maxServableHeight
 }
 
 // stallVerdict says what a lack of progress in block sync means.
@@ -516,7 +523,7 @@ const (
 
 // stallVerdictFor decides what to do when block sync has made no progress for
 // stalledFor, given whether any peer holds the block we are waiting for and how
-// many blocks behind the highest height any peer claims we are.
+// many blocks behind the highest height a servable peer claims we are.
 //
 // Waiting on a block someone has is a reason to keep retrying, not to stop:
 // handing over to consensus is effectively irreversible, so stopping while

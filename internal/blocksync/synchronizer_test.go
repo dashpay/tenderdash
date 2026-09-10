@@ -1104,16 +1104,67 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncStopsWhenTheOnlyPeerIsRateRej
 	suite.Require().False(caughtUp)
 }
 
-// TestStallSnapshotIsOneObservation checks that a block applied concurrently
-// cannot tear the stall verdict's inputs apart. advance() stamps the height and
-// the advance time together, so a snapshot must show the state either wholly
-// before that or wholly after it - never a height from one side paired with a
-// staleness or a servability from the other. Ending block sync is a one-way door,
-// so a stop assembled from mixed readings is unrecoverable.
-//
-// The peer here holds startHeight+1 upwards, which makes servability flip exactly
-// when the height moves, so a mixed reading shows up as a contradiction rather
-// than as the same answer by luck.
+func (suite *SynchronizerTestSuite) TestStallSnapshotServableHeight() {
+	const height = int64(10)
+	slowPeer := newPeerData("slow", 1, 30)
+	slowPeer.recvMonitor = newSlowMonitor(suite.T())
+	busyPeer := newPeerData("busy", 1, 30)
+	busyPeer.numPending = maxPendingRequestsPerPeer
+	testCases := []struct {
+		name       string
+		peers      []PeerData
+		wantMax    int64
+		wantUsable int64
+	}{
+		{name: "no peers"},
+		{
+			name:       "available ranges",
+			peers:      []PeerData{newPeerData("archive", 1, 20), newPeerData("recent", 5, 30)},
+			wantMax:    30,
+			wantUsable: 30,
+		},
+		{
+			name:       "pruned range",
+			peers:      []PeerData{newPeerData("archive", 1, 20), newPeerData("pruned", 25, 30)},
+			wantMax:    30,
+			wantUsable: 20,
+		},
+		{
+			name:    "no overlapping range",
+			peers:   []PeerData{newPeerData("older", 1, 9), newPeerData("recent", 25, 30)},
+			wantMax: 30,
+		},
+		{
+			name:       "rate rejected peer",
+			peers:      []PeerData{newPeerData("archive", 1, 20), slowPeer},
+			wantMax:    30,
+			wantUsable: 20,
+		},
+		{
+			name:       "busy peer remains servable",
+			peers:      []PeerData{busyPeer},
+			wantMax:    30,
+			wantUsable: 30,
+		},
+	}
+	for _, tc := range testCases {
+		suite.Run(tc.name, func() {
+			applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+			sync := NewSynchronizer(height, suite.client, applier)
+			for _, peer := range tc.peers {
+				sync.AddPeer(peer)
+			}
+			_, _, servable, maxHeight, hasPeers, maxServableHeight := sync.stallSnapshot()
+			suite.Require().Equal(tc.wantMax, maxHeight)
+			suite.Require().Equal(tc.wantUsable, maxServableHeight)
+			suite.Require().Equal(tc.wantUsable > 0, servable)
+			suite.Require().Equal(len(tc.peers) > 0, hasPeers)
+		})
+	}
+}
+
+// Advancing the height changes servability and its maximum together with the
+// stall timestamp; the snapshot must not mix values from opposite sides.
 func (suite *SynchronizerTestSuite) TestStallSnapshotIsOneObservation() {
 	const (
 		startHeight = int64(100)
@@ -1137,12 +1188,13 @@ func (suite *SynchronizerTestSuite) TestStallSnapshotIsOneObservation() {
 		}()
 		runtime.Gosched()
 		close(ready)
-		height, stalled, servable, maxPeerHeight, hasPeers := sync.stallSnapshot()
+		height, stalled, servable, maxPeerHeight, hasPeers, maxServableHeight := sync.stallSnapshot()
 		<-applied
 		suite.Require().True(hasPeers)
-		suite.Require().Equal(int64(1000), maxPeerHeight, "the height the gap is measured against")
+		suite.Require().Equal(int64(1000), maxPeerHeight, "the retained handover target")
 
 		if height == startHeight {
+			suite.Require().Zero(maxServableHeight)
 			suite.Require().Equal(stalledFor, stalled,
 				"height %d reported with the advance time stamped by a later height (trial %d)", height, trial)
 			suite.Require().False(servable,
@@ -1150,6 +1202,7 @@ func (suite *SynchronizerTestSuite) TestStallSnapshotIsOneObservation() {
 			continue
 		}
 		suite.Require().Equal(startHeight+1, height, "height moved by more than the one applied block")
+		suite.Require().Equal(int64(1000), maxServableHeight)
 		suite.Require().Zero(stalled,
 			"height %d reported with the advance time from before it was applied (trial %d)", height, trial)
 		suite.Require().True(servable,
