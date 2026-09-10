@@ -66,9 +66,7 @@ func (c *EnterNewRoundAction) Execute(ctx context.Context, stateEvent StateEvent
 		"round", stateData.Round,
 		"step", stateData.Step)
 
-	// Setup new round
-	// we don't fire newStep for this step,
-	// but we fire an event, so update the round step first
+	// Update the round before resetting its proposal state and publishing events.
 	stateData.updateRoundStep(round, cstypes.RoundStepNewRound)
 	if round == 0 {
 		// We've already reset these upon new height,
@@ -96,6 +94,9 @@ func (c *EnterNewRoundAction) Execute(ctx context.Context, stateEvent StateEvent
 
 	c.eventPublisher.PublishNewRoundEvent(stateData.NewRoundEvent())
 	if stateData.Commit != nil {
+		// Advance peers before announcing the target, so a later Propose step
+		// cannot clear it as part of their new-round reset.
+		c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
 		c.eventPublisher.PublishValidBlockEvent(stateData.RoundState)
 	}
 	// Wait for txs to be available in the mempool

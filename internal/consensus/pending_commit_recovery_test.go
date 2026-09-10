@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -126,4 +127,79 @@ func TestPendingCommitAppliesRetainedFutureRoundBlock(t *testing.T) {
 	require.NoError(t, n.node.ctrl.Dispatch(ctx,
 		&TryAddCommitEvent{Commit: n.commit, PeerID: n.peerID}, &stateData))
 	assert.Equal(t, n.block.Height+1, stateData.Height)
+}
+
+func TestPendingCommitTargetSurvivesRoundStepAnnouncements(t *testing.T) {
+	for _, delayed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("delayed_propose_%t", delayed), func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			cfg := configSetup(t)
+			cfg.Consensus.DontAutoPropose = false
+			n := newCommitFixture(ctx, t, cfg, multiPartBlockPartSize, 0)
+			stateData := n.node.GetStateData()
+			ctx = dash.ContextWithProTxHash(ctx, n.node.privValidator.ProTxHash)
+			ctx = msgInfoWithCtx(ctx, msgInfo{Msg: &CommitMessage{n.commit}, PeerID: n.peerID})
+			require.NoError(t, n.node.ctrl.Dispatch(ctx,
+				&TryAddCommitEvent{Commit: n.commit, PeerID: n.peerID}, &stateData))
+			require.Same(t, n.commit, stateData.Commit)
+			parts := stateData.ProposalBlockParts
+
+			// Choose this node's next proposer round so the delayed case exercises the clock wait.
+			nextRound := int32(1)
+			for ; nextRound <= int32(stateData.Validators.Size()); nextRound++ {
+				proposer, err := stateData.ProposerSelector.GetProposer(stateData.Height, nextRound)
+				require.NoError(t, err)
+				if proposer.ProTxHash.Equal(n.node.privValidator.ProTxHash) {
+					break
+				}
+			}
+			require.LessOrEqual(t, nextRound, int32(stateData.Validators.Size()))
+			lastBlockTime := stateData.state.LastBlockTime
+			if delayed {
+				stateData.state.LastBlockTime = time.Now().Add(time.Hour)
+			}
+
+			peer := NewPeerState(log.NewNopLogger(), "receiver")
+			peer.PRS.Height = stateData.Height
+			peer.PRS.Round = stateData.Round
+			peer.PRS.Step = stateData.Step
+			steps := 0
+			n.node.emitter.AddListener(types.EventNewRoundStepValue, func(data eventemitter.EventData) error {
+				msg, err := MsgFromProto(data.(*cstypes.RoundState).NewRoundStepMessage())
+				require.NoError(t, err)
+				peer.ApplyNewRoundStepMessage(msg.(*NewRoundStepMessage))
+				steps++
+				return nil
+			})
+			n.node.emitter.AddListener(types.EventValidBlockValue, func(data eventemitter.EventData) error {
+				msg, err := MsgFromProto(data.(*cstypes.RoundState).NewValidBlockMessage())
+				require.NoError(t, err)
+				peer.ApplyNewValidBlockMessage(msg.(*NewValidBlockMessage))
+				return nil
+			})
+			assertDownloadTarget := func() {
+				t.Helper()
+				prs := peer.GetRoundState()
+				assert.True(t, prs.ProposalBlockPartSetHeader.Equals(n.commit.BlockID.PartSetHeader))
+				assert.NotNil(t, prs.ProposalBlockParts)
+				sender := cstypes.RoundState{Height: n.block.Height, Round: nextRound, ProposalBlockParts: n.parts}
+				assert.True(t, shouldBlockPartsBeGossiped(sender, prs, true))
+				assert.True(t, n.parts.BitArray().Sub(prs.ProposalBlockParts).IsFull())
+				assert.Same(t, parts, stateData.ProposalBlockParts)
+			}
+			require.NoError(t, n.node.ctrl.Dispatch(ctx,
+				&EnterNewRoundEvent{Height: stateData.Height, Round: nextRound}, &stateData))
+			assertDownloadTarget()
+			if delayed {
+				require.Equal(t, cstypes.RoundStepNewRound, stateData.Step)
+				stateData.state.LastBlockTime = lastBlockTime
+				require.NoError(t, n.node.ctrl.Dispatch(ctx,
+					&EnterProposeEvent{Height: stateData.Height, Round: nextRound}, &stateData))
+				assertDownloadTarget()
+			}
+			require.Equal(t, cstypes.RoundStepPropose, stateData.Step)
+			require.Positive(t, steps)
+		})
+	}
 }
