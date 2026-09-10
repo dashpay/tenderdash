@@ -132,7 +132,6 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo], prop
 		},
 		ApplyCommitType: &ApplyCommitAction{
 			logger:         cs.logger,
-			catchup:        cs.catchup,
 			blockStore:     cs.blockStore,
 			blockExec:      cs.blockExecutor,
 			wal:            wal,

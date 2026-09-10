@@ -401,7 +401,7 @@ func (s *Synchronizer) IsCaughtUp() bool {
 }
 
 // WaitForSync blocks until block sync is finished, and reports whether the node
-// actually caught up.
+// actually caught up and the highest peer target observed while waiting.
 //
 // A stall on its own is not a reason to stop. Handing over to consensus is a
 // one-way door - only the state sync path ever switches back to block sync - and
@@ -412,18 +412,20 @@ func (s *Synchronizer) IsCaughtUp() bool {
 // block, or once the stall has outlasted maxSyncStall within maxCatchupGap of
 // the tip, so that a wedged synchronizer can still hand over rather than
 // blocking forever without handing over a node consensus cannot catch up.
-func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool) {
+func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHeight int64) {
 	ticker := s.clock.NewTicker(switchToConsensusIntervalSeconds * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
-			return s.IsCaughtUp()
+			height, _, _, peerHeight, hasPeers := s.stallSnapshot()
+			return hasPeers && height >= peerHeight, max(targetHeight, peerHeight)
 		case <-ticker.Chan():
-			if s.IsCaughtUp() {
-				return true
+			height, stalledFor, servable, maxPeerHeight, hasPeers := s.stallSnapshot()
+			targetHeight = max(targetHeight, maxPeerHeight)
+			if hasPeers && height >= maxPeerHeight {
+				return true, targetHeight
 			}
-			height, stalledFor, servable, maxPeerHeight := s.stallSnapshot()
 			switch stallVerdictFor(servable, maxPeerHeight-height, stalledFor) {
 			case stopNothingToFetch:
 				if maxPeerHeight > height {
@@ -437,7 +439,7 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool) {
 						"stalled_for", stalledFor,
 					)
 				}
-				return false
+				return false, targetHeight
 			case stopStalledTooLong:
 				s.logger.Error(
 					"block sync stalled for too long, handing over to consensus while still behind",
@@ -445,7 +447,7 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool) {
 					"max_peer_height", maxPeerHeight,
 					"stalled_for", stalledFor,
 				)
-				return false
+				return false, targetHeight
 			}
 			if stalledFor > syncTimeout {
 				s.logger.Error(
@@ -487,10 +489,17 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool) {
 // fetch while the height we had by then moved on to is served. Ending block
 // sync is a one-way door, so a stop assembled from two inconsistent readings
 // leaves the node in consensus catch-up it cannot leave.
-func (s *Synchronizer) stallSnapshot() (height int64, stalledFor time.Duration, servable bool, maxPeerHeight int64) {
+func (s *Synchronizer) stallSnapshot() (height int64, stalledFor time.Duration, servable bool, maxPeerHeight int64, hasPeers bool) {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
-	return s.height, s.clock.Since(s.lastAdvance), s.peerStore.HasPeerForHeight(s.height), s.peerStore.MaxHeight()
+	peers := s.peerStore.All()
+	hasHeight := heightBetweenPeerHeightRange(s.height)
+	responsive := ignoreTimedOutPeers(minRecvRate)
+	for _, peer := range peers {
+		maxPeerHeight = max(maxPeerHeight, peer.height)
+		servable = servable || (hasHeight(peer.peerID, peer) && responsive(peer.peerID, peer))
+	}
+	return s.height, s.clock.Since(s.lastAdvance), servable, maxPeerHeight, len(peers) > 0
 }
 
 // stallVerdict says what a lack of progress in block sync means.

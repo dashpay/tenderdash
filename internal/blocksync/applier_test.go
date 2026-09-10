@@ -7,18 +7,64 @@ import (
 	"testing"
 	"time"
 
+	dbm "github.com/cometbft/cometbft-db"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	abciclient "github.com/dashpay/tenderdash/abci/client"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/internal/consensus"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/state/mocks"
 	statefactory "github.com/dashpay/tenderdash/internal/state/test/factory"
+	"github.com/dashpay/tenderdash/internal/store"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/internal/test/metricspy"
 	tmrequire "github.com/dashpay/tenderdash/internal/test/require"
+	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )
+
+func TestBlockApplierChecksAppResponseBeforeSave(t *testing.T) {
+	ctx := context.Background()
+	valSet, privVals := factory.MockValidatorSet()
+	initialState := fakeInitialState(valSet)
+	state := initialState.Copy()
+	blocks := statefactory.MakeBlocks(ctx, t, 2, &state, privVals, 1)
+	block, commit := blocks[0], blocks[1].LastCommit
+	appHash := make([]byte, crypto.DefaultAppHashSize)
+	appHash[0] = 1
+	app := &inconsistentProposalApp{appHash: appHash}
+	client := abciclient.NewLocalClient(log.NewNopLogger(), app)
+	blockStore := store.NewBlockStore(dbm.NewMemDB())
+	stateStore := sm.NewStore(dbm.NewMemDB())
+	require.NoError(t, stateStore.Save(initialState))
+	executor := sm.NewBlockExecutor(stateStore, client, nil, sm.EmptyEvidencePool{}, blockStore, nil)
+	applier := newBlockApplier(executor, blockStore, applierWithState(initialState))
+
+	require.Panics(t, func() { _ = applier.Apply(ctx, block, commit) })
+	require.Zero(t, blockStore.Height(), "an inconsistent app response must not advance the block store")
+	require.Equal(t, initialState.LastBlockHeight, applier.State().LastBlockHeight)
+	loaded, err := stateStore.Load()
+	require.NoError(t, err)
+	require.Equal(t, initialState.LastBlockHeight, loaded.LastBlockHeight)
+}
+
+type inconsistentProposalApp struct {
+	abci.BaseApplication
+	appHash []byte
+}
+
+func (app *inconsistentProposalApp) ProcessProposal(
+	_ context.Context, req *abci.RequestProcessProposal,
+) (*abci.ResponseProcessProposal, error) {
+	return &abci.ResponseProcessProposal{
+		Status:    abci.ResponseProcessProposal_ACCEPT,
+		AppHash:   app.appHash,
+		TxResults: factory.ExecTxResults(types.NewTxs(req.Txs)),
+	}, nil
+}
 
 func TestBlockApplierApply(t *testing.T) {
 	ctx := context.Background()
@@ -51,7 +97,7 @@ func TestBlockApplierApply(t *testing.T) {
 					Once().
 					Return(nil)
 				mockBlockExec.
-					On("ProcessProposal", mock.Anything, blockH1, commitH1.Round, initialState, false).
+					On("ProcessProposal", mock.Anything, blockH1, commitH1.Round, initialState, true).
 					Once().
 					Return(sm.CurrentRoundState{}, nil)
 				mockBlockExec.
@@ -81,7 +127,7 @@ func TestBlockApplierApply(t *testing.T) {
 					Once().
 					Return(nil)
 				mockBlockExec.
-					On("ProcessProposal", mock.Anything, blockH1, commitH1.Round, initialState, false).
+					On("ProcessProposal", mock.Anything, blockH1, commitH1.Round, initialState, true).
 					Once().
 					Return(sm.CurrentRoundState{}, nil)
 				mockBlockExec.
@@ -183,7 +229,7 @@ func TestBlockApplierDoesNotSaveBlockRejectedByApp(t *testing.T) {
 		Once().
 		Return(nil)
 	mockBlockExec.
-		On("ProcessProposal", mock.Anything, block, commit.Round, initialState, false).
+		On("ProcessProposal", mock.Anything, block, commit.Round, initialState, true).
 		Once().
 		Return(sm.CurrentRoundState{}, errors.New("app rejected the block"))
 
@@ -214,7 +260,7 @@ func TestBlockApplierSavesBlockBeforeFinalize(t *testing.T) {
 		Once().
 		Return(nil)
 	mockBlockExec.
-		On("ProcessProposal", mock.Anything, block, commit.Round, initialState, false).
+		On("ProcessProposal", mock.Anything, block, commit.Round, initialState, true).
 		Once().
 		Run(func(mock.Arguments) { calls = append(calls, "process") }).
 		Return(sm.CurrentRoundState{}, nil)
@@ -251,7 +297,7 @@ func TestBlockApplierRecordsStageMetrics(t *testing.T) {
 
 	mockBlockStore.On("SaveBlock", blockH1, mock.Anything, commitH1).Twice()
 	mockBlockExec.On("ValidateBlock", mock.Anything, mock.Anything, blockH1).Twice().Return(nil)
-	mockBlockExec.On("ProcessProposal", mock.Anything, blockH1, commitH1.Round, initialState, false).
+	mockBlockExec.On("ProcessProposal", mock.Anything, blockH1, commitH1.Round, initialState, true).
 		Twice().Return(sm.CurrentRoundState{}, nil)
 	mockBlockExec.On("FinalizeBlock", mock.Anything, initialState, sm.CurrentRoundState{}, mock.Anything, blockH1, commitH1).
 		Twice().Return(initialState, nil)

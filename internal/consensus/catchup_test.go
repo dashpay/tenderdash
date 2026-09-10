@@ -4,6 +4,9 @@ import (
 	"context"
 	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/jonboulle/clockwork"
 
 	"github.com/stretchr/testify/require"
 
@@ -13,95 +16,51 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
-// TestCatchupTrackerMayPropose covers the whole suppression window: a node that
-// block sync handed to consensus while it was provably behind must not propose
-// until something says it reached the network - a peer reporting a height no
-// higher than its own, or a block committed through consensus while no peer
-// reports one. A peer that has reported nothing yet is not that something.
 func TestCatchupTrackerMayPropose(t *testing.T) {
-	const ourHeight = int64(100)
-	testCases := []struct {
-		name       string
-		armed      bool
-		peerHeight int64
-		committed  bool
-		want       bool
+	for _, tc := range []struct {
+		name   string
+		target int64
+		height int64
+		want   bool
 	}{
-		{
-			name: "handover was caught up",
-			want: true,
-		},
-		{
-			name:       "behind, nothing committed through consensus yet",
-			armed:      true,
-			peerHeight: ourHeight + 5000,
-			want:       false,
-		},
-		{
-			name:  "no peer has reported a height yet",
-			armed: true,
-			want:  false,
-		},
-		{
-			name:       "committed, but a peer is still ahead",
-			armed:      true,
-			peerHeight: ourHeight + 1,
-			committed:  true,
-			want:       false,
-		},
-		{
-			name:       "committed, no peer above us",
-			armed:      true,
-			peerHeight: ourHeight,
-			committed:  true,
-			want:       true,
-		},
-		{
-			name:      "no peer has reported a height, but a block was committed",
-			armed:     true,
-			committed: true,
-			want:      true,
-		},
-		{
-			name:       "a peer reports our own height, nothing committed yet",
-			armed:      true,
-			peerHeight: ourHeight,
-			want:       true,
-		},
-	}
-	for _, tc := range testCases {
+		{"not armed", 0, 100, true},
+		{"historical height", 5000, 100, false},
+		{"target block not yet applied", 100, 100, false},
+		{"target block applied", 100, 101, true},
+		{"beyond target", 100, 102, true},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tracker := &catchupTracker{}
-			if tc.armed {
-				tracker.arm(func() int64 { return tc.peerHeight })
+			if tc.target > 0 {
+				tracker.arm(tc.target, clockwork.NewFakeClock())
 			}
-			if tc.committed {
-				tracker.blockCommitted()
-			}
-			require.Equal(t, tc.want, tracker.mayPropose(ourHeight))
+			require.Equal(t, tc.want, tracker.mayPropose(tc.height))
 		})
 	}
 }
 
-// TestCatchupTrackerDoesNotRearm is what keeps the suppression out of reach of a
-// peer that lies about its height. Only a block-sync handover can start it - a
-// state the node enters only while provably behind - so once the node has caught
-// up, a peer claiming to be far ahead cannot silence it again.
-func TestCatchupTrackerDoesNotRearm(t *testing.T) {
-	const ourHeight = int64(100)
-	peerHeight := ourHeight
-
+func TestCatchupTrackerExpiry(t *testing.T) {
+	clock := clockwork.NewFakeClock()
 	tracker := &catchupTracker{}
-	tracker.arm(func() int64 { return peerHeight })
-	tracker.blockCommitted()
-	require.True(t, tracker.mayPropose(ourHeight))
-
-	peerHeight = ourHeight + 1_000_000
-	require.True(t, tracker.mayPropose(ourHeight), "a peer's claimed height must not suppress proposing again")
+	tracker.arm(5000, clock)
+	require.False(t, tracker.mayPropose(100))
+	clock.Advance(maxCatchupSuppression - time.Nanosecond)
+	require.False(t, tracker.mayPropose(101), "partial local progress must preserve the target")
+	clock.Advance(time.Nanosecond)
+	require.True(t, tracker.mayPropose(102), "partial progress must not extend an unverified claim")
+	require.True(t, tracker.mayPropose(102), "expiry must permanently release the gate")
 }
 
-// TestCatchupTrackerNotWired checks that a tracker nobody armed permits
-// proposing, so a state built without one proposes as it always did.
+func TestCatchupTrackerDoesNotRearm(t *testing.T) {
+	clock := clockwork.NewFakeClock()
+	tracker := &catchupTracker{}
+	tracker.arm(100, clock)
+	require.True(t, tracker.mayPropose(101))
+	require.True(t, tracker.mayPropose(100), "only a new handover may re-arm the tracker")
+	tracker.arm(102, clock)
+	require.False(t, tracker.mayPropose(101), "a new handover must retain its own target")
+}
+
 func TestCatchupTrackerNotWired(t *testing.T) {
 	var tracker *catchupTracker
 	require.True(t, tracker.mayPropose(1))
@@ -145,7 +104,7 @@ func TestEnterProposeSuppressedWhileCatchingUp(t *testing.T) {
 	ensureNewRound(t, newRoundCh, height, round)
 
 	creator := enterProposeWithCountingCreator(cs)
-	cs.catchup.arm(func() int64 { return height + 5000 })
+	cs.catchup.arm(height+5000, clockwork.NewFakeClock())
 
 	stateData = cs.GetStateData()
 	require.NoError(t, cs.ctrl.Dispatch(ctx, &EnterProposeEvent{Height: height, Round: round}, &stateData))
@@ -170,8 +129,7 @@ func TestEnterProposeResumesOnceCaughtUp(t *testing.T) {
 	ensureNewRound(t, newRoundCh, height, round)
 
 	creator := enterProposeWithCountingCreator(cs)
-	cs.catchup.arm(func() int64 { return height })
-	cs.catchup.blockCommitted()
+	cs.catchup.arm(height-1, clockwork.NewFakeClock())
 
 	stateData = cs.GetStateData()
 	require.NoError(t, cs.ctrl.Dispatch(ctx, &EnterProposeEvent{Height: height, Round: round}, &stateData))

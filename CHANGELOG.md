@@ -2,6 +2,7 @@
 
 ### Bug Fixes
 
+- Delay proposals after an incomplete block-sync handover with a bounded catch-up window, and validate application responses before persisting synced blocks (#1416).
 - Bound stalled block-response cleanup while allowing actively progressing transfers to continue.
 - Authenticate state-sync validator thresholds against locally stored genesis parameters.
 - Reject partially populated validator public-key shares in light blocks.

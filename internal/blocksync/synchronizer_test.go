@@ -199,7 +199,7 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResult() {
 					Once().
 					Return(nil)
 				suite.blockExec.
-					On("ProcessProposal", mock.Anything, respH1.Block, mock.Anything, mock.Anything, false).
+					On("ProcessProposal", mock.Anything, respH1.Block, mock.Anything, mock.Anything, true).
 					Once().
 					Return(sm.CurrentRoundState{}, nil)
 				suite.blockExec.
@@ -995,7 +995,8 @@ func (suite *SynchronizerTestSuite) newWaitForSyncHarness(height int64, peers ..
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan bool, 1)
 	go func() {
-		done <- sync.WaitForSync(ctx)
+		caughtUp, _ := sync.WaitForSync(ctx)
+		done <- caughtUp
 	}()
 	suite.Require().NoError(clock.BlockUntilContext(ctx, 1))
 	return &waitForSyncHarness{clock: clock, done: done, cancel: cancel}
@@ -1136,8 +1137,9 @@ func (suite *SynchronizerTestSuite) TestStallSnapshotIsOneObservation() {
 		}()
 		runtime.Gosched()
 		close(ready)
-		height, stalled, servable, maxPeerHeight := sync.stallSnapshot()
+		height, stalled, servable, maxPeerHeight, hasPeers := sync.stallSnapshot()
 		<-applied
+		suite.Require().True(hasPeers)
 		suite.Require().Equal(int64(1000), maxPeerHeight, "the height the gap is measured against")
 
 		if height == startHeight {
