@@ -43,6 +43,7 @@ The following metrics are available:
 | consensus_step_duration                 | Histogram | step            | Histogram of durations for each step in the consensus protocol                                                                             |
 | consensus_block_gossip_receive_latency  | Histogram |                 | Histogram of time taken to receive a block in seconds, measure between when a new block is first discovered to when the block is completed |
 | consensus_block_gossip_parts_received   | Counter   | matches_current | Number of block parts received by the node                                                                                                 |
+| consensus_block_sync_apply_stage_duration | Histogram | stage         | Time a block spent in each stage of the block sync applier, in ms: partset, verify_commit, verify_block, save, exec, and wait (idle time between blocks) |
 | consensus_quorum_prevote_delay          | Gauge     |                 | Interval in seconds between the proposal timestamp and the timestamp of the earliest prevote that achieved a quorum                        |
 | consensus_full_prevote_delay            | Gauge     |                 | Interval in seconds between the proposal timestamp and the timestamp of the latest prevote in a round where all validators voted           |
 | consensus_proposal_timestamp_difference | Histogram |                 | Difference between the timestamp in the proposal message and the local time of the validator at the time it received the message           |
@@ -78,6 +79,7 @@ The following metrics are available:
 | state_block_processing_time             | Histogram |                 | time between BeginBlock and EndBlock in ms                                                                                                 |
 | state_consensus_param_updates           | Counter   |                 | number of consensus parameter updates returned by the application since process start                                                      |
 | state_validator_set_updates             | Counter   |                 | number of validator set updates returned by the application since process start                                                            |
+| state_block_apply_stage_duration        | Histogram | stage           | Time spent in each stage of applying a committed block, in ms: the ABCI calls, the state and ABCI response writes, the mempool update and the event publish |
 
 ## Useful queries
 
