@@ -117,33 +117,61 @@ type Store interface {
 type dbStore struct {
 	db     dbm.DB
 	logger log.Logger
+
+	// unsafeNoFsync drops the fsync from every write. See StoreWithUnsafeNoFsync.
+	unsafeNoFsync bool
 }
 
 var _ Store = (*dbStore)(nil)
 
-// NewStore creates the dbStore of the state pkg.
-//
-// ## Parameters
-//
-//   - `db` - the database to use
-//   - `logger` - the logger to use; optional, defaults to a nop logger if not provided; if more than one is provided,
-//     it will panic
-//
-// ##Panics
-//
-// If more than one logger is provided.
-func NewStore(db dbm.DB, logger ...log.Logger) Store {
-	// To avoid changing the API, we use `logger ...log.Logger` in function signature, so that old code can
-	// provide only `db`. In this case, we use NopLogger.
-	if len(logger) == 0 || logger[0] == nil {
-		logger = []log.Logger{log.NewNopLogger()}
-	}
+// StoreOption configures the store returned by NewStore.
+type StoreOption func(*dbStore)
 
-	if len(logger) > 1 {
-		panic("NewStore(): maximum one logger is allowed")
+// StoreWithLogger sets the logger of the store. A nil logger is ignored.
+func StoreWithLogger(logger log.Logger) StoreOption {
+	return func(s *dbStore) {
+		if logger != nil {
+			s.logger = logger
+		}
 	}
+}
 
-	return dbStore{db, logger[0]}
+// StoreWithUnsafeNoFsync is the state-store half of the block store's
+// WithUnsafeNoFsync: writes return before they have reached the disk. It is a
+// benchmarking aid. Never use it on a node whose data matters: a power loss can
+// leave the state store behind the application.
+func StoreWithUnsafeNoFsync() StoreOption {
+	return func(s *dbStore) {
+		s.unsafeNoFsync = true
+	}
+}
+
+// NewStore creates the dbStore of the state pkg, backed by db. Without options
+// it logs nowhere and every write is durable.
+func NewStore(db dbm.DB, opts ...StoreOption) Store {
+	store := dbStore{db: db, logger: log.NewNopLogger()}
+	for _, opt := range opts {
+		opt(&store)
+	}
+	return store
+}
+
+// writeBatch commits a batch durably, unless the store was built with
+// StoreWithUnsafeNoFsync.
+func (store dbStore) writeBatch(batch dbm.Batch) error {
+	if store.unsafeNoFsync {
+		return batch.Write()
+	}
+	return batch.WriteSync()
+}
+
+// set writes a single key durably, unless the store was built with
+// StoreWithUnsafeNoFsync.
+func (store dbStore) set(key, value []byte) error {
+	if store.unsafeNoFsync {
+		return store.db.Set(key, value)
+	}
+	return store.db.SetSync(key, value)
 }
 
 // Load loads the State from the database.
@@ -217,7 +245,7 @@ func (store dbStore) save(state State, key []byte) error {
 		return err
 	}
 
-	return batch.WriteSync()
+	return store.writeBatch(batch)
 }
 
 // BootstrapState saves a new state, used e.g. by state sync when starting from non-zero height.
@@ -254,7 +282,7 @@ func (store dbStore) Bootstrap(state State) error {
 		return err
 	}
 
-	return batch.WriteSync()
+	return store.writeBatch(batch)
 }
 
 // PruneStates deletes states up to the height specified (exclusive). It is not
@@ -415,7 +443,7 @@ func (store dbStore) pruneRange(start []byte, end []byte) error {
 		}
 	}
 
-	return batch.WriteSync()
+	return store.writeBatch(batch)
 }
 
 // reverseBatchDelete runs a reverse iterator (from end to start) filling up a batch until either
@@ -497,7 +525,7 @@ func (store dbStore) saveABCIResponses(height int64, abciResponses tmstate.ABCIR
 	if err != nil {
 		return err
 	}
-	return store.db.SetSync(abciResponsesKey(height), bz)
+	return store.set(abciResponsesKey(height), bz)
 }
 
 // SaveValidatorSets is used to save the validator set over multiple heights.
@@ -515,7 +543,7 @@ func (store dbStore) SaveValidatorSets(lowerHeight, upperHeight int64, vals *typ
 		}
 	}
 
-	return batch.WriteSync()
+	return store.writeBatch(batch)
 }
 
 // -----------------------------------------------------------------------------

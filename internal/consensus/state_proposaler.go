@@ -63,6 +63,12 @@ func (p *Proposaler) Set(
 		return nil
 	}
 
+	// Keep a later-round proposal from disrupting the committed-block download.
+	if rs.Commit != nil && rs.ProposalBlockParts.HasHeader(rs.Commit.BlockID.PartSetHeader) &&
+		!proposal.BlockID.Equals(rs.Commit.BlockID) {
+		return nil
+	}
+
 	// Verify POLRound, which must be -1 or in range [0, proposal.Round).
 	if proposal.POLRound < -1 ||
 		(proposal.POLRound >= 0 && proposal.POLRound >= proposal.Round) {
@@ -71,6 +77,16 @@ func (p *Proposaler) Set(
 
 	if proposal.CoreChainLockedHeight < p.committedState.LastCoreChainLockedBlockHeight {
 		return ErrInvalidProposalCoreHeight
+	}
+
+	// Parts may finish before a replacement proposal arrives.
+	if rs.ProposalBlock != nil && rs.ProposalBlockParts != nil {
+		if !rs.ProposalBlock.BlockID(rs.ProposalBlockParts).Equals(proposal.BlockID) {
+			return ErrInvalidProposalBlockID
+		}
+		if rs.ProposalBlock.CoreChainLockedHeight != proposal.CoreChainLockedHeight {
+			return ErrInvalidProposalCoreHeight
+		}
 	}
 
 	err := p.verifyProposal(ctx, proposal, rs)

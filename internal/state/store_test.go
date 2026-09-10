@@ -203,7 +203,7 @@ func TestStoreLoadValidatorsOnRotation(t *testing.T) {
 			uncommittedHeight := startHeight + rotations*int64(nVals)
 
 			stateDB := dbm.NewMemDB()
-			stateStore := sm.NewStore(stateDB, log.NewTestingLoggerWithLevel(t, log.LogLevelDebug))
+			stateStore := sm.NewStore(stateDB, sm.StoreWithLogger(log.NewTestingLoggerWithLevel(t, log.LogLevelDebug)))
 
 			validators := make([]*types.ValidatorSet, nValSets)
 			for i := int64(0); i < nValSets; i++ {

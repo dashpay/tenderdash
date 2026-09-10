@@ -76,7 +76,7 @@ type RemoteClient_ABCIInfo_Call struct {
 
 // ABCIInfo is a helper method to define mock.On call
 //   - context1 context.Context
-func (_e *RemoteClient_Expecter) ABCIInfo(context1 interface{}) *RemoteClient_ABCIInfo_Call {
+func (_e *RemoteClient_Expecter) ABCIInfo(context1 any) *RemoteClient_ABCIInfo_Call {
 	return &RemoteClient_ABCIInfo_Call{Call: _e.mock.On("ABCIInfo", context1)}
 }
 
@@ -140,7 +140,7 @@ type RemoteClient_ABCIQuery_Call struct {
 //   - ctx context.Context
 //   - path string
 //   - data bytes.HexBytes
-func (_e *RemoteClient_Expecter) ABCIQuery(ctx interface{}, path interface{}, data interface{}) *RemoteClient_ABCIQuery_Call {
+func (_e *RemoteClient_Expecter) ABCIQuery(ctx any, path any, data any) *RemoteClient_ABCIQuery_Call {
 	return &RemoteClient_ABCIQuery_Call{Call: _e.mock.On("ABCIQuery", ctx, path, data)}
 }
 
@@ -215,7 +215,7 @@ type RemoteClient_ABCIQueryWithOptions_Call struct {
 //   - path string
 //   - data bytes.HexBytes
 //   - opts client.ABCIQueryOptions
-func (_e *RemoteClient_Expecter) ABCIQueryWithOptions(ctx interface{}, path interface{}, data interface{}, opts interface{}) *RemoteClient_ABCIQueryWithOptions_Call {
+func (_e *RemoteClient_Expecter) ABCIQueryWithOptions(ctx any, path any, data any, opts any) *RemoteClient_ABCIQueryWithOptions_Call {
 	return &RemoteClient_ABCIQueryWithOptions_Call{Call: _e.mock.On("ABCIQueryWithOptions", ctx, path, data, opts)}
 }
 
@@ -293,7 +293,7 @@ type RemoteClient_Block_Call struct {
 // Block is a helper method to define mock.On call
 //   - ctx context.Context
 //   - height *int64
-func (_e *RemoteClient_Expecter) Block(ctx interface{}, height interface{}) *RemoteClient_Block_Call {
+func (_e *RemoteClient_Expecter) Block(ctx any, height any) *RemoteClient_Block_Call {
 	return &RemoteClient_Block_Call{Call: _e.mock.On("Block", ctx, height)}
 }
 
@@ -361,7 +361,7 @@ type RemoteClient_BlockByHash_Call struct {
 // BlockByHash is a helper method to define mock.On call
 //   - ctx context.Context
 //   - hash bytes.HexBytes
-func (_e *RemoteClient_Expecter) BlockByHash(ctx interface{}, hash interface{}) *RemoteClient_BlockByHash_Call {
+func (_e *RemoteClient_Expecter) BlockByHash(ctx any, hash any) *RemoteClient_BlockByHash_Call {
 	return &RemoteClient_BlockByHash_Call{Call: _e.mock.On("BlockByHash", ctx, hash)}
 }
 
@@ -429,7 +429,7 @@ type RemoteClient_BlockResults_Call struct {
 // BlockResults is a helper method to define mock.On call
 //   - ctx context.Context
 //   - height *int64
-func (_e *RemoteClient_Expecter) BlockResults(ctx interface{}, height interface{}) *RemoteClient_BlockResults_Call {
+func (_e *RemoteClient_Expecter) BlockResults(ctx any, height any) *RemoteClient_BlockResults_Call {
 	return &RemoteClient_BlockResults_Call{Call: _e.mock.On("BlockResults", ctx, height)}
 }
 
@@ -500,7 +500,7 @@ type RemoteClient_BlockSearch_Call struct {
 //   - page *int
 //   - perPage *int
 //   - orderBy string
-func (_e *RemoteClient_Expecter) BlockSearch(ctx interface{}, query interface{}, page interface{}, perPage interface{}, orderBy interface{}) *RemoteClient_BlockSearch_Call {
+func (_e *RemoteClient_Expecter) BlockSearch(ctx any, query any, page any, perPage any, orderBy any) *RemoteClient_BlockSearch_Call {
 	return &RemoteClient_BlockSearch_Call{Call: _e.mock.On("BlockSearch", ctx, query, page, perPage, orderBy)}
 }
 
@@ -584,7 +584,7 @@ type RemoteClient_BlockchainInfo_Call struct {
 //   - ctx context.Context
 //   - minHeight int64
 //   - maxHeight int64
-func (_e *RemoteClient_Expecter) BlockchainInfo(ctx interface{}, minHeight interface{}, maxHeight interface{}) *RemoteClient_BlockchainInfo_Call {
+func (_e *RemoteClient_Expecter) BlockchainInfo(ctx any, minHeight any, maxHeight any) *RemoteClient_BlockchainInfo_Call {
 	return &RemoteClient_BlockchainInfo_Call{Call: _e.mock.On("BlockchainInfo", ctx, minHeight, maxHeight)}
 }
 
@@ -657,7 +657,7 @@ type RemoteClient_BroadcastEvidence_Call struct {
 // BroadcastEvidence is a helper method to define mock.On call
 //   - context1 context.Context
 //   - evidence types.Evidence
-func (_e *RemoteClient_Expecter) BroadcastEvidence(context1 interface{}, evidence interface{}) *RemoteClient_BroadcastEvidence_Call {
+func (_e *RemoteClient_Expecter) BroadcastEvidence(context1 any, evidence any) *RemoteClient_BroadcastEvidence_Call {
 	return &RemoteClient_BroadcastEvidence_Call{Call: _e.mock.On("BroadcastEvidence", context1, evidence)}
 }
 
@@ -725,7 +725,7 @@ type RemoteClient_BroadcastTx_Call struct {
 // BroadcastTx is a helper method to define mock.On call
 //   - context1 context.Context
 //   - tx types.Tx
-func (_e *RemoteClient_Expecter) BroadcastTx(context1 interface{}, tx interface{}) *RemoteClient_BroadcastTx_Call {
+func (_e *RemoteClient_Expecter) BroadcastTx(context1 any, tx any) *RemoteClient_BroadcastTx_Call {
 	return &RemoteClient_BroadcastTx_Call{Call: _e.mock.On("BroadcastTx", context1, tx)}
 }
 
@@ -793,7 +793,7 @@ type RemoteClient_BroadcastTxAsync_Call struct {
 // BroadcastTxAsync is a helper method to define mock.On call
 //   - context1 context.Context
 //   - tx types.Tx
-func (_e *RemoteClient_Expecter) BroadcastTxAsync(context1 interface{}, tx interface{}) *RemoteClient_BroadcastTxAsync_Call {
+func (_e *RemoteClient_Expecter) BroadcastTxAsync(context1 any, tx any) *RemoteClient_BroadcastTxAsync_Call {
 	return &RemoteClient_BroadcastTxAsync_Call{Call: _e.mock.On("BroadcastTxAsync", context1, tx)}
 }
 
@@ -861,7 +861,7 @@ type RemoteClient_BroadcastTxCommit_Call struct {
 // BroadcastTxCommit is a helper method to define mock.On call
 //   - context1 context.Context
 //   - tx types.Tx
-func (_e *RemoteClient_Expecter) BroadcastTxCommit(context1 interface{}, tx interface{}) *RemoteClient_BroadcastTxCommit_Call {
+func (_e *RemoteClient_Expecter) BroadcastTxCommit(context1 any, tx any) *RemoteClient_BroadcastTxCommit_Call {
 	return &RemoteClient_BroadcastTxCommit_Call{Call: _e.mock.On("BroadcastTxCommit", context1, tx)}
 }
 
@@ -929,7 +929,7 @@ type RemoteClient_BroadcastTxSync_Call struct {
 // BroadcastTxSync is a helper method to define mock.On call
 //   - context1 context.Context
 //   - tx types.Tx
-func (_e *RemoteClient_Expecter) BroadcastTxSync(context1 interface{}, tx interface{}) *RemoteClient_BroadcastTxSync_Call {
+func (_e *RemoteClient_Expecter) BroadcastTxSync(context1 any, tx any) *RemoteClient_BroadcastTxSync_Call {
 	return &RemoteClient_BroadcastTxSync_Call{Call: _e.mock.On("BroadcastTxSync", context1, tx)}
 }
 
@@ -997,7 +997,7 @@ type RemoteClient_CheckTx_Call struct {
 // CheckTx is a helper method to define mock.On call
 //   - context1 context.Context
 //   - tx types.Tx
-func (_e *RemoteClient_Expecter) CheckTx(context1 interface{}, tx interface{}) *RemoteClient_CheckTx_Call {
+func (_e *RemoteClient_Expecter) CheckTx(context1 any, tx any) *RemoteClient_CheckTx_Call {
 	return &RemoteClient_CheckTx_Call{Call: _e.mock.On("CheckTx", context1, tx)}
 }
 
@@ -1065,7 +1065,7 @@ type RemoteClient_Commit_Call struct {
 // Commit is a helper method to define mock.On call
 //   - ctx context.Context
 //   - height *int64
-func (_e *RemoteClient_Expecter) Commit(ctx interface{}, height interface{}) *RemoteClient_Commit_Call {
+func (_e *RemoteClient_Expecter) Commit(ctx any, height any) *RemoteClient_Commit_Call {
 	return &RemoteClient_Commit_Call{Call: _e.mock.On("Commit", ctx, height)}
 }
 
@@ -1133,7 +1133,7 @@ type RemoteClient_ConsensusParams_Call struct {
 // ConsensusParams is a helper method to define mock.On call
 //   - ctx context.Context
 //   - height *int64
-func (_e *RemoteClient_Expecter) ConsensusParams(ctx interface{}, height interface{}) *RemoteClient_ConsensusParams_Call {
+func (_e *RemoteClient_Expecter) ConsensusParams(ctx any, height any) *RemoteClient_ConsensusParams_Call {
 	return &RemoteClient_ConsensusParams_Call{Call: _e.mock.On("ConsensusParams", ctx, height)}
 }
 
@@ -1200,7 +1200,7 @@ type RemoteClient_ConsensusState_Call struct {
 
 // ConsensusState is a helper method to define mock.On call
 //   - context1 context.Context
-func (_e *RemoteClient_Expecter) ConsensusState(context1 interface{}) *RemoteClient_ConsensusState_Call {
+func (_e *RemoteClient_Expecter) ConsensusState(context1 any) *RemoteClient_ConsensusState_Call {
 	return &RemoteClient_ConsensusState_Call{Call: _e.mock.On("ConsensusState", context1)}
 }
 
@@ -1262,7 +1262,7 @@ type RemoteClient_DumpConsensusState_Call struct {
 
 // DumpConsensusState is a helper method to define mock.On call
 //   - context1 context.Context
-func (_e *RemoteClient_Expecter) DumpConsensusState(context1 interface{}) *RemoteClient_DumpConsensusState_Call {
+func (_e *RemoteClient_Expecter) DumpConsensusState(context1 any) *RemoteClient_DumpConsensusState_Call {
 	return &RemoteClient_DumpConsensusState_Call{Call: _e.mock.On("DumpConsensusState", context1)}
 }
 
@@ -1325,7 +1325,7 @@ type RemoteClient_Events_Call struct {
 // Events is a helper method to define mock.On call
 //   - ctx context.Context
 //   - req *coretypes.RequestEvents
-func (_e *RemoteClient_Expecter) Events(ctx interface{}, req interface{}) *RemoteClient_Events_Call {
+func (_e *RemoteClient_Expecter) Events(ctx any, req any) *RemoteClient_Events_Call {
 	return &RemoteClient_Events_Call{Call: _e.mock.On("Events", ctx, req)}
 }
 
@@ -1392,7 +1392,7 @@ type RemoteClient_Genesis_Call struct {
 
 // Genesis is a helper method to define mock.On call
 //   - context1 context.Context
-func (_e *RemoteClient_Expecter) Genesis(context1 interface{}) *RemoteClient_Genesis_Call {
+func (_e *RemoteClient_Expecter) Genesis(context1 any) *RemoteClient_Genesis_Call {
 	return &RemoteClient_Genesis_Call{Call: _e.mock.On("Genesis", context1)}
 }
 
@@ -1455,7 +1455,7 @@ type RemoteClient_GenesisChunked_Call struct {
 // GenesisChunked is a helper method to define mock.On call
 //   - context1 context.Context
 //   - v uint
-func (_e *RemoteClient_Expecter) GenesisChunked(context1 interface{}, v interface{}) *RemoteClient_GenesisChunked_Call {
+func (_e *RemoteClient_Expecter) GenesisChunked(context1 any, v any) *RemoteClient_GenesisChunked_Call {
 	return &RemoteClient_GenesisChunked_Call{Call: _e.mock.On("GenesisChunked", context1, v)}
 }
 
@@ -1523,7 +1523,7 @@ type RemoteClient_Header_Call struct {
 // Header is a helper method to define mock.On call
 //   - ctx context.Context
 //   - height *int64
-func (_e *RemoteClient_Expecter) Header(ctx interface{}, height interface{}) *RemoteClient_Header_Call {
+func (_e *RemoteClient_Expecter) Header(ctx any, height any) *RemoteClient_Header_Call {
 	return &RemoteClient_Header_Call{Call: _e.mock.On("Header", ctx, height)}
 }
 
@@ -1591,7 +1591,7 @@ type RemoteClient_HeaderByHash_Call struct {
 // HeaderByHash is a helper method to define mock.On call
 //   - ctx context.Context
 //   - hash bytes.HexBytes
-func (_e *RemoteClient_Expecter) HeaderByHash(ctx interface{}, hash interface{}) *RemoteClient_HeaderByHash_Call {
+func (_e *RemoteClient_Expecter) HeaderByHash(ctx any, hash any) *RemoteClient_HeaderByHash_Call {
 	return &RemoteClient_HeaderByHash_Call{Call: _e.mock.On("HeaderByHash", ctx, hash)}
 }
 
@@ -1658,7 +1658,7 @@ type RemoteClient_Health_Call struct {
 
 // Health is a helper method to define mock.On call
 //   - context1 context.Context
-func (_e *RemoteClient_Expecter) Health(context1 interface{}) *RemoteClient_Health_Call {
+func (_e *RemoteClient_Expecter) Health(context1 any) *RemoteClient_Health_Call {
 	return &RemoteClient_Health_Call{Call: _e.mock.On("Health", context1)}
 }
 
@@ -1720,7 +1720,7 @@ type RemoteClient_NetInfo_Call struct {
 
 // NetInfo is a helper method to define mock.On call
 //   - context1 context.Context
-func (_e *RemoteClient_Expecter) NetInfo(context1 interface{}) *RemoteClient_NetInfo_Call {
+func (_e *RemoteClient_Expecter) NetInfo(context1 any) *RemoteClient_NetInfo_Call {
 	return &RemoteClient_NetInfo_Call{Call: _e.mock.On("NetInfo", context1)}
 }
 
@@ -1782,7 +1782,7 @@ type RemoteClient_NumUnconfirmedTxs_Call struct {
 
 // NumUnconfirmedTxs is a helper method to define mock.On call
 //   - context1 context.Context
-func (_e *RemoteClient_Expecter) NumUnconfirmedTxs(context1 interface{}) *RemoteClient_NumUnconfirmedTxs_Call {
+func (_e *RemoteClient_Expecter) NumUnconfirmedTxs(context1 any) *RemoteClient_NumUnconfirmedTxs_Call {
 	return &RemoteClient_NumUnconfirmedTxs_Call{Call: _e.mock.On("NumUnconfirmedTxs", context1)}
 }
 
@@ -1878,7 +1878,7 @@ type RemoteClient_RemoveTx_Call struct {
 // RemoveTx is a helper method to define mock.On call
 //   - context1 context.Context
 //   - txKey types.TxKey
-func (_e *RemoteClient_Expecter) RemoveTx(context1 interface{}, txKey interface{}) *RemoteClient_RemoveTx_Call {
+func (_e *RemoteClient_Expecter) RemoveTx(context1 any, txKey any) *RemoteClient_RemoveTx_Call {
 	return &RemoteClient_RemoveTx_Call{Call: _e.mock.On("RemoveTx", context1, txKey)}
 }
 
@@ -1934,7 +1934,7 @@ type RemoteClient_Start_Call struct {
 
 // Start is a helper method to define mock.On call
 //   - context1 context.Context
-func (_e *RemoteClient_Expecter) Start(context1 interface{}) *RemoteClient_Start_Call {
+func (_e *RemoteClient_Expecter) Start(context1 any) *RemoteClient_Start_Call {
 	return &RemoteClient_Start_Call{Call: _e.mock.On("Start", context1)}
 }
 
@@ -1996,7 +1996,7 @@ type RemoteClient_Status_Call struct {
 
 // Status is a helper method to define mock.On call
 //   - context1 context.Context
-func (_e *RemoteClient_Expecter) Status(context1 interface{}) *RemoteClient_Status_Call {
+func (_e *RemoteClient_Expecter) Status(context1 any) *RemoteClient_Status_Call {
 	return &RemoteClient_Status_Call{Call: _e.mock.On("Status", context1)}
 }
 
@@ -2067,9 +2067,9 @@ type RemoteClient_Subscribe_Call struct {
 //   - subscriber string
 //   - query string
 //   - outCapacity ...int
-func (_e *RemoteClient_Expecter) Subscribe(ctx interface{}, subscriber interface{}, query interface{}, outCapacity ...interface{}) *RemoteClient_Subscribe_Call {
+func (_e *RemoteClient_Expecter) Subscribe(ctx any, subscriber any, query any, outCapacity ...any) *RemoteClient_Subscribe_Call {
 	return &RemoteClient_Subscribe_Call{Call: _e.mock.On("Subscribe",
-		append([]interface{}{ctx, subscriber, query}, outCapacity...)...)}
+		append([]any{ctx, subscriber, query}, outCapacity...)...)}
 }
 
 func (_c *RemoteClient_Subscribe_Call) Run(run func(ctx context.Context, subscriber string, query string, outCapacity ...int)) *RemoteClient_Subscribe_Call {
@@ -2149,7 +2149,7 @@ type RemoteClient_Tx_Call struct {
 //   - ctx context.Context
 //   - hash bytes.HexBytes
 //   - prove bool
-func (_e *RemoteClient_Expecter) Tx(ctx interface{}, hash interface{}, prove interface{}) *RemoteClient_Tx_Call {
+func (_e *RemoteClient_Expecter) Tx(ctx any, hash any, prove any) *RemoteClient_Tx_Call {
 	return &RemoteClient_Tx_Call{Call: _e.mock.On("Tx", ctx, hash, prove)}
 }
 
@@ -2226,7 +2226,7 @@ type RemoteClient_TxSearch_Call struct {
 //   - page *int
 //   - perPage *int
 //   - orderBy string
-func (_e *RemoteClient_Expecter) TxSearch(ctx interface{}, query interface{}, prove interface{}, page interface{}, perPage interface{}, orderBy interface{}) *RemoteClient_TxSearch_Call {
+func (_e *RemoteClient_Expecter) TxSearch(ctx any, query any, prove any, page any, perPage any, orderBy any) *RemoteClient_TxSearch_Call {
 	return &RemoteClient_TxSearch_Call{Call: _e.mock.On("TxSearch", ctx, query, prove, page, perPage, orderBy)}
 }
 
@@ -2314,7 +2314,7 @@ type RemoteClient_UnconfirmedTx_Call struct {
 // UnconfirmedTx is a helper method to define mock.On call
 //   - ctx context.Context
 //   - txHash []byte
-func (_e *RemoteClient_Expecter) UnconfirmedTx(ctx interface{}, txHash interface{}) *RemoteClient_UnconfirmedTx_Call {
+func (_e *RemoteClient_Expecter) UnconfirmedTx(ctx any, txHash any) *RemoteClient_UnconfirmedTx_Call {
 	return &RemoteClient_UnconfirmedTx_Call{Call: _e.mock.On("UnconfirmedTx", ctx, txHash)}
 }
 
@@ -2383,7 +2383,7 @@ type RemoteClient_UnconfirmedTxs_Call struct {
 //   - ctx context.Context
 //   - page *int
 //   - perPage *int
-func (_e *RemoteClient_Expecter) UnconfirmedTxs(ctx interface{}, page interface{}, perPage interface{}) *RemoteClient_UnconfirmedTxs_Call {
+func (_e *RemoteClient_Expecter) UnconfirmedTxs(ctx any, page any, perPage any) *RemoteClient_UnconfirmedTxs_Call {
 	return &RemoteClient_UnconfirmedTxs_Call{Call: _e.mock.On("UnconfirmedTxs", ctx, page, perPage)}
 }
 
@@ -2446,7 +2446,7 @@ type RemoteClient_Unsubscribe_Call struct {
 //   - ctx context.Context
 //   - subscriber string
 //   - query string
-func (_e *RemoteClient_Expecter) Unsubscribe(ctx interface{}, subscriber interface{}, query interface{}) *RemoteClient_Unsubscribe_Call {
+func (_e *RemoteClient_Expecter) Unsubscribe(ctx any, subscriber any, query any) *RemoteClient_Unsubscribe_Call {
 	return &RemoteClient_Unsubscribe_Call{Call: _e.mock.On("Unsubscribe", ctx, subscriber, query)}
 }
 
@@ -2508,7 +2508,7 @@ type RemoteClient_UnsubscribeAll_Call struct {
 // UnsubscribeAll is a helper method to define mock.On call
 //   - ctx context.Context
 //   - subscriber string
-func (_e *RemoteClient_Expecter) UnsubscribeAll(ctx interface{}, subscriber interface{}) *RemoteClient_UnsubscribeAll_Call {
+func (_e *RemoteClient_Expecter) UnsubscribeAll(ctx any, subscriber any) *RemoteClient_UnsubscribeAll_Call {
 	return &RemoteClient_UnsubscribeAll_Call{Call: _e.mock.On("UnsubscribeAll", ctx, subscriber)}
 }
 
@@ -2579,7 +2579,7 @@ type RemoteClient_Validators_Call struct {
 //   - page *int
 //   - perPage *int
 //   - requestQuorumInfo *bool
-func (_e *RemoteClient_Expecter) Validators(ctx interface{}, height interface{}, page interface{}, perPage interface{}, requestQuorumInfo interface{}) *RemoteClient_Validators_Call {
+func (_e *RemoteClient_Expecter) Validators(ctx any, height any, page any, perPage any, requestQuorumInfo any) *RemoteClient_Validators_Call {
 	return &RemoteClient_Validators_Call{Call: _e.mock.On("Validators", ctx, height, page, perPage, requestQuorumInfo)}
 }
 

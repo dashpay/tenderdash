@@ -149,7 +149,16 @@ func makeNode(
 	}
 	closers = append(closers, dbCloser)
 
-	stateStore := sm.NewStore(stateDB, logger.With("module", "state_store"))
+	stateStoreOpts := []sm.StoreOption{sm.StoreWithLogger(logger.With("module", "state_store"))}
+	if cfg.UnsafeNoFsync {
+		// Here and in initDBs are the only places the policy is applied:
+		// tooling that opens the same databases (rollback, reindex, inspect)
+		// keeps durable writes.
+		stateStoreOpts = append(stateStoreOpts, sm.StoreWithUnsafeNoFsync())
+		logger.Error("unsafe-no-fsync is set: block store and state store writes are not durable; " +
+			"a power loss can leave this node unable to start. Never use this on a node whose data matters")
+	}
+	stateStore := sm.NewStore(stateDB, stateStoreOpts...)
 
 	genDoc, err := genesisDocProvider()
 	if err != nil {
