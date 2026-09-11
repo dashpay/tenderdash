@@ -91,17 +91,26 @@ func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *ty
 	}
 	verifyTime := time.Since(start)
 
+	// Validate the app response before persisting; save before FinalizeBlock so
+	// crash recovery never finds the block store behind the application.
+	start = time.Now()
+	uncommittedState, err := e.blockExec.ProcessProposal(ctx, block, commit.Round, e.state, true)
+	if err != nil {
+		panic(fmt.Sprintf("failed to process committed block (%d:%X): %v", block.Height, block.Hash(), err))
+	}
+	processTime := time.Since(start)
+
 	start = time.Now()
 	e.store.SaveBlock(block, blockParts, commit)
 	saveTime := e.observeSince("save", start)
 
 	start = time.Now()
-	// TODO: Same thing for app - but we would need a way to get the hash without persisting the state.
-	e.state, err = e.blockExec.ApplyBlock(ctx, e.state, blockID, block, commit)
+	e.state, err = e.blockExec.FinalizeBlock(ctx, e.state, uncommittedState, blockID, block, commit)
 	if err != nil {
-		panic(fmt.Sprintf("failed to process committed block (%d:%X): %v", block.Height, block.Hash(), err))
+		panic(fmt.Sprintf("failed to finalize committed block (%d:%X): %v", block.Height, block.Hash(), err))
 	}
-	execTime := e.observeSince("exec", start)
+	execTime := processTime + time.Since(start)
+	e.metrics.ObserveBlockSyncStage("exec", execTime)
 
 	e.stats.add(partSetTime, verifyTime, saveTime, execTime)
 	// ByteSize is the size of the serialized block we just built, so the metric
