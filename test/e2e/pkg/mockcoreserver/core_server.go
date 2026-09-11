@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"strings"
 
 	"github.com/dashpay/dashd-go/btcjson"
 
+	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/crypto/encoding"
 	"github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/privval"
 	"github.com/dashpay/tenderdash/types"
@@ -28,6 +31,48 @@ type MockCoreServer struct {
 	ChainID  string
 	LLMQType btcjson.LLMQType
 	FilePV   *privval.FilePV
+	// Quorums holds complete `quorum info` answers keyed by lower-case hex
+	// quorum hash (see QuorumsFromValidatorSetUpdates). A quorum missing here
+	// is answered from FilePV, which only knows the local node's own share.
+	Quorums map[string]btcjson.QuorumInfoResult
+}
+
+// QuorumsFromValidatorSetUpdates builds the `quorum info` answers Dash Core
+// would give for every quorum of a validator set schedule: all members with
+// their public key shares and the threshold public key. State sync
+// authenticates light block validator sets against exactly these fields.
+func QuorumsFromValidatorSetUpdates(
+	llmqType btcjson.LLMQType,
+	updates map[int64]abci.ValidatorSetUpdate,
+) (map[string]btcjson.QuorumInfoResult, error) {
+	quorums := make(map[string]btcjson.QuorumInfoResult, len(updates))
+	for height, update := range updates {
+		thresholdKey, err := encoding.PubKeyFromProto(update.ThresholdPublicKey)
+		if err != nil {
+			return nil, fmt.Errorf("threshold public key of the update at height %d: %w", height, err)
+		}
+		members := make([]btcjson.QuorumMember, 0, len(update.ValidatorUpdates))
+		for _, validator := range update.ValidatorUpdates {
+			member := btcjson.QuorumMember{ProTxHash: hex.EncodeToString(validator.ProTxHash), Valid: true}
+			if validator.PubKey != nil {
+				pubKey, err := encoding.PubKeyFromProto(*validator.PubKey)
+				if err != nil {
+					return nil, fmt.Errorf("public key of %X at height %d: %w", validator.ProTxHash, height, err)
+				}
+				member.PubKeyShare = hex.EncodeToString(pubKey.Bytes())
+			}
+			members = append(members, member)
+		}
+		quorumHash := hex.EncodeToString(update.QuorumHash)
+		quorums[quorumHash] = btcjson.QuorumInfoResult{
+			Height:          math.MustConvertUint32(height),
+			Type:            llmqType.Name(),
+			QuorumHash:      quorumHash,
+			Members:         members,
+			QuorumPublicKey: hex.EncodeToString(thresholdKey.Bytes()),
+		}
+	}
+	return quorums, nil
 }
 
 // QuorumInfo returns a quorum-info result
@@ -40,6 +85,9 @@ func (c *MockCoreServer) QuorumInfo(ctx context.Context, cmd btcjson.QuorumCmd) 
 	if cmd.QuorumHash == nil {
 		err = fmt.Errorf("quorum hash can not be nil when trying to get quorum info")
 		panic(err)
+	}
+	if info, ok := c.Quorums[strings.ToLower(*cmd.QuorumHash)]; ok {
+		return info
 	}
 	quorumHashBytes, err := hex.DecodeString(*cmd.QuorumHash)
 	if len(quorumHashBytes) != crypto.DefaultHashSize {
@@ -69,14 +117,14 @@ func (c *MockCoreServer) QuorumInfo(ctx context.Context, cmd btcjson.QuorumCmd) 
 		panic(err)
 	}
 
+	// Dash Core reports the quorum type by its LLMQ name (e.g. "llmq_test"),
+	// which is what state sync's validator-set authentication parses.
 	return btcjson.QuorumInfoResult{
-		Height: math.MustConvertUint32(height),
-		// Dash Core reports the quorum type by its LLMQ name (e.g. "llmq_test"),
-		// which is what state sync's validator-set authentication parses.
+		Height:          math.MustConvertUint32(height),
 		Type:            c.LLMQType.Name(),
 		QuorumHash:      quorumHash.String(),
 		Members:         members,
-		QuorumPublicKey: tpk.String(),
+		QuorumPublicKey: hex.EncodeToString(tpk.Bytes()),
 	}
 }
 
