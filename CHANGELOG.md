@@ -2,6 +2,7 @@
 
 ### Bug Fixes
 
+- Preserve committed-block downloads across round timeouts and announce their part-set target to peers (#1415).
 - Bound stalled block-response cleanup while allowing actively progressing transfers to continue.
 - Authenticate state-sync validator thresholds against locally stored genesis parameters.
 - Reject partially populated validator public-key shares in light blocks.

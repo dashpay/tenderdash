@@ -229,7 +229,8 @@ func (rs RoundState) NewValidBlockMessage() *tmcons.NewValidBlock {
 		Round:              rs.Round,
 		BlockPartSetHeader: psHeader.ToProto(),
 		BlockParts:         rs.ProposalBlockParts.BitArray().ToProto(),
-		IsCommit:           rs.Step == RoundStepApplyCommit,
+		IsCommit: rs.Step == RoundStepApplyCommit ||
+			(rs.Commit != nil && rs.Commit.Height == rs.Height && psHeader.Equals(rs.Commit.BlockID.PartSetHeader)),
 	}
 }
 

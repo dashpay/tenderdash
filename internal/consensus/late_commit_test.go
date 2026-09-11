@@ -138,6 +138,8 @@ func TestCommitAfterDroppedProposalAppliesCompleteBlock(t *testing.T) {
 						return
 					}
 					assert.Nil(t, stateData.Commit)
+					assert.NotNil(t, stateData.ProposalBlock)
+					assert.Zero(t, node.blockStore.Height())
 					assert.True(t, stateData.ProposalBlockParts.IsComplete())
 					assert.True(t, stateData.ProposalBlockParts.HasHeader(parts.Header()))
 					return
