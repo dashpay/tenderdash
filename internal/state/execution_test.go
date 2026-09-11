@@ -10,7 +10,6 @@ import (
 	"time"
 
 	dbm "github.com/cometbft/cometbft-db"
-	"github.com/go-kit/kit/metrics"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -32,6 +31,7 @@ import (
 	sf "github.com/dashpay/tenderdash/internal/state/test/factory"
 	"github.com/dashpay/tenderdash/internal/store"
 	"github.com/dashpay/tenderdash/internal/test/factory"
+	"github.com/dashpay/tenderdash/internal/test/metricspy"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/libs/rand"
 	tmtypes "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -1382,7 +1382,7 @@ type verifiedCommitFixture struct {
 	ctx       context.Context
 	blockExec *sm.BlockExecutor
 	// skipped counts the LastCommit verifications the executor skipped
-	skipped *skipCounter
+	skipped *metricspy.Counter
 	// state after height 1 is applied; the state height 2 validates against
 	state sm.State
 	// block ID and commit for height 1, as block sync would hand to the applier
@@ -1419,7 +1419,7 @@ func newVerifiedCommitFixture(t *testing.T) verifiedCommitFixture {
 	mp.On("FlushAppConn", mock.Anything).Return(nil)
 	mp.On("Update", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything, mock.Anything).Return(nil)
-	skipped := &skipCounter{}
+	skipped := metricspy.NewCounter()
 	execMetrics := sm.NopMetrics()
 	execMetrics.LastCommitVerificationSkipped = skipped
 	blockExec := sm.NewBlockExecutor(stateStore, proxyApp, mp, sm.EmptyEvidencePool{},
@@ -1484,14 +1484,6 @@ func (f verifiedCommitFixture) genuineCommit(t *testing.T, height int64) (types.
 	commit, _ := makeValidCommit(f.ctx, t, height, blockID, f.verifiedAgainst.Validators, f.privVals)
 	return blockID, commit
 }
-
-// skipCounter is a metrics.Counter that only counts, so a test can read how
-// many LastCommit verifications the executor skipped.
-type skipCounter struct{ total float64 }
-
-func (c *skipCounter) With(_ ...string) metrics.Counter { return c }
-func (c *skipCounter) Add(delta float64)                { c.total += delta }
-func (c *skipCounter) Value() float64                   { return c.total }
 
 // cloneCommit returns a commit with the same fields and no cached hash, so a
 // test can mutate it without touching the fixture's copy.
@@ -1571,10 +1563,12 @@ func TestVerifyCommitReturnsVerification(t *testing.T) {
 	})
 }
 
-// TestApplyBlockSkipsVerifiedLastCommit checks the block sync flow end to end:
-// with the verification of the commit it just verified, ApplyBlock for the next
-// block does not threshold-verify that commit again, while a LastCommit the
-// verification does not cover is verified — and rejected when forged.
+// TestApplyBlockSkipsVerifiedLastCommit checks the ApplyBlock flow: with the
+// verification of the commit it just verified, ApplyBlock for the next block
+// does not threshold-verify that commit again, while a LastCommit the
+// verification does not cover is verified — and rejected when forged. Block
+// sync does not call ApplyBlock; TestBlockApplierSkipsTheLastCommitItVerified
+// pins its flow.
 func TestApplyBlockSkipsVerifiedLastCommit(t *testing.T) {
 	t.Run("verified commit is not re-verified", func(t *testing.T) {
 		f := newVerifiedCommitFixture(t)
@@ -1598,15 +1592,6 @@ func TestApplyBlockSkipsVerifiedLastCommit(t *testing.T) {
 		err := f.applyNext(t, forgedCommit(f.commit), types.VerifiedCommit{})
 		require.ErrorAs(t, err, &sm.ErrInvalidBlock{})
 		require.ErrorContains(t, err, badCommitSignature)
-		require.Equal(t, 0.0, f.skipped.Value())
-	})
-
-	t.Run("forged commit rejected by VerifyCommit is still rejected by ApplyBlock", func(t *testing.T) {
-		f := newVerifiedCommitFixture(t)
-		bad := forgedCommit(f.commit)
-		verified, err := f.verify(bad)
-		require.ErrorContains(t, err, badCommitSignature)
-		require.ErrorContains(t, f.applyNext(t, bad, verified), badCommitSignature)
 		require.Equal(t, 0.0, f.skipped.Value())
 	})
 
