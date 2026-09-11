@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,6 +32,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/mempool"
 	tmpubsub "github.com/dashpay/tenderdash/internal/pubsub"
 	sm "github.com/dashpay/tenderdash/internal/state"
+	sf "github.com/dashpay/tenderdash/internal/state/test/factory"
 	"github.com/dashpay/tenderdash/internal/store"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
@@ -1058,6 +1060,123 @@ func newMockTickerFunc(onlyOnce bool) func() TimeoutTicker {
 	}
 }
 
+// commitFixture is a node of a two-validator network that is not the
+// proposer, together with the block the network commits at height 1, the parts
+// that block is gossiped in, and a commit for it. The caller installs whatever
+// stale round state its scenario needs before dispatching.
+type commitFixture struct {
+	node     *State
+	block    *types.Block
+	parts    *types.PartSet
+	commit   *types.Commit
+	peerID   types.NodeID
+	privVals []types.PrivValidator
+}
+
+// multiPartBlockPartSize gossips the fixture's block in more than one part, so a
+// scenario can hold a part set that is under way but not yet complete.
+const multiPartBlockPartSize uint32 = 64
+
+// newCommitFixture builds the network and signs a commit at commitRound for
+// a block gossiped in partSize chunks.
+func newCommitFixture(
+	ctx context.Context,
+	t *testing.T,
+	cfg *config.Config,
+	partSize uint32,
+	commitRound int32,
+) commitFixture {
+	t.Helper()
+
+	css := makeConsensusState(ctx, t, cfg, 2, strings.ReplaceAll(t.Name(), "/", "_"), newTickerFunc())
+	privVals := make([]types.PrivValidator, 0, len(css))
+	for _, c := range css {
+		privVals = append(privVals, c.privValidator.PrivValidator)
+	}
+	proposerStateData := css[0].GetStateData()
+
+	block, err := sf.MakeBlock(proposerStateData.state, 1, &types.Commit{}, kvstore.ProtocolVersion)
+	require.NoError(t, err)
+	block.CoreChainLockedHeight = 1
+	parts, err := block.MakePartSet(partSize)
+	require.NoError(t, err)
+
+	voteSet := types.NewVoteSet(
+		proposerStateData.state.ChainID,
+		block.Height,
+		commitRound,
+		tmproto.PrecommitType,
+		proposerStateData.Validators,
+	)
+	commit, err := factory.MakeCommit(
+		ctx,
+		block.BlockID(parts),
+		block.Height,
+		commitRound,
+		voteSet,
+		proposerStateData.Validators,
+		privVals,
+	)
+	require.NoError(t, err)
+
+	if partSize == multiPartBlockPartSize {
+		require.Greater(t, parts.Total(), uint32(1), "the block must be gossiped in more than one part")
+	}
+	return commitFixture{
+		node:     css[1],
+		block:    block,
+		parts:    parts,
+		commit:   commit,
+		peerID:   proposerStateData.Validators.Proposer().NodeAddress.NodeID,
+		privVals: privVals,
+	}
+}
+
+// precommit signs a precommit for blockID from every validator, enough for a
+// +2/3 majority.
+func (n commitFixture) precommit(ctx context.Context, t *testing.T, blockID types.BlockID) []*types.Vote {
+	t.Helper()
+	return n.signAll(ctx, t, tmproto.PrecommitType, blockID)
+}
+
+// prevote signs a prevote for blockID from every validator, enough for a polka.
+func (n commitFixture) prevote(ctx context.Context, t *testing.T, blockID types.BlockID) []*types.Vote {
+	t.Helper()
+
+	return n.signAll(ctx, t, tmproto.PrevoteType, blockID)
+}
+
+func (n commitFixture) signAll(
+	ctx context.Context,
+	t *testing.T,
+	voteType tmproto.SignedMsgType,
+	blockID types.BlockID,
+) []*types.Vote {
+	t.Helper()
+
+	stateData := n.node.GetStateData()
+	vals := stateData.Validators
+	votes := make([]*types.Vote, 0, len(n.privVals))
+	for _, pv := range n.privVals {
+		proTxHash, err := pv.GetProTxHash(ctx)
+		require.NoError(t, err)
+		index, val := vals.GetByProTxHash(proTxHash)
+		require.NotNil(t, val, "every private validator must be in the set")
+		votes = append(votes, signVote(ctx, t, newValidatorStub(pv, index, n.block.Height),
+			voteType, stateData.state.ChainID, blockID, vals.QuorumType, vals.QuorumHash))
+	}
+	return votes
+}
+
+// deliver dispatches votes through the real message path.
+func (n commitFixture) deliver(ctx context.Context, t *testing.T, stateData *StateData, votes []*types.Vote) {
+	t.Helper()
+	for _, vote := range votes {
+		voteCtx := msgInfoWithCtx(ctx, msgInfo{Msg: &VoteMessage{vote}, PeerID: n.peerID})
+		require.NoError(t, n.node.ctrl.Dispatch(voteCtx, &AddVoteEvent{Vote: vote, PeerID: n.peerID}, stateData))
+	}
+}
+
 func newTickerFunc() func() TimeoutTicker {
 	return func() TimeoutTicker { return NewTimeoutTicker(log.NewNopLogger()) }
 }
@@ -1140,4 +1259,59 @@ func (s *testSigner) signVotes(ctx context.Context, votes ...*types.Vote) error 
 		vote.BlockSignature = protoVote.BlockSignature
 	}
 	return nil
+}
+
+// signedProposalFrom builds a proposal for blockID signed by the validator that
+// is entitled to propose at the round, so it clears every check except the ones
+// under test.
+func signedProposalFrom(
+	ctx context.Context,
+	t *testing.T,
+	n commitFixture,
+	round int32,
+	coreChainLockedHeight uint32,
+	blockID types.BlockID,
+) *types.Proposal {
+	t.Helper()
+
+	stateData := n.node.GetStateData()
+	proposer, err := stateData.ProposerSelector.GetProposer(n.block.Height, round)
+	require.NoError(t, err)
+
+	var key types.PrivValidator
+	for _, pv := range n.privVals {
+		proTxHash, err := pv.GetProTxHash(ctx)
+		require.NoError(t, err)
+		if proTxHash.Equal(proposer.ProTxHash) {
+			key = pv
+		}
+	}
+	require.NotNil(t, key, "the entitled proposer's key must be among the validators")
+
+	proposal := types.NewProposal(
+		n.block.Height, coreChainLockedHeight, round, -1, blockID, n.block.Time)
+	proto := proposal.ToProto()
+	vals := stateData.Validators
+	_, err = key.SignProposal(ctx, stateData.state.ChainID, vals.QuorumType, vals.QuorumHash, proto)
+	require.NoError(t, err)
+	proposal.Signature = proto.Signature
+	return proposal
+}
+
+// collectFirstPartOf points the round state at the node's block and hands it the
+// first part, the state a retarget leaves behind while the rest arrives.
+func collectFirstPartOf(t *testing.T, n commitFixture, stateData *StateData) {
+	t.Helper()
+
+	received := types.NewPartSetFromHeader(n.commit.BlockID.PartSetHeader)
+	added, err := received.AddPart(n.parts.GetPart(0))
+	require.NoError(t, err)
+	require.True(t, added)
+	stateData.ProposalBlockParts = received
+	stateData.updateRoundStep(n.commit.Round, cstypes.RoundStepPrevote)
+}
+
+func drainVerificationBudget(budget *rateVerificationBudget) {
+	for budget.Allow(1) {
+	}
 }

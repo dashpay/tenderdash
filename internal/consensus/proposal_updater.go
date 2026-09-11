@@ -1,8 +1,7 @@
 package consensus
 
 import (
-	"time"
-
+	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -14,25 +13,16 @@ type proposalUpdater struct {
 
 func (u *proposalUpdater) updateStateData(stateData *StateData, blockID types.BlockID) error {
 	stateData.replaceProposalBlockOnLockedBlock(blockID)
-	if stateData.ProposalBlock.HashesTo(blockID.Hash) || stateData.ProposalBlockParts.HasHeader(blockID.PartSetHeader) {
+	if stateData.holdsProposalBlock(blockID) {
 		return nil
 	}
-	// If we don't have the block being committed, set up to get it.
 	u.logger.Debug(
-		"commit is for a block we do not know about; set ProposalBlock=nil",
-		"proposal", stateData.ProposalBlock.Hash(),
-		"commit", blockID.Hash,
+		"retargeting proposal block state at the committed block",
+		"proposal_block", tmstrings.LazyBlockHash(stateData.ProposalBlock),
+		"commit_block", blockID.Hash,
+		"part_set_header_matched", stateData.ProposalBlockParts.HasHeader(blockID.PartSetHeader),
 	)
-	// We're getting the wrong block.
-	// Set up ProposalBlockParts and keep waiting.
-	stateData.ProposalBlock = nil
-	// Metadata for another block must not reject the committed block when it arrives.
-	if stateData.Proposal != nil && !stateData.Proposal.BlockID.Equals(blockID) {
-		stateData.Proposal = nil
-		stateData.ProposalReceiveTime = time.Time{}
-	}
-	stateData.metrics.MarkBlockGossipStarted()
-	stateData.ProposalBlockParts = types.NewPartSetFromHeader(blockID.PartSetHeader)
+	stateData.retargetTo(blockID, retargetOnApplyCommit)
 	err := stateData.Save()
 	if err != nil {
 		return err

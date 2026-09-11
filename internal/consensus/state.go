@@ -37,6 +37,7 @@ const (
 var (
 	ErrInvalidProposalNotSet     = errors.New("error invalid proposal not set")
 	ErrInvalidProposalForCommit  = errors.New("error invalid proposal for commit")
+	ErrInvalidProposalForPartSet = errors.New("error invalid proposal for the block parts being collected")
 	ErrInvalidProposalBlockID    = errors.New("proposal block ID does not describe the assembled block")
 	ErrUnableToVerifyProposal    = errors.New("error unable to verify proposal")
 	ErrInvalidProposalSignature  = errors.New("error invalid proposal signature")

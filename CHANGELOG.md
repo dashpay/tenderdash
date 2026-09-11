@@ -3,6 +3,7 @@
 ### Bug Fixes
 
 - Require configured browser origins for light-proxy WebSockets via `rpc.cors-allowed-origins` (including same-host origins); an empty list rejects Origin-bearing requests, while clients without Origin remain supported.
+- Preserve committed-block downloads across round timeouts and announce their part-set target to peers (#1415).
 - Bound stalled block-response cleanup while allowing actively progressing transfers to continue.
 - Authenticate state-sync validator thresholds against locally stored genesis parameters.
 - Reject partially populated validator public-key shares in light blocks.
