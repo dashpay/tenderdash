@@ -9,6 +9,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -839,7 +840,7 @@ func applyBlock(
 	bps, err := blk.MakePartSet(testPartSize)
 	require.NoError(t, err)
 	blkID := blk.BlockID(bps)
-	newState, err := blockExec.ApplyBlock(ctx, st, blkID, blk, commit)
+	newState, err := blockExec.ApplyBlock(ctx, st, blkID, blk, commit, types.VerifiedCommit{})
 	require.NoError(t, err)
 	return newState
 }
@@ -1396,7 +1397,36 @@ func TestHandshakeInitialCoreLockHeight(t *testing.T) {
 	assert.Equal(t, InitialCoreHeight, state.LastCoreChainLockedBlockHeight)
 }
 
+// walRoundsSkipperProposeTimeout replaces the test genesis' 30ms propose
+// timeout on the node that generates the WAL for testWALRoundsSkipper. That
+// node is the only validator, so it proposes every round and its propose
+// timeout can only race its own proposal: there is no absent proposer to wait
+// out, and a round moves on as soon as the proposal is complete. At 30ms a
+// loaded machine lets the timeout win round maxRound, which heights 3 to
+// chainLen have to commit in. The override is node-local, not a consensus
+// parameter, so no block changes.
+const walRoundsSkipperProposeTimeout = 10 * time.Second
+
 func TestWALRoundsSkipper(t *testing.T) {
+	testWALRoundsSkipper(t, false)
+}
+
+// TestWALRoundsSkipperSlowProposer delays the node's own proposal at round
+// maxRound past the propose timeout the test genesis sets for that round, as a
+// loaded CI runner does. The WAL generator must still commit every height at
+// round maxRound.
+func TestWALRoundsSkipperSlowProposer(t *testing.T) {
+	testWALRoundsSkipper(t, true)
+}
+
+// testWALRoundsSkipper generates a WAL in which heights 3 to chainLen prevote
+// nil for rounds 0 to maxRound-1 and commit at round maxRound, then checks that
+// a node replaying it with WalSkipRoundsToLast carries on to the next height.
+// With slowProposer, the generating node's PrepareProposal at round maxRound
+// outlasts the test genesis' propose timeout.
+func testWALRoundsSkipper(t *testing.T, slowProposer bool) {
+	// first, so that it is muted only after every later cleanup has run
+	logger := newTeardownSafeLogger(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	const (
@@ -1405,7 +1435,7 @@ func TestWALRoundsSkipper(t *testing.T) {
 	)
 	cfg := getConfig(t)
 	cfg.Consensus.WalSkipRoundsToLast = true
-	logger := log.NewTestingLogger(t)
+	cfg.Consensus.UnsafeProposeTimeoutOverride = walRoundsSkipperProposeTimeout
 	ng := nodeGen{
 		cfg:    cfg,
 		logger: logger,
@@ -1413,6 +1443,9 @@ func TestWALRoundsSkipper(t *testing.T) {
 			stopConsensusAtHeight(chainLen+1, 0),
 			stopConsensusAtHeight(chainLen, maxRound+1),
 		)},
+	}
+	if slowProposer {
+		ng.app = newSlowProposerApp(t, cfg, maxRound)
 	}
 	node := ng.Generate(ctx, t)
 	withReplayPrevoter(node.csState)
@@ -1462,7 +1495,7 @@ func TestWALRoundsSkipper(t *testing.T) {
 	require.NoError(t, err)
 	ctx = dash.ContextWithProTxHash(ctx, proTxHash)
 
-	cs := newStateWithConfigAndBlockStore(ctx, t, log.NewTestingLogger(t), cfg, state, privVal, app, blockStore)
+	cs := newStateWithConfigAndBlockStore(ctx, t, logger, cfg, state, privVal, app, blockStore)
 
 	commit := blockStore.commits[len(blockStore.commits)-1]
 	require.Equal(t, int64(4), commit.Height)
@@ -1531,6 +1564,91 @@ func newBlockReplayer(
 		NewReplayBlockExecutor(proxyApp, stateStore, blockStore, eventBus),
 		ReplayerWithProTxHash(proTxHash),
 	)
+}
+
+// slowProposerApp is a kvstore application whose PrepareProposal takes delay
+// longer at round, so a node proposing at that round completes its proposal
+// only after delay has passed.
+type slowProposerApp struct {
+	*kvstore.Application
+	round int32
+	delay time.Duration
+}
+
+// newSlowProposerApp returns a slowProposerApp whose delay at round is three
+// times the propose timeout cfg's genesis sets for round, yet still well below
+// walRoundsSkipperProposeTimeout.
+func newSlowProposerApp(t *testing.T, cfg *config.Config, round int32) *slowProposerApp {
+	t.Helper()
+	genDoc, err := types.GenesisDocFromFile(cfg.GenesisFile())
+	require.NoError(t, err)
+	require.NotNil(t, genDoc.ConsensusParams, "test genesis sets no consensus params")
+	delay := 3 * genDoc.ConsensusParams.Timeout.TimeoutParamsOrDefaults().ProposeTimeout(round)
+	require.Less(t, delay, walRoundsSkipperProposeTimeout/10,
+		"the delay must stay far below the propose timeout override")
+
+	app, err := kvstore.NewMemoryApp()
+	require.NoError(t, err)
+	return &slowProposerApp{Application: app, round: round, delay: delay}
+}
+
+func (app *slowProposerApp) PrepareProposal(
+	ctx context.Context,
+	req *abci.RequestPrepareProposal,
+) (*abci.ResponsePrepareProposal, error) {
+	if req.Round == app.round {
+		select {
+		case <-time.After(app.delay):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	return app.Application.PrepareProposal(ctx, req)
+}
+
+// teardownSafeLogWriter writes to t's log until it is muted and discards
+// everything after. A consensus State outlives its test: Stop and Wait return
+// without waiting for its receiveRoutine, which exits only once it notices its
+// context is done, nor for the goroutines that stop its WAL and other services
+// on that context. Any of them logging after t has completed panics the whole
+// test binary.
+type teardownSafeLogWriter struct {
+	mtx   sync.Mutex // held across t.Log, so muting waits out a write in flight
+	t     testing.TB
+	muted bool
+}
+
+func (w *teardownSafeLogWriter) Write(p []byte) (int, error) {
+	w.mtx.Lock()
+	defer w.mtx.Unlock()
+	if !w.muted {
+		w.t.Log(string(p))
+	}
+	return len(p), nil
+}
+
+func (w *teardownSafeLogWriter) mute() {
+	w.mtx.Lock()
+	defer w.mtx.Unlock()
+	w.muted = true
+}
+
+// newTeardownSafeLogger returns a logger at NewTestingLogger's level that
+// writes through a teardownSafeLogWriter muted by a cleanup of t. Cleanups run
+// last-in first-out, so create it before anything else registers one: the
+// writer is then muted only after every other cleanup has run, and nothing is
+// logged once t has completed.
+func newTeardownSafeLogger(t *testing.T) log.Logger {
+	t.Helper()
+	w := &teardownSafeLogWriter{t: t}
+	t.Cleanup(w.mute)
+	level := log.LogLevelError
+	if testing.Verbose() {
+		level = log.LogLevelDebug
+	}
+	logger, err := log.NewLogger(level, w)
+	require.NoError(t, err)
+	return logger
 }
 
 type replayPrevoter struct {

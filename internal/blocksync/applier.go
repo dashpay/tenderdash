@@ -23,6 +23,12 @@ type (
 		state     sm.State
 		metrics   *consensus.Metrics
 		stats     applyStats
+		// lastCommit is the commit of the block most recently applied onto state,
+		// with the proof of its verification. The next block carries that commit
+		// as its LastCommit, so this is offered back when that block is validated
+		// and applied, sparing a second threshold verification of the same commit.
+		// Guarded by mtx, like state.
+		lastCommit types.VerifiedCommit
 		// lastDone is when the previous Apply returned, so the time the applier
 		// sits idle waiting for the next block can be measured
 		lastDone time.Time
@@ -85,7 +91,7 @@ func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *ty
 	partSetTime := e.observeSince("partset", start)
 
 	start = time.Now()
-	err = e.verify(ctx, blockID, block, commit)
+	verified, err := e.verify(ctx, blockID, block, commit)
 	if err != nil {
 		return err
 	}
@@ -97,10 +103,12 @@ func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *ty
 
 	start = time.Now()
 	// TODO: Same thing for app - but we would need a way to get the hash without persisting the state.
-	e.state, err = e.blockExec.ApplyBlock(ctx, e.state, blockID, block, commit)
+	e.state, err = e.blockExec.ApplyBlock(ctx, e.state, blockID, block, commit, e.lastCommit)
 	if err != nil {
 		panic(fmt.Sprintf("failed to process committed block (%d:%X): %v", block.Height, block.Hash(), err))
 	}
+	// commit comes back as the next block's LastCommit
+	e.lastCommit = verified
 	execTime := e.observeSince("exec", start)
 
 	e.stats.add(partSetTime, verifyTime, saveTime, execTime)
@@ -129,12 +137,22 @@ func (e *blockApplier) UpdateState(newState sm.State) {
 	e.mtx.Lock()
 	defer e.mtx.Unlock()
 	e.state = newState
+	// the commit lastCommit verified was applied onto the replaced state, not onto
+	// newState
+	e.lastCommit = types.VerifiedCommit{}
 }
 
-func (e *blockApplier) verify(ctx context.Context, blockID types.BlockID, block *types.Block, commit *types.Commit) error {
-	// The executor remembers successful verification for the next block's LastCommit.
+// verify checks commit and then block against the current state, before the
+// block is persisted. It returns commit with the proof of its verification;
+// the next block carries commit as its LastCommit.
+func (e *blockApplier) verify(
+	ctx context.Context,
+	blockID types.BlockID,
+	block *types.Block,
+	commit *types.Commit,
+) (types.VerifiedCommit, error) {
 	start := time.Now()
-	err := e.blockExec.VerifyCommit(e.state, blockID, block.Height, commit)
+	verified, err := e.blockExec.VerifyCommit(e.state, blockID, block.Height, commit)
 	e.observeSince("verify_commit", start)
 
 	// If either of the checks failed we log the error and request for a new block
@@ -146,11 +164,11 @@ func (e *blockApplier) verify(ctx context.Context, blockID types.BlockID, block 
 			"block_id", blockID,
 			"height", block.Height,
 		)
-		return err
+		return types.VerifiedCommit{}, err
 	}
 	// validate the block before we persist it
 	start = time.Now()
-	err = e.blockExec.ValidateBlock(ctx, e.state, block)
+	err = e.blockExec.ValidateBlock(ctx, e.state, block, e.lastCommit)
 	e.observeSince("verify_block", start)
 	if err != nil {
 		err = fmt.Errorf("invalid block: %w", err)
@@ -159,9 +177,9 @@ func (e *blockApplier) verify(ctx context.Context, blockID types.BlockID, block 
 			"block_id", blockID,
 			"height", block.Height,
 		)
-		return err
+		return types.VerifiedCommit{}, err
 	}
-	return nil
+	return verified, nil
 }
 
 // observeSince records the time since start under stage and returns it, so the
