@@ -48,13 +48,13 @@ func TestBlockApplierApply(t *testing.T) {
 				mockBlockExec.
 					On("VerifyCommit", initialState, blockH1ID, blockH1.Height, commitH1).
 					Once().
-					Return(nil)
+					Return(types.CommitVerification{}, nil)
 				mockBlockExec.
-					On("ValidateBlock", mock.Anything, initialState, blockH1).
+					On("ValidateBlock", mock.Anything, initialState, blockH1, types.CommitVerification{}).
 					Once().
 					Return(nil)
 				mockBlockExec.
-					On("ApplyBlock", mock.Anything, initialState, blockH1ID, blockH1, commitH1).
+					On("ApplyBlock", mock.Anything, initialState, blockH1ID, blockH1, commitH1, types.CommitVerification{}).
 					Once().
 					Return(state, nil)
 			},
@@ -68,7 +68,7 @@ func TestBlockApplierApply(t *testing.T) {
 				mockBlockExec.
 					On("VerifyCommit", initialState, blockH1ID, blockH1.Height, commitH1).
 					Once().
-					Return(errors.New("bad signature"))
+					Return(types.CommitVerification{}, errors.New("bad signature"))
 			},
 			wantErr: "invalid a commit: bad signature",
 		},
@@ -79,9 +79,9 @@ func TestBlockApplierApply(t *testing.T) {
 				mockBlockExec.
 					On("VerifyCommit", initialState, blockH1ID, blockH1.Height, commitH1).
 					Once().
-					Return(nil)
+					Return(types.CommitVerification{}, nil)
 				mockBlockExec.
-					On("ValidateBlock", mock.Anything, initialState, blockH1).
+					On("ValidateBlock", mock.Anything, initialState, blockH1, types.CommitVerification{}).
 					Once().
 					Return(errors.New("invalid block"))
 			},
@@ -95,13 +95,13 @@ func TestBlockApplierApply(t *testing.T) {
 				mockBlockExec.
 					On("VerifyCommit", initialState, blockH1ID, blockH1.Height, commitH1).
 					Once().
-					Return(nil)
+					Return(types.CommitVerification{}, nil)
 				mockBlockExec.
-					On("ValidateBlock", mock.Anything, initialState, blockH1).
+					On("ValidateBlock", mock.Anything, initialState, blockH1, types.CommitVerification{}).
 					Once().
 					Return(nil)
 				mockBlockExec.
-					On("ApplyBlock", mock.Anything, initialState, blockH1ID, blockH1, commitH1).
+					On("ApplyBlock", mock.Anything, initialState, blockH1ID, blockH1, commitH1, types.CommitVerification{}).
 					Once().
 					Return(state, errors.New("eeeeeeeee"))
 			},
@@ -193,12 +193,12 @@ func TestBlockApplierRecordsStageMetrics(t *testing.T) {
 	blockH1 := blocks[0]
 	commitH1 := blocks[1].LastCommit
 
-	mockBlockExec.On("VerifyCommit", initialState, blockH1.BlockID(nil), blockH1.Height, commitH1).Twice().Return(nil)
+	mockBlockExec.On("VerifyCommit", initialState, blockH1.BlockID(nil), blockH1.Height, commitH1).Twice().Return(types.CommitVerification{}, nil)
 	mockBlockExec.On("VerifyCommit", initialState, blockH1.BlockID(nil), blockH1.Height, new(types.Commit)).
-		Once().Return(errors.New("bad signature"))
+		Once().Return(types.CommitVerification{}, errors.New("bad signature"))
 	mockBlockStore.On("SaveBlock", blockH1, mock.Anything, commitH1).Twice()
-	mockBlockExec.On("ValidateBlock", mock.Anything, mock.Anything, blockH1).Twice().Return(nil)
-	mockBlockExec.On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, blockH1, commitH1).
+	mockBlockExec.On("ValidateBlock", mock.Anything, mock.Anything, blockH1, types.CommitVerification{}).Twice().Return(nil)
+	mockBlockExec.On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, blockH1, commitH1, types.CommitVerification{}).
 		Twice().Return(initialState, nil)
 
 	hist := metricspy.NewHistogram("stage")
@@ -257,7 +257,7 @@ func TestBlockApplierVerifyFailureTimesOnlyTheCheckThatRan(t *testing.T) {
 
 	// A rejected commit must stop before ValidateBlock is reached.
 	mockBlockExec.On("VerifyCommit", initialState, blockH1.BlockID(nil), blockH1.Height, new(types.Commit)).
-		Once().Return(errors.New("bad signature"))
+		Once().Return(types.CommitVerification{}, errors.New("bad signature"))
 	require.Error(t, applier.Apply(ctx, blockH1, new(types.Commit)))
 
 	require.Len(t, hist.Samples["partset"], 1)
@@ -265,4 +265,73 @@ func TestBlockApplierVerifyFailureTimesOnlyTheCheckThatRan(t *testing.T) {
 	require.Empty(t, hist.Samples["verify_block"], "block validation did not run")
 	require.Empty(t, hist.Samples["save"])
 	require.Empty(t, hist.Samples["exec"])
+}
+
+// TestBlockApplierOffersTheCommitVerificationForward checks that the
+// verification the executor returns for a block's commit is what the applier
+// offers when it validates and applies the next block, whose LastCommit is that
+// commit. The first block has none to offer, a rejected commit does not replace
+// it, and replacing the state discards it.
+func TestBlockApplierOffersTheCommitVerificationForward(t *testing.T) {
+	ctx := context.Background()
+	valSet, privVals := factory.MockValidatorSet()
+	initialState := fakeInitialState(valSet)
+	state := initialState.Copy()
+	blocks := statefactory.MakeBlocks(ctx, t, 3, &state, privVals, 1)
+	blockH1, blockH2 := blocks[0], blocks[1]
+	commitH1, commitH2 := blocks[1].LastCommit, blocks[2].LastCommit
+	blockH1ID, blockH2ID := blockH1.BlockID(nil), blockH2.BlockID(nil)
+
+	// a genuine verification, so the expectations can tell it from the zero value
+	verifiedH1, err := types.VerifyCommitSignatures(initialState.Validators, initialState.ChainID,
+		blockH1ID, blockH1.Height, commitH1, nil)
+	require.NoError(t, err)
+	require.NotEqual(t, types.CommitVerification{}, verifiedH1)
+	none := types.CommitVerification{}
+
+	// applyH1 returns an applier that has applied block 1, offering no
+	// verification because there is no previous commit
+	applyH1 := func(t *testing.T) (*blockApplier, *mocks.Executor) {
+		blockExec := mocks.NewExecutor(t)
+		blockStore := mocks.NewBlockStore(t)
+		blockStore.On("SaveBlock", mock.Anything, mock.Anything, mock.Anything).Maybe()
+		blockExec.On("VerifyCommit", mock.Anything, blockH1ID, blockH1.Height, commitH1).Once().Return(verifiedH1, nil)
+		blockExec.On("ValidateBlock", mock.Anything, mock.Anything, blockH1, none).Once().Return(nil)
+		blockExec.On("ApplyBlock", mock.Anything, mock.Anything, blockH1ID, blockH1, commitH1, none).
+			Once().Return(initialState, nil)
+		applier := newBlockApplier(blockExec, blockStore, applierWithState(initialState))
+		require.NoError(t, applier.Apply(ctx, blockH1, commitH1))
+		return applier, blockExec
+	}
+	// expectH2 expects block 2 to be validated and applied offering lastCommit
+	expectH2 := func(blockExec *mocks.Executor, lastCommit types.CommitVerification) {
+		blockExec.On("VerifyCommit", mock.Anything, blockH2ID, blockH2.Height, commitH2).Once().Return(none, nil)
+		blockExec.On("ValidateBlock", mock.Anything, mock.Anything, blockH2, lastCommit).Once().Return(nil)
+		blockExec.On("ApplyBlock", mock.Anything, mock.Anything, blockH2ID, blockH2, commitH2, lastCommit).
+			Once().Return(initialState, nil)
+	}
+
+	t.Run("the next block is offered the previous commit's verification", func(t *testing.T) {
+		applier, blockExec := applyH1(t)
+		expectH2(blockExec, verifiedH1)
+		require.NoError(t, applier.Apply(ctx, blockH2, commitH2))
+	})
+
+	t.Run("a rejected commit does not replace the verification", func(t *testing.T) {
+		applier, blockExec := applyH1(t)
+		bad := new(types.Commit)
+		blockExec.On("VerifyCommit", mock.Anything, blockH2ID, blockH2.Height, bad).
+			Once().Return(none, errors.New("bad signature"))
+		require.Error(t, applier.Apply(ctx, blockH2, bad))
+
+		expectH2(blockExec, verifiedH1)
+		require.NoError(t, applier.Apply(ctx, blockH2, commitH2))
+	})
+
+	t.Run("replacing the state discards the verification", func(t *testing.T) {
+		applier, blockExec := applyH1(t)
+		applier.UpdateState(initialState)
+		expectH2(blockExec, none)
+		require.NoError(t, applier.Apply(ctx, blockH2, commitH2))
+	})
 }

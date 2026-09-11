@@ -839,7 +839,7 @@ func applyBlock(
 	bps, err := blk.MakePartSet(testPartSize)
 	require.NoError(t, err)
 	blkID := blk.BlockID(bps)
-	newState, err := blockExec.ApplyBlock(ctx, st, blkID, blk, commit)
+	newState, err := blockExec.ApplyBlock(ctx, st, blkID, blk, commit, types.CommitVerification{})
 	require.NoError(t, err)
 	return newState
 }

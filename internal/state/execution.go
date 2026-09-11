@@ -10,9 +10,6 @@ import (
 	"fmt"
 	"time"
 
-	sync "github.com/sasha-s/go-deadlock"
-
-	"github.com/dashpay/dashd-go/btcjson"
 	abciclient "github.com/dashpay/tenderdash/abci/client"
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"
@@ -52,19 +49,30 @@ type Executor interface {
 		verify bool,
 	) (CurrentRoundState, error)
 
-	ValidateBlock(ctx context.Context, state State, block *types.Block) error
+	// ValidateBlock, ValidateBlockWithRoundState, FinalizeBlock and ApplyBlock
+	// take lastCommit, the verification of block.LastCommit if the caller holds
+	// one. It spares the threshold verification only when it covers exactly the
+	// verification the block's validation would run; anything else, including
+	// the zero value, is verified in full.
+	ValidateBlock(ctx context.Context, state State, block *types.Block, lastCommit types.CommitVerification) error
 
 	// VerifyCommit checks that commit is state.Validators' commit for the block
-	// blockID at height. On success it remembers the verification, so the same
-	// commit is not threshold-verified again when it reappears as the next
+	// blockID at height. On success it returns the verification, which the
+	// caller can offer back as lastCommit when commit reappears as the next
 	// block's LastCommit.
-	VerifyCommit(state State, blockID types.BlockID, height int64, commit *types.Commit) error
+	VerifyCommit(
+		state State,
+		blockID types.BlockID,
+		height int64,
+		commit *types.Commit,
+	) (types.CommitVerification, error)
 
 	ValidateBlockWithRoundState(
 		ctx context.Context,
 		state State,
 		uncommittedState CurrentRoundState,
 		block *types.Block,
+		lastCommit types.CommitVerification,
 	) error
 
 	FinalizeBlock(
@@ -74,6 +82,7 @@ type Executor interface {
 		blockID types.BlockID,
 		block *types.Block,
 		commit *types.Commit,
+		lastCommit types.CommitVerification,
 	) (State, error)
 
 	ApplyBlock(
@@ -82,6 +91,7 @@ type Executor interface {
 		blockID types.BlockID,
 		block *types.Block,
 		commit *types.Commit,
+		lastCommit types.CommitVerification,
 	) (State, error)
 
 	VerifyVoteExtension(ctx context.Context, vote *types.Vote) error
@@ -117,109 +127,6 @@ type BlockExecutor struct {
 	// detect non-deterministic prepare proposal responses
 	lastRequestPrepareProposalHash  []byte
 	lastResponsePrepareProposalHash []byte
-
-	// commits VerifyCommit has accepted, so validateBlock can skip the threshold
-	// verification when one of them comes back as the next block's LastCommit
-	verified verifiedCommits
-}
-
-// verifiedCommits is the memo behind VerifyCommit. It keeps the two most recent
-// entries because block sync verifies commit N before it validates block N,
-// whose LastCommit is commit N-1: both have to be present at once.
-//
-// A BlockExecutor is driven by one goroutine at a time - block sync, then
-// consensus after the handover - which is what the unsynchronised cache above
-// relies on. The memo is locked anyway: it decides whether a signature check
-// runs, so it should not depend on that discipline.
-type verifiedCommits struct {
-	mtx    sync.Mutex
-	recent [2]*verifiedCommit
-}
-
-// remember makes vc the most recent entry, dropping the oldest.
-func (v *verifiedCommits) remember(vc *verifiedCommit) {
-	v.mtx.Lock()
-	defer v.mtx.Unlock()
-	v.recent[1] = v.recent[0]
-	v.recent[0] = vc
-}
-
-// forHeight returns the entry for the commit at height, or nil.
-func (v *verifiedCommits) forHeight(height int64) *verifiedCommit {
-	v.mtx.Lock()
-	defer v.mtx.Unlock()
-	for _, vc := range v.recent {
-		if vc != nil && vc.height == height {
-			return vc
-		}
-	}
-	return nil
-}
-
-// verifiedCommit pins every input ValidatorSet.verifyCommit reads, so two equal
-// entries mean a repeat verification would be handed identical arguments: same
-// chain, height, block ID, quorum, threshold key and a byte-identical commit.
-// Every slice-backed field is an owned copy, so the memo never aliases the
-// validator set, the block ID or the commit it was built from.
-type verifiedCommit struct {
-	chainID      string
-	height       int64
-	blockID      types.BlockID
-	quorumType   btcjson.LLMQType
-	quorumHash   crypto.QuorumHash
-	keyType      string
-	thresholdKey []byte
-	commit       []byte
-}
-
-// newVerifiedCommit describes verifying commit against vals as the commit for
-// blockID at height. Both sides of the memo are built through here, so the entry
-// VerifyCommit stores and the entry validateBlock looks for cannot disagree
-// about how an input is derived. It fails when an input cannot be pinned down,
-// which means the verification can be neither remembered nor matched.
-func newVerifiedCommit(
-	chainID string,
-	height int64,
-	blockID types.BlockID,
-	vals *types.ValidatorSet,
-	commit *types.Commit,
-) (*verifiedCommit, error) {
-	if vals == nil {
-		return nil, errors.New("no validator set")
-	}
-	if commit == nil {
-		return nil, errors.New("no commit")
-	}
-	key := vals.ThresholdPublicKey
-	if key == nil {
-		return nil, errors.New("validator set has no threshold public key")
-	}
-	encoded, err := commit.ToProto().Marshal()
-	if err != nil {
-		return nil, fmt.Errorf("marshal commit: %w", err)
-	}
-	return &verifiedCommit{
-		chainID:      chainID,
-		height:       height,
-		blockID:      blockID.Copy(),
-		quorumType:   vals.QuorumType,
-		quorumHash:   vals.QuorumHash.Copy(),
-		keyType:      key.Type(),
-		thresholdKey: bytes.Clone(key.Bytes()),
-		commit:       encoded,
-	}, nil
-}
-
-// equal reports whether both entries describe the same verification.
-func (v *verifiedCommit) equal(o *verifiedCommit) bool {
-	return v.chainID == o.chainID &&
-		v.height == o.height &&
-		v.blockID.Equals(o.blockID) &&
-		v.quorumType == o.quorumType &&
-		v.quorumHash.Equal(o.quorumHash) &&
-		v.keyType == o.keyType &&
-		bytes.Equal(v.thresholdKey, o.thresholdKey) &&
-		bytes.Equal(v.commit, o.commit)
 }
 
 // BlockExecWithLogger is an option function to set a logger to BlockExecutor
@@ -272,9 +179,6 @@ func NewBlockExecutor(
 }
 
 // Copy returns a new instance of BlockExecutor and applies option functions.
-//
-// The verified-commit memo is deliberately not carried over: the copy verifies
-// every LastCommit itself. The replayer relies on that.
 func (blockExec *BlockExecutor) Copy(opts ...func(e *BlockExecutor)) *BlockExecutor {
 	copied := &BlockExecutor{
 		eventPublisher: blockExec.eventPublisher,
@@ -509,7 +413,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		// Here we check if the ProcessProposal response matches
 		// block received from proposer, eg. if `uncommittedState`
 		// fields are the same as `block` fields
-		err = blockExec.ValidateBlockWithRoundState(ctx, state, stateChanges, block)
+		err = blockExec.ValidateBlockWithRoundState(ctx, state, stateChanges, block, types.CommitVerification{})
 		if err != nil {
 			return stateChanges, ErrInvalidBlock{err}
 		}
@@ -523,15 +427,18 @@ func (blockExec *BlockExecutor) ProcessProposal(
 // If the block is invalid, it returns an error.
 // Validation does not mutate state, but does require historical information from the stateDB,
 // ie. to verify evidence from a validator at an old height.
-func (blockExec *BlockExecutor) ValidateBlock(ctx context.Context, state State, block *types.Block) error {
+func (blockExec *BlockExecutor) ValidateBlock(
+	ctx context.Context,
+	state State,
+	block *types.Block,
+	lastCommit types.CommitVerification,
+) error {
 	hash := block.Hash()
 	if _, ok := blockExec.cache[hash.String()]; ok {
 		return nil
 	}
 
-	// passed as a closure so the memo is consulted only for a block that has
-	// passed ValidateBasic and every cheaper header check
-	err := validateBlock(state, block, func() bool { return blockExec.lastCommitVerified(state, block) })
+	err := validateBlock(state, block, lastCommit, blockExec.metrics)
 	if err != nil {
 		return err
 	}
@@ -546,45 +453,16 @@ func (blockExec *BlockExecutor) ValidateBlock(ctx context.Context, state State, 
 }
 
 // VerifyCommit verifies commit against state.Validators as the commit for the
-// block blockID at height, and on success remembers exactly what it verified.
-// The same commit comes back one height later as the next block's LastCommit,
-// and validateBlock and ValidateBlockWithRoundState both skip their threshold
-// verification when it matches the memo. This is the only way into the memo,
-// so nothing can be recorded as verified without being verified here.
-func (blockExec *BlockExecutor) VerifyCommit(state State, blockID types.BlockID, height int64, commit *types.Commit) error {
-	if state.Validators == nil {
-		return errors.New("cannot verify commit: state has no validator set")
-	}
-	if err := state.Validators.VerifyCommit(state.ChainID, blockID, height, commit); err != nil {
-		return err
-	}
-	vc, err := newVerifiedCommit(state.ChainID, height, blockID, state.Validators, commit)
-	if err != nil {
-		// The commit is good, it just cannot be remembered, so the next block pays
-		// for a second verification. A verified commit should always be memoizable.
-		blockExec.logger.Error("verified commit could not be memoized", "height", height, "err", err)
-		return nil
-	}
-	blockExec.verified.remember(vc)
-	return nil
-}
-
-// lastCommitVerified reports whether block.LastCommit was already verified by
-// VerifyCommit against exactly the inputs a verification now would be handed.
-// Anything short of a full match falls through to a real verification.
-func (blockExec *BlockExecutor) lastCommitVerified(state State, block *types.Block) bool {
-	// checked before the commit is encoded, so the common case of an empty memo
-	// stays cheap
-	vc := blockExec.verified.forHeight(block.Height - 1)
-	if vc == nil {
-		return false
-	}
-	want, err := newVerifiedCommit(state.ChainID, block.Height-1, state.LastBlockID, state.LastValidators, block.LastCommit)
-	if err != nil || !vc.equal(want) {
-		return false
-	}
-	blockExec.metrics.LastCommitVerificationSkipped.Add(1)
-	return true
+// block blockID at height. On success it returns the verification, which the
+// caller offers back as lastCommit when the same commit comes back one height
+// later as the next block's LastCommit.
+func (blockExec *BlockExecutor) VerifyCommit(
+	state State,
+	blockID types.BlockID,
+	height int64,
+	commit *types.Commit,
+) (types.CommitVerification, error) {
+	return types.VerifyCommitSignatures(state.Validators, state.ChainID, blockID, height, commit, nil)
 }
 
 func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
@@ -592,8 +470,9 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 	state State,
 	uncommittedState CurrentRoundState,
 	block *types.Block,
+	lastCommit types.CommitVerification,
 ) error {
-	err := blockExec.ValidateBlock(ctx, state, block)
+	err := blockExec.ValidateBlock(ctx, state, block, lastCommit)
 	if err != nil {
 		return err
 	}
@@ -618,12 +497,11 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 	// ValidateBlock above normally verifies block.LastCommit, but it short-circuits
 	// on its per-height cache, which is keyed on the block hash alone and so says
 	// nothing about the state the earlier validation ran against. That is why this
-	// second verification exists. The memo is safe to skip on instead: it is a
-	// property of the data, not of the cache.
-	if block.Height > state.InitialHeight && !blockExec.lastCommitVerified(state, block) {
-		if err := state.LastValidators.VerifyCommit(
-			state.ChainID, state.LastBlockID, block.Height-1, block.LastCommit); err != nil {
-			return fmt.Errorf("error validating block: %w", err)
+	// second verification exists. lastCommit is safe to skip on instead: it names
+	// the verified data itself, not a block hash.
+	if block.Height > state.InitialHeight {
+		if err := verifyLastCommit(state, block, lastCommit, blockExec.metrics); err != nil {
+			return err
 		}
 	}
 	if !bytes.Equal(block.NextValidatorsHash, uncommittedState.NextValidators.Hash()) {
@@ -657,6 +535,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	blockID types.BlockID,
 	block *types.Block,
 	commit *types.Commit,
+	lastCommit types.CommitVerification,
 ) (State, error) {
 	// This is the only ValidateBlockWithRoundState on the ApplyBlock path, so it
 	// must not be removed: ApplyBlock deliberately calls ProcessProposal with
@@ -668,7 +547,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	// app by ProcessProposal and written by blockApplier.Apply; what this guards
 	// is the state and ABCI responses written below.
 	stages := blockExec.metrics.startStages()
-	if err := blockExec.ValidateBlockWithRoundState(ctx, state, uncommittedState, block); err != nil {
+	if err := blockExec.ValidateBlockWithRoundState(ctx, state, uncommittedState, block, lastCommit); err != nil {
 		return state, ErrInvalidBlock{err}
 	}
 	stages.done("finalize_validate")
@@ -743,6 +622,7 @@ func (blockExec *BlockExecutor) ApplyBlock(
 	blockID types.BlockID,
 	block *types.Block,
 	commit *types.Commit,
+	lastCommit types.CommitVerification,
 ) (State, error) {
 	// verify is false because FinalizeBlock below runs ValidateBlockWithRoundState
 	// with the same arguments and wraps failures in the same ErrInvalidBlock.
@@ -752,7 +632,7 @@ func (blockExec *BlockExecutor) ApplyBlock(
 	if err != nil {
 		return state, err
 	}
-	return blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, commit)
+	return blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, commit, lastCommit)
 }
 
 // ExtendVote gets vote-extensions from ABCI and updates vote.VoteExtensions with this value

@@ -131,7 +131,7 @@ func (suite *PrevoterTestSuite) TestDo() {
 			}
 			if tc.mockValidateBlock {
 				suite.mockExecutor.
-					On("ValidateBlockWithRoundState", ctx, mock.Anything, mock.Anything, mock.Anything).
+					On("ValidateBlockWithRoundState", ctx, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Once().
 					Return(nil)
 			}

@@ -10,9 +10,3 @@ import (
 func ValidateValidatorUpdates(abciUpdates []abci.ValidatorUpdate, params types.ValidatorParams) error {
 	return validateValidatorUpdates(abciUpdates, params)
 }
-
-// LastCommitVerified exposes lastCommitVerified for tests of the verified-commit
-// memo.
-func (blockExec *BlockExecutor) LastCommitVerified(state State, block *types.Block) bool {
-	return blockExec.lastCommitVerified(state, block)
-}
