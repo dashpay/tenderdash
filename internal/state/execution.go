@@ -50,29 +50,31 @@ type Executor interface {
 	) (CurrentRoundState, error)
 
 	// ValidateBlock, ValidateBlockWithRoundState, FinalizeBlock and ApplyBlock
-	// take lastCommit, the verification of block.LastCommit if the caller holds
-	// one. It spares the threshold verification only when it covers exactly the
-	// verification the block's validation would run; anything else, including
-	// the zero value, is verified in full.
-	ValidateBlock(ctx context.Context, state State, block *types.Block, lastCommit types.CommitVerification) error
+	// take lastCommit, block.LastCommit with the proof of its verification if
+	// the caller holds one. The proof spares the threshold verification only
+	// when it covers exactly the verification the block's validation would run;
+	// anything else, including a VerifiedCommit without proof, is verified in
+	// full. block.LastCommit is always what is verified: the commit lastCommit
+	// holds is never read in its place.
+	ValidateBlock(ctx context.Context, state State, block *types.Block, lastCommit types.VerifiedCommit) error
 
 	// VerifyCommit checks that commit is state.Validators' commit for the block
-	// blockID at height. On success it returns the verification, which the
-	// caller can offer back as lastCommit when commit reappears as the next
-	// block's LastCommit.
+	// blockID at height. On success it returns commit with the proof of that
+	// verification, which the caller can offer back as lastCommit when commit
+	// reappears as the next block's LastCommit.
 	VerifyCommit(
 		state State,
 		blockID types.BlockID,
 		height int64,
 		commit *types.Commit,
-	) (types.CommitVerification, error)
+	) (types.VerifiedCommit, error)
 
 	ValidateBlockWithRoundState(
 		ctx context.Context,
 		state State,
 		uncommittedState CurrentRoundState,
 		block *types.Block,
-		lastCommit types.CommitVerification,
+		lastCommit types.VerifiedCommit,
 	) error
 
 	FinalizeBlock(
@@ -82,7 +84,7 @@ type Executor interface {
 		blockID types.BlockID,
 		block *types.Block,
 		commit *types.Commit,
-		lastCommit types.CommitVerification,
+		lastCommit types.VerifiedCommit,
 	) (State, error)
 
 	ApplyBlock(
@@ -91,7 +93,7 @@ type Executor interface {
 		blockID types.BlockID,
 		block *types.Block,
 		commit *types.Commit,
-		lastCommit types.CommitVerification,
+		lastCommit types.VerifiedCommit,
 	) (State, error)
 
 	VerifyVoteExtension(ctx context.Context, vote *types.Vote) error
@@ -413,7 +415,8 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		// Here we check if the ProcessProposal response matches
 		// block received from proposer, eg. if `uncommittedState`
 		// fields are the same as `block` fields
-		err = blockExec.ValidateBlockWithRoundState(ctx, state, stateChanges, block, types.CommitVerification{})
+		err = blockExec.ValidateBlockWithRoundState(ctx, state, stateChanges, block,
+			types.NewUnverifiedCommit(block.LastCommit))
 		if err != nil {
 			return stateChanges, ErrInvalidBlock{err}
 		}
@@ -431,7 +434,7 @@ func (blockExec *BlockExecutor) ValidateBlock(
 	ctx context.Context,
 	state State,
 	block *types.Block,
-	lastCommit types.CommitVerification,
+	lastCommit types.VerifiedCommit,
 ) error {
 	hash := block.Hash()
 	if _, ok := blockExec.cache[hash.String()]; ok {
@@ -453,15 +456,15 @@ func (blockExec *BlockExecutor) ValidateBlock(
 }
 
 // VerifyCommit verifies commit against state.Validators as the commit for the
-// block blockID at height. On success it returns the verification, which the
-// caller offers back as lastCommit when the same commit comes back one height
-// later as the next block's LastCommit.
+// block blockID at height. On success it returns commit with the proof of that
+// verification, which the caller offers back as lastCommit when the same commit
+// comes back one height later as the next block's LastCommit.
 func (blockExec *BlockExecutor) VerifyCommit(
 	state State,
 	blockID types.BlockID,
 	height int64,
 	commit *types.Commit,
-) (types.CommitVerification, error) {
+) (types.VerifiedCommit, error) {
 	return types.VerifyCommitSignatures(state.Validators, state.ChainID, blockID, height, commit, nil)
 }
 
@@ -470,7 +473,7 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 	state State,
 	uncommittedState CurrentRoundState,
 	block *types.Block,
-	lastCommit types.CommitVerification,
+	lastCommit types.VerifiedCommit,
 ) error {
 	err := blockExec.ValidateBlock(ctx, state, block, lastCommit)
 	if err != nil {
@@ -497,8 +500,8 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 	// ValidateBlock above normally verifies block.LastCommit, but it short-circuits
 	// on its per-height cache, which is keyed on the block hash alone and so says
 	// nothing about the state the earlier validation ran against. That is why this
-	// second verification exists. lastCommit is safe to skip on instead: it names
-	// the verified data itself, not a block hash.
+	// second verification exists. lastCommit's proof is safe to skip on instead:
+	// it names the verified data itself, not a block hash.
 	if block.Height > state.InitialHeight {
 		if err := verifyLastCommit(state, block, lastCommit, blockExec.metrics); err != nil {
 			return err
@@ -535,7 +538,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	blockID types.BlockID,
 	block *types.Block,
 	commit *types.Commit,
-	lastCommit types.CommitVerification,
+	lastCommit types.VerifiedCommit,
 ) (State, error) {
 	// This is the only ValidateBlockWithRoundState on the ApplyBlock path, so it
 	// must not be removed: ApplyBlock deliberately calls ProcessProposal with
@@ -622,7 +625,7 @@ func (blockExec *BlockExecutor) ApplyBlock(
 	blockID types.BlockID,
 	block *types.Block,
 	commit *types.Commit,
-	lastCommit types.CommitVerification,
+	lastCommit types.VerifiedCommit,
 ) (State, error) {
 	// verify is false because FinalizeBlock below runs ValidateBlockWithRoundState
 	// with the same arguments and wraps failures in the same ErrInvalidBlock.

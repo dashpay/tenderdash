@@ -960,23 +960,26 @@ func (vals *ValidatorSet) VerifyCommitWithBudget(
 }
 
 // VerifyCommitUnlessVerified verifies commit exactly as VerifyCommit does,
-// unless verified already records that very verification: the same chain,
+// unless verified carries proof of that very verification: the same chain,
 // height, block ID, quorum and threshold key, and a commit whose signed content
 // and signatures are unchanged. It reports whether the verification was
 // skipped.
 //
-// Anything verified does not cover — including the zero value, which covers
-// nothing — falls through to VerifyCommit's own check and reports its errors
-// unchanged, so callers can keep telling a forged commit from an honest
-// disagreement by the error's type.
+// Anything verified's proof does not cover — including a VerifiedCommit
+// without proof, such as NewUnverifiedCommit's or the zero value — falls
+// through to VerifyCommit's own check and reports its errors unchanged, so
+// callers can keep telling a forged commit from an honest disagreement by the
+// error's type.
+//
+// commit is what is verified. The commit verified holds is never consulted.
 func (vals *ValidatorSet) VerifyCommitUnlessVerified(
 	chainID string,
 	blockID BlockID,
 	height int64,
 	commit *Commit,
-	verified CommitVerification,
+	verified VerifiedCommit,
 ) (skipped bool, err error) {
-	if verified.checkMatches(chainID, vals, blockID, height, commit) == nil {
+	if verified.proof.checkMatches(chainID, vals, blockID, height, commit) == nil {
 		return true, nil
 	}
 	return false, vals.verifyCommit(chainID, blockID, height, commit, nil)
@@ -1041,7 +1044,7 @@ func (vals *ValidatorSet) verifyCommitReportingSigns(
 
 // commitSignData runs every check verifyCommit makes before it touches a
 // signature and returns the signing data the signatures are verified against.
-// A CommitVerification re-runs it on the commit it is offered, so the two
+// A commitProof re-runs it on the commit it is offered, so the two
 // cannot come to disagree about what those checks are.
 func (vals *ValidatorSet) commitSignData(
 	chainID string,

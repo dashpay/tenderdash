@@ -40,7 +40,7 @@ func (_m *Executor) EXPECT() *Executor_Expecter {
 }
 
 // ApplyBlock provides a mock function for the type Executor
-func (_mock *Executor) ApplyBlock(ctx context.Context, state1 state.State, blockID types.BlockID, block *types.Block, commit *types.Commit, lastCommit types.CommitVerification) (state.State, error) {
+func (_mock *Executor) ApplyBlock(ctx context.Context, state1 state.State, blockID types.BlockID, block *types.Block, commit *types.Commit, lastCommit types.VerifiedCommit) (state.State, error) {
 	ret := _mock.Called(ctx, state1, blockID, block, commit, lastCommit)
 
 	if len(ret) == 0 {
@@ -49,15 +49,15 @@ func (_mock *Executor) ApplyBlock(ctx context.Context, state1 state.State, block
 
 	var r0 state.State
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, state.State, types.BlockID, *types.Block, *types.Commit, types.CommitVerification) (state.State, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, state.State, types.BlockID, *types.Block, *types.Commit, types.VerifiedCommit) (state.State, error)); ok {
 		return returnFunc(ctx, state1, blockID, block, commit, lastCommit)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, state.State, types.BlockID, *types.Block, *types.Commit, types.CommitVerification) state.State); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, state.State, types.BlockID, *types.Block, *types.Commit, types.VerifiedCommit) state.State); ok {
 		r0 = returnFunc(ctx, state1, blockID, block, commit, lastCommit)
 	} else {
 		r0 = ret.Get(0).(state.State)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, state.State, types.BlockID, *types.Block, *types.Commit, types.CommitVerification) error); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, state.State, types.BlockID, *types.Block, *types.Commit, types.VerifiedCommit) error); ok {
 		r1 = returnFunc(ctx, state1, blockID, block, commit, lastCommit)
 	} else {
 		r1 = ret.Error(1)
@@ -76,12 +76,12 @@ type Executor_ApplyBlock_Call struct {
 //   - blockID types.BlockID
 //   - block *types.Block
 //   - commit *types.Commit
-//   - lastCommit types.CommitVerification
+//   - lastCommit types.VerifiedCommit
 func (_e *Executor_Expecter) ApplyBlock(ctx any, state1 any, blockID any, block any, commit any, lastCommit any) *Executor_ApplyBlock_Call {
 	return &Executor_ApplyBlock_Call{Call: _e.mock.On("ApplyBlock", ctx, state1, blockID, block, commit, lastCommit)}
 }
 
-func (_c *Executor_ApplyBlock_Call) Run(run func(ctx context.Context, state1 state.State, blockID types.BlockID, block *types.Block, commit *types.Commit, lastCommit types.CommitVerification)) *Executor_ApplyBlock_Call {
+func (_c *Executor_ApplyBlock_Call) Run(run func(ctx context.Context, state1 state.State, blockID types.BlockID, block *types.Block, commit *types.Commit, lastCommit types.VerifiedCommit)) *Executor_ApplyBlock_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -103,9 +103,9 @@ func (_c *Executor_ApplyBlock_Call) Run(run func(ctx context.Context, state1 sta
 		if args[4] != nil {
 			arg4 = args[4].(*types.Commit)
 		}
-		var arg5 types.CommitVerification
+		var arg5 types.VerifiedCommit
 		if args[5] != nil {
-			arg5 = args[5].(types.CommitVerification)
+			arg5 = args[5].(types.VerifiedCommit)
 		}
 		run(
 			arg0,
@@ -124,7 +124,7 @@ func (_c *Executor_ApplyBlock_Call) Return(state11 state.State, err error) *Exec
 	return _c
 }
 
-func (_c *Executor_ApplyBlock_Call) RunAndReturn(run func(ctx context.Context, state1 state.State, blockID types.BlockID, block *types.Block, commit *types.Commit, lastCommit types.CommitVerification) (state.State, error)) *Executor_ApplyBlock_Call {
+func (_c *Executor_ApplyBlock_Call) RunAndReturn(run func(ctx context.Context, state1 state.State, blockID types.BlockID, block *types.Block, commit *types.Commit, lastCommit types.VerifiedCommit) (state.State, error)) *Executor_ApplyBlock_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -280,7 +280,7 @@ func (_c *Executor_ExtendVote_Call) RunAndReturn(run func(ctx context.Context, v
 }
 
 // FinalizeBlock provides a mock function for the type Executor
-func (_mock *Executor) FinalizeBlock(ctx context.Context, state1 state.State, uncommittedState state.CurrentRoundState, blockID types.BlockID, block *types.Block, commit *types.Commit, lastCommit types.CommitVerification) (state.State, error) {
+func (_mock *Executor) FinalizeBlock(ctx context.Context, state1 state.State, uncommittedState state.CurrentRoundState, blockID types.BlockID, block *types.Block, commit *types.Commit, lastCommit types.VerifiedCommit) (state.State, error) {
 	ret := _mock.Called(ctx, state1, uncommittedState, blockID, block, commit, lastCommit)
 
 	if len(ret) == 0 {
@@ -289,15 +289,15 @@ func (_mock *Executor) FinalizeBlock(ctx context.Context, state1 state.State, un
 
 	var r0 state.State
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, state.State, state.CurrentRoundState, types.BlockID, *types.Block, *types.Commit, types.CommitVerification) (state.State, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, state.State, state.CurrentRoundState, types.BlockID, *types.Block, *types.Commit, types.VerifiedCommit) (state.State, error)); ok {
 		return returnFunc(ctx, state1, uncommittedState, blockID, block, commit, lastCommit)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, state.State, state.CurrentRoundState, types.BlockID, *types.Block, *types.Commit, types.CommitVerification) state.State); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, state.State, state.CurrentRoundState, types.BlockID, *types.Block, *types.Commit, types.VerifiedCommit) state.State); ok {
 		r0 = returnFunc(ctx, state1, uncommittedState, blockID, block, commit, lastCommit)
 	} else {
 		r0 = ret.Get(0).(state.State)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, state.State, state.CurrentRoundState, types.BlockID, *types.Block, *types.Commit, types.CommitVerification) error); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, state.State, state.CurrentRoundState, types.BlockID, *types.Block, *types.Commit, types.VerifiedCommit) error); ok {
 		r1 = returnFunc(ctx, state1, uncommittedState, blockID, block, commit, lastCommit)
 	} else {
 		r1 = ret.Error(1)
@@ -317,12 +317,12 @@ type Executor_FinalizeBlock_Call struct {
 //   - blockID types.BlockID
 //   - block *types.Block
 //   - commit *types.Commit
-//   - lastCommit types.CommitVerification
+//   - lastCommit types.VerifiedCommit
 func (_e *Executor_Expecter) FinalizeBlock(ctx any, state1 any, uncommittedState any, blockID any, block any, commit any, lastCommit any) *Executor_FinalizeBlock_Call {
 	return &Executor_FinalizeBlock_Call{Call: _e.mock.On("FinalizeBlock", ctx, state1, uncommittedState, blockID, block, commit, lastCommit)}
 }
 
-func (_c *Executor_FinalizeBlock_Call) Run(run func(ctx context.Context, state1 state.State, uncommittedState state.CurrentRoundState, blockID types.BlockID, block *types.Block, commit *types.Commit, lastCommit types.CommitVerification)) *Executor_FinalizeBlock_Call {
+func (_c *Executor_FinalizeBlock_Call) Run(run func(ctx context.Context, state1 state.State, uncommittedState state.CurrentRoundState, blockID types.BlockID, block *types.Block, commit *types.Commit, lastCommit types.VerifiedCommit)) *Executor_FinalizeBlock_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -348,9 +348,9 @@ func (_c *Executor_FinalizeBlock_Call) Run(run func(ctx context.Context, state1 
 		if args[5] != nil {
 			arg5 = args[5].(*types.Commit)
 		}
-		var arg6 types.CommitVerification
+		var arg6 types.VerifiedCommit
 		if args[6] != nil {
-			arg6 = args[6].(types.CommitVerification)
+			arg6 = args[6].(types.VerifiedCommit)
 		}
 		run(
 			arg0,
@@ -370,7 +370,7 @@ func (_c *Executor_FinalizeBlock_Call) Return(state11 state.State, err error) *E
 	return _c
 }
 
-func (_c *Executor_FinalizeBlock_Call) RunAndReturn(run func(ctx context.Context, state1 state.State, uncommittedState state.CurrentRoundState, blockID types.BlockID, block *types.Block, commit *types.Commit, lastCommit types.CommitVerification) (state.State, error)) *Executor_FinalizeBlock_Call {
+func (_c *Executor_FinalizeBlock_Call) RunAndReturn(run func(ctx context.Context, state1 state.State, uncommittedState state.CurrentRoundState, blockID types.BlockID, block *types.Block, commit *types.Commit, lastCommit types.VerifiedCommit) (state.State, error)) *Executor_FinalizeBlock_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -460,7 +460,7 @@ func (_c *Executor_ProcessProposal_Call) RunAndReturn(run func(ctx context.Conte
 }
 
 // ValidateBlock provides a mock function for the type Executor
-func (_mock *Executor) ValidateBlock(ctx context.Context, state1 state.State, block *types.Block, lastCommit types.CommitVerification) error {
+func (_mock *Executor) ValidateBlock(ctx context.Context, state1 state.State, block *types.Block, lastCommit types.VerifiedCommit) error {
 	ret := _mock.Called(ctx, state1, block, lastCommit)
 
 	if len(ret) == 0 {
@@ -468,7 +468,7 @@ func (_mock *Executor) ValidateBlock(ctx context.Context, state1 state.State, bl
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, state.State, *types.Block, types.CommitVerification) error); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, state.State, *types.Block, types.VerifiedCommit) error); ok {
 		r0 = returnFunc(ctx, state1, block, lastCommit)
 	} else {
 		r0 = ret.Error(0)
@@ -485,12 +485,12 @@ type Executor_ValidateBlock_Call struct {
 //   - ctx context.Context
 //   - state1 state.State
 //   - block *types.Block
-//   - lastCommit types.CommitVerification
+//   - lastCommit types.VerifiedCommit
 func (_e *Executor_Expecter) ValidateBlock(ctx any, state1 any, block any, lastCommit any) *Executor_ValidateBlock_Call {
 	return &Executor_ValidateBlock_Call{Call: _e.mock.On("ValidateBlock", ctx, state1, block, lastCommit)}
 }
 
-func (_c *Executor_ValidateBlock_Call) Run(run func(ctx context.Context, state1 state.State, block *types.Block, lastCommit types.CommitVerification)) *Executor_ValidateBlock_Call {
+func (_c *Executor_ValidateBlock_Call) Run(run func(ctx context.Context, state1 state.State, block *types.Block, lastCommit types.VerifiedCommit)) *Executor_ValidateBlock_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -504,9 +504,9 @@ func (_c *Executor_ValidateBlock_Call) Run(run func(ctx context.Context, state1 
 		if args[2] != nil {
 			arg2 = args[2].(*types.Block)
 		}
-		var arg3 types.CommitVerification
+		var arg3 types.VerifiedCommit
 		if args[3] != nil {
-			arg3 = args[3].(types.CommitVerification)
+			arg3 = args[3].(types.VerifiedCommit)
 		}
 		run(
 			arg0,
@@ -523,13 +523,13 @@ func (_c *Executor_ValidateBlock_Call) Return(err error) *Executor_ValidateBlock
 	return _c
 }
 
-func (_c *Executor_ValidateBlock_Call) RunAndReturn(run func(ctx context.Context, state1 state.State, block *types.Block, lastCommit types.CommitVerification) error) *Executor_ValidateBlock_Call {
+func (_c *Executor_ValidateBlock_Call) RunAndReturn(run func(ctx context.Context, state1 state.State, block *types.Block, lastCommit types.VerifiedCommit) error) *Executor_ValidateBlock_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // ValidateBlockWithRoundState provides a mock function for the type Executor
-func (_mock *Executor) ValidateBlockWithRoundState(ctx context.Context, state1 state.State, uncommittedState state.CurrentRoundState, block *types.Block, lastCommit types.CommitVerification) error {
+func (_mock *Executor) ValidateBlockWithRoundState(ctx context.Context, state1 state.State, uncommittedState state.CurrentRoundState, block *types.Block, lastCommit types.VerifiedCommit) error {
 	ret := _mock.Called(ctx, state1, uncommittedState, block, lastCommit)
 
 	if len(ret) == 0 {
@@ -537,7 +537,7 @@ func (_mock *Executor) ValidateBlockWithRoundState(ctx context.Context, state1 s
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, state.State, state.CurrentRoundState, *types.Block, types.CommitVerification) error); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, state.State, state.CurrentRoundState, *types.Block, types.VerifiedCommit) error); ok {
 		r0 = returnFunc(ctx, state1, uncommittedState, block, lastCommit)
 	} else {
 		r0 = ret.Error(0)
@@ -555,12 +555,12 @@ type Executor_ValidateBlockWithRoundState_Call struct {
 //   - state1 state.State
 //   - uncommittedState state.CurrentRoundState
 //   - block *types.Block
-//   - lastCommit types.CommitVerification
+//   - lastCommit types.VerifiedCommit
 func (_e *Executor_Expecter) ValidateBlockWithRoundState(ctx any, state1 any, uncommittedState any, block any, lastCommit any) *Executor_ValidateBlockWithRoundState_Call {
 	return &Executor_ValidateBlockWithRoundState_Call{Call: _e.mock.On("ValidateBlockWithRoundState", ctx, state1, uncommittedState, block, lastCommit)}
 }
 
-func (_c *Executor_ValidateBlockWithRoundState_Call) Run(run func(ctx context.Context, state1 state.State, uncommittedState state.CurrentRoundState, block *types.Block, lastCommit types.CommitVerification)) *Executor_ValidateBlockWithRoundState_Call {
+func (_c *Executor_ValidateBlockWithRoundState_Call) Run(run func(ctx context.Context, state1 state.State, uncommittedState state.CurrentRoundState, block *types.Block, lastCommit types.VerifiedCommit)) *Executor_ValidateBlockWithRoundState_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -578,9 +578,9 @@ func (_c *Executor_ValidateBlockWithRoundState_Call) Run(run func(ctx context.Co
 		if args[3] != nil {
 			arg3 = args[3].(*types.Block)
 		}
-		var arg4 types.CommitVerification
+		var arg4 types.VerifiedCommit
 		if args[4] != nil {
-			arg4 = args[4].(types.CommitVerification)
+			arg4 = args[4].(types.VerifiedCommit)
 		}
 		run(
 			arg0,
@@ -598,28 +598,28 @@ func (_c *Executor_ValidateBlockWithRoundState_Call) Return(err error) *Executor
 	return _c
 }
 
-func (_c *Executor_ValidateBlockWithRoundState_Call) RunAndReturn(run func(ctx context.Context, state1 state.State, uncommittedState state.CurrentRoundState, block *types.Block, lastCommit types.CommitVerification) error) *Executor_ValidateBlockWithRoundState_Call {
+func (_c *Executor_ValidateBlockWithRoundState_Call) RunAndReturn(run func(ctx context.Context, state1 state.State, uncommittedState state.CurrentRoundState, block *types.Block, lastCommit types.VerifiedCommit) error) *Executor_ValidateBlockWithRoundState_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // VerifyCommit provides a mock function for the type Executor
-func (_mock *Executor) VerifyCommit(state1 state.State, blockID types.BlockID, height int64, commit *types.Commit) (types.CommitVerification, error) {
+func (_mock *Executor) VerifyCommit(state1 state.State, blockID types.BlockID, height int64, commit *types.Commit) (types.VerifiedCommit, error) {
 	ret := _mock.Called(state1, blockID, height, commit)
 
 	if len(ret) == 0 {
 		panic("no return value specified for VerifyCommit")
 	}
 
-	var r0 types.CommitVerification
+	var r0 types.VerifiedCommit
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(state.State, types.BlockID, int64, *types.Commit) (types.CommitVerification, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(state.State, types.BlockID, int64, *types.Commit) (types.VerifiedCommit, error)); ok {
 		return returnFunc(state1, blockID, height, commit)
 	}
-	if returnFunc, ok := ret.Get(0).(func(state.State, types.BlockID, int64, *types.Commit) types.CommitVerification); ok {
+	if returnFunc, ok := ret.Get(0).(func(state.State, types.BlockID, int64, *types.Commit) types.VerifiedCommit); ok {
 		r0 = returnFunc(state1, blockID, height, commit)
 	} else {
-		r0 = ret.Get(0).(types.CommitVerification)
+		r0 = ret.Get(0).(types.VerifiedCommit)
 	}
 	if returnFunc, ok := ret.Get(1).(func(state.State, types.BlockID, int64, *types.Commit) error); ok {
 		r1 = returnFunc(state1, blockID, height, commit)
@@ -671,12 +671,12 @@ func (_c *Executor_VerifyCommit_Call) Run(run func(state1 state.State, blockID t
 	return _c
 }
 
-func (_c *Executor_VerifyCommit_Call) Return(commitVerification types.CommitVerification, err error) *Executor_VerifyCommit_Call {
-	_c.Call.Return(commitVerification, err)
+func (_c *Executor_VerifyCommit_Call) Return(verifiedCommit types.VerifiedCommit, err error) *Executor_VerifyCommit_Call {
+	_c.Call.Return(verifiedCommit, err)
 	return _c
 }
 
-func (_c *Executor_VerifyCommit_Call) RunAndReturn(run func(state1 state.State, blockID types.BlockID, height int64, commit *types.Commit) (types.CommitVerification, error)) *Executor_VerifyCommit_Call {
+func (_c *Executor_VerifyCommit_Call) RunAndReturn(run func(state1 state.State, blockID types.BlockID, height int64, commit *types.Commit) (types.VerifiedCommit, error)) *Executor_VerifyCommit_Call {
 	_c.Call.Return(run)
 	return _c
 }

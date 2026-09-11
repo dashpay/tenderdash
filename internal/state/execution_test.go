@@ -96,7 +96,7 @@ func TestApplyBlock(t *testing.T) {
 	require.NoError(t, err)
 	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: bps.Header()}
 
-	state, err = blockExec.ApplyBlock(ctx, state, blockID, block, new(types.Commit), types.CommitVerification{})
+	state, err = blockExec.ApplyBlock(ctx, state, blockID, block, new(types.Commit), types.VerifiedCommit{})
 	require.NoError(t, err)
 
 	// State for next block
@@ -192,7 +192,7 @@ func TestFinalizeBlockByzantineValidators(t *testing.T) {
 
 	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: bps.Header()}
 
-	_, err = blockExec.ApplyBlock(ctx, state, blockID, block, new(types.Commit), types.CommitVerification{})
+	_, err = blockExec.ApplyBlock(ctx, state, blockID, block, new(types.Commit), types.VerifiedCommit{})
 	require.NoError(t, err)
 
 	// TODO check state and mempool
@@ -688,7 +688,7 @@ func TestFinalizeBlockValidatorUpdates(t *testing.T) {
 	require.NoError(t, err)
 	blockID := block.BlockID(nil)
 	require.NoError(t, err)
-	state, err = blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, new(types.Commit), types.CommitVerification{})
+	state, err = blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, new(types.Commit), types.VerifiedCommit{})
 	require.NoError(t, err)
 
 	require.Nil(t, err)
@@ -770,7 +770,7 @@ func TestFinalizeBlockValidatorUpdatesResultingInEmptySet(t *testing.T) {
 	}
 
 	assert.NotPanics(t, func() {
-		state, err = blockExec.ApplyBlock(ctx, state, blockID, block, new(types.Commit), types.CommitVerification{})
+		state, err = blockExec.ApplyBlock(ctx, state, blockID, block, new(types.Commit), types.VerifiedCommit{})
 	})
 	assert.NotNil(t, err)
 	assert.NotEmpty(t, state.Validators.Validators)
@@ -1360,7 +1360,7 @@ func TestApplyBlockValidatesBlock(t *testing.T) {
 	require.NoError(t, err)
 	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: bps.Header()}
 
-	_, err = blockExec.ApplyBlock(ctx, state, blockID, block, new(types.Commit), types.CommitVerification{})
+	_, err = blockExec.ApplyBlock(ctx, state, blockID, block, new(types.Commit), types.VerifiedCommit{})
 	require.Error(t, err, "ApplyBlock must reject a block that fails validation")
 	require.ErrorAs(t, err, &sm.ErrInvalidBlock{})
 
@@ -1447,7 +1447,7 @@ func newVerifiedCommitFixture(t *testing.T) verifiedCommitFixture {
 
 // verify runs commit through the executor as block sync does when it applies
 // the height 1 block, and returns the verification the executor hands back.
-func (f verifiedCommitFixture) verify(commit *types.Commit) (types.CommitVerification, error) {
+func (f verifiedCommitFixture) verify(commit *types.Commit) (types.VerifiedCommit, error) {
 	return f.blockExec.VerifyCommit(f.verifiedAgainst, f.blockID, 1, commit)
 }
 
@@ -1465,7 +1465,7 @@ func (f verifiedCommitFixture) blockWith(lastCommit *types.Commit) *types.Block 
 func (f verifiedCommitFixture) applyNext(
 	t *testing.T,
 	lastCommit *types.Commit,
-	lastCommitVerified types.CommitVerification,
+	lastCommitVerified types.VerifiedCommit,
 ) error {
 	t.Helper()
 	block := f.blockWith(lastCommit)
@@ -1525,14 +1525,14 @@ func TestVerifyCommitReturnsVerification(t *testing.T) {
 		noVals.Validators = nil
 		verified, err := f.blockExec.VerifyCommit(noVals, f.blockID, 1, f.commit)
 		require.Error(t, err)
-		require.Equal(t, types.CommitVerification{}, verified)
+		require.Equal(t, types.VerifiedCommit{}, verified)
 	})
 
 	t.Run("rejected commit yields no verification", func(t *testing.T) {
 		f := newVerifiedCommitFixture(t)
 		verified, err := f.verify(forgedCommit(f.commit))
 		require.ErrorContains(t, err, badCommitSignature)
-		require.Equal(t, types.CommitVerification{}, verified)
+		require.Equal(t, types.VerifiedCommit{}, verified)
 	})
 
 	t.Run("covering verification skips the LastCommit check", func(t *testing.T) {
@@ -1548,7 +1548,7 @@ func TestVerifyCommitReturnsVerification(t *testing.T) {
 
 	t.Run("zero verification verifies in full", func(t *testing.T) {
 		f := newVerifiedCommitFixture(t)
-		require.NoError(t, f.blockExec.ValidateBlock(f.ctx, f.state, f.block, types.CommitVerification{}))
+		require.NoError(t, f.blockExec.ValidateBlock(f.ctx, f.state, f.block, types.VerifiedCommit{}))
 		require.Equal(t, 0.0, f.skipped.Value(), "nothing was verified, so nothing may be skipped")
 	})
 
@@ -1589,13 +1589,13 @@ func TestApplyBlockSkipsVerifiedLastCommit(t *testing.T) {
 
 	t.Run("genuine commit passes without a verification", func(t *testing.T) {
 		f := newVerifiedCommitFixture(t)
-		require.NoError(t, f.applyNext(t, f.commit, types.CommitVerification{}))
+		require.NoError(t, f.applyNext(t, f.commit, types.VerifiedCommit{}))
 		require.Equal(t, 0.0, f.skipped.Value(), "nothing was verified, so nothing may be skipped")
 	})
 
 	t.Run("unverified forged commit is rejected", func(t *testing.T) {
 		f := newVerifiedCommitFixture(t)
-		err := f.applyNext(t, forgedCommit(f.commit), types.CommitVerification{})
+		err := f.applyNext(t, forgedCommit(f.commit), types.VerifiedCommit{})
 		require.ErrorAs(t, err, &sm.ErrInvalidBlock{})
 		require.ErrorContains(t, err, badCommitSignature)
 		require.Equal(t, 0.0, f.skipped.Value())

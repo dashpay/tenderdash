@@ -23,11 +23,12 @@ type (
 		state     sm.State
 		metrics   *consensus.Metrics
 		stats     applyStats
-		// lastCommit verifies the commit of the block most recently applied onto
-		// state. The next block carries that commit as its LastCommit, so this is
-		// offered back when that block is validated and applied, sparing a second
-		// threshold verification of the same commit. Guarded by mtx, like state.
-		lastCommit types.CommitVerification
+		// lastCommit is the commit of the block most recently applied onto state,
+		// with the proof of its verification. The next block carries that commit
+		// as its LastCommit, so this is offered back when that block is validated
+		// and applied, sparing a second threshold verification of the same commit.
+		// Guarded by mtx, like state.
+		lastCommit types.VerifiedCommit
 		// lastDone is when the previous Apply returned, so the time the applier
 		// sits idle waiting for the next block can be measured
 		lastDone time.Time
@@ -138,18 +139,18 @@ func (e *blockApplier) UpdateState(newState sm.State) {
 	e.state = newState
 	// the commit lastCommit verified was applied onto the replaced state, not onto
 	// newState
-	e.lastCommit = types.CommitVerification{}
+	e.lastCommit = types.VerifiedCommit{}
 }
 
 // verify checks commit and then block against the current state, before the
-// block is persisted. It returns the verification of commit, which the next
-// block carries as its LastCommit.
+// block is persisted. It returns commit with the proof of its verification;
+// the next block carries commit as its LastCommit.
 func (e *blockApplier) verify(
 	ctx context.Context,
 	blockID types.BlockID,
 	block *types.Block,
 	commit *types.Commit,
-) (types.CommitVerification, error) {
+) (types.VerifiedCommit, error) {
 	start := time.Now()
 	verified, err := e.blockExec.VerifyCommit(e.state, blockID, block.Height, commit)
 	e.observeSince("verify_commit", start)
@@ -163,7 +164,7 @@ func (e *blockApplier) verify(
 			"block_id", blockID,
 			"height", block.Height,
 		)
-		return types.CommitVerification{}, err
+		return types.VerifiedCommit{}, err
 	}
 	// validate the block before we persist it
 	start = time.Now()
@@ -176,7 +177,7 @@ func (e *blockApplier) verify(
 			"block_id", blockID,
 			"height", block.Height,
 		)
-		return types.CommitVerification{}, err
+		return types.VerifiedCommit{}, err
 	}
 	return verified, nil
 }

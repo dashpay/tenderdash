@@ -306,9 +306,10 @@ func (r *BlockReplayer) syncStateAt(
 	meta := r.store.LoadBlockMeta(height)
 	seenCommit := r.store.LoadSeenCommitAt(height)
 	// Use stubs for both mempool and evidence pool since no transactions nor
-	// evidence are needed here - block already exists. No verification of
-	// block.LastCommit is offered, so the replayer verifies every block in full.
-	state, err := blockExec.ApplyBlock(ctx, state, meta.BlockID, block, seenCommit, types.CommitVerification{})
+	// evidence are needed here - block already exists. The replayer holds no
+	// proof for block.LastCommit, so it verifies every block in full.
+	state, err := blockExec.ApplyBlock(ctx, state, meta.BlockID, block, seenCommit,
+		types.NewUnverifiedCommit(block.LastCommit))
 	if err != nil {
 		return sm.State{}, err
 	}

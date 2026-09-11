@@ -14,9 +14,10 @@ import (
 //-----------------------------------------------------
 // Validate block
 
-// validateBlock validates block against state. lastCommit is the caller's
-// verification of block.LastCommit, if it holds one; see verifyLastCommit.
-func validateBlock(state State, block *types.Block, lastCommit types.CommitVerification, metrics *Metrics) error {
+// validateBlock validates block against state. lastCommit carries the caller's
+// proof of block.LastCommit's verification, if it holds one; see
+// verifyLastCommit.
+func validateBlock(state State, block *types.Block, lastCommit types.VerifiedCommit, metrics *Metrics) error {
 	// Validate internal consistency.
 	if err := block.ValidateBasic(); err != nil {
 		return err
@@ -133,12 +134,13 @@ func validateBlock(state State, block *types.Block, lastCommit types.CommitVerif
 }
 
 // verifyLastCommit verifies block.LastCommit against state.LastValidators as
-// the commit for state.LastBlockID. lastCommit spares that BLS threshold
-// verification only when it covers exactly this verification — same chain,
-// height, block ID, quorum, threshold key and commit content — and each skip is
-// counted in metrics. Anything else, including the zero value that callers
-// holding no verification pass, is verified in full.
-func verifyLastCommit(state State, block *types.Block, lastCommit types.CommitVerification, metrics *Metrics) error {
+// the commit for state.LastBlockID. lastCommit's proof spares that BLS
+// threshold verification only when it covers exactly this verification — same
+// chain, height, block ID, quorum, threshold key and commit content — and each
+// skip is counted in metrics. Anything else, including a VerifiedCommit without
+// proof that callers holding none pass, is verified in full. block.LastCommit
+// is what is verified; the commit lastCommit holds is never read.
+func verifyLastCommit(state State, block *types.Block, lastCommit types.VerifiedCommit, metrics *Metrics) error {
 	skipped, err := state.LastValidators.VerifyCommitUnlessVerified(
 		state.ChainID, state.LastBlockID, block.Height-1, block.LastCommit, lastCommit)
 	if err != nil {

@@ -12,8 +12,8 @@ import (
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
-// A commit verification is accepted in place of verifying a commit again, so
-// it is only as safe as what it names. These pin that it names exactly the
+// A verified commit's proof is accepted in place of verifying a commit again,
+// so it is only as safe as what it names. These pin that it names exactly the
 // inputs a verification is handed, that it can only be produced by verifying,
 // and that anything it does not cover is verified in full — with the errors a
 // full verification reports, since callers decide whether to evict a peer on
@@ -67,35 +67,37 @@ func (in commitInputs) verify() error {
 	return in.vals.VerifyCommit(in.chainID, in.blockID, in.height, in.commit)
 }
 
-func (in commitInputs) mint(budget VerificationBudget) (CommitVerification, error) {
+func (in commitInputs) mint(budget VerificationBudget) (VerifiedCommit, error) {
 	return VerifyCommitSignatures(in.vals, in.chainID, in.blockID, in.height, in.commit, budget)
 }
 
-func (in commitInputs) matches(v CommitVerification) error {
-	return v.checkMatches(in.chainID, in.vals, in.blockID, in.height, in.commit)
+func (in commitInputs) matches(v VerifiedCommit) error {
+	return v.proof.checkMatches(in.chainID, in.vals, in.blockID, in.height, in.commit)
 }
 
-func (in commitInputs) verifyUnlessVerified(v CommitVerification) (bool, error) {
+func (in commitInputs) verifyUnlessVerified(v VerifiedCommit) (bool, error) {
 	return in.vals.VerifyCommitUnlessVerified(in.chainID, in.blockID, in.height, in.commit, v)
 }
 
-// A verification covers the commit it was minted for, and a caller holding it
-// skips the threshold verification for that commit.
+// A verified commit covers the commit it was minted for, and a caller holding
+// it skips the threshold verification for that commit.
 func TestVerifyCommitSignaturesCoversTheCommitItVerified(t *testing.T) {
 	in := newCommitInputs(t)
 
 	verified, err := in.mint(nil)
 	require.NoError(t, err)
+	require.NotNil(t, verified.proof)
+	require.Same(t, in.commit, verified.Commit(), "the verified commit holds the caller's commit")
 	require.NoError(t, in.matches(verified))
 
-	// Equal inputs held in different memory: the verification is about values,
-	// and block sync compares it against a validator set one height on that is a
-	// different object holding the same quorum.
+	// Equal inputs held in different memory: the proof is about values, and block
+	// sync compares it against a validator set one height on that is a different
+	// object holding the same quorum.
 	require.NoError(t, in.clone(t).matches(verified))
 
 	skipped, err := in.verifyUnlessVerified(verified)
 	require.NoError(t, err)
-	require.True(t, skipped, "a commit the verification covers must not be verified again")
+	require.True(t, skipped, "a commit the proof covers must not be verified again")
 }
 
 // Nothing is handed out for a commit that failed verification, so there is
@@ -106,7 +108,7 @@ func TestVerifyCommitSignaturesYieldsNothingForABadCommit(t *testing.T) {
 
 	verified, err := in.mint(nil)
 	require.ErrorAs(t, err, &ErrInvalidCommitSignature{})
-	require.Equal(t, CommitVerification{}, verified)
+	require.Equal(t, VerifiedCommit{}, verified)
 
 	skipped, err := in.verifyUnlessVerified(verified)
 	require.False(t, skipped)
@@ -120,38 +122,52 @@ func TestVerifyCommitSignaturesRejectsMissingInputs(t *testing.T) {
 
 	verified, err := VerifyCommitSignatures(nil, in.chainID, in.blockID, in.height, in.commit, nil)
 	require.ErrorIs(t, err, ErrValidatorSetNilOrEmpty)
-	require.Equal(t, CommitVerification{}, verified)
+	require.Equal(t, VerifiedCommit{}, verified)
 
 	verified, err = VerifyCommitSignatures(in.vals, in.chainID, in.blockID, in.height, nil, nil)
 	require.Error(t, err)
-	require.Equal(t, CommitVerification{}, verified)
+	require.Equal(t, VerifiedCommit{}, verified)
 }
 
-// The zero value is what code that verified nothing holds — consensus and the
-// replayer pass it on every call. It must never let a verification be skipped,
-// and must never cause a commit to be rejected either: it only ever falls
-// through to a real verification.
-func TestZeroCommitVerificationMatchesNothing(t *testing.T) {
+// A VerifiedCommit without proof is what code that verified nothing holds —
+// consensus and the replayer pass NewUnverifiedCommit on every call, block
+// sync passes the zero value. Neither may ever let a verification be skipped,
+// not even when it holds the very commit being verified, and neither may ever
+// cause a commit to be rejected: it only ever falls through to a real
+// verification.
+func TestUnverifiedCommitMatchesNothing(t *testing.T) {
 	in := newCommitInputs(t)
 
-	require.ErrorIs(t, in.matches(CommitVerification{}), errCommitVerificationMismatch)
+	holding := NewUnverifiedCommit(in.commit)
+	require.Same(t, in.commit, holding.Commit())
+	require.Nil(t, holding.proof)
+	require.Equal(t, VerifiedCommit{}, NewUnverifiedCommit(nil), "the zero value is the unverified nil commit")
 
-	skipped, err := in.verifyUnlessVerified(CommitVerification{})
-	require.NoError(t, err, "a genuine commit offered with no verification must still pass")
-	require.False(t, skipped)
+	for name, unverified := range map[string]VerifiedCommit{
+		"zero value":                     {},
+		"holding the commit it verifies": holding,
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.ErrorIs(t, in.matches(unverified), errCommitProofMismatch)
 
-	forged := in.clone(t)
-	forged.commit.ThresholdBlockSignature[0] ^= 0xff
-	skipped, err = forged.verifyUnlessVerified(CommitVerification{})
-	require.False(t, skipped)
-	require.ErrorAs(t, err, &ErrInvalidCommitSignature{})
+			skipped, err := in.verifyUnlessVerified(unverified)
+			require.NoError(t, err, "a genuine commit offered without proof must still pass")
+			require.False(t, skipped)
+
+			forged := in.clone(t)
+			forged.commit.ThresholdBlockSignature[0] ^= 0xff
+			skipped, err = forged.verifyUnlessVerified(unverified)
+			require.False(t, skipped)
+			require.ErrorAs(t, err, &ErrInvalidCommitSignature{})
+		})
+	}
 }
 
-// A verification is about one commit under one set of inputs. Changing any one
-// of them — on the verifier's side or in the commit — must not be covered, and
+// A proof is about one commit under one set of inputs. Changing any one of
+// them — on the verifier's side or in the commit — must not be covered, and
 // must fall through to a verification that rejects it exactly as VerifyCommit
 // does.
-func TestCommitVerificationDoesNotCoverADifferentVerification(t *testing.T) {
+func TestVerifiedCommitDoesNotCoverADifferentVerification(t *testing.T) {
 	genuine := newCommitInputs(t)
 	verified, err := genuine.mint(nil)
 	require.NoError(t, err)
@@ -160,7 +176,7 @@ func TestCommitVerificationDoesNotCoverADifferentVerification(t *testing.T) {
 		name   string
 		mutate func(in *commitInputs)
 		// panics is set where VerifyCommit itself dereferences the missing input;
-		// those cases are only asked whether the verification matches
+		// those cases are only asked whether the proof matches
 		panics bool
 	}{
 		{name: "chain ID", mutate: func(in *commitInputs) { in.chainID += "-fork" }},
@@ -207,7 +223,7 @@ func TestCommitVerificationDoesNotCoverADifferentVerification(t *testing.T) {
 			in := genuine.clone(t)
 			tc.mutate(&in)
 
-			require.ErrorIs(t, in.matches(verified), errCommitVerificationMismatch)
+			require.ErrorIs(t, in.matches(verified), errCommitProofMismatch)
 			if tc.panics {
 				return
 			}
@@ -221,16 +237,20 @@ func TestCommitVerificationDoesNotCoverADifferentVerification(t *testing.T) {
 	}
 }
 
-// A verification owns what it records. Rewriting the inputs it was minted from
+// A proof owns what it records. Rewriting the inputs it was minted from
 // afterwards — through the commit, block ID or validator set the caller still
-// holds — must not change what it covers.
-func TestCommitVerificationSurvivesMutationOfItsInputs(t *testing.T) {
+// holds — must not change what it covers. The commit itself is held by the
+// caller's pointer on purpose: it is what the proof is about, not part of it,
+// so rewriting it must make the proof refuse even that very commit.
+func TestVerifiedCommitProofSurvivesMutationOfItsInputs(t *testing.T) {
 	genuine := newCommitInputs(t)
 	minted := genuine.clone(t)
 	pristine := genuine.clone(t)
 
 	verified, err := minted.mint(nil)
 	require.NoError(t, err)
+	require.Same(t, minted.commit, verified.Commit(),
+		"the verified commit embeds the caller's commit pointer by design")
 
 	minted.blockID.Hash[0] ^= 0xff
 	minted.commit.ThresholdBlockSignature[0] ^= 0xff
@@ -239,16 +259,16 @@ func TestCommitVerificationSurvivesMutationOfItsInputs(t *testing.T) {
 	minted.vals.ThresholdPublicKey.Bytes()[0] ^= 0xff
 
 	require.NoError(t, pristine.matches(verified),
-		"the verification must not alias the block ID, commit or validator set it was minted from")
-	require.ErrorIs(t, minted.matches(verified), errCommitVerificationMismatch,
-		"the rewritten inputs are not what was verified")
+		"the proof must not alias the block ID, commit or validator set it was minted from")
+	require.ErrorIs(t, minted.matches(verified), errCommitProofMismatch,
+		"the rewritten inputs, including the embedded commit itself, are not what was verified")
 }
 
 // The threshold key is an interface, so a caller can mint with an
 // implementation that verifies anything while reporting the real key's bytes.
-// Whether a verification is covered has to be decided by the key the consumer
-// trusts, not by the key the verification was minted with.
-func TestCommitVerificationFromAKeyThatAnswersYesMatchesNothing(t *testing.T) {
+// Whether a proof covers a verification has to be decided by the key the
+// consumer trusts, not by the key the proof was minted with.
+func TestVerifiedCommitFromAKeyThatAnswersYesMatchesNothing(t *testing.T) {
 	in := newCommitInputs(t).clone(t)
 	in.commit.ThresholdBlockSignature = make([]byte, SignatureSize)
 
@@ -259,18 +279,19 @@ func TestCommitVerificationFromAKeyThatAnswersYesMatchesNothing(t *testing.T) {
 	// leaves behind on failure is refused for the same reason
 	verified, _ := VerifyCommitSignatures(hostile, in.chainID, in.blockID, in.height, in.commit, nil)
 
-	require.ErrorIs(t, in.matches(verified), errCommitVerificationMismatch,
-		"a verification minted by a key of the caller's choosing was accepted")
+	require.ErrorIs(t, in.matches(verified), errCommitProofMismatch,
+		"a proof minted by a key of the caller's choosing was accepted")
 	skipped, err := in.verifyUnlessVerified(verified)
 	require.False(t, skipped)
 	require.ErrorAs(t, err, &ErrInvalidCommitSignature{})
 }
 
 // Callers evict a peer on ErrInvalidCommitSignature alone, and tolerate every
-// other commit failure. Minting a verification, and consuming one that does not
-// cover the commit, must report exactly the error VerifyCommit reports — same
-// type, same content — for every failure VerifyCommit distinguishes.
-func TestCommitVerificationKeepsTheVerifyCommitErrors(t *testing.T) {
+// other commit failure. Minting a verified commit, and consuming one whose
+// proof does not cover the commit, must report exactly the error VerifyCommit
+// reports — same type, same content — for every failure VerifyCommit
+// distinguishes.
+func TestVerifiedCommitKeepsTheVerifyCommitErrors(t *testing.T) {
 	genuine := newCommitInputs(t)
 	verified, err := genuine.mint(nil)
 	require.NoError(t, err)
@@ -339,7 +360,7 @@ func TestCommitVerificationKeepsTheVerifyCommitErrors(t *testing.T) {
 
 			minted, err := in.mint(nil)
 			require.Equal(t, want, err, "minting must fail exactly as VerifyCommit fails")
-			require.Equal(t, CommitVerification{}, minted)
+			require.Equal(t, VerifiedCommit{}, minted)
 
 			skipped, err := in.verifyUnlessVerified(verified)
 			require.False(t, skipped)
@@ -357,7 +378,7 @@ func TestVerifyCommitSignaturesChargesTheBudget(t *testing.T) {
 	verified, err := in.mint(exhausted)
 	require.ErrorIs(t, err, ErrVerificationBudgetExhausted)
 	require.NotErrorAs(t, err, &ErrInvalidCommitSignature{})
-	require.Equal(t, CommitVerification{}, verified)
+	require.Equal(t, VerifiedCommit{}, verified)
 	require.Equal(t, []int{1}, exhausted.costs)
 
 	charged := &recordingVerificationBudget{}

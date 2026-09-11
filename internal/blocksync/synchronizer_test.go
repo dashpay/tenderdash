@@ -87,11 +87,11 @@ func (suite *SynchronizerTestSuite) TestBasic() {
 	suite.blockExec.
 		On("VerifyCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
-		Return(types.CommitVerification{}, nil)
+		Return(types.VerifiedCommit{}, nil)
 	suite.blockExec.
 		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
-		Return(func(_ context.Context, state sm.State, _ types.BlockID, _ *types.Block, _ *types.Commit, _ types.CommitVerification) sm.State {
+		Return(func(_ context.Context, state sm.State, _ types.BlockID, _ *types.Block, _ *types.Commit, _ types.VerifiedCommit) sm.State {
 			return state
 		}, nil)
 	suite.client.
@@ -210,7 +210,7 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResult() {
 				suite.blockExec.
 					On("VerifyCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Maybe().
-					Return(types.CommitVerification{}, nil)
+					Return(types.VerifiedCommit{}, nil)
 				suite.blockExec.
 					On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, respH1.Block, respH1.Commit, mock.Anything).
 					Once().
@@ -432,11 +432,11 @@ func (suite *SynchronizerTestSuite) TestConsumeDuplicateThenDrain() {
 	suite.blockExec.
 		On("VerifyCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
-		Return(types.CommitVerification{}, nil)
+		Return(types.VerifiedCommit{}, nil)
 	suite.blockExec.
 		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Twice().
-		Return(func(_ context.Context, state sm.State, _ types.BlockID, _ *types.Block, _ *types.Commit, _ types.CommitVerification) sm.State {
+		Return(func(_ context.Context, state sm.State, _ types.BlockID, _ *types.Block, _ *types.Commit, _ types.VerifiedCommit) sm.State {
 			return state
 		}, nil)
 
@@ -503,7 +503,7 @@ func (suite *SynchronizerTestSuite) TestApplyFailurePunishesSupplyingPeer() {
 	suite.blockExec.
 		On("VerifyCommit", mock.Anything, mock.Anything, poisonH1.Block.Height, poisonH1.Commit).
 		Once().
-		Return(types.CommitVerification{}, nil)
+		Return(types.VerifiedCommit{}, nil)
 	suite.blockExec.
 		On("ValidateBlock", mock.Anything, mock.Anything, poisonH1.Block, mock.Anything).
 		Once().
@@ -1230,11 +1230,11 @@ func (suite *SynchronizerTestSuite) newBacklogHarness() *backlogHarness {
 	suite.blockExec.
 		On("VerifyCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
-		Return(types.CommitVerification{}, nil)
+		Return(types.VerifiedCommit{}, nil)
 	suite.blockExec.
 		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
-		Return(func(_ context.Context, state sm.State, _ types.BlockID, _ *types.Block, _ *types.Commit, _ types.CommitVerification) sm.State {
+		Return(func(_ context.Context, state sm.State, _ types.BlockID, _ *types.Block, _ *types.Commit, _ types.VerifiedCommit) sm.State {
 			return state
 		}, nil)
 
@@ -1684,11 +1684,11 @@ func (suite *SynchronizerTestSuite) TestClientTimeoutUnwedgesAFullWindow() {
 	suite.blockExec.
 		On("VerifyCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
-		Return(types.CommitVerification{}, nil)
+		Return(types.VerifiedCommit{}, nil)
 	suite.blockExec.
 		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
-		Return(func(_ context.Context, state sm.State, _ types.BlockID, _ *types.Block, _ *types.Commit, _ types.CommitVerification) sm.State {
+		Return(func(_ context.Context, state sm.State, _ types.BlockID, _ *types.Block, _ *types.Commit, _ types.VerifiedCommit) sm.State {
 			return state
 		}, nil)
 

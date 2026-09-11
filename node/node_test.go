@@ -610,7 +610,7 @@ func TestCreateProposalBlock(t *testing.T) {
 	}
 	assert.EqualValues(t, partSetFromHeader.ByteSize(), partSet.ByteSize())
 
-	err = blockExec.ValidateBlock(ctx, state, block, types.CommitVerification{})
+	err = blockExec.ValidateBlock(ctx, state, block, types.VerifiedCommit{})
 	assert.NoError(t, err)
 
 	assert.EqualValues(t, block.Header.ProposedAppVersion, proposedAppVersion)
