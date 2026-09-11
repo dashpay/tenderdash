@@ -39,9 +39,16 @@ func isPeerFloodableError(err error) bool {
 		errors.Is(err, ErrInvalidProposalCoreHeight) ||
 		errors.Is(err, ErrInvalidProposalBlockID) ||
 		errors.Is(err, ErrInvalidProposalForCommit) ||
+		errors.Is(err, ErrInvalidProposalForPartSet) ||
 		errors.Is(err, ErrUnableToVerifyProposal) ||
 		errors.Is(err, ErrPeerStateInvalidVoteIndex) ||
-		errors.Is(err, ErrInvalidNewRoundStepHeight)
+		errors.Is(err, ErrInvalidNewRoundStepHeight) ||
+		// Every peer commit for the current height that clears ValidateBasic reaches
+		// these two rejections, and an honest peer on a different quorum rotation or
+		// vote-extension configuration reaches them too. Both cost the sender a
+		// copied commit and nothing else.
+		errors.As(err, &types.ErrInvalidCommitQuorumHash{}) ||
+		errors.As(err, &types.ErrVoteExtensionCountMismatch{})
 }
 
 type msgInfoDispatcher struct {
@@ -282,10 +289,19 @@ func loggingMiddleware(logger log.Logger) msgMiddlewareFunc {
 				// including internal faults such as ErrPrivValidatorNotSet
 				// surfaced while handling a peer message — stays at Error, so
 				// this never hides a real problem.
-				if isPeerFloodableError(err) {
-					loggerWithArgs.Debug("rejected peer message", "error", err)
-				} else {
+				switch {
+				case !isPeerFloodableError(err):
 					loggerWithArgs.Error("failed to process message", "error", err)
+				case envelope.PeerID == "" && !envelope.fromReplay:
+					// The floodable classes describe what a peer can force. Reaching
+					// one on a message this node produced describes a local fault --
+					// our own proposal refused means this node has stopped being able
+					// to propose -- and debug would bury it. Replay is exempt: it is
+					// re-playing what already happened, and says nothing about what
+					// this node can do now.
+					loggerWithArgs.Warn("rejected message this node produced", "error", err)
+				default:
+					loggerWithArgs.Debug("rejected peer message", "error", err)
 				}
 				return nil
 			}

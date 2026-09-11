@@ -88,12 +88,7 @@ func (suite *SynchronizerTestSuite) TestBasic() {
 		On("VerifyCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
 		Return(types.VerifiedCommit{}, nil)
-	suite.blockExec.
-		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Maybe().
-		Return(func(_ context.Context, state sm.State, _ types.BlockID, _ *types.Block, _ *types.Commit, _ types.VerifiedCommit) sm.State {
-			return state
-		}, nil)
+	expectApply(suite.blockExec, func(call *mock.Call) { call.Maybe() })
 	suite.client.
 		On("GetBlock", mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
@@ -212,7 +207,11 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResult() {
 					Maybe().
 					Return(types.VerifiedCommit{}, nil)
 				suite.blockExec.
-					On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, respH1.Block, respH1.Commit, mock.Anything).
+					On("ProcessProposal", mock.Anything, respH1.Block, mock.Anything, mock.Anything, true).
+					Once().
+					Return(sm.CurrentRoundState{}, nil)
+				suite.blockExec.
+					On("FinalizeBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, respH1.Block, respH1.Commit, mock.Anything).
 					Once().
 					Return(sm.State{}, nil)
 			},
@@ -433,12 +432,7 @@ func (suite *SynchronizerTestSuite) TestConsumeDuplicateThenDrain() {
 		On("VerifyCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
 		Return(types.VerifiedCommit{}, nil)
-	suite.blockExec.
-		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Twice().
-		Return(func(_ context.Context, state sm.State, _ types.BlockID, _ *types.Block, _ *types.Commit, _ types.VerifiedCommit) sm.State {
-			return state
-		}, nil)
+	expectApply(suite.blockExec, func(call *mock.Call) { call.Twice() })
 
 	resultCh <- workerpool.Result{Value: respH1}
 	suite.Require().NoError(pool.consumeJobResult(ctx))
@@ -925,11 +919,13 @@ func makePeers(numPeers int, minHeight, maxHeight int64) map[types.NodeID]PeerDa
 
 // TestStallVerdictFor checks when a lack of progress ends block sync. Handing
 // over to consensus is effectively irreversible, so a stall must not end block
-// sync while a peer still holds the block we are waiting for.
+// sync while a peer still holds the block we are waiting for, nor while the node
+// is so far behind that consensus catch-up could never close the gap.
 func TestStallVerdictFor(t *testing.T) {
 	testCases := []struct {
 		name       string
 		servable   bool
+		behindBy   int64
 		stalledFor time.Duration
 		want       stallVerdict
 	}{
@@ -964,10 +960,18 @@ func TestStallVerdictFor(t *testing.T) {
 			want:       keepSyncing,
 		},
 		{
-			name:       "stalled past the wedge limit",
+			name:       "stalled past the wedge limit within reach of the tip",
 			servable:   true,
+			behindBy:   maxCatchupGap,
 			stalledFor: maxSyncStall + time.Second,
 			want:       stopStalledTooLong,
+		},
+		{
+			name:       "stalled past the wedge limit while far behind",
+			servable:   true,
+			behindBy:   maxCatchupGap + 1,
+			stalledFor: maxSyncStall + time.Second,
+			want:       keepSyncing,
 		},
 		{
 			name:       "the wedge limit does not override nothing to fetch",
@@ -978,7 +982,7 @@ func TestStallVerdictFor(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.want, stallVerdictFor(tc.servable, tc.stalledFor))
+			require.Equal(t, tc.want, stallVerdictFor(tc.servable, tc.behindBy, tc.stalledFor))
 		})
 	}
 }
@@ -1009,7 +1013,8 @@ func (suite *SynchronizerTestSuite) newWaitForSyncHarness(height int64, peers ..
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan bool, 1)
 	go func() {
-		done <- sync.WaitForSync(ctx)
+		caughtUp, _ := sync.WaitForSync(ctx)
+		done <- caughtUp
 	}()
 	suite.Require().NoError(clock.BlockUntilContext(ctx, 1))
 	return &waitForSyncHarness{clock: clock, done: done, cancel: cancel}
@@ -1065,10 +1070,12 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncKeepsGoingWhileAPeerCanServeU
 // TestWaitForSyncHandsOverAfterMaxSyncStall checks the wall-clock backstop.
 // Servability is judged from what peers advertise about themselves, so a peer
 // that claims our height and never answers keeps the node in block sync
-// indefinitely unless a stall long enough to look like a wedge ends it.
+// indefinitely unless a stall long enough to look like a wedge ends it. Within
+// reach of the tip consensus catch-up can cover what is left, so the backstop
+// applies.
 func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverAfterMaxSyncStall() {
 	const height = int64(100)
-	peer := newPeerData("peer in range", 1, 1000)
+	peer := newPeerData("peer in range", 1, height+maxCatchupGap)
 	h := suite.newWaitForSyncHarness(height, peer)
 	defer h.cancel()
 
@@ -1077,6 +1084,23 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverAfterMaxSyncStall() 
 	caughtUp, ended := h.result(2 * time.Second)
 	suite.Require().True(ended, "no progress for %s did not hand over to consensus", maxSyncStall)
 	suite.Require().False(caughtUp, "handing over after a stall is not catching up")
+}
+
+// TestWaitForSyncKeepsSyncingWhileFarBehind is the counterpart: the wall-clock
+// backstop must not hand over a node that is thousands of blocks behind. It
+// would arrive in consensus as a validator at a height the network committed
+// long ago (dashpay/tenderdash#1413), and consensus catch-up moves about one
+// block per gossip cycle, so it would never reach the tip that way either.
+func (suite *SynchronizerTestSuite) TestWaitForSyncKeepsSyncingWhileFarBehind() {
+	const height = int64(100)
+	peer := newPeerData("peer far ahead", 1, height+maxCatchupGap+1)
+	h := suite.newWaitForSyncHarness(height, peer)
+	defer h.cancel()
+
+	h.clock.Advance(maxSyncStall + time.Second)
+
+	_, ended := h.result(200 * time.Millisecond)
+	suite.Require().False(ended, "block sync gave up while still %d blocks behind", maxCatchupGap+1)
 }
 
 // TestWaitForSyncStopsWhenTheOnlyPeerIsRateRejected covers the slow-peer route to
@@ -1098,16 +1122,67 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncStopsWhenTheOnlyPeerIsRateRej
 	suite.Require().False(caughtUp)
 }
 
-// TestStallSnapshotIsOneObservation checks that a block applied concurrently
-// cannot tear the stall verdict's inputs apart. advance() stamps the height and
-// the advance time together, so a snapshot must show the state either wholly
-// before that or wholly after it - never a height from one side paired with a
-// staleness or a servability from the other. Ending block sync is a one-way door,
-// so a stop assembled from mixed readings is unrecoverable.
-//
-// The peer here holds startHeight+1 upwards, which makes servability flip exactly
-// when the height moves, so a mixed reading shows up as a contradiction rather
-// than as the same answer by luck.
+func (suite *SynchronizerTestSuite) TestStallSnapshotServableHeight() {
+	const height = int64(10)
+	slowPeer := newPeerData("slow", 1, 30)
+	slowPeer.recvMonitor = newSlowMonitor(suite.T())
+	busyPeer := newPeerData("busy", 1, 30)
+	busyPeer.numPending = maxPendingRequestsPerPeer
+	testCases := []struct {
+		name       string
+		peers      []PeerData
+		wantMax    int64
+		wantUsable int64
+	}{
+		{name: "no peers"},
+		{
+			name:       "available ranges",
+			peers:      []PeerData{newPeerData("archive", 1, 20), newPeerData("recent", 5, 30)},
+			wantMax:    30,
+			wantUsable: 30,
+		},
+		{
+			name:       "pruned range",
+			peers:      []PeerData{newPeerData("archive", 1, 20), newPeerData("pruned", 25, 30)},
+			wantMax:    30,
+			wantUsable: 20,
+		},
+		{
+			name:    "no overlapping range",
+			peers:   []PeerData{newPeerData("older", 1, 9), newPeerData("recent", 25, 30)},
+			wantMax: 30,
+		},
+		{
+			name:       "rate rejected peer",
+			peers:      []PeerData{newPeerData("archive", 1, 20), slowPeer},
+			wantMax:    30,
+			wantUsable: 20,
+		},
+		{
+			name:       "busy peer remains servable",
+			peers:      []PeerData{busyPeer},
+			wantMax:    30,
+			wantUsable: 30,
+		},
+	}
+	for _, tc := range testCases {
+		suite.Run(tc.name, func() {
+			applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+			sync := NewSynchronizer(height, suite.client, applier)
+			for _, peer := range tc.peers {
+				sync.AddPeer(peer)
+			}
+			_, _, servable, maxHeight, hasPeers, maxServableHeight := sync.stallSnapshot()
+			suite.Require().Equal(tc.wantMax, maxHeight)
+			suite.Require().Equal(tc.wantUsable, maxServableHeight)
+			suite.Require().Equal(tc.wantUsable > 0, servable)
+			suite.Require().Equal(len(tc.peers) > 0, hasPeers)
+		})
+	}
+}
+
+// Advancing the height changes servability and its maximum together with the
+// stall timestamp; the snapshot must not mix values from opposite sides.
 func (suite *SynchronizerTestSuite) TestStallSnapshotIsOneObservation() {
 	const (
 		startHeight = int64(100)
@@ -1131,10 +1206,13 @@ func (suite *SynchronizerTestSuite) TestStallSnapshotIsOneObservation() {
 		}()
 		runtime.Gosched()
 		close(ready)
-		height, stalled, servable := sync.stallSnapshot()
+		height, stalled, servable, maxPeerHeight, hasPeers, maxServableHeight := sync.stallSnapshot()
 		<-applied
+		suite.Require().True(hasPeers)
+		suite.Require().Equal(int64(1000), maxPeerHeight, "the retained handover target")
 
 		if height == startHeight {
+			suite.Require().Zero(maxServableHeight)
 			suite.Require().Equal(stalledFor, stalled,
 				"height %d reported with the advance time stamped by a later height (trial %d)", height, trial)
 			suite.Require().False(servable,
@@ -1142,6 +1220,7 @@ func (suite *SynchronizerTestSuite) TestStallSnapshotIsOneObservation() {
 			continue
 		}
 		suite.Require().Equal(startHeight+1, height, "height moved by more than the one applied block")
+		suite.Require().Equal(int64(1000), maxServableHeight)
 		suite.Require().Zero(stalled,
 			"height %d reported with the advance time from before it was applied (trial %d)", height, trial)
 		suite.Require().True(servable,
@@ -1231,12 +1310,7 @@ func (suite *SynchronizerTestSuite) newBacklogHarness() *backlogHarness {
 		On("VerifyCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
 		Return(types.VerifiedCommit{}, nil)
-	suite.blockExec.
-		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Maybe().
-		Return(func(_ context.Context, state sm.State, _ types.BlockID, _ *types.Block, _ *types.Commit, _ types.VerifiedCommit) sm.State {
-			return state
-		}, nil)
+	expectApply(suite.blockExec, func(call *mock.Call) { call.Maybe() })
 
 	jobCh := make(chan *workerpool.Job, 1)
 	resultCh := make(chan workerpool.Result, 1)
@@ -1685,12 +1759,7 @@ func (suite *SynchronizerTestSuite) TestClientTimeoutUnwedgesAFullWindow() {
 		On("VerifyCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
 		Return(types.VerifiedCommit{}, nil)
-	suite.blockExec.
-		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Maybe().
-		Return(func(_ context.Context, state sm.State, _ types.BlockID, _ *types.Block, _ *types.Commit, _ types.VerifiedCommit) sm.State {
-			return state
-		}, nil)
+	expectApply(suite.blockExec, func(call *mock.Call) { call.Maybe() })
 
 	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
 	pool := NewSynchronizer(blocking, blockClient, applier,
@@ -1756,4 +1825,19 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResultKeepsPeerOnTransientFail
 	}
 	suite.Require().NoError(pool.consumeJobResult(ctx))
 	suite.Require().Empty(pool.peerStore.All(), "peer must be dropped once it exceeds the threshold")
+}
+
+// expectApply sets up the pair of application calls the block applier makes for
+// every block it applies - it runs the two halves of ApplyBlock separately so
+// that the block store is advanced between them - and leaves the state
+// unchanged. expect applies the same cardinality to both.
+func expectApply(exec *mocks.Executor, expect func(*mock.Call)) {
+	expect(exec.
+		On("ProcessProposal", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(sm.CurrentRoundState{}, nil))
+	expect(exec.
+		On("FinalizeBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(func(_ context.Context, state sm.State, _ sm.CurrentRoundState, _ types.BlockID, _ *types.Block, _ *types.Commit, _ types.VerifiedCommit) sm.State {
+			return state
+		}, nil))
 }

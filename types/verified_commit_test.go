@@ -315,6 +315,9 @@ func TestVerifiedCommitKeepsTheVerifyCommitErrors(t *testing.T) {
 		{
 			name:   "wrong quorum hash",
 			mutate: func(in *commitInputs) { in.commit.QuorumHash = crypto.RandQuorumHash() },
+			check: func(t *testing.T, err error) {
+				require.ErrorAs(t, err, &ErrInvalidCommitQuorumHash{})
+			},
 		},
 		{
 			name:   "wrong height",

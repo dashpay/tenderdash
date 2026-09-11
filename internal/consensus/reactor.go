@@ -443,8 +443,15 @@ func (r *Reactor) WaitSync() bool {
 
 // SwitchToConsensus switches from block-sync mode to consensus mode. It resets
 // the state, turns off block-sync, and starts the consensus state-machine.
-func (r *Reactor) SwitchToConsensus(ctx context.Context, state sm.State, skipWAL bool) {
-	r.logger.Info("switching to consensus")
+//
+// targetHeight is the highest committed block height reported during block sync.
+// skipWAL says the node needs no WAL catchup.
+func (r *Reactor) SwitchToConsensus(ctx context.Context, state sm.State, skipWAL bool, targetHeight int64) {
+	r.logger.Info("switching to consensus", "target_height", targetHeight)
+
+	if targetHeight > state.LastBlockHeight {
+		r.state.catchup.arm(targetHeight, r.clock)
+	}
 
 	stateData := r.state.GetStateData()
 	// we have no votes, so reconstruct LastCommit from SeenCommit

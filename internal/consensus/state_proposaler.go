@@ -97,9 +97,9 @@ func (p *Proposaler) Set(
 	rs.ProposalReceiveTime = receivedAt
 
 	p.proposalTimestampDifferenceMetric(*rs)
-	// We don't update cs.ProposalBlockParts if it is already set.
-	// This happens if we're already in cstypes.RoundStepApplyCommit or if there is a valid block in the current round.
-	// TODO: We can check if Proposal is for a different block as this is a sign of misbehavior!
+	// A part set already under way is kept: verifyProposal has established that
+	// this proposal names the block it is collecting, and the parts in it are
+	// that block's.
 	if rs.ProposalBlockParts == nil {
 		p.metrics.MarkBlockGossipStarted()
 		rs.ProposalBlockParts = types.NewPartSetFromHeader(proposal.BlockID.PartSetHeader)
@@ -241,13 +241,23 @@ func (p *Proposaler) verifyProposal(ctx context.Context, proposal *types.Proposa
 			proposal.Height, proposal.Round, rs.Height, rs.Round)
 	}
 
+	// Resolved once: the refusal below names the proposer, and the branch after it
+	// decides whether a signature can be checked at all.
 	proposer, err := rs.ProposerSelector.GetProposer(rs.Height, rs.Round)
 	if err != nil {
 		return fmt.Errorf("error getting proposer: %w", err)
 	}
 
+	// A round state that has already fixed a block settles which block this round
+	// produced, so a disagreeing proposal is refused whether or not its signature
+	// can be checked. Refusing costs a BlockID comparison and the lookup above and
+	// spends no verification permit; the data channel's rate limit bounds it.
+	if err := p.checkProposalAgainstRoundState(proposal, rs, proposer); err != nil {
+		return err
+	}
+
 	if proposer.PubKey == nil {
-		return p.verifyProposalForNonValidatorSet(proposal, *rs)
+		return p.verifyProposalForNonValidatorSet(proposal, rs)
 	}
 
 	// We are part of the validator set, so the signature is checked here — one
@@ -292,30 +302,63 @@ func (p *Proposaler) verifyProposal(ctx context.Context, proposal *types.Proposa
 	return ErrInvalidProposalSignature
 }
 
-func (p *Proposaler) verifyProposalForNonValidatorSet(proposal *types.Proposal, rs cstypes.RoundState) error {
+// checkProposalAgainstRoundState refuses a proposal naming a block other than
+// the one the round is already committed to collecting. Two things fix that
+// block: a commit for the same height and round, whose verified threshold
+// signature settles it outright, and a part set already under way, which is a
+// Merkle root over exactly one block's bytes and so can complete into no other.
+// A proposal that disagrees with either cannot be acted on, and installing it
+// makes the round state reject the parts it is itself waiting for.
+func (p *Proposaler) checkProposalAgainstRoundState(
+	proposal *types.Proposal,
+	rs *cstypes.RoundState,
+	proposer *types.Validator,
+) error {
+	err := roundStateRefusal(proposal, rs)
+	if err == nil {
+		return nil
+	}
+	// A mismatching block ID is free to produce, so this cannot be louder
+	// than Debug.
+	p.logger.Debug("proposal names a block the round is not collecting",
+		"height", proposal.Height,
+		"round", proposal.Round,
+		"reason", err,
+		"proposer_proTxHash", proposer.ProTxHash.ShortString())
+	return err
+}
+
+// roundStateRefusal names what in the round state has already fixed a different
+// block, or nil when nothing has. The two answers are kept apart because they
+// are different observations about the sender: disagreeing with a part set means
+// the block cannot be assembled, disagreeing with a commit contradicts a
+// verified threshold signature.
+func roundStateRefusal(proposal *types.Proposal, rs *cstypes.RoundState) error {
+	commit := rs.Commit
+	if commit != nil && commit.Height == proposal.Height && commit.Round == proposal.Round &&
+		!proposal.BlockID.Equals(commit.BlockID) {
+		return ErrInvalidProposalForCommit
+	}
+	if rs.ProposalBlockParts != nil && !rs.ProposalBlockParts.HasHeader(proposal.BlockID.PartSetHeader) {
+		return ErrInvalidProposalForPartSet
+	}
+	// Nothing has fixed a block; the signature is the only attestation.
+	return nil
+}
+
+// verifyProposalForNonValidatorSet attests a proposal this node cannot check by
+// signature. Outside the validator set there is no proposer public key, so a
+// commit for the same height and round is the whole attestation. The comparison
+// against that commit is repeated here rather than inherited from the caller:
+// there is no signature check on this path to fall back on, so the acceptance
+// must not rest on a precondition established somewhere else.
+func (p *Proposaler) verifyProposalForNonValidatorSet(proposal *types.Proposal, rs *cstypes.RoundState) error {
 	commit := rs.Commit
 	if commit == nil || commit.Height != proposal.Height || commit.Round != proposal.Round {
 		// We received a proposal we can not check
 		return ErrUnableToVerifyProposal
 	}
-	// We are not part of the validator set
-	// We might have a commit already for the Round State
-	// We need to verify that the commit block id is equal to the proposal block id
 	if !proposal.BlockID.Equals(commit.BlockID) {
-		proposer, err := rs.ProposerSelector.GetProposer(proposal.Height, proposal.Round)
-		if err != nil {
-			p.logger.Error("error getting proposer",
-				"height", proposal.Height,
-				"round", proposal.Round,
-				"err", err)
-		} else {
-			// A mismatching block ID is free to produce, so this cannot be
-			// louder than Debug.
-			p.logger.Debug("proposal blockID isn't the same as the commit blockID",
-				"height", proposal.Height,
-				"round", proposal.Round,
-				"proposer_proTxHash", proposer.ProTxHash.ShortString())
-		}
 		return ErrInvalidProposalForCommit
 	}
 	return nil

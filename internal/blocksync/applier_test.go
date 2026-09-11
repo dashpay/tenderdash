@@ -13,6 +13,7 @@ import (
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
 	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/internal/consensus"
 	"github.com/dashpay/tenderdash/internal/eventbus"
 	mpmocks "github.com/dashpay/tenderdash/internal/mempool/mocks"
@@ -27,6 +28,46 @@ import (
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )
+
+func TestBlockApplierChecksAppResponseBeforeSave(t *testing.T) {
+	ctx := context.Background()
+	valSet, privVals := factory.MockValidatorSet()
+	initialState := fakeInitialState(valSet)
+	state := initialState.Copy()
+	blocks := statefactory.MakeBlocks(ctx, t, 2, &state, privVals, 1)
+	block, commit := blocks[0], blocks[1].LastCommit
+	appHash := make([]byte, crypto.DefaultAppHashSize)
+	appHash[0] = 1
+	app := &inconsistentProposalApp{appHash: appHash}
+	client := abciclient.NewLocalClient(log.NewNopLogger(), app)
+	blockStore := store.NewBlockStore(dbm.NewMemDB())
+	stateStore := sm.NewStore(dbm.NewMemDB())
+	require.NoError(t, stateStore.Save(initialState))
+	executor := sm.NewBlockExecutor(stateStore, client, nil, sm.EmptyEvidencePool{}, blockStore, nil)
+	applier := newBlockApplier(executor, blockStore, applierWithState(initialState))
+
+	require.Panics(t, func() { _ = applier.Apply(ctx, block, commit) })
+	require.Zero(t, blockStore.Height(), "an inconsistent app response must not advance the block store")
+	require.Equal(t, initialState.LastBlockHeight, applier.State().LastBlockHeight)
+	loaded, err := stateStore.Load()
+	require.NoError(t, err)
+	require.Equal(t, initialState.LastBlockHeight, loaded.LastBlockHeight)
+}
+
+type inconsistentProposalApp struct {
+	abci.BaseApplication
+	appHash []byte
+}
+
+func (app *inconsistentProposalApp) ProcessProposal(
+	_ context.Context, req *abci.RequestProcessProposal,
+) (*abci.ResponseProcessProposal, error) {
+	return &abci.ResponseProcessProposal{
+		Status:    abci.ResponseProcessProposal_ACCEPT,
+		AppHash:   app.appHash,
+		TxResults: factory.ExecTxResults(types.NewTxs(req.Txs)),
+	}, nil
+}
 
 func TestBlockApplierApply(t *testing.T) {
 	ctx := context.Background()
@@ -63,7 +104,11 @@ func TestBlockApplierApply(t *testing.T) {
 					Once().
 					Return(nil)
 				mockBlockExec.
-					On("ApplyBlock", mock.Anything, initialState, blockH1ID, blockH1, commitH1, types.VerifiedCommit{}).
+					On("ProcessProposal", mock.Anything, blockH1, commitH1.Round, initialState, true).
+					Once().
+					Return(sm.CurrentRoundState{}, nil)
+				mockBlockExec.
+					On("FinalizeBlock", mock.Anything, initialState, sm.CurrentRoundState{}, blockH1ID, blockH1, commitH1, types.VerifiedCommit{}).
 					Once().
 					Return(state, nil)
 			},
@@ -110,7 +155,11 @@ func TestBlockApplierApply(t *testing.T) {
 					Once().
 					Return(nil)
 				mockBlockExec.
-					On("ApplyBlock", mock.Anything, initialState, blockH1ID, blockH1, commitH1, types.VerifiedCommit{}).
+					On("ProcessProposal", mock.Anything, blockH1, commitH1.Round, initialState, true).
+					Once().
+					Return(sm.CurrentRoundState{}, nil)
+				mockBlockExec.
+					On("FinalizeBlock", mock.Anything, initialState, sm.CurrentRoundState{}, blockH1ID, blockH1, commitH1, types.VerifiedCommit{}).
 					Once().
 					Return(state, errors.New("eeeeeeeee"))
 			},
@@ -186,6 +235,86 @@ func TestApplyStatsSubMillisecondPreserved(t *testing.T) {
 	require.Zero(t, timings.PartSet.Milliseconds(), "the value this test exists to protect")
 }
 
+// TestBlockApplierDoesNotSaveBlockRejectedByApp checks that a block the
+// application refuses never reaches the block store. Persisting it leaves the
+// store a height ahead of both the state and the app, and every later start has
+// to re-process that block through an application that already rejected it once
+// - the restart-proof failure of dashpay/tenderdash#1413.
+func TestBlockApplierDoesNotSaveBlockRejectedByApp(t *testing.T) {
+	ctx := context.Background()
+	mockBlockExec := mocks.NewExecutor(t)
+	// no SaveBlock expectation: the store must not be touched at all, and the
+	// mock fails the test on any call it was not told to expect
+	mockBlockStore := mocks.NewBlockStore(t)
+	valSet, privVals := factory.MockValidatorSet()
+	initialState := fakeInitialState(valSet)
+	state := initialState.Copy()
+	blocks := statefactory.MakeBlocks(ctx, t, 2, &state, privVals, 1)
+	block, commit := blocks[0], blocks[1].LastCommit
+
+	mockBlockExec.
+		On("VerifyCommit", initialState, block.BlockID(nil), block.Height, commit).
+		Once().
+		Return(types.VerifiedCommit{}, nil)
+	mockBlockExec.
+		On("ValidateBlock", mock.Anything, initialState, block, types.VerifiedCommit{}).
+		Once().
+		Return(nil)
+	mockBlockExec.
+		On("ProcessProposal", mock.Anything, block, commit.Round, initialState, true).
+		Once().
+		Return(sm.CurrentRoundState{}, errors.New("app rejected the block"))
+
+	applier := newBlockApplier(mockBlockExec, mockBlockStore, applierWithState(initialState))
+	require.Panics(t, func() { _ = applier.Apply(ctx, block, commit) })
+}
+
+// TestBlockApplierSavesBlockBeforeFinalize pins the order the handshake relies
+// on: the block is in the store before the application commits it. The store may
+// be one height ahead of the state - replayer.go replays that last block on the
+// next start - but a store behind the app or the state is a case it rejects
+// outright, so a crash must never be able to leave one.
+func TestBlockApplierSavesBlockBeforeFinalize(t *testing.T) {
+	ctx := context.Background()
+	mockBlockExec := mocks.NewExecutor(t)
+	mockBlockStore := mocks.NewBlockStore(t)
+	valSet, privVals := factory.MockValidatorSet()
+	initialState := fakeInitialState(valSet)
+	state := initialState.Copy()
+	blocks := statefactory.MakeBlocks(ctx, t, 2, &state, privVals, 1)
+	block, commit := blocks[0], blocks[1].LastCommit
+	blockParts, err := block.MakePartSet(types.BlockPartSizeBytes)
+	require.NoError(t, err)
+
+	var calls []string
+	mockBlockExec.
+		On("VerifyCommit", initialState, block.BlockID(nil), block.Height, commit).
+		Once().
+		Return(types.VerifiedCommit{}, nil)
+	mockBlockExec.
+		On("ValidateBlock", mock.Anything, initialState, block, types.VerifiedCommit{}).
+		Once().
+		Return(nil)
+	mockBlockExec.
+		On("ProcessProposal", mock.Anything, block, commit.Round, initialState, true).
+		Once().
+		Run(func(mock.Arguments) { calls = append(calls, "process") }).
+		Return(sm.CurrentRoundState{}, nil)
+	mockBlockStore.
+		On("SaveBlock", block, blockParts, commit).
+		Once().
+		Run(func(mock.Arguments) { calls = append(calls, "save") })
+	mockBlockExec.
+		On("FinalizeBlock", mock.Anything, initialState, sm.CurrentRoundState{}, block.BlockID(blockParts), block, commit, types.VerifiedCommit{}).
+		Once().
+		Run(func(mock.Arguments) { calls = append(calls, "finalize") }).
+		Return(state, nil)
+
+	applier := newBlockApplier(mockBlockExec, mockBlockStore, applierWithState(initialState))
+	require.NoError(t, applier.Apply(ctx, block, commit))
+	require.Equal(t, []string{"process", "save", "finalize"}, calls)
+}
+
 // TestBlockApplierRecordsStageMetrics checks that a successful apply records
 // one sample per stage of the pipeline, that the verify stage is split into
 // the commit signature check and block validation, and that the idle time
@@ -207,7 +336,9 @@ func TestBlockApplierRecordsStageMetrics(t *testing.T) {
 		Once().Return(types.VerifiedCommit{}, errors.New("bad signature"))
 	mockBlockStore.On("SaveBlock", blockH1, mock.Anything, commitH1).Twice()
 	mockBlockExec.On("ValidateBlock", mock.Anything, mock.Anything, blockH1, types.VerifiedCommit{}).Twice().Return(nil)
-	mockBlockExec.On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, blockH1, commitH1, types.VerifiedCommit{}).
+	mockBlockExec.On("ProcessProposal", mock.Anything, blockH1, commitH1.Round, initialState, true).
+		Twice().Return(sm.CurrentRoundState{}, nil)
+	mockBlockExec.On("FinalizeBlock", mock.Anything, initialState, sm.CurrentRoundState{}, mock.Anything, blockH1, commitH1, types.VerifiedCommit{}).
 		Twice().Return(initialState, nil)
 
 	hist := metricspy.NewHistogram("stage")
@@ -306,7 +437,9 @@ func TestBlockApplierOffersTheVerifiedCommitForward(t *testing.T) {
 		blockStore.On("SaveBlock", mock.Anything, mock.Anything, mock.Anything).Maybe()
 		blockExec.On("VerifyCommit", mock.Anything, blockH1ID, blockH1.Height, commitH1).Once().Return(verifiedH1, nil)
 		blockExec.On("ValidateBlock", mock.Anything, mock.Anything, blockH1, none).Once().Return(nil)
-		blockExec.On("ApplyBlock", mock.Anything, mock.Anything, blockH1ID, blockH1, commitH1, none).
+		blockExec.On("ProcessProposal", mock.Anything, blockH1, commitH1.Round, mock.Anything, true).
+			Once().Return(sm.CurrentRoundState{}, nil)
+		blockExec.On("FinalizeBlock", mock.Anything, mock.Anything, mock.Anything, blockH1ID, blockH1, commitH1, none).
 			Once().Return(initialState, nil)
 		applier := newBlockApplier(blockExec, blockStore, applierWithState(initialState))
 		require.NoError(t, applier.Apply(ctx, blockH1, commitH1))
@@ -316,7 +449,9 @@ func TestBlockApplierOffersTheVerifiedCommitForward(t *testing.T) {
 	expectH2 := func(blockExec *mocks.Executor, lastCommit types.VerifiedCommit) {
 		blockExec.On("VerifyCommit", mock.Anything, blockH2ID, blockH2.Height, commitH2).Once().Return(none, nil)
 		blockExec.On("ValidateBlock", mock.Anything, mock.Anything, blockH2, lastCommit).Once().Return(nil)
-		blockExec.On("ApplyBlock", mock.Anything, mock.Anything, blockH2ID, blockH2, commitH2, lastCommit).
+		blockExec.On("ProcessProposal", mock.Anything, blockH2, commitH2.Round, mock.Anything, true).
+			Once().Return(sm.CurrentRoundState{}, nil)
+		blockExec.On("FinalizeBlock", mock.Anything, mock.Anything, mock.Anything, blockH2ID, blockH2, commitH2, lastCommit).
 			Once().Return(initialState, nil)
 	}
 
@@ -384,7 +519,7 @@ func TestBlockApplierSkipsTheLastCommitItVerified(t *testing.T) {
 
 	// Height 1 has no LastCommit to verify. Every later height skips it twice:
 	// in the validation before the block is saved, and in the validation
-	// ApplyBlock runs against the round state. (ApplyBlock's own ValidateBlock
+	// FinalizeBlock runs against the round state. (ApplyBlock's own ValidateBlock
 	// is answered from the executor's per-block cache.)
 	commit := types.NewCommit(0, 0, types.BlockID{}, nil, nil)
 	for _, step := range []struct {

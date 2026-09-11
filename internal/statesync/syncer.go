@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
@@ -77,9 +78,20 @@ type syncer struct {
 	chunkQueue *chunkQueue
 	metrics    *Metrics
 
-	avgChunkTime             int64
-	lastSyncedSnapshotHeight int64
+	// avgChunkTime, lastSyncedSnapshotHeight and totalSnapshots are written by
+	// the sync goroutines and read by the RPC metrics getters. totalSnapshots
+	// counts every snapshot ever discovered: unlike the pool size it never
+	// decreases, so the metric survives snapshot rejections and peer
+	// disconnects after the restore completes.
+	avgChunkTime             atomic.Int64
+	lastSyncedSnapshotHeight atomic.Int64
+	totalSnapshots           atomic.Int64
 	processingSnapshot       *snapshot
+
+	// last observed processed-chunk count, retained after the chunk queue is
+	// dropped at the end of Sync() so the metric survives the sync itself;
+	// guarded by mtx.
+	lastChunksCount int64
 }
 
 // AddChunk adds a chunk to the chunk queue, if any. It returns false if the chunk has already
@@ -119,6 +131,7 @@ func (s *syncer) AddSnapshot(peerID types.NodeID, snapshot *snapshot) (bool, err
 		return false, err
 	}
 	if added {
+		s.totalSnapshots.Add(1)
 		s.metrics.TotalSnapshots.Add(1)
 		s.logger.Info("Discovered new snapshot",
 			"height", snapshot.Height,
@@ -219,7 +232,7 @@ func (s *syncer) SyncAny(
 		switch {
 		case err == nil:
 			s.metrics.SnapshotHeight.Set(float64(snapshot.Height))
-			s.lastSyncedSnapshotHeight = tmmath.MustConvertInt64(snapshot.Height)
+			s.lastSyncedSnapshotHeight.Store(tmmath.MustConvertInt64(snapshot.Height))
 			return newState, commit, nil
 
 		case errors.Is(err, errAbort):
@@ -286,11 +299,7 @@ func (s *syncer) Sync(ctx context.Context, snapshot *snapshot, queue *chunkQueue
 	}
 	s.chunkQueue = queue
 	s.mtx.Unlock()
-	defer func() {
-		s.mtx.Lock()
-		s.chunkQueue = nil
-		s.mtx.Unlock()
-	}()
+	defer s.releaseChunkQueue()
 
 	hctx, hcancel := context.WithTimeout(ctx, 30*time.Second)
 	defer hcancel()
@@ -498,8 +507,50 @@ func (s *syncer) applyChunks(ctx context.Context, queue *chunkQueue, start time.
 
 func (s *syncer) acceptChunk(queue *chunkQueue, start time.Time) {
 	s.metrics.SnapshotChunk.Add(1)
-	s.avgChunkTime = time.Since(start).Nanoseconds() / int64(queue.DoneChunksCount())
-	s.metrics.ChunkProcessAvgTime.Set(float64(s.avgChunkTime))
+	avgChunkTime := time.Since(start).Nanoseconds() / int64(queue.DoneChunksCount())
+	s.avgChunkTime.Store(avgChunkTime)
+	s.metrics.ChunkProcessAvgTime.Set(float64(avgChunkTime))
+}
+
+// releaseChunkQueue records the queue's final processed-chunk count and then
+// drops the queue, so the metrics getter keeps reporting it after the sync ends.
+func (s *syncer) releaseChunkQueue() {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+	if s.chunkQueue != nil {
+		s.lastChunksCount = int64(s.chunkQueue.DoneChunksCount())
+	}
+	s.chunkQueue = nil
+}
+
+// TotalSnapshots returns the cumulative number of snapshots discovered so far.
+// It deliberately does not report the pool size: the pool shrinks as snapshots
+// are rejected or peers disconnect, which would zero the /status metrics if a
+// peer left between the restore finishing and the sync completing.
+func (s *syncer) TotalSnapshots() int64 {
+	return s.totalSnapshots.Load()
+}
+
+// AvgChunkTime returns the average chunk processing time, in nanoseconds.
+func (s *syncer) AvgChunkTime() int64 {
+	return s.avgChunkTime.Load()
+}
+
+// LastSyncedSnapshotHeight returns the height of the last successfully synced
+// snapshot, or 0 if none completed yet.
+func (s *syncer) LastSyncedSnapshotHeight() int64 {
+	return s.lastSyncedSnapshotHeight.Load()
+}
+
+// SnapshotChunksCount returns the number of chunks processed for the snapshot
+// being restored, falling back to the last finished sync when idle.
+func (s *syncer) SnapshotChunksCount() int64 {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+	if s.chunkQueue != nil {
+		return int64(s.chunkQueue.DoneChunksCount())
+	}
+	return s.lastChunksCount
 }
 
 // fetchChunks requests chunks from peers, receiving allocations from the chunk queue. Chunks

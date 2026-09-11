@@ -150,11 +150,7 @@ func (c *EnterPrecommitAction) Execute(ctx context.Context, stateEvent StateEven
 	// Fetch that block, and precommit nil.
 	logger.Debug("precommit step: +2/3 prevotes for a block we do not have; voting nil", "block_id", blockID)
 
-	if !stateData.ProposalBlockParts.HasHeader(blockID.PartSetHeader) {
-		stateData.ProposalBlock = nil
-		stateData.metrics.MarkBlockGossipStarted()
-		stateData.ProposalBlockParts = types.NewPartSetFromHeader(blockID.PartSetHeader)
-	}
+	stateData.retargetTo(blockID, retargetOnPrecommit)
 
 	c.voteSigner.signAddVote(ctx, stateData, tmproto.PrecommitType, types.BlockID{})
 	return nil
