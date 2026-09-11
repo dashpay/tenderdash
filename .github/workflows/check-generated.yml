@@ -3,6 +3,10 @@
 # Note that we run these checks regardless whether the input files have
 # changed, because generated code can change in response to toolchain updates
 # even if no files in the repository are modified.
+#
+# actions/setup-go runs after checkout (its cache key files must exist) and only
+# when the check runs. Each job lists its own config files so the two jobs keep
+# separate Go caches.
 name: Check generated code
 on:
   pull_request:
@@ -18,10 +22,6 @@ jobs:
   check-mocks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-go@v7.0.0
-        with:
-          go-version: "1.27.1"
-
       - uses: actions/checkout@v7
 
       - uses: technote-space/get-diff-action@v6
@@ -29,6 +29,15 @@ jobs:
           PATTERNS: |
             **/*.go
           FILES: |
+            .github/workflows/check-generated.yml
+
+      - uses: actions/setup-go@v7.0.0
+        if: env.GIT_DIFF
+        with:
+          go-version: "1.27.1"
+          cache-dependency-path: |
+            go.sum
+            .mockery.yaml
             .github/workflows/check-generated.yml
 
       - name: "Check generated mocks"
@@ -53,16 +62,23 @@ jobs:
   check-proto:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-go@v7.0.0
-        with:
-          go-version: "1.27.1"
-
       - uses: actions/checkout@v7
 
       - uses: technote-space/get-diff-action@v6
         with:
           PATTERNS: |
             **/*.proto
+
+      - uses: actions/setup-go@v7.0.0
+        if: env.GIT_DIFF
+        with:
+          go-version: "1.27.1"
+          cache-dependency-path: |
+            go.sum
+            buf.yaml
+            buf.gen.yaml
+            buf.lock
+            .github/workflows/check-generated.yml
 
       - name: "Check protobuf generated code"
         if: env.GIT_DIFF
