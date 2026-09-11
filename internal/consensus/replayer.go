@@ -309,7 +309,7 @@ func (r *BlockReplayer) syncStateAt(
 	// evidence are needed here - block already exists. The replayer holds no
 	// proof for block.LastCommit, so it verifies every block in full.
 	state, err := blockExec.ApplyBlock(ctx, state, meta.BlockID, block, seenCommit,
-		types.NewUnverifiedCommit(block.LastCommit))
+		types.VerifiedCommit{})
 	if err != nil {
 		return sm.State{}, err
 	}

@@ -130,18 +130,19 @@ func TestVerifyCommitSignaturesRejectsMissingInputs(t *testing.T) {
 }
 
 // A VerifiedCommit without proof is what code that verified nothing holds —
-// consensus and the replayer pass NewUnverifiedCommit on every call, block
-// sync passes the zero value. Neither may ever let a verification be skipped,
-// not even when it holds the very commit being verified, and neither may ever
-// cause a commit to be rejected: it only ever falls through to a real
-// verification.
+// consensus, the replayer and block sync all pass the zero value. Nothing
+// outside this package can build a proof-less VerifiedCommit that names a
+// real commit; this in-package literal exists only to pin that even that
+// stronger case — a bare commit with no proof, and no exported way to
+// construct it — may never let a verification be skipped, not even when it
+// holds the very commit being verified, and may never cause a commit to be
+// rejected: it only ever falls through to a real verification.
 func TestUnverifiedCommitMatchesNothing(t *testing.T) {
 	in := newCommitInputs(t)
 
-	holding := NewUnverifiedCommit(in.commit)
+	holding := VerifiedCommit{commit: in.commit}
 	require.Same(t, in.commit, holding.Commit())
 	require.Nil(t, holding.proof)
-	require.Equal(t, VerifiedCommit{}, NewUnverifiedCommit(nil), "the zero value is the unverified nil commit")
 
 	for name, unverified := range map[string]VerifiedCommit{
 		"zero value":                     {},

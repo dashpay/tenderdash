@@ -965,11 +965,11 @@ func (vals *ValidatorSet) VerifyCommitWithBudget(
 // and signatures are unchanged. It reports whether the verification was
 // skipped.
 //
-// Anything verified's proof does not cover — including a VerifiedCommit
-// without proof, such as NewUnverifiedCommit's or the zero value — falls
-// through to VerifyCommit's own check and reports its errors unchanged, so
-// callers can keep telling a forged commit from an honest disagreement by the
-// error's type.
+// Anything verified's proof does not cover — including the zero
+// VerifiedCommit, the only proof-less value code outside this package can
+// hold — falls through to VerifyCommit's own check and reports its errors
+// unchanged, so callers can keep telling a forged commit from an honest
+// disagreement by the error's type.
 //
 // commit is what is verified. The commit verified holds is never consulted.
 func (vals *ValidatorSet) VerifyCommitUnlessVerified(

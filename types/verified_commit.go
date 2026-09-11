@@ -24,9 +24,11 @@ var errCommitProofMismatch = errors.New("commit proof does not match the commit 
 // parameter it records is one it would have verified with itself.
 //
 // Only VerifyCommitSignatures attaches a proof, and only after the signatures
-// verified. NewUnverifiedCommit carries none, and neither does the zero value,
-// which is NewUnverifiedCommit(nil); code that has verified nothing can pass
-// either freely, since it only ever leads to a full verification.
+// verified. Nothing outside this package can build a VerifiedCommit that
+// names a commit without a proof to match it: the zero value is the only
+// proof-less VerifiedCommit a caller can construct, and it names no commit
+// either. Code that has verified nothing passes the zero value freely, since
+// it only ever leads to a full verification.
 //
 // The commit is the caller's pointer: it names what the proof is about and is
 // never itself evidence of anything. See Commit.
@@ -75,13 +77,6 @@ type commitProof struct {
 	// each. A real verification always records at least the block digest.
 	signHashes [][]byte
 	signatures [][]byte
-}
-
-// NewUnverifiedCommit returns commit as a VerifiedCommit without proof, for a
-// caller that holds commit but has not verified it. It is only ever verified in
-// full.
-func NewUnverifiedCommit(commit *Commit) VerifiedCommit {
-	return VerifiedCommit{commit: commit}
 }
 
 // Commit returns the commit v was built for, as the pointer v was built with.

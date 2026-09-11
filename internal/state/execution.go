@@ -416,7 +416,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		// block received from proposer, eg. if `uncommittedState`
 		// fields are the same as `block` fields
 		err = blockExec.ValidateBlockWithRoundState(ctx, state, stateChanges, block,
-			types.NewUnverifiedCommit(block.LastCommit))
+			types.VerifiedCommit{})
 		if err != nil {
 			return stateChanges, ErrInvalidBlock{err}
 		}
