@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -304,6 +305,31 @@ func createPeerManager(
 	return peerManager, closer, nil
 }
 
+// channelDescriptors lists every channel the node's reactors open, so the
+// transport can create each connection with all of them. Reactors open their
+// channels only after the router has started accepting and dialing peers; a
+// connection created before a channel was registered would treat a peer that
+// speaks on it early (e.g. a seed answering on the PEX channel) as a protocol
+// violation and drop the peer with "unknown channel". Registered up front, the
+// router merely drops messages for a channel no reactor has opened yet.
+func channelDescriptors(cfg *config.Config) []*p2p.ChannelDescriptor {
+	descs := []*p2p.ChannelDescriptor{pex.ChannelDescriptor()}
+	if cfg.Mode != config.ModeSeed {
+		descs = append(descs, evidence.GetChannelDescriptor())
+		for _, set := range []map[p2p.ChannelID]*p2p.ChannelDescriptor{
+			p2p.ChannelDescriptors(cfg),
+			p2p.ConsensusChannelDescriptors(),
+			p2p.StatesyncChannelDescriptors(),
+		} {
+			for _, desc := range set {
+				descs = append(descs, desc)
+			}
+		}
+	}
+	sort.Slice(descs, func(i, j int) bool { return descs[i].ID < descs[j].ID })
+	return descs
+}
+
 func createRouter(
 	logger log.Logger,
 	p2pMetrics *p2p.Metrics,
@@ -322,7 +348,7 @@ func createRouter(
 	transportConf.RecvRate = cfg.P2P.RecvRate
 	transportConf.MaxPacketMsgPayloadSize = cfg.P2P.MaxPacketMsgPayloadSize
 	transport := p2p.NewMConnTransport(
-		p2pLogger, transportConf, []*p2p.ChannelDescriptor{},
+		p2pLogger, transportConf, channelDescriptors(cfg),
 		p2p.MConnTransportOptions{
 			MaxAcceptedConnections: uint32(cfg.P2P.MaxConnections),
 		},
