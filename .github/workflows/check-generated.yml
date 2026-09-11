@@ -26,9 +26,10 @@ jobs:
 
       - uses: technote-space/get-diff-action@v6
         with:
+          # FILES matches bare file names only, so the workflow path goes in
+          # PATTERNS (minimatch globs) to re-run the check when it changes.
           PATTERNS: |
             **/*.go
-          FILES: |
             .github/workflows/check-generated.yml
 
       - uses: actions/setup-go@v7.0.0
