@@ -232,6 +232,7 @@ func (p *byzantinePrevoter) Do(ctx context.Context, stateData *StateData) error 
 		stateData.Round,
 		stateData.state,
 		true,
+		types.VerifiedCommit{},
 	)
 	require.NoError(p.t, err)
 	assert.NotZero(p.t, uncommittedState)

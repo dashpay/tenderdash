@@ -52,7 +52,7 @@ func makeAndCommitGoodBlock(
 	block.ResultsHash, err = abci.TxResultsHash(txResults)
 	require.NoError(t, err)
 
-	uncommittedState, err := blockExec.ProcessProposal(ctx, block, 0, state, true)
+	uncommittedState, err := blockExec.ProcessProposal(ctx, block, 0, state, true, types.VerifiedCommit{})
 	require.NoError(t, err)
 	// Simulate a lastCommit for this block from all validators for the next height
 	commit, _ := makeValidCommit(ctx, t, height, blockID, state.Validators, privVals)

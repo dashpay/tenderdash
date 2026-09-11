@@ -207,7 +207,7 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResult() {
 					Maybe().
 					Return(types.VerifiedCommit{}, nil)
 				suite.blockExec.
-					On("ProcessProposal", mock.Anything, respH1.Block, mock.Anything, mock.Anything, true).
+					On("ProcessProposal", mock.Anything, respH1.Block, mock.Anything, mock.Anything, true, mock.Anything).
 					Once().
 					Return(sm.CurrentRoundState{}, nil)
 				suite.blockExec.
@@ -1833,7 +1833,7 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResultKeepsPeerOnTransientFail
 // unchanged. expect applies the same cardinality to both.
 func expectApply(exec *mocks.Executor, expect func(*mock.Call)) {
 	expect(exec.
-		On("ProcessProposal", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		On("ProcessProposal", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(sm.CurrentRoundState{}, nil))
 	expect(exec.
 		On("FinalizeBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).

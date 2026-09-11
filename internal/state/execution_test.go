@@ -276,7 +276,7 @@ func TestProcessProposal(t *testing.T) {
 		TxResults: txResults,
 		Status:    abci.ResponseProcessProposal_ACCEPT,
 	}, nil)
-	uncommittedState, err := blockExec.ProcessProposal(ctx, block1, round, state, true)
+	uncommittedState, err := blockExec.ProcessProposal(ctx, block1, round, state, true, types.VerifiedCommit{})
 	require.NoError(t, err)
 	assert.NotZero(t, uncommittedState)
 	app.AssertExpectations(t)
@@ -346,7 +346,7 @@ func TestUpdateConsensusParams(t *testing.T) {
 		Status:                abci.ResponseProcessProposal_ACCEPT,
 		ConsensusParamUpdates: &tmtypes.ConsensusParams{Block: &tmtypes.BlockParams{MaxBytes: 1024 * 1024}},
 	}, nil).Once()
-	uncommittedState, err := blockExec.ProcessProposal(ctx, block1, round, state, true)
+	uncommittedState, err := blockExec.ProcessProposal(ctx, block1, round, state, true, types.VerifiedCommit{})
 	require.NoError(t, err)
 	assert.Equal(t, block1.NextConsensusHash, uncommittedState.NextConsensusParams.HashConsensusParams())
 
@@ -423,7 +423,7 @@ func TestOverrideAppVersion(t *testing.T) {
 		Status:    abci.ResponseProcessProposal_ACCEPT,
 	}, nil).Once()
 
-	_, err = blockExec.ProcessProposal(ctx, block1, round, state, true)
+	_, err = blockExec.ProcessProposal(ctx, block1, round, state, true, types.VerifiedCommit{})
 	require.NoError(t, err)
 	assert.EqualValues(t, appVersion, block1.Version.App, "App version should be overridden by PrepareProposal")
 

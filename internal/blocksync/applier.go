@@ -100,7 +100,7 @@ func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *ty
 	// Validate the app response before persisting; save before FinalizeBlock so
 	// crash recovery never finds the block store behind the application.
 	start = time.Now()
-	uncommittedState, err := e.blockExec.ProcessProposal(ctx, block, commit.Round, e.state, true)
+	uncommittedState, err := e.blockExec.ProcessProposal(ctx, block, commit.Round, e.state, true, e.lastCommit)
 	if err != nil {
 		panic(fmt.Sprintf("failed to process committed block (%d:%X): %v", block.Height, block.Hash(), err))
 	}

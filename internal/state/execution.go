@@ -47,10 +47,12 @@ type Executor interface {
 		round int32,
 		state State,
 		verify bool,
+		lastCommit types.VerifiedCommit,
 	) (CurrentRoundState, error)
 
-	// ValidateBlock, ValidateBlockWithRoundState, FinalizeBlock and ApplyBlock
-	// take lastCommit, block.LastCommit with the proof of its verification if
+	// ValidateBlock, ValidateBlockWithRoundState, FinalizeBlock, ApplyBlock and
+	// ProcessProposal (used only when verify is set) take lastCommit,
+	// block.LastCommit with the proof of its verification if
 	// the caller holds one. The proof spares the threshold verification only
 	// when it covers exactly the verification the block's validation would run;
 	// anything else, including a VerifiedCommit without proof, is verified in
@@ -355,6 +357,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 	round int32,
 	state State,
 	verify bool,
+	lastCommit types.VerifiedCommit,
 ) (CurrentRoundState, error) {
 	version := block.Version.ToProto()
 	stages := blockExec.metrics.startStages()
@@ -415,8 +418,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		// Here we check if the ProcessProposal response matches
 		// block received from proposer, eg. if `uncommittedState`
 		// fields are the same as `block` fields
-		err = blockExec.ValidateBlockWithRoundState(ctx, state, stateChanges, block,
-			types.VerifiedCommit{})
+		err = blockExec.ValidateBlockWithRoundState(ctx, state, stateChanges, block, lastCommit)
 		if err != nil {
 			return stateChanges, ErrInvalidBlock{err}
 		}
@@ -631,7 +633,7 @@ func (blockExec *BlockExecutor) ApplyBlock(
 	// with the same arguments and wraps failures in the same ErrInvalidBlock.
 	// Verifying here as well would validate every block twice, and each pass costs
 	// a threshold signature verification of block.LastCommit.
-	uncommittedState, err := blockExec.ProcessProposal(ctx, block, commit.Round, state, false)
+	uncommittedState, err := blockExec.ProcessProposal(ctx, block, commit.Round, state, false, lastCommit)
 	if err != nil {
 		return state, err
 	}

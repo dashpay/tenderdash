@@ -104,7 +104,7 @@ func TestBlockApplierApply(t *testing.T) {
 					Once().
 					Return(nil)
 				mockBlockExec.
-					On("ProcessProposal", mock.Anything, blockH1, commitH1.Round, initialState, true).
+					On("ProcessProposal", mock.Anything, blockH1, commitH1.Round, initialState, true, types.VerifiedCommit{}).
 					Once().
 					Return(sm.CurrentRoundState{}, nil)
 				mockBlockExec.
@@ -155,7 +155,7 @@ func TestBlockApplierApply(t *testing.T) {
 					Once().
 					Return(nil)
 				mockBlockExec.
-					On("ProcessProposal", mock.Anything, blockH1, commitH1.Round, initialState, true).
+					On("ProcessProposal", mock.Anything, blockH1, commitH1.Round, initialState, true, types.VerifiedCommit{}).
 					Once().
 					Return(sm.CurrentRoundState{}, nil)
 				mockBlockExec.
@@ -261,7 +261,7 @@ func TestBlockApplierDoesNotSaveBlockRejectedByApp(t *testing.T) {
 		Once().
 		Return(nil)
 	mockBlockExec.
-		On("ProcessProposal", mock.Anything, block, commit.Round, initialState, true).
+		On("ProcessProposal", mock.Anything, block, commit.Round, initialState, true, types.VerifiedCommit{}).
 		Once().
 		Return(sm.CurrentRoundState{}, errors.New("app rejected the block"))
 
@@ -296,7 +296,7 @@ func TestBlockApplierSavesBlockBeforeFinalize(t *testing.T) {
 		Once().
 		Return(nil)
 	mockBlockExec.
-		On("ProcessProposal", mock.Anything, block, commit.Round, initialState, true).
+		On("ProcessProposal", mock.Anything, block, commit.Round, initialState, true, types.VerifiedCommit{}).
 		Once().
 		Run(func(mock.Arguments) { calls = append(calls, "process") }).
 		Return(sm.CurrentRoundState{}, nil)
@@ -336,7 +336,7 @@ func TestBlockApplierRecordsStageMetrics(t *testing.T) {
 		Once().Return(types.VerifiedCommit{}, errors.New("bad signature"))
 	mockBlockStore.On("SaveBlock", blockH1, mock.Anything, commitH1).Twice()
 	mockBlockExec.On("ValidateBlock", mock.Anything, mock.Anything, blockH1, types.VerifiedCommit{}).Twice().Return(nil)
-	mockBlockExec.On("ProcessProposal", mock.Anything, blockH1, commitH1.Round, initialState, true).
+	mockBlockExec.On("ProcessProposal", mock.Anything, blockH1, commitH1.Round, initialState, true, types.VerifiedCommit{}).
 		Twice().Return(sm.CurrentRoundState{}, nil)
 	mockBlockExec.On("FinalizeBlock", mock.Anything, initialState, sm.CurrentRoundState{}, mock.Anything, blockH1, commitH1, types.VerifiedCommit{}).
 		Twice().Return(initialState, nil)
@@ -437,7 +437,7 @@ func TestBlockApplierOffersTheVerifiedCommitForward(t *testing.T) {
 		blockStore.On("SaveBlock", mock.Anything, mock.Anything, mock.Anything).Maybe()
 		blockExec.On("VerifyCommit", mock.Anything, blockH1ID, blockH1.Height, commitH1).Once().Return(verifiedH1, nil)
 		blockExec.On("ValidateBlock", mock.Anything, mock.Anything, blockH1, none).Once().Return(nil)
-		blockExec.On("ProcessProposal", mock.Anything, blockH1, commitH1.Round, mock.Anything, true).
+		blockExec.On("ProcessProposal", mock.Anything, blockH1, commitH1.Round, mock.Anything, true, none).
 			Once().Return(sm.CurrentRoundState{}, nil)
 		blockExec.On("FinalizeBlock", mock.Anything, mock.Anything, mock.Anything, blockH1ID, blockH1, commitH1, none).
 			Once().Return(initialState, nil)
@@ -449,7 +449,7 @@ func TestBlockApplierOffersTheVerifiedCommitForward(t *testing.T) {
 	expectH2 := func(blockExec *mocks.Executor, lastCommit types.VerifiedCommit) {
 		blockExec.On("VerifyCommit", mock.Anything, blockH2ID, blockH2.Height, commitH2).Once().Return(none, nil)
 		blockExec.On("ValidateBlock", mock.Anything, mock.Anything, blockH2, lastCommit).Once().Return(nil)
-		blockExec.On("ProcessProposal", mock.Anything, blockH2, commitH2.Round, mock.Anything, true).
+		blockExec.On("ProcessProposal", mock.Anything, blockH2, commitH2.Round, mock.Anything, true, lastCommit).
 			Once().Return(sm.CurrentRoundState{}, nil)
 		blockExec.On("FinalizeBlock", mock.Anything, mock.Anything, mock.Anything, blockH2ID, blockH2, commitH2, lastCommit).
 			Once().Return(initialState, nil)
@@ -517,15 +517,18 @@ func TestBlockApplierSkipsTheLastCommitItVerified(t *testing.T) {
 		sm.BockExecWithMetrics(execMetrics))
 	applier := newBlockApplier(blockExec, blockStore, applierWithState(state))
 
-	// Height 1 has no LastCommit to verify. Every later height skips it twice:
-	// in the validation before the block is saved, and in the validation
-	// FinalizeBlock runs against the round state. (ApplyBlock's own ValidateBlock
-	// is answered from the executor's per-block cache.)
+	// Height 1 has no LastCommit to verify. Every later height skips its
+	// threshold verification three times, once per site handed the proof: the
+	// applier's ValidateBlock before the block is saved, ProcessProposal's check
+	// of the app response, and FinalizeBlock's. The latter two find the block in
+	// the executor's per-block cache but still each run
+	// ValidateBlockWithRoundState's explicit LastCommit check, so any site handed
+	// a zero proof verifies in full and drops the count.
 	commit := types.NewCommit(0, 0, types.BlockID{}, nil, nil)
 	for _, step := range []struct {
 		height      int64
 		wantSkipped float64
-	}{{1, 0}, {2, 2}, {3, 4}} {
+	}{{1, 0}, {2, 3}, {3, 6}} {
 		block, _, _, seenCommit := makeNextBlock(ctx, t, applier.State(), privVals[0], step.height, commit)
 		require.NoError(t, applier.Apply(ctx, block, seenCommit))
 		require.Equal(t, step.wantSkipped, skipped.Value(),

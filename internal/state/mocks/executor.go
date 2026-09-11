@@ -376,8 +376,8 @@ func (_c *Executor_FinalizeBlock_Call) RunAndReturn(run func(ctx context.Context
 }
 
 // ProcessProposal provides a mock function for the type Executor
-func (_mock *Executor) ProcessProposal(ctx context.Context, block *types.Block, round int32, state1 state.State, verify bool) (state.CurrentRoundState, error) {
-	ret := _mock.Called(ctx, block, round, state1, verify)
+func (_mock *Executor) ProcessProposal(ctx context.Context, block *types.Block, round int32, state1 state.State, verify bool, lastCommit types.VerifiedCommit) (state.CurrentRoundState, error) {
+	ret := _mock.Called(ctx, block, round, state1, verify, lastCommit)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ProcessProposal")
@@ -385,16 +385,16 @@ func (_mock *Executor) ProcessProposal(ctx context.Context, block *types.Block, 
 
 	var r0 state.CurrentRoundState
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, *types.Block, int32, state.State, bool) (state.CurrentRoundState, error)); ok {
-		return returnFunc(ctx, block, round, state1, verify)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *types.Block, int32, state.State, bool, types.VerifiedCommit) (state.CurrentRoundState, error)); ok {
+		return returnFunc(ctx, block, round, state1, verify, lastCommit)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, *types.Block, int32, state.State, bool) state.CurrentRoundState); ok {
-		r0 = returnFunc(ctx, block, round, state1, verify)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *types.Block, int32, state.State, bool, types.VerifiedCommit) state.CurrentRoundState); ok {
+		r0 = returnFunc(ctx, block, round, state1, verify, lastCommit)
 	} else {
 		r0 = ret.Get(0).(state.CurrentRoundState)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, *types.Block, int32, state.State, bool) error); ok {
-		r1 = returnFunc(ctx, block, round, state1, verify)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *types.Block, int32, state.State, bool, types.VerifiedCommit) error); ok {
+		r1 = returnFunc(ctx, block, round, state1, verify, lastCommit)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -412,11 +412,12 @@ type Executor_ProcessProposal_Call struct {
 //   - round int32
 //   - state1 state.State
 //   - verify bool
-func (_e *Executor_Expecter) ProcessProposal(ctx any, block any, round any, state1 any, verify any) *Executor_ProcessProposal_Call {
-	return &Executor_ProcessProposal_Call{Call: _e.mock.On("ProcessProposal", ctx, block, round, state1, verify)}
+//   - lastCommit types.VerifiedCommit
+func (_e *Executor_Expecter) ProcessProposal(ctx any, block any, round any, state1 any, verify any, lastCommit any) *Executor_ProcessProposal_Call {
+	return &Executor_ProcessProposal_Call{Call: _e.mock.On("ProcessProposal", ctx, block, round, state1, verify, lastCommit)}
 }
 
-func (_c *Executor_ProcessProposal_Call) Run(run func(ctx context.Context, block *types.Block, round int32, state1 state.State, verify bool)) *Executor_ProcessProposal_Call {
+func (_c *Executor_ProcessProposal_Call) Run(run func(ctx context.Context, block *types.Block, round int32, state1 state.State, verify bool, lastCommit types.VerifiedCommit)) *Executor_ProcessProposal_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -438,12 +439,17 @@ func (_c *Executor_ProcessProposal_Call) Run(run func(ctx context.Context, block
 		if args[4] != nil {
 			arg4 = args[4].(bool)
 		}
+		var arg5 types.VerifiedCommit
+		if args[5] != nil {
+			arg5 = args[5].(types.VerifiedCommit)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
 			arg3,
 			arg4,
+			arg5,
 		)
 	})
 	return _c
@@ -454,7 +460,7 @@ func (_c *Executor_ProcessProposal_Call) Return(currentRoundState state.CurrentR
 	return _c
 }
 
-func (_c *Executor_ProcessProposal_Call) RunAndReturn(run func(ctx context.Context, block *types.Block, round int32, state1 state.State, verify bool) (state.CurrentRoundState, error)) *Executor_ProcessProposal_Call {
+func (_c *Executor_ProcessProposal_Call) RunAndReturn(run func(ctx context.Context, block *types.Block, round int32, state1 state.State, verify bool, lastCommit types.VerifiedCommit) (state.CurrentRoundState, error)) *Executor_ProcessProposal_Call {
 	_c.Call.Return(run)
 	return _c
 }

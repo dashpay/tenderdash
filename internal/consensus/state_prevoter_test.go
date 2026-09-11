@@ -125,7 +125,7 @@ func (suite *PrevoterTestSuite) TestDo() {
 			}
 			if tc.mockProcessProposal {
 				suite.mockExecutor.
-					On("ProcessProposal", ctx, mock.Anything, int32(0), mock.Anything, true).
+					On("ProcessProposal", ctx, mock.Anything, int32(0), mock.Anything, true, types.VerifiedCommit{}).
 					Once().
 					Return(currState, tc.ppErr)
 			}

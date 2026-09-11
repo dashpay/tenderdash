@@ -70,7 +70,10 @@ func (c *blockExecutor) ensureProcess(ctx context.Context, rs *cstypes.RoundStat
 	crs := rs.CurrentRoundState
 	if crs.Params.Source != sm.ProcessProposalSource || !crs.MatchesBlock(block.Header, round) {
 		c.logger.Trace("CurrentRoundState is outdated, executing ProcessProposal", "crs", crs)
-		uncommittedState, err := c.blockExec.ProcessProposal(ctx, block, round, c.committedState, true)
+		// consensus holds no proof for the block's LastCommit, so it is verified
+		// in full
+		uncommittedState, err := c.blockExec.ProcessProposal(ctx, block, round, c.committedState, true,
+			types.VerifiedCommit{})
 		if err != nil {
 			return fmt.Errorf("ProcessProposal abci method: %w", err)
 		}
