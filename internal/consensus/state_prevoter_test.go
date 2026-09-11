@@ -125,13 +125,13 @@ func (suite *PrevoterTestSuite) TestDo() {
 			}
 			if tc.mockProcessProposal {
 				suite.mockExecutor.
-					On("ProcessProposal", ctx, mock.Anything, int32(0), mock.Anything, true).
+					On("ProcessProposal", ctx, mock.Anything, int32(0), mock.Anything, true, types.VerifiedCommit{}).
 					Once().
 					Return(currState, tc.ppErr)
 			}
 			if tc.mockValidateBlock {
 				suite.mockExecutor.
-					On("ValidateBlockWithRoundState", ctx, mock.Anything, mock.Anything, mock.Anything).
+					On("ValidateBlockWithRoundState", ctx, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Once().
 					Return(nil)
 			}

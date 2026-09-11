@@ -275,7 +275,9 @@ func (r *BlockReplayer) replayBlock(
 ) (sm.CurrentRoundState, error) {
 	r.logger.Info("Replay: applying block", "height", height)
 	// Extra check to ensure the app was not changed in a way it shouldn't have.
-	ucState, err := r.blockExec.ProcessProposal(ctx, block, commit.Round, state, false)
+	// The replayer holds no proof for block.LastCommit.
+	ucState, err := r.blockExec.ProcessProposal(ctx, block, commit.Round, state, false,
+		types.VerifiedCommit{})
 	if err != nil {
 		return sm.CurrentRoundState{}, fmt.Errorf("blockReplayer process proposal: %w", err)
 	}
@@ -306,8 +308,10 @@ func (r *BlockReplayer) syncStateAt(
 	meta := r.store.LoadBlockMeta(height)
 	seenCommit := r.store.LoadSeenCommitAt(height)
 	// Use stubs for both mempool and evidence pool since no transactions nor
-	// evidence are needed here - block already exists.
-	state, err := blockExec.ApplyBlock(ctx, state, meta.BlockID, block, seenCommit)
+	// evidence are needed here - block already exists. The replayer holds no
+	// proof for block.LastCommit, so it verifies every block in full.
+	state, err := blockExec.ApplyBlock(ctx, state, meta.BlockID, block, seenCommit,
+		types.VerifiedCommit{})
 	if err != nil {
 		return sm.State{}, err
 	}

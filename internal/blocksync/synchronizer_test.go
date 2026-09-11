@@ -81,9 +81,13 @@ func (suite *SynchronizerTestSuite) TestBasic() {
 		On("SaveBlock", mock.Anything, mock.Anything, mock.Anything).
 		Maybe()
 	suite.blockExec.
-		On("ValidateBlock", mock.Anything, mock.Anything, mock.Anything).
+		On("ValidateBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
 		Return(nil)
+	suite.blockExec.
+		On("VerifyCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Maybe().
+		Return(types.VerifiedCommit{}, nil)
 	expectApply(suite.blockExec, func(call *mock.Call) { call.Maybe() })
 	suite.client.
 		On("GetBlock", mock.Anything, mock.Anything, mock.Anything).
@@ -195,15 +199,19 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResult() {
 					Once().
 					Return(nil)
 				suite.blockExec.
-					On("ValidateBlock", mock.Anything, mock.Anything, respH1.Block).
+					On("ValidateBlock", mock.Anything, mock.Anything, respH1.Block, mock.Anything).
 					Once().
 					Return(nil)
 				suite.blockExec.
-					On("ProcessProposal", mock.Anything, respH1.Block, mock.Anything, mock.Anything, true).
+					On("VerifyCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Maybe().
+					Return(types.VerifiedCommit{}, nil)
+				suite.blockExec.
+					On("ProcessProposal", mock.Anything, respH1.Block, mock.Anything, mock.Anything, true, mock.Anything).
 					Once().
 					Return(sm.CurrentRoundState{}, nil)
 				suite.blockExec.
-					On("FinalizeBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, respH1.Block, respH1.Commit).
+					On("FinalizeBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, respH1.Block, respH1.Commit, mock.Anything).
 					Once().
 					Return(sm.State{}, nil)
 			},
@@ -238,8 +246,10 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResult() {
 			wantPushBack: []int64{1, 2},
 			mockFn: func(pool *Synchronizer) {
 				pool.pendingToApply[2] = BlockResponse{PeerID: "peer 1", Block: respH2.Block}
+				// VerifyCommit is covered by the Maybe expectation the earlier case
+				// registered on this shared mock
 				suite.blockExec.
-					On("ValidateBlock", mock.Anything, mock.Anything, respH1.Block).
+					On("ValidateBlock", mock.Anything, mock.Anything, respH1.Block, mock.Anything).
 					Once().
 					Return(errors.New("invalid error"))
 				suite.client.
@@ -415,9 +425,13 @@ func (suite *SynchronizerTestSuite) TestConsumeDuplicateThenDrain() {
 		On("SaveBlock", mock.Anything, mock.Anything, mock.Anything).
 		Twice()
 	suite.blockExec.
-		On("ValidateBlock", mock.Anything, mock.Anything, mock.Anything).
+		On("ValidateBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Twice().
 		Return(nil)
+	suite.blockExec.
+		On("VerifyCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Maybe().
+		Return(types.VerifiedCommit{}, nil)
 	expectApply(suite.blockExec, func(call *mock.Call) { call.Twice() })
 
 	resultCh <- workerpool.Result{Value: respH1}
@@ -481,7 +495,11 @@ func (suite *SynchronizerTestSuite) TestApplyFailurePunishesSupplyingPeer() {
 	pool.pendingToApply[poisonH1.Block.Height] = *poisonH1
 
 	suite.blockExec.
-		On("ValidateBlock", mock.Anything, mock.Anything, poisonH1.Block).
+		On("VerifyCommit", mock.Anything, mock.Anything, poisonH1.Block.Height, poisonH1.Commit).
+		Once().
+		Return(types.VerifiedCommit{}, nil)
+	suite.blockExec.
+		On("ValidateBlock", mock.Anything, mock.Anything, poisonH1.Block, mock.Anything).
 		Once().
 		Return(errors.New("invalid block"))
 	suite.client.
@@ -1285,9 +1303,13 @@ func (suite *SynchronizerTestSuite) newBacklogHarness() *backlogHarness {
 		On("SaveBlock", mock.Anything, mock.Anything, mock.Anything).
 		Maybe()
 	suite.blockExec.
-		On("ValidateBlock", mock.Anything, mock.Anything, mock.Anything).
+		On("ValidateBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
 		Return(nil)
+	suite.blockExec.
+		On("VerifyCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Maybe().
+		Return(types.VerifiedCommit{}, nil)
 	expectApply(suite.blockExec, func(call *mock.Call) { call.Maybe() })
 
 	jobCh := make(chan *workerpool.Job, 1)
@@ -1730,9 +1752,13 @@ func (suite *SynchronizerTestSuite) TestClientTimeoutUnwedgesAFullWindow() {
 		On("SaveBlock", mock.Anything, mock.Anything, mock.Anything).
 		Maybe()
 	suite.blockExec.
-		On("ValidateBlock", mock.Anything, mock.Anything, mock.Anything).
+		On("ValidateBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
 		Return(nil)
+	suite.blockExec.
+		On("VerifyCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Maybe().
+		Return(types.VerifiedCommit{}, nil)
 	expectApply(suite.blockExec, func(call *mock.Call) { call.Maybe() })
 
 	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
@@ -1807,11 +1833,11 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResultKeepsPeerOnTransientFail
 // unchanged. expect applies the same cardinality to both.
 func expectApply(exec *mocks.Executor, expect func(*mock.Call)) {
 	expect(exec.
-		On("ProcessProposal", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		On("ProcessProposal", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(sm.CurrentRoundState{}, nil))
 	expect(exec.
-		On("FinalizeBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(func(_ context.Context, state sm.State, _ sm.CurrentRoundState, _ types.BlockID, _ *types.Block, _ *types.Commit) sm.State {
+		On("FinalizeBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(func(_ context.Context, state sm.State, _ sm.CurrentRoundState, _ types.BlockID, _ *types.Block, _ *types.Commit, _ types.VerifiedCommit) sm.State {
 			return state
 		}, nil))
 }

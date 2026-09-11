@@ -424,10 +424,10 @@ func TestFinalizeBlock(t *testing.T) {
 	require.NoError(t, err)
 	block.NextValidatorsHash = newVals.Hash()
 	const round = int32(0)
-	candidateState, err := blockExec.ProcessProposal(ctx, block, round, state, true)
+	candidateState, err := blockExec.ProcessProposal(ctx, block, round, state, true, types.VerifiedCommit{})
 	require.NoError(t, err)
 
-	state, err = blockExec.FinalizeBlock(ctx, state, candidateState, blockID, block, new(types.Commit))
+	state, err = blockExec.FinalizeBlock(ctx, state, candidateState, blockID, block, new(types.Commit), types.VerifiedCommit{})
 	require.NoError(t, err)
 
 	// test new validator was added to NextValidators

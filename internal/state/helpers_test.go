@@ -47,16 +47,16 @@ func makeAndCommitGoodBlock(
 	// A good block passes
 	state, blockID, block := makeAndApplyGoodBlock(t, state, height, lastCommit, proposerProTxHash, evidence, proposedAppVersion)
 
-	require.NoError(t, blockExec.ValidateBlock(ctx, state, block))
+	require.NoError(t, blockExec.ValidateBlock(ctx, state, block, types.VerifiedCommit{}))
 	txResults := factory.ExecTxResults(block.Txs)
 	block.ResultsHash, err = abci.TxResultsHash(txResults)
 	require.NoError(t, err)
 
-	uncommittedState, err := blockExec.ProcessProposal(ctx, block, 0, state, true)
+	uncommittedState, err := blockExec.ProcessProposal(ctx, block, 0, state, true, types.VerifiedCommit{})
 	require.NoError(t, err)
 	// Simulate a lastCommit for this block from all validators for the next height
 	commit, _ := makeValidCommit(ctx, t, height, blockID, state.Validators, privVals)
-	state, err = blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, commit)
+	state, err = blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, commit, types.VerifiedCommit{})
 	require.NoError(t, err)
 
 	return state, blockID, commit

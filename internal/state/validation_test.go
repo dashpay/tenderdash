@@ -146,7 +146,7 @@ func TestValidateBlockHeader(t *testing.T) {
 
 				tc.malleateBlock(block)
 
-				err = blockExec.ValidateBlockWithRoundState(ctx, state, changes, block)
+				err = blockExec.ValidateBlockWithRoundState(ctx, state, changes, block, types.VerifiedCommit{})
 				t.Logf("%s: %v", tc.name, err)
 				require.Error(t, err, tc.name)
 			})
@@ -163,7 +163,7 @@ func TestValidateBlockHeader(t *testing.T) {
 	block, err := statefactory.MakeBlock(state, nextHeight, lastCommit, 0)
 	require.NoError(t, err)
 	state.InitialHeight = nextHeight + 1
-	err = blockExec.ValidateBlock(ctx, state, block)
+	err = blockExec.ValidateBlock(ctx, state, block, types.VerifiedCommit{})
 	require.Error(t, err, "expected an error when state is ahead of block")
 	assert.Contains(t, err.Error(), "lower than initial height")
 }
@@ -244,7 +244,7 @@ func TestValidateBlockCommit(t *testing.T) {
 			)
 			block, err := statefactory.MakeBlock(state, height, wrongHeightCommit, 0)
 			require.NoError(t, err)
-			err = blockExec.ValidateBlock(ctx, state, block)
+			err = blockExec.ValidateBlock(ctx, state, block, types.VerifiedCommit{})
 			var wantErr types.ErrInvalidCommitHeight
 			require.True(t, errors.As(err, &wantErr), "expected ErrInvalidCommitHeight at height %d but got: %v", height, err)
 
@@ -253,7 +253,7 @@ func TestValidateBlockCommit(t *testing.T) {
 			*/
 			block, err = statefactory.MakeBlock(state, height, wrongVoteMessageSignedCommit, 0)
 			require.NoError(t, err)
-			err = blockExec.ValidateBlock(ctx, state, block)
+			err = blockExec.ValidateBlock(ctx, state, block, types.VerifiedCommit{})
 			require.True(
 				t,
 				strings.HasPrefix(
@@ -419,7 +419,7 @@ func TestValidateBlockEvidence(t *testing.T) {
 				0,
 			)
 
-			err := blockExec.ValidateBlock(ctx, state, block)
+			err := blockExec.ValidateBlock(ctx, state, block, types.VerifiedCommit{})
 			if assert.Error(t, err) {
 				_, ok := err.(*types.ErrEvidenceOverflow)
 				require.True(

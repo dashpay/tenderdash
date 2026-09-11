@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -30,6 +31,7 @@ import (
 	sf "github.com/dashpay/tenderdash/internal/state/test/factory"
 	"github.com/dashpay/tenderdash/internal/store"
 	"github.com/dashpay/tenderdash/internal/test/factory"
+	"github.com/dashpay/tenderdash/internal/test/metricspy"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/libs/rand"
 	tmtypes "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -94,7 +96,7 @@ func TestApplyBlock(t *testing.T) {
 	require.NoError(t, err)
 	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: bps.Header()}
 
-	state, err = blockExec.ApplyBlock(ctx, state, blockID, block, new(types.Commit))
+	state, err = blockExec.ApplyBlock(ctx, state, blockID, block, new(types.Commit), types.VerifiedCommit{})
 	require.NoError(t, err)
 
 	// State for next block
@@ -190,7 +192,7 @@ func TestFinalizeBlockByzantineValidators(t *testing.T) {
 
 	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: bps.Header()}
 
-	_, err = blockExec.ApplyBlock(ctx, state, blockID, block, new(types.Commit))
+	_, err = blockExec.ApplyBlock(ctx, state, blockID, block, new(types.Commit), types.VerifiedCommit{})
 	require.NoError(t, err)
 
 	// TODO check state and mempool
@@ -274,7 +276,7 @@ func TestProcessProposal(t *testing.T) {
 		TxResults: txResults,
 		Status:    abci.ResponseProcessProposal_ACCEPT,
 	}, nil)
-	uncommittedState, err := blockExec.ProcessProposal(ctx, block1, round, state, true)
+	uncommittedState, err := blockExec.ProcessProposal(ctx, block1, round, state, true, types.VerifiedCommit{})
 	require.NoError(t, err)
 	assert.NotZero(t, uncommittedState)
 	app.AssertExpectations(t)
@@ -344,7 +346,7 @@ func TestUpdateConsensusParams(t *testing.T) {
 		Status:                abci.ResponseProcessProposal_ACCEPT,
 		ConsensusParamUpdates: &tmtypes.ConsensusParams{Block: &tmtypes.BlockParams{MaxBytes: 1024 * 1024}},
 	}, nil).Once()
-	uncommittedState, err := blockExec.ProcessProposal(ctx, block1, round, state, true)
+	uncommittedState, err := blockExec.ProcessProposal(ctx, block1, round, state, true, types.VerifiedCommit{})
 	require.NoError(t, err)
 	assert.Equal(t, block1.NextConsensusHash, uncommittedState.NextConsensusParams.HashConsensusParams())
 
@@ -421,7 +423,7 @@ func TestOverrideAppVersion(t *testing.T) {
 		Status:    abci.ResponseProcessProposal_ACCEPT,
 	}, nil).Once()
 
-	_, err = blockExec.ProcessProposal(ctx, block1, round, state, true)
+	_, err = blockExec.ProcessProposal(ctx, block1, round, state, true, types.VerifiedCommit{})
 	require.NoError(t, err)
 	assert.EqualValues(t, appVersion, block1.Version.App, "App version should be overridden by PrepareProposal")
 
@@ -686,7 +688,7 @@ func TestFinalizeBlockValidatorUpdates(t *testing.T) {
 	require.NoError(t, err)
 	blockID := block.BlockID(nil)
 	require.NoError(t, err)
-	state, err = blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, new(types.Commit))
+	state, err = blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, new(types.Commit), types.VerifiedCommit{})
 	require.NoError(t, err)
 
 	require.Nil(t, err)
@@ -768,7 +770,7 @@ func TestFinalizeBlockValidatorUpdatesResultingInEmptySet(t *testing.T) {
 	}
 
 	assert.NotPanics(t, func() {
-		state, err = blockExec.ApplyBlock(ctx, state, blockID, block, new(types.Commit))
+		state, err = blockExec.ApplyBlock(ctx, state, blockID, block, new(types.Commit), types.VerifiedCommit{})
 	})
 	assert.NotNil(t, err)
 	assert.NotEmpty(t, state.Validators.Validators)
@@ -1358,7 +1360,7 @@ func TestApplyBlockValidatesBlock(t *testing.T) {
 	require.NoError(t, err)
 	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: bps.Header()}
 
-	_, err = blockExec.ApplyBlock(ctx, state, blockID, block, new(types.Commit))
+	_, err = blockExec.ApplyBlock(ctx, state, blockID, block, new(types.Commit), types.VerifiedCommit{})
 	require.Error(t, err, "ApplyBlock must reject a block that fails validation")
 	require.ErrorAs(t, err, &sm.ErrInvalidBlock{})
 
@@ -1367,4 +1369,237 @@ func TestApplyBlockValidatesBlock(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, state.LastBlockHeight, loaded.LastBlockHeight,
 		"an invalid block must not advance the state store")
+}
+
+// badCommitSignature is what ValidatorSet.VerifyCommit reports for a forged threshold
+// signature. ErrInvalidBlock does not unwrap, so tests match it by message.
+const badCommitSignature = "invalid commit signatures for quorum"
+
+// verifiedCommitFixture drives a real BlockExecutor through height 1 so height 2
+// carries a genuine BLS LastCommit, then returns everything a test of the
+// commit verification flow needs.
+type verifiedCommitFixture struct {
+	ctx       context.Context
+	blockExec *sm.BlockExecutor
+	// skipped counts the LastCommit verifications the executor skipped
+	skipped *metricspy.Counter
+	// state after height 1 is applied; the state height 2 validates against
+	state sm.State
+	// block ID and commit for height 1, as block sync would hand to the applier
+	blockID types.BlockID
+	commit  *types.Commit
+	// height 2 block whose LastCommit is commit
+	block *types.Block
+	// state height 1 was verified against (Validators is the signing set)
+	verifiedAgainst sm.State
+	privVals        map[string]types.PrivValidator
+}
+
+func newVerifiedCommitFixture(t *testing.T) verifiedCommitFixture {
+	t.Helper()
+	app := &testApp{}
+	logger := log.NewNopLogger()
+	proxyApp := proxy.New(abciclient.NewLocalClient(logger, app), logger, proxy.NopMetrics())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	require.NoError(t, proxyApp.Start(ctx))
+
+	eventBus := eventbus.NewDefault(logger)
+	require.NoError(t, eventBus.Start(ctx))
+
+	state, stateDB, privVals := makeState(t, 2, 1)
+	stateStore := sm.NewStore(stateDB)
+	ctx = dash.ContextWithProTxHash(ctx, state.Validators.Validators[0].ProTxHash)
+	app.ValidatorSetUpdate = state.Validators.ABCIEquivalentValidatorUpdates()
+
+	mp := &mpmocks.Mempool{}
+	mp.On("Lock").Return()
+	mp.On("Unlock").Return()
+	mp.On("FlushAppConn", mock.Anything).Return(nil)
+	mp.On("Update", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	skipped := metricspy.NewCounter()
+	execMetrics := sm.NopMetrics()
+	execMetrics.LastCommitVerificationSkipped = skipped
+	blockExec := sm.NewBlockExecutor(stateStore, proxyApp, mp, sm.EmptyEvidencePool{},
+		store.NewBlockStore(dbm.NewMemDB()), eventBus, sm.BockExecWithMetrics(execMetrics))
+
+	genesis := state
+	proposer := state.GetProposerFromState(1, 0).ProTxHash
+	// makeAndCommitGoodBlock validates through this executor and populates its
+	// per-height cache; FinalizeBlock resets it, so height 2 validates for real.
+	state, blockID, commit := makeAndCommitGoodBlock(ctx, t, state, 1, new(types.Commit), proposer, blockExec, privVals, nil, 0)
+
+	f := verifiedCommitFixture{
+		ctx:             ctx,
+		blockExec:       blockExec,
+		skipped:         skipped,
+		state:           state,
+		blockID:         blockID,
+		commit:          commit,
+		verifiedAgainst: genesis,
+		privVals:        privVals,
+	}
+	f.block = f.blockWith(commit)
+	return f
+}
+
+// verify runs commit through the executor as block sync does when it applies
+// the height 1 block, and returns the verification the executor hands back.
+func (f verifiedCommitFixture) verify(commit *types.Commit) (types.VerifiedCommit, error) {
+	return f.blockExec.VerifyCommit(f.verifiedAgainst, f.blockID, 1, commit)
+}
+
+// blockWith builds the height 2 block carrying lastCommit, ready for ApplyBlock.
+func (f verifiedCommitFixture) blockWith(lastCommit *types.Commit) *types.Block {
+	proposer := f.state.GetProposerFromState(2, 0).ProTxHash
+	block := f.state.MakeBlock(2, factory.MakeNTxs(2, 10), lastCommit, nil, proposer, 0)
+	block.ResultsHash, _ = abci.TxResultsHash(factory.ExecTxResults(block.Txs))
+	return block
+}
+
+// applyNext runs the height 2 block carrying lastCommit through ApplyBlock,
+// offering lastCommitVerified as the verification of that LastCommit, and
+// returns the resulting error.
+func (f verifiedCommitFixture) applyNext(
+	t *testing.T,
+	lastCommit *types.Commit,
+	lastCommitVerified types.VerifiedCommit,
+) error {
+	t.Helper()
+	block := f.blockWith(lastCommit)
+	bps, err := block.MakePartSet(testPartSize)
+	require.NoError(t, err)
+	_, err = f.blockExec.ApplyBlock(f.ctx, f.state, block.BlockID(bps), block, new(types.Commit), lastCommitVerified)
+	return err
+}
+
+// genuineCommit signs a commit for an unrelated block at height with the
+// fixture's validators: one that passes verification but is not the commit
+// under test.
+func (f verifiedCommitFixture) genuineCommit(t *testing.T, height int64) (types.BlockID, *types.Commit) {
+	t.Helper()
+	blockID := factory.MakeBlockID()
+	commit, _ := makeValidCommit(f.ctx, t, height, blockID, f.verifiedAgainst.Validators, f.privVals)
+	return blockID, commit
+}
+
+// cloneCommit returns a commit with the same fields and no cached hash, so a
+// test can mutate it without touching the fixture's copy.
+func cloneCommit(c *types.Commit) *types.Commit {
+	return &types.Commit{
+		Height:                  c.Height,
+		Round:                   c.Round,
+		BlockID:                 c.BlockID.Copy(),
+		QuorumHash:              bytes.Clone(c.QuorumHash),
+		ThresholdBlockSignature: bytes.Clone(c.ThresholdBlockSignature),
+		ThresholdVoteExtensions: slices.Clone(c.ThresholdVoteExtensions),
+	}
+}
+
+// forgedCommit returns a copy of commit with a corrupted threshold signature.
+func forgedCommit(commit *types.Commit) *types.Commit {
+	c := cloneCommit(commit)
+	c.ThresholdBlockSignature[0] ^= 0xff
+	return c
+}
+
+// TestVerifyCommitReturnsVerification checks that the executor hands back a
+// verification only for a commit it accepted, and that validating the next
+// block skips the LastCommit threshold verification only when the verification
+// it is offered covers that exact commit. What "exactly" means input by input
+// is pinned in the types package; this checks the executor honors it.
+func TestVerifyCommitReturnsVerification(t *testing.T) {
+	t.Run("state without validators cannot verify", func(t *testing.T) {
+		f := newVerifiedCommitFixture(t)
+		noVals := f.verifiedAgainst.Copy()
+		noVals.Validators = nil
+		verified, err := f.blockExec.VerifyCommit(noVals, f.blockID, 1, f.commit)
+		require.Error(t, err)
+		require.Equal(t, types.VerifiedCommit{}, verified)
+	})
+
+	t.Run("rejected commit yields no verification", func(t *testing.T) {
+		f := newVerifiedCommitFixture(t)
+		verified, err := f.verify(forgedCommit(f.commit))
+		require.ErrorContains(t, err, badCommitSignature)
+		require.Equal(t, types.VerifiedCommit{}, verified)
+	})
+
+	t.Run("covering verification skips the LastCommit check", func(t *testing.T) {
+		f := newVerifiedCommitFixture(t)
+		verified, err := f.verify(f.commit)
+		require.NoError(t, err)
+		// verified against height 1's Validators, validated against height 2's
+		// LastValidators: the same quorum held by a different object
+		require.NotSame(t, f.verifiedAgainst.Validators, f.state.LastValidators)
+		require.NoError(t, f.blockExec.ValidateBlock(f.ctx, f.state, f.block, verified))
+		require.Equal(t, 1.0, f.skipped.Value())
+	})
+
+	t.Run("zero verification verifies in full", func(t *testing.T) {
+		f := newVerifiedCommitFixture(t)
+		require.NoError(t, f.blockExec.ValidateBlock(f.ctx, f.state, f.block, types.VerifiedCommit{}))
+		require.Equal(t, 0.0, f.skipped.Value(), "nothing was verified, so nothing may be skipped")
+	})
+
+	t.Run("verification of another commit verifies in full", func(t *testing.T) {
+		f := newVerifiedCommitFixture(t)
+		otherBlockID, otherCommit := f.genuineCommit(t, 1)
+		other, err := f.blockExec.VerifyCommit(f.verifiedAgainst, otherBlockID, 1, otherCommit)
+		require.NoError(t, err)
+		require.NoError(t, f.blockExec.ValidateBlock(f.ctx, f.state, f.block, other))
+		require.Equal(t, 0.0, f.skipped.Value())
+	})
+
+	t.Run("verification does not cover a forged LastCommit", func(t *testing.T) {
+		f := newVerifiedCommitFixture(t)
+		verified, err := f.verify(f.commit)
+		require.NoError(t, err)
+		err = f.blockExec.ValidateBlock(f.ctx, f.state, f.blockWith(forgedCommit(f.commit)), verified)
+		require.ErrorContains(t, err, badCommitSignature)
+		require.Equal(t, 0.0, f.skipped.Value())
+	})
+}
+
+// TestApplyBlockSkipsVerifiedLastCommit checks the ApplyBlock flow: with the
+// verification of the commit it just verified, ApplyBlock for the next block
+// does not threshold-verify that commit again, while a LastCommit the
+// verification does not cover is verified — and rejected when forged. Block
+// sync does not call ApplyBlock; TestBlockApplierSkipsTheLastCommitItVerified
+// pins its flow.
+func TestApplyBlockSkipsVerifiedLastCommit(t *testing.T) {
+	t.Run("verified commit is not re-verified", func(t *testing.T) {
+		f := newVerifiedCommitFixture(t)
+		verified, err := f.verify(f.commit)
+		require.NoError(t, err)
+		require.NoError(t, f.applyNext(t, f.commit, verified))
+		// once in validateBlock and once in ValidateBlockWithRoundState: the two
+		// threshold verifications ApplyBlock would otherwise run on LastCommit
+		require.Equal(t, 2.0, f.skipped.Value(),
+			"a commit the verification covers must not be verified again")
+	})
+
+	t.Run("genuine commit passes without a verification", func(t *testing.T) {
+		f := newVerifiedCommitFixture(t)
+		require.NoError(t, f.applyNext(t, f.commit, types.VerifiedCommit{}))
+		require.Equal(t, 0.0, f.skipped.Value(), "nothing was verified, so nothing may be skipped")
+	})
+
+	t.Run("unverified forged commit is rejected", func(t *testing.T) {
+		f := newVerifiedCommitFixture(t)
+		err := f.applyNext(t, forgedCommit(f.commit), types.VerifiedCommit{})
+		require.ErrorAs(t, err, &sm.ErrInvalidBlock{})
+		require.ErrorContains(t, err, badCommitSignature)
+		require.Equal(t, 0.0, f.skipped.Value())
+	})
+
+	t.Run("verification of the genuine commit does not cover a forged one", func(t *testing.T) {
+		f := newVerifiedCommitFixture(t)
+		verified, err := f.verify(f.commit)
+		require.NoError(t, err)
+		require.ErrorContains(t, f.applyNext(t, forgedCommit(f.commit), verified), badCommitSignature)
+		require.Equal(t, 0.0, f.skipped.Value())
+	})
 }
