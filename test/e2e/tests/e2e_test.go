@@ -71,6 +71,10 @@ func testNode(t *testing.T, testFunc func(context.Context, *testing.T, e2e.Node)
 		}
 
 		t.Run(node.Name, func(t *testing.T) {
+			// TODO: parallel node subtests were checked for data races by review
+			// only; run a -race tests binary against a local testnet (e.g.
+			// `go test -race -c -o build/tests ./tests`, then the runner) and
+			// drop this note once it passes.
 			t.Parallel()
 
 			ctx, cancel := context.WithCancel(context.Background())
