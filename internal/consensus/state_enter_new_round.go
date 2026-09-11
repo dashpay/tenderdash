@@ -66,9 +66,7 @@ func (c *EnterNewRoundAction) Execute(ctx context.Context, stateEvent StateEvent
 		"round", stateData.Round,
 		"step", stateData.Step)
 
-	// Setup new round
-	// we don't fire newStep for this step,
-	// but we fire an event, so update the round step first
+	// Update the round before resetting its proposal state and publishing events.
 	stateData.updateRoundStep(round, cstypes.RoundStepNewRound)
 	if round == 0 {
 		// We've already reset these upon new height,
@@ -78,8 +76,13 @@ func (c *EnterNewRoundAction) Execute(ctx context.Context, stateEvent StateEvent
 		logger.Trace("resetting proposal info")
 		stateData.Proposal = nil
 		stateData.ProposalReceiveTime = time.Time{}
-		stateData.ProposalBlock = nil
-		stateData.ProposalBlockParts = nil
+		if stateData.Commit != nil {
+			// The committed block remains the download target across rounds.
+			stateData.retargetTo(stateData.Commit.BlockID, retargetOnParkCommit)
+		} else {
+			stateData.ProposalBlock = nil
+			stateData.ProposalBlockParts = nil
+		}
 	}
 
 	stateData.Votes.SetRound(round + 1) // also track next round (round+1) to allow round-skipping
@@ -90,6 +93,12 @@ func (c *EnterNewRoundAction) Execute(ctx context.Context, stateEvent StateEvent
 	}
 
 	c.eventPublisher.PublishNewRoundEvent(stateData.NewRoundEvent())
+	if stateData.Commit != nil {
+		// Advance peers before announcing the target, so a later Propose step
+		// cannot clear it as part of their new-round reset.
+		c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
+		c.eventPublisher.PublishValidBlockEvent(stateData.RoundState)
+	}
 	// Wait for txs to be available in the mempool
 	// before we enterPropose in round 0. If the last block changed the app hash,
 	waitForTxs := c.config.WaitForTxs() && round == 0 && stateData.state.InitialHeight != stateData.Height

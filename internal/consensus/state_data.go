@@ -382,9 +382,18 @@ func (s *StateData) proposalIsTimely() error {
 func (s *StateData) updateValidBlock() bool {
 	s.ValidRound = s.Round
 	// we only update valid block if it's not set already; otherwise we might overwrite the recv time
-	if !s.ValidBlock.HashesTo(s.ProposalBlock.Hash()) {
+	blockHash := s.ProposalBlock.Hash()
+	if !s.ValidBlock.HashesTo(blockHash) {
 		s.ValidBlock = s.ProposalBlock
-		s.ValidBlockRecvTime = s.ProposalReceiveTime
+		// Only a proposal for this block dates it; one for another block measures
+		// the arrival of something else and is dropped as stale moments later. With
+		// no live proposal to date it, now is when this node learned the block --
+		// and the zero time is not an option, since propose reads this back and the
+		// zero time is not timely.
+		s.ValidBlockRecvTime = tmtime.Now()
+		if s.Proposal != nil && s.Proposal.BlockID.Hash.Equal(blockHash) && !s.ProposalReceiveTime.IsZero() {
+			s.ValidBlockRecvTime = s.ProposalReceiveTime
+		}
 		s.ValidBlockParts = s.ProposalBlockParts
 
 		return true
@@ -408,12 +417,21 @@ func (s *StateData) updateLockedBlock() {
 	s.LockedBlockParts = s.ProposalBlockParts
 }
 
-func (s *StateData) verifyCommit(
+// readyToApplyCommit verifies commit's threshold signature against the commit's
+// own BlockID and reports whether the caller may proceed.
+//
+// (true, nil) means proceed; under ignoreProposalBlock that means move to the
+// commit's round, not apply it. (false, nil) means either that the commit is not
+// for this height, in which case it is ignored unverified, or that it is
+// authentic but its block has not arrived, in which case adoptCommit has parked
+// it. A non-nil error is either a verification failure, which identifies the
+// sender, or ErrVerificationBudgetExhausted, which is local and does not.
+func (s *StateData) readyToApplyCommit(
 	commit *types.Commit,
 	peerID types.NodeID,
 	ignoreProposalBlock bool,
 	budget types.VerificationBudget,
-) (verified bool, err error) {
+) (readyToApply bool, err error) {
 	// Lets first do some basic commit validation before more complicated commit verification
 	if err := commit.ValidateBasic(); err != nil {
 		return false, fmt.Errorf("error validating commit: %w", err)
@@ -452,57 +470,60 @@ func (s *StateData) verifyCommit(
 		return false, nil
 	}
 
-	proposalMatchesCommit := rs.Proposal != nil && rs.Proposal.BlockID.Equals(commit.BlockID)
-	if !proposalMatchesCommit || ignoreProposalBlock {
-		if ignoreProposalBlock {
-			s.logger.Debug("Commit verified for future round", "height", commit.Height, "round", commit.Round)
-		} else {
-			s.logger.Debug("Commit came in before proposal", "height", commit.Height, "round", commit.Round)
-		}
-
-		// We need to verify that it was properly signed
-		// This generally proves that the commit is correct
-		if err := s.verifyCommitSignatures(commit.BlockID, commit, budget); err != nil {
-			return false, fmt.Errorf("error verifying commit: %w", err)
-		}
-		if rs.Proposal != nil && !proposalMatchesCommit {
-			// A valid threshold commit is stronger evidence than a proposal. Clear
-			// metadata for another block only after authenticating the commit, then
-			// use the ordinary commit-before-proposal download path below.
-			s.Proposal = nil
-			s.ProposalReceiveTime = time.Time{}
-		}
-
-		// A retained block with matching parts can be validated without its proposal.
-		if !ignoreProposalBlock && s.ProposalBlock != nil && s.ProposalBlockParts.IsComplete() &&
-			s.ProposalBlockParts.HasHeader(commit.BlockID.PartSetHeader) {
-			return true, nil
-		}
-
-		if !s.ProposalBlockParts.HasHeader(commit.BlockID.PartSetHeader) {
-			s.logger.Debug("setting proposal block parts from commit", "partSetHeader", commit.BlockID.PartSetHeader)
-			s.ProposalBlock = nil
-			s.ProposalBlockParts = types.NewPartSetFromHeader(commit.BlockID.PartSetHeader)
-		}
-
-		s.Commit = commit
-
-		if ignoreProposalBlock {
-			// If we are verifying the commit for a future round we just need to know if the commit was properly signed
-			// so we can go to the next round
-			return true, nil
-		}
-		// We don't need to go to the next round, when we get the proposal in the commit will be set and the proposal
-		// block will be executed
-		return false, nil
-	}
-
-	// Lets verify that the threshold signature matches the current validator set
+	// The threshold signature covers the commit's own BlockID and nothing else, so
+	// a proposal of ours the network never committed proves nothing about it:
+	// checking against it rejects genuine commits (dashpay/tenderdash#1414).
+	// Checking against commit.BlockID also makes ValidatorSet.verifyCommit's own
+	// BlockID guard tautological, so no commit is refused before a pairing is
+	// spent: VerificationRateLimit alone bounds the work a peer can ask for here.
 	if err := s.verifyCommitSignatures(commit.BlockID, commit, budget); err != nil {
 		return false, fmt.Errorf("error verifying commit: %w", err)
 	}
 
-	return true, nil
+	// Matching complete parts already determine the block; a conflicting hash
+	// cannot be resolved by parking the commit and waiting for more parts.
+	if s.ProposalBlock != nil && s.ProposalBlockParts.IsComplete() &&
+		s.ProposalBlockParts.HasHeader(commit.BlockID.PartSetHeader) &&
+		!s.ProposalBlock.HashesTo(commit.BlockID.Hash) {
+		return false, errors.New("cannot accept commit; retained block does not hash to commit hash")
+	}
+
+	if ignoreProposalBlock {
+		// For a future round, a properly signed commit is all we need to know to go
+		// to that round.
+		s.logger.Debug("commit verified for future round", "height", commit.Height, "round", commit.Round)
+		s.adoptCommit(commit)
+		return true, nil
+	}
+
+	// A Proposal attests which block the round is collecting, not that it has
+	// arrived, so first check whether the block is held. The caller then checks
+	// every BlockID field against that block before processing it.
+	if s.holdsProposalBlock(commit.BlockID) {
+		return true, nil
+	}
+
+	if rs.Proposal == nil {
+		s.logger.Debug("commit came in before proposal", "height", commit.Height, "round", commit.Round)
+	} else {
+		s.logger.Debug("commit is for a block other than the proposal we hold",
+			"height", commit.Height,
+			"round", commit.Round,
+			"commit_block", commit.BlockID.Hash,
+			"proposal_block", rs.Proposal.BlockID.Hash,
+		)
+	}
+	// We don't need to go to the next round; the commit is applied once the block
+	// it commits has been received.
+	s.adoptCommit(commit)
+	return false, nil
+}
+
+// adoptCommit keeps the authenticated commit and its block's collected parts
+// until the block can be applied, including across round changes.
+func (s *StateData) adoptCommit(commit *types.Commit) {
+	s.retargetTo(commit.BlockID, retargetOnParkCommit)
+	s.Commit = commit
 }
 
 func (s *StateData) verifyCommitSignatures(
@@ -516,10 +537,88 @@ func (s *StateData) verifyCommitSignatures(
 	return s.Validators.VerifyCommit(s.state.ChainID, blockID, s.Height, commit)
 }
 
+// retargetReason names the call site that repointed the round state, since they
+// share the log lines in retargetTo and dropStaleProposal. retargetOnLockedBlock
+// belongs to the one site that repoints without going through retargetTo: it
+// installs the locked block and its parts directly, so only the proposal half
+// applies. The two commit-driven reasons are opposite halves of one story: one
+// parks a commit whose block has not arrived, the other applies a commit whose
+// block has.
+type retargetReason string
+
+const (
+	retargetOnParkCommit  retargetReason = "park_commit"
+	retargetOnApplyCommit retargetReason = "apply_commit"
+	retargetOnPolka       retargetReason = "polka"
+	retargetOnPrecommit   retargetReason = "precommit"
+	retargetOnLockedBlock retargetReason = "locked_block"
+)
+
+// retargetTo points the round state at blockID, the block this node is now
+// collecting. Three pieces of state, three criteria, in one place so that no
+// site can repoint the part set without also dropping a Proposal that describes
+// something else -- the inconsistency behind dashpay/tenderdash#1414.
+//
+// blockID must be one the round has at least +2/3 evidence for: a commit, or a
+// polka. Repointing at a block named by a single peer would let that peer
+// discard the parts and the proposal this round had collected. Every caller
+// satisfies this; nothing here checks it.
+//
+// Block gossip is marked as started only where the part set is replaced. A
+// retarget that keeps the set is not starting to fetch anything, and marking
+// there would restart the latency clock partway through a fetch already under
+// way, reporting less time than the block actually took to arrive.
+func (s *StateData) retargetTo(blockID types.BlockID, reason retargetReason) {
+	s.dropStaleProposal(blockID, reason)
+	// The part set header is a Merkle root over exactly this block's bytes, so
+	// parts already collected under it are this block's; replacing the set would
+	// discard them and force the whole block to be fetched again.
+	if !s.ProposalBlockParts.HasHeader(blockID.PartSetHeader) {
+		s.logger.Debug("collecting a different block; replacing the part set",
+			"height", s.Height, "round", s.Round, "reason", reason,
+			"part_set_header", blockID.PartSetHeader)
+		// The assembled block goes with the set it was assembled from: a block
+		// outliving its parts reads as held over a set with nothing in it.
+		s.ProposalBlock = nil
+		s.metrics.MarkBlockGossipStarted()
+		s.ProposalBlockParts = types.NewPartSetFromHeader(blockID.PartSetHeader)
+	} else if !s.ProposalBlock.HashesTo(blockID.Hash) {
+		s.ProposalBlock = nil
+	}
+}
+
+// dropStaleProposal clears a Proposal describing a block other than blockID,
+// along with the receive time its timeliness is measured from. Staleness is a
+// question about the whole BlockID: a part set header that happens to match says
+// nothing about the hash or the state ID. A Proposal that outlives the block it
+// names rejects the real block's last part over its core chain locked height.
+func (s *StateData) dropStaleProposal(blockID types.BlockID, reason retargetReason) {
+	if s.Proposal == nil || s.Proposal.BlockID.Equals(blockID) {
+		return
+	}
+	s.logger.Debug("dropping proposal for a block the round no longer tracks",
+		"height", s.Height, "round", s.Round, "reason", reason,
+		"proposal_block", s.Proposal.BlockID.Hash, "block", blockID.Hash)
+	s.Proposal = nil
+	s.ProposalReceiveTime = time.Time{}
+}
+
+// holdsProposalBlock reports whether the round state already carries the block blockID
+// names, as an assembled block under a part set built from the same header.
+func (s *StateData) holdsProposalBlock(blockID types.BlockID) bool {
+	return s.ProposalBlock.HashesTo(blockID.Hash) && s.ProposalBlockParts.HasHeader(blockID.PartSetHeader)
+}
+
 func (s *StateData) isLockedBlockEqual(blockID types.BlockID) bool {
 	return s.LockedBlock.HashesTo(blockID.Hash)
 }
 
+// replaceProposalBlockOnLockedBlock repoints the round state at blockID using the
+// locked block, when that is the block blockID names. It is the one writer of the
+// proposal block slots that does not go through retargetTo: the locked block and
+// its parts are installed together and already satisfy the target, so there is
+// nothing for retargetTo to do -- except the part it owns that has nothing to do
+// with the block, which is dropping a Proposal describing something else.
 func (s *StateData) replaceProposalBlockOnLockedBlock(blockID types.BlockID) {
 	// The Locked* fields no longer matter.
 	// Move them over to ProposalBlock if they match the commit hash,
@@ -527,6 +626,7 @@ func (s *StateData) replaceProposalBlockOnLockedBlock(blockID types.BlockID) {
 	if !s.isLockedBlockEqual(blockID) {
 		return
 	}
+	s.dropStaleProposal(blockID, retargetOnLockedBlock)
 	s.ProposalBlock = s.LockedBlock
 	s.ProposalBlockParts = s.LockedBlockParts
 	s.logger.Trace("commit is for a locked block; set ProposalBlock=LockedBlock", "block_hash", blockID.Hash)

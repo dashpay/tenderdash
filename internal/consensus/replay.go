@@ -73,6 +73,10 @@ func (cs *State) readReplayMessage(ctx context.Context, msg *TimedWALMessage, ne
 		switch msg := m.Msg.(type) {
 		case *ProposalMessage:
 			p := msg.Proposal
+			// Advancing the round here bypasses EnterNewRound, which is what
+			// clears the proposal, its receive time, the block and the part set
+			// together. An earlier round's part set outlives the round it belonged
+			// to, and proposal admission judges the next proposal against it.
 			if cs.config.WalSkipRoundsToLast && p.Round > stateData.Round {
 				stateData.Votes.SetRound(p.Round)
 				stateData.Round = p.Round

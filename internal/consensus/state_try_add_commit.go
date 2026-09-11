@@ -55,36 +55,55 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 	// We need to first verify that the commit received wasn't for a future round,
 	// If it was then we must go to next round
 	if commit.Height == rs.Height && commit.Round > rs.Round {
-		cs.logger.Trace("Commit received for a later round", "height", commit.Height, "our round",
-			rs.Round, "commit round", commit.Round)
-		verified, err := cs.verifyCommit(ctx, stateData, commit, peerID, true)
+		cs.logger.Trace("commit received for a later round", "height", commit.Height,
+			"our_round", rs.Round, "commit_round", commit.Round)
+		verified, err := cs.prepareCommitForApply(ctx, stateData, commit, peerID, true)
 		if err != nil {
 			cs.handleCommitVerifyError(err, peerID, fromReplay)
 			return err
 		}
 		if verified {
-			_ = stateEvent.Ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height, Round: commit.Round}, stateData)
-			// We are now going to receive the block, so initialize the block parts.
-			if stateData.ProposalBlockParts == nil {
-				stateData.ProposalBlockParts = types.NewPartSetFromHeader(commit.BlockID.PartSetHeader)
+			if err := stateEvent.Ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height, Round: commit.Round}, stateData); err != nil {
+				return err
 			}
-
+			if stateData.holdsProposalBlock(commit.BlockID) {
+				// The retained block needs no further part to trigger application.
+				return stateEvent.Ctrl.Dispatch(ctx, &AddCommitEvent{Commit: commit}, stateData)
+			}
 			return nil
 		}
 	}
 
 	// First lets verify that the commit is what we are expecting
-	verified, err := cs.verifyCommit(ctx, stateData, commit, peerID, false)
+	verified, err := cs.prepareCommitForApply(ctx, stateData, commit, peerID, false)
 	if err != nil {
 		cs.handleCommitVerifyError(err, peerID, fromReplay)
 		return err
 	}
 	if !verified {
+		if stateData.Commit != nil {
+			cs.eventPublisher.PublishValidBlockEvent(stateData.RoundState)
+		}
 		return nil
 	}
 
-	stateData.Commit = commit
+	// prepareCommitForApply has already established that the block is held.
+	// Restated so that a later change there cannot silently let the round step
+	// stand in for it again: a commit parked on the step is parked for good,
+	// because a part set completes exactly once.
+	if !stateData.holdsProposalBlock(commit.BlockID) {
+		cs.logger.Error("commit verified against a block the round state does not hold",
+			"height", commit.Height,
+			"round", commit.Round,
+			"commit_block", commit.BlockID.Hash,
+		)
+		return nil
+	}
 
+	// Below the guard, so that the guard firing leaves nothing behind. Setting
+	// Commit is what stops a later commit being reconsidered, and a round holding
+	// one it never dispatched waits for an event that will not arrive.
+	stateData.Commit = commit
 	return stateEvent.Ctrl.Dispatch(ctx, &AddCommitEvent{Commit: commit}, stateData)
 }
 
@@ -100,8 +119,11 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 // under the original PeerID, so a peer would otherwise be evicted at restart for
 // a message it sent long ago.
 func (cs *TryAddCommitAction) handleCommitVerifyError(err error, peerID types.NodeID, fromReplay bool) {
-	if peerID != "" && !fromReplay && errors.Is(err, types.ErrVerificationBudgetExhausted) {
-		cs.metrics.VerificationBudgetDrops.Add(1)
+	if peerID != "" && !fromReplay {
+		cs.metrics.CommitVerifyFailures.With("reason", commitVerifyFailureReason(err)).Add(1)
+		if errors.Is(err, types.ErrVerificationBudgetExhausted) {
+			cs.metrics.VerificationBudgetDrops.Add(1)
+		}
 	}
 	if cs.peerErrorQueue == nil || fromReplay {
 		return
@@ -117,6 +139,26 @@ func (cs *TryAddCommitAction) handleCommitVerifyError(err error, peerID types.No
 	select {
 	case cs.peerErrorQueue.ch <- peerErrorMsg{PeerID: peerID, Err: err, Fatal: true}:
 	default:
+	}
+}
+
+// commitVerifyFailureReason classifies a commit rejection for the metric. The
+// classes separate what they say about this node from what they say about the
+// sender: a quorum-hash disagreement usually means our validator set is stale,
+// a forged signature means the sender is dishonest, and an exhausted budget
+// means neither.
+func commitVerifyFailureReason(err error) string {
+	switch {
+	case errors.As(err, &types.ErrInvalidCommitQuorumHash{}):
+		return "quorum_hash"
+	case errors.As(err, &types.ErrVoteExtensionCountMismatch{}):
+		return "extension_count"
+	case errors.As(err, &types.ErrInvalidCommitSignature{}):
+		return "invalid_signature"
+	case errors.Is(err, types.ErrVerificationBudgetExhausted):
+		return "budget"
+	default:
+		return "other"
 	}
 }
 
@@ -168,8 +210,18 @@ func verifyCommitBlock(
 	return true, nil
 }
 
-func (cs *TryAddCommitAction) verifyCommit(ctx context.Context, stateData *StateData, commit *types.Commit, peerID types.NodeID, ignoreProposalBlock bool) (verified bool, err error) {
-	verified, err = stateData.verifyCommit(
+// prepareCommitForApply verifies the commit and, unless ignoreProposalBlock, the
+// block it names: it runs that block through the application, so a true return
+// means the block is processed and validated, not merely that a signature checked
+// out.
+func (cs *TryAddCommitAction) prepareCommitForApply(
+	ctx context.Context,
+	stateData *StateData,
+	commit *types.Commit,
+	peerID types.NodeID,
+	ignoreProposalBlock bool,
+) (verified bool, err error) {
+	verified, err = stateData.readyToApplyCommit(
 		commit,
 		peerID,
 		ignoreProposalBlock,

@@ -3,6 +3,7 @@
 ### Bug Fixes
 
 - Delay proposals after an incomplete block-sync handover with a bounded catch-up window, base the stall fallback on peers that can serve the needed block, and validate application responses before persisting synced blocks (#1416).
+- Preserve committed-block downloads across round timeouts and announce their part-set target to peers (#1415).
 - Bound stalled block-response cleanup while allowing actively progressing transfers to continue.
 - Authenticate state-sync validator thresholds against locally stored genesis parameters.
 - Reject partially populated validator public-key shares in light blocks.

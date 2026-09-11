@@ -187,3 +187,68 @@ func TestHasVoteIndexRejectionIsFloodable(t *testing.T) {
 	assert.True(t, isPeerFloodableError(ErrPeerStateInvalidVoteIndex),
 		"a vote index outside our validator set is peer-triggerable at will")
 }
+
+// A commit is verified against its own BlockID, so every peer commit that clears
+// ValidateBasic reaches the quorum-hash and vote-extension-count rejections. Both
+// are what an honest peer on a different quorum rotation or vote-extension
+// configuration produces, and copying a commit off the wire costs the sender
+// nothing. A forged threshold signature is the one commit failure that is not
+// free, and it must stay at Error so the eviction it triggers is visible.
+func TestCommitRejectionsAreFloodable(t *testing.T) {
+	assert.True(t, isPeerFloodableError(types.ErrInvalidCommitQuorumHash{}),
+		"a commit naming another quorum is peer-triggerable at will")
+	assert.True(t, isPeerFloodableError(types.ErrVoteExtensionCountMismatch{Extensions: 1, Signatures: 0}),
+		"a vote-extension count disagreement is peer-triggerable at will")
+	assert.True(t,
+		isPeerFloodableError(fmt.Errorf("error verifying commit: %w", types.ErrInvalidCommitQuorumHash{})),
+		"must see through the verifyCommit wrapping")
+
+	assert.False(t, isPeerFloodableError(types.ErrInvalidCommitSignature{}),
+		"a forged threshold signature is not free to produce and evicts the sender")
+}
+
+// TestLoggingMiddlewareSeparatesLocalFaultsFromReplay pins the two conditions on
+// the warn arm. A floodable rejection of a message this node produced is a local
+// fault worth surfacing -- our own proposal refused means the node has stopped
+// being able to propose, and debug would bury it. The same rejection during
+// replay says nothing about what the node can do now: replay re-plays the past,
+// and warning there would fire on every restart.
+func TestLoggingMiddlewareSeparatesLocalFaultsFromReplay(t *testing.T) {
+	vote := &types.Vote{
+		Type:               tmproto.PrecommitType,
+		Height:             1,
+		ValidatorProTxHash: make([]byte, 32),
+	}
+	run := func(t *testing.T, peerID types.NodeID, fromReplay bool) string {
+		t.Helper()
+		var buf bytes.Buffer
+		logger, err := log.NewLogger("debug", &buf)
+		require.NoError(t, err)
+		env := msgEnvelope{
+			msgInfo:    msgInfo{Msg: &VoteMessage{Vote: vote}, PeerID: peerID},
+			fromReplay: fromReplay,
+		}
+		mw := loggingMiddleware(logger)(func(_ context.Context, _ *StateData, _ msgEnvelope) error {
+			return types.ErrVoteInvalidBlockSignature
+		})
+		require.NoError(t, mw(context.Background(), &StateData{}, env))
+		return buf.String()
+	}
+
+	t.Run("this node, live -> Warn", func(t *testing.T) {
+		out := run(t, "", false)
+		assert.Contains(t, out, `"level":"warn"`, "a local fault must not be filed as peer noise")
+	})
+
+	t.Run("this node, replay -> Debug", func(t *testing.T) {
+		out := run(t, "", true)
+		assert.NotContains(t, out, `"level":"warn"`, "replay re-plays the past and warns about nothing")
+		assert.Contains(t, out, `"level":"debug"`)
+	})
+
+	t.Run("a peer -> Debug", func(t *testing.T) {
+		out := run(t, "peerX", false)
+		assert.NotContains(t, out, `"level":"warn"`)
+		assert.Contains(t, out, `"level":"debug"`)
+	})
+}
