@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"strconv"
 
 	"github.com/dashpay/dashd-go/btcjson"
 
@@ -71,8 +70,10 @@ func (c *MockCoreServer) QuorumInfo(ctx context.Context, cmd btcjson.QuorumCmd) 
 	}
 
 	return btcjson.QuorumInfoResult{
-		Height:          math.MustConvertUint32(height),
-		Type:            strconv.Itoa(int(c.LLMQType)),
+		Height: math.MustConvertUint32(height),
+		// Dash Core reports the quorum type by its LLMQ name (e.g. "llmq_test"),
+		// which is what state sync's validator-set authentication parses.
+		Type:            c.LLMQType.Name(),
 		QuorumHash:      quorumHash.String(),
 		Members:         members,
 		QuorumPublicKey: tpk.String(),
