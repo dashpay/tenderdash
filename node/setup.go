@@ -1,10 +1,11 @@
 package node
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -316,17 +317,14 @@ func channelDescriptors(cfg *config.Config) []*p2p.ChannelDescriptor {
 	descs := []*p2p.ChannelDescriptor{pex.ChannelDescriptor()}
 	if cfg.Mode != config.ModeSeed {
 		descs = append(descs, evidence.GetChannelDescriptor())
-		for _, set := range []map[p2p.ChannelID]*p2p.ChannelDescriptor{
-			p2p.ChannelDescriptors(cfg),
-			p2p.ConsensusChannelDescriptors(),
-			p2p.StatesyncChannelDescriptors(),
-		} {
-			for _, desc := range set {
-				descs = append(descs, desc)
-			}
+		// p2p.ChannelDescriptors already merges the consensus and state sync
+		// sets, so it is the only p2p set to pull in: adding either of them
+		// again would hand the transport two descriptors per channel ID.
+		for _, desc := range p2p.ChannelDescriptors(cfg) {
+			descs = append(descs, desc)
 		}
 	}
-	sort.Slice(descs, func(i, j int) bool { return descs[i].ID < descs[j].ID })
+	slices.SortFunc(descs, func(a, b *p2p.ChannelDescriptor) int { return cmp.Compare(a.ID, b.ID) })
 	return descs
 }
 
