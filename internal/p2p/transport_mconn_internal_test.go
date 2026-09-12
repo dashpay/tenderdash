@@ -1,6 +1,7 @@
 package p2p
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -42,4 +43,21 @@ func TestMConnTransportAddChannelDescriptorsSkipsRegisteredChannels(t *testing.T
 
 	require.Len(t, snapshot, 1, "a snapshot taken before the registration was appended to")
 	assert.Same(t, pex, snapshot[0])
+}
+
+// TestMConnTransportAddChannelDescriptorsWarnsAboutLateChannel checks that
+// registering a channel the transport was not created with is reported. Opening
+// such a channel succeeds, and only peers that speak on it over a connection
+// established earlier are dropped, so without this warning a channel missing
+// from the node's up-front list leaves no trace at all.
+func TestMConnTransportAddChannelDescriptorsWarnsAboutLateChannel(t *testing.T) {
+	logger := log.NewTestingLogger(t)
+	// The logger fails the test during cleanup if nothing matched.
+	logger.AssertMatch(regexp.MustCompile("channel registered after the transport was created"))
+
+	transport := NewMConnTransport(logger, conn.DefaultMConnConfig(),
+		[]*ChannelDescriptor{{ID: 0x00, Priority: 1, Name: "pex"}}, MConnTransportOptions{})
+
+	transport.AddChannelDescriptors([]*ChannelDescriptor{{ID: 0x38, Priority: 6, Name: "evidence"}})
+	require.Len(t, transport.channelDescs, 2)
 }

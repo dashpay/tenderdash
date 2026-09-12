@@ -228,9 +228,18 @@ func (m *MConnTransport) AddChannelDescriptors(channelDesc []*ChannelDescriptor)
 	descs := make([]*ChannelDescriptor, len(m.channelDescs), len(m.channelDescs)+len(channelDesc))
 	copy(descs, m.channelDescs)
 	for _, desc := range channelDesc {
-		if !slices.ContainsFunc(descs, func(d *ChannelDescriptor) bool { return d.ID == desc.ID }) {
-			descs = append(descs, desc)
+		if slices.ContainsFunc(descs, func(d *ChannelDescriptor) bool { return d.ID == desc.ID }) {
+			continue
 		}
+		// Every channel a node opens should be registered before the transport
+		// starts connecting, because connections already established were built
+		// without this one and drop any peer that speaks on it. Reaching here
+		// is a gap in that up-front list, not a peer's fault - and it is
+		// otherwise invisible, since opening the channel still succeeds.
+		m.logger.Warn("channel registered after the transport was created; "+
+			"peers speaking on it over an existing connection will be dropped",
+			"channel", desc.ID, "name", desc.Name)
+		descs = append(descs, desc)
 	}
 	m.channelDescs = descs
 }
