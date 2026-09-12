@@ -38,6 +38,11 @@ var (
 // given a single stateful node to test, running as a subtest in
 // parallel with other subtests.
 //
+// Parallel subtests start only after the calling test function returns, so
+// its deferred cleanups (e.g. context cancellation) have already run. The
+// callback must use the ctx it is given, and anything it captures from the
+// caller must be read-only or synchronized.
+//
 // The testnet manifest must be given as the envvar E2E_MANIFEST. If not set,
 // these tests are skipped so that they're not picked up during normal unit
 // test runs. If E2E_NODE is also set, only the specified node is tested,
@@ -66,6 +71,12 @@ func testNode(t *testing.T, testFunc func(context.Context, *testing.T, e2e.Node)
 		}
 
 		t.Run(node.Name, func(t *testing.T) {
+			// TODO: parallel node subtests were checked for data races by review
+			// only; run a -race tests binary against a local testnet (e.g.
+			// `go test -race -c -o build/tests ./tests`, then the runner) and
+			// drop this note once it passes.
+			t.Parallel()
+
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
