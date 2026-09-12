@@ -18,11 +18,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      - uses: actions/checkout@v7
+
+      # Runs after checkout so the Go cache key files exist; listing this
+      # workflow file keeps its cache separate from other workflows.
       - uses: actions/setup-go@v7.0.0
         with:
           go-version: "1.27.1"
-
-      - uses: actions/checkout@v7
+          cache-dependency-path: |
+            go.sum
+            .github/workflows/govulncheck.yml
 
       - name: Install BLS library
         uses: ./.github/actions/bls
