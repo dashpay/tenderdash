@@ -7,23 +7,50 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/internal/evidence"
 	"github.com/dashpay/tenderdash/internal/p2p"
+	"github.com/dashpay/tenderdash/internal/p2p/pex"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/types"
 	"github.com/dashpay/tenderdash/version"
 )
 
-// TestChannelDescriptorsMatchAdvertisedChannels checks, for every node mode,
-// that the descriptors the transport is created with are exactly the channels
-// the node advertises in its NodeInfo, each registered once.
+// openedChannels returns, per node mode, the descriptors every component of a
+// node passes to Router.OpenChannel. Each entry is the same expression its
+// caller uses - p2p client (node.go), consensus, state sync, evidence and PEX
+// reactors - so that adding a channel to any of those sets, or dropping one from
+// the transport's up-front list, breaks this test rather than only connections
+// made during startup.
+func openedChannels(cfg *config.Config) []*p2p.ChannelDescriptor {
+	opened := []*p2p.ChannelDescriptor{pex.ChannelDescriptor()}
+	if cfg.Mode == config.ModeSeed {
+		return opened
+	}
+	opened = append(opened, evidence.GetChannelDescriptor())
+	for _, set := range []map[p2p.ChannelID]*p2p.ChannelDescriptor{
+		p2p.ChannelDescriptors(cfg),
+		p2p.ConsensusChannelDescriptors(),
+		p2p.StatesyncChannelDescriptors(),
+	} {
+		for _, desc := range set {
+			opened = append(opened, desc)
+		}
+	}
+	return opened
+}
+
+// TestChannelDescriptorsCoverEveryOpenedChannel checks, for every node mode,
+// that the transport is created with each channel the node later opens, exactly
+// once, and that NodeInfo advertises the same set.
 //
 // A channel missing from the descriptors is registered with the transport only
-// when its reactor starts, after the router already accepts and dials peers, so
-// a connection made in that window drops a peer that speaks on it with
-// "unknown channel". A channel registered twice gives every connection two
-// conn.MConnection channels for one ID, of which the channel index keeps an
-// arbitrary one and the other silently never receives.
-func TestChannelDescriptorsMatchAdvertisedChannels(t *testing.T) {
+// when its owner opens it, after the router already accepts and dials peers, so
+// a connection made in that window drops a peer that speaks on it with "unknown
+// channel" - and nothing else fails, because Router.OpenChannel does not
+// consult the up-front list. A channel registered twice gives every connection
+// two conn.MConnection channels for one ID, of which the channel index keeps an
+// arbitrary one while the other silently never receives.
+func TestChannelDescriptorsCoverEveryOpenedChannel(t *testing.T) {
 	nodeKey := types.GenNodeKey()
 	// Only ChainID is read out of the genesis doc by either NodeInfo builder.
 	genDoc := &types.GenesisDoc{ChainID: "channel-descriptors-test"}
@@ -36,12 +63,18 @@ func TestChannelDescriptorsMatchAdvertisedChannels(t *testing.T) {
 			require.NoError(t, err)
 			cfg.Mode = mode
 
-			registered := make(map[uint16]string)
+			registered := make(map[p2p.ChannelID]string)
 			for _, desc := range channelDescriptors(cfg) {
-				name, dup := registered[uint16(desc.ID)]
+				name, dup := registered[desc.ID]
 				require.False(t, dup,
 					"channel %#x is registered twice, as %q and %q", desc.ID, name, desc.Name)
-				registered[uint16(desc.ID)] = desc.Name
+				registered[desc.ID] = desc.Name
+			}
+
+			for _, desc := range openedChannels(cfg) {
+				assert.Contains(t, registered, desc.ID,
+					"channel %#x (%q) is opened by a %s node but not registered with the transport up front",
+					desc.ID, desc.Name, mode)
 			}
 
 			var nodeInfo types.NodeInfo
@@ -51,29 +84,20 @@ func TestChannelDescriptorsMatchAdvertisedChannels(t *testing.T) {
 				nodeInfo, err = makeNodeInfo(cfg, nodeKey, nil, nil, genDoc, version.Consensus{})
 			}
 			// Validate, called by both builders, rejects a duplicate or
-			// over-long advertised channel list.
+			// over-long (types.maxNumChannels) advertised channel list.
 			require.NoError(t, err)
 
 			advertised := nodeInfo.Channels.ToSlice()
-			require.NotEmpty(t, advertised)
-			for _, id := range advertised {
-				assert.Contains(t, registered, id,
-					"channel %#x is advertised in NodeInfo but not registered with the transport up front", id)
-			}
-
-			// p2p.ErrorChannel is the one exception in both directions: the p2p
-			// client opens it lazily on first use rather than through a
-			// reactor, and it is deliberately not advertised to peers.
-			want := advertised
-			if mode != config.ModeSeed {
-				want = append(want, uint16(p2p.ErrorChannel))
-			}
-			got := make([]uint16, 0, len(registered))
+			assert.NotContains(t, advertised, uint16(p2p.ErrorChannel),
+				"the error channel carries no peer traffic and must not be advertised")
+			want := make([]uint16, 0, len(registered))
 			for id := range registered {
-				got = append(got, id)
+				if id != p2p.ErrorChannel {
+					want = append(want, uint16(id))
+				}
 			}
-			assert.ElementsMatch(t, want, got,
-				"the transport is created with channels no reactor of a %s node opens", mode)
+			assert.ElementsMatch(t, want, advertised,
+				"a %s node advertises channels that differ from the ones it registers", mode)
 		})
 	}
 }
