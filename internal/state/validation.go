@@ -14,7 +14,10 @@ import (
 //-----------------------------------------------------
 // Validate block
 
-func validateBlock(state State, block *types.Block) error {
+// validateBlock validates block against state. lastCommit carries the caller's
+// proof of block.LastCommit's verification, if it holds one; see
+// verifyLastCommit.
+func validateBlock(state State, block *types.Block, lastCommit types.VerifiedCommit, metrics *Metrics) error {
 	// Validate internal consistency.
 	if err := block.ValidateBasic(); err != nil {
 		return err
@@ -79,14 +82,8 @@ func validateBlock(state State, block *types.Block) error {
 		if len(block.LastCommit.ThresholdBlockSignature) != 0 {
 			return errors.New("initial block can't have ThresholdBlockSignature set")
 		}
-	} else {
-		// fmt.Printf("validating against state with lastBlockId %s lastStateId %s\n", state.LastBlockID.String(),
-		//  state.LastStateID.String())
-		// LastPrecommits.Signatures length is checked in VerifyCommit.
-		if err := state.LastValidators.VerifyCommit(
-			state.ChainID, state.LastBlockID, block.Height-1, block.LastCommit); err != nil {
-			return fmt.Errorf("error validating block: %w", err)
-		}
+	} else if err := verifyLastCommit(state, block, lastCommit, metrics); err != nil {
+		return err
 	}
 
 	// NOTE: We can't actually verify it's the right proposer because we don't
@@ -133,6 +130,25 @@ func validateBlock(state State, block *types.Block) error {
 		return types.NewErrEvidenceOverflow(max, got)
 	}
 
+	return nil
+}
+
+// verifyLastCommit verifies block.LastCommit against state.LastValidators as
+// the commit for state.LastBlockID. lastCommit's proof spares that BLS
+// threshold verification only when it covers exactly this verification — same
+// chain, height, block ID, quorum, threshold key and commit content — and each
+// skip is counted in metrics. Anything else, including a VerifiedCommit without
+// proof that callers holding none pass, is verified in full. block.LastCommit
+// is what is verified; the commit lastCommit holds is never read.
+func verifyLastCommit(state State, block *types.Block, lastCommit types.VerifiedCommit, metrics *Metrics) error {
+	skipped, err := state.LastValidators.VerifyCommitUnlessVerified(
+		state.ChainID, state.LastBlockID, block.Height-1, block.LastCommit, lastCommit)
+	if err != nil {
+		return fmt.Errorf("error validating block: %w", err)
+	}
+	if skipped {
+		metrics.LastCommitVerificationSkipped.Add(1)
+	}
 	return nil
 }
 

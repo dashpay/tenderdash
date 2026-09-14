@@ -70,7 +70,10 @@ func (c *blockExecutor) ensureProcess(ctx context.Context, rs *cstypes.RoundStat
 	crs := rs.CurrentRoundState
 	if crs.Params.Source != sm.ProcessProposalSource || !crs.MatchesBlock(block.Header, round) {
 		c.logger.Trace("CurrentRoundState is outdated, executing ProcessProposal", "crs", crs)
-		uncommittedState, err := c.blockExec.ProcessProposal(ctx, block, round, c.committedState, true)
+		// consensus holds no proof for the block's LastCommit, so it is verified
+		// in full
+		uncommittedState, err := c.blockExec.ProcessProposal(ctx, block, round, c.committedState, true,
+			types.VerifiedCommit{})
 		if err != nil {
 			return fmt.Errorf("ProcessProposal abci method: %w", err)
 		}
@@ -100,12 +103,17 @@ func (c *blockExecutor) finalize(ctx context.Context, stateData *StateData, comm
 		},
 		block,
 		commit,
+		// consensus holds no proof for the block's LastCommit, so it is verified
+		// in full
+		types.VerifiedCommit{},
 	)
 }
 
 func (c *blockExecutor) validate(ctx context.Context, stateData *StateData) error {
-	// Validate the block.
-	err := c.blockExec.ValidateBlockWithRoundState(ctx, stateData.state, stateData.CurrentRoundState, stateData.ProposalBlock)
+	// Validate the block. Consensus holds no proof for its LastCommit, so it is
+	// verified in full.
+	err := c.blockExec.ValidateBlockWithRoundState(ctx, stateData.state, stateData.CurrentRoundState,
+		stateData.ProposalBlock, types.VerifiedCommit{})
 	if err != nil {
 		step := stateData.Step.String()
 		return fmt.Errorf("invalid block %X (step %s): %w", step, stateData.CurrentRoundState.AppHash, err)
