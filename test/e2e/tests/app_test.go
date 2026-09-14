@@ -21,6 +21,7 @@ import (
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
 	"github.com/dashpay/tenderdash/rpc/client/http"
+	e2eapp "github.com/dashpay/tenderdash/test/e2e/app"
 	e2e "github.com/dashpay/tenderdash/test/e2e/pkg"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -30,11 +31,14 @@ const (
 )
 
 // TestApp_ProposeNextBlockImmediately checks that a network whose nodes never
-// create empty blocks on their own still produces them when the application
-// sets ResponseFinalizeBlock.propose_next_block_immediately: without the hint a
-// proposer waits for transactions, so an empty block above the initial height
-// can only come from it. The runner keeps the chain running for several blocks
-// after it stops the load generator, which is where these empty blocks appear.
+// create empty blocks on their own keeps producing blocks when the application
+// sets ResponseFinalizeBlock.propose_next_block_immediately. Without the hint a
+// proposer waits for mempool transactions, so a block above the initial height
+// that carries none can only come from it. The e2e application adds its own
+// extensionSum transaction to every proposal, so "none" means no transaction
+// other than that one. The runner keeps the chain running for several blocks
+// after it stops the load generator, which is where these blocks appear; the
+// test also watches the chain grow while nothing submits transactions.
 func TestApp_ProposeNextBlockImmediately(t *testing.T) {
 	testnet := loadTestnet(t)
 	if testnet.CreateEmptyBlocks || !testnet.ProposeNextBlockImmediately {
@@ -44,19 +48,40 @@ func TestApp_ProposeNextBlockImmediately(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	blocks := fetchBlockChain(ctx, t)
-	require.NotEmpty(t, blocks)
-
-	emptyBlocks := 0
-	for _, block := range blocks {
+	extTxPrefix := []byte(e2eapp.VoteExtensionKey + "=")
+	blocksWithoutMempoolTxs := 0
+	for _, block := range fetchBlockChain(ctx, t) {
 		// The initial height never waits for transactions, so it does not count.
-		if block.Height > testnet.InitialHeight && len(block.Txs) == 0 {
-			emptyBlocks++
+		if block.Height <= testnet.InitialHeight {
+			continue
+		}
+		mempoolTxs := 0
+		for _, tx := range block.Txs {
+			if !bytes.HasPrefix(tx, extTxPrefix) {
+				mempoolTxs++
+			}
+		}
+		if mempoolTxs == 0 {
+			blocksWithoutMempoolTxs++
 		}
 	}
-	require.Greater(t, emptyBlocks, 0,
-		"no empty block above height %d: the propose_next_block_immediately hint did not drive block production",
+	require.Greater(t, blocksWithoutMempoolTxs, 0,
+		"no block above height %d without mempool transactions: the propose_next_block_immediately hint did not drive block production",
 		testnet.InitialHeight)
+
+	// Nothing submits transactions while this test runs, so any growth comes from the hint.
+	archiveNodes := testnet.ArchiveNodes()
+	require.NotEmpty(t, archiveNodes)
+	client, err := archiveNodes[0].Client()
+	require.NoError(t, err)
+	status, err := client.Status(ctx)
+	require.NoError(t, err)
+	startHeight := status.SyncInfo.LatestBlockHeight
+	require.Eventually(t, func() bool {
+		status, err := client.Status(ctx)
+		return err == nil && status.SyncInfo.LatestBlockHeight > startHeight
+	}, 30*time.Second, 500*time.Millisecond,
+		"chain did not grow past height %d without transactions", startHeight)
 }
 
 // Tests that any initial state given in genesis has made it into the app.
