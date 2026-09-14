@@ -813,6 +813,55 @@ func (suite *SynchronizerTestSuite) TestStatusRefreshPreservesPendingRequests() 
 	suite.Require().EqualValues(0, numPending())
 }
 
+func (suite *SynchronizerTestSuite) TestNoBlockResponseRetriesAnotherPeer() {
+	ctx := context.Background()
+	const height = int64(1000)
+	peerID := types.NodeID("snapshot peer")
+	resultCh := make(chan workerpool.Result, 1)
+	wp := workerpool.New(0, workerpool.WithResultCh(resultCh))
+	pool := NewSynchronizer(height, suite.client, nil, WithWorkerPool(wp))
+	pool.AddPeer(newPeerData(peerID, height, 1030))
+	pool.peerStore.Update(peerID, AddNumPending(1))
+	pool.jobProgressCounter.Add(1)
+	resultCh <- errorResult(peerID, height, &client.ErrBlockNotFound{Height: height})
+	suite.Require().NoError(pool.consumeJobResult(ctx))
+	suite.Equal([]int64{height}, pool.jobGen.pushedBack)
+	suite.False(pool.peerStore.HasPeerForHeight(height), "a negative reply invalidates the advertised range")
+
+	pool.AddPeer(newPeerData(peerID, height, 1040))
+	suite.False(pool.peerStore.HasPeerForHeight(height), "status refresh must not erase the negative reply")
+	peer, found := pool.peerStore.Get(peerID)
+	suite.Require().True(found, "a missing block does not warrant disconnecting a peer")
+	suite.Zero(peer.numPending)
+	suite.Zero(peer.numFailures)
+	suite.Zero(pool.jobProgressCounter.Load())
+	suite.True(pool.peerStore.HasPeerForHeight(height + 1))
+
+	otherID := types.NodeID("archive peer")
+	pool.AddPeer(newPeerData(otherID, height, 1030))
+	nextHeight := pool.jobGen.nextHeight()
+	suite.Equal(height, nextHeight)
+	selected, err := pool.jobGen.getPeer(ctx, nextHeight)
+	suite.Require().NoError(err)
+	suite.Equal(otherID, selected.peerID)
+}
+
+func (suite *SynchronizerTestSuite) TestNoBlockResponseForWrongHeightPreservesRange() {
+	peerID := types.NodeID("peer")
+	resultCh := make(chan workerpool.Result, 1)
+	wp := workerpool.New(0, workerpool.WithResultCh(resultCh))
+	pool := NewSynchronizer(1000, suite.client, nil, WithWorkerPool(wp))
+	pool.AddPeer(newPeerData(peerID, 1000, 1030))
+	pool.peerStore.Update(peerID, AddNumPending(1))
+	resultCh <- errorResult(peerID, 1000, &client.ErrBlockNotFound{Height: 1030})
+	suite.Require().NoError(pool.consumeJobResult(context.Background()))
+	suite.True(pool.peerStore.HasPeerForHeight(1000))
+	peer, found := pool.peerStore.Get(peerID)
+	suite.Require().True(found)
+	suite.Zero(peer.numPending)
+	suite.EqualValues(1, peer.numFailures)
+}
+
 // TestStatusRefreshUpdatesAdvertisedRange checks that a status response still does
 // the one thing it is for: moving the range of blocks the peer claims to serve. It
 // is the guard on the tests above, which a synchronizer that ignored status

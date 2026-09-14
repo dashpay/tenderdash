@@ -108,6 +108,39 @@ func (suite *ChannelTestSuite) TestGetBlockFailedSend() {
 	tmrequire.Error(suite.T(), "failed send", err)
 }
 
+func (suite *ChannelTestSuite) TestGetBlockNoBlockResponse() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var reqID string
+	suite.p2pChannel.On("Send", mock.Anything, mock.Anything).Once().Run(func(args mock.Arguments) {
+		reqID = args.Get(1).(p2p.Envelope).Attributes[RequestIDAttribute]
+	}).Return(nil)
+	p, err := suite.client.GetBlock(ctx, suite.height, suite.peerID)
+	suite.Require().NoError(err)
+	out := make(chan p2p.Envelope, 1)
+	out <- p2p.Envelope{
+		From:       suite.peerID,
+		Attributes: map[string]string{ResponseIDAttribute: reqID},
+		Message:    &bcproto.NoBlockResponse{Height: suite.height},
+	}
+	close(out)
+	suite.p2pChannel.On("Receive", ctx).Once().Return(p2p.NewChannelIterator(out))
+	suite.Require().NoError(suite.client.Consume(ctx, ConsumerParams{
+		ReadChannels: []p2p.ChannelID{testChannelID},
+		Handler:      newMockConsumer(suite.T()),
+	}))
+	answered := make(chan error, 1)
+	go func() { _, err := p.Await(); answered <- err }()
+	select {
+	case err := <-answered:
+		var missing *ErrBlockNotFound
+		suite.Require().ErrorAs(err, &missing)
+		suite.Equal(suite.height, missing.Height)
+	case <-time.After(time.Second):
+		suite.FailNow("NoBlockResponse must settle the request without advancing its timeout")
+	}
+}
+
 func (suite *ChannelTestSuite) TestGetBlockTimeout() {
 	ctx := context.Background()
 	var reqID string
@@ -285,6 +318,8 @@ func (suite *ChannelTestSuite) TestLateResponseAfterTimeoutIsNotAnError() {
 	envelope := newEnvelope(uuid.NewString(), suite.peerID, suite.response)
 	envelope.AddAttribute(ResponseIDAttribute, reqID)
 	suite.Require().NoError(suite.client.resolve(ctx, envelope))
+	envelope.Message = &bcproto.NoBlockResponse{Height: suite.height}
+	suite.Require().NoError(suite.client.resolve(ctx, envelope))
 }
 
 // Silencing late responses must not silence fabricated ones: a response quoting
@@ -297,6 +332,8 @@ func (suite *ChannelTestSuite) TestUnsolicitedResponseIDIsAnError() {
 	err := suite.client.resolve(ctx, envelope)
 	suite.Require().Error(err)
 	suite.Require().Contains(err.Error(), neverIssued)
+	envelope.Message = &bcproto.NoBlockResponse{Height: suite.height}
+	suite.Require().Error(suite.client.resolve(ctx, envelope))
 }
 
 // Retention has to track how many requests are in flight, not how many have ever

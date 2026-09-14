@@ -144,10 +144,6 @@ func (h *blockP2PMessageHandler) Handle(ctx context.Context, p2pClient *client.C
 			return nil
 		}
 		h.peerAdder.AddPeer(newPeerData(envelope.From, msg.Base, msg.Height))
-	case *bcproto.NoBlockResponse:
-		h.logger.Debug("peer does not have the requested block",
-			"peer", envelope.From,
-			"height", msg.Height)
 	default:
 		return fmt.Errorf("received unknown message: %T", msg)
 	}
