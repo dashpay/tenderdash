@@ -543,6 +543,12 @@ from this condition, but not sure), and _p_ receives a Precommit message for rou
       blocks then this data is permanently lost, and no new nodes will be able to join the network and
       bootstrap. Historical blocks may also be required for other purposes, e.g. auditing, replay of
       non-persisted heights, light client verification, and so on.
+    * Set `ResponseFinalizeBlock.propose_next_block_immediately` when the Application has block-driven
+      work pending that the next block would carry out, for example withdrawal transactions waiting to be
+      signed. The node then does not wait for transactions (`create-empty-blocks-interval`) before
+      proposing round 0 of the next height. This is a hint to the local node, not part of consensus: it is
+      not compared between validators, it only matters on the node that proposes the next height, and it
+      is consumed once; a node that restarts in between falls back to the configured wait.
     * Just as `ProcessProposal`, the implementation of `FinalizeBlock` MUST be deterministic, since it is
       making the Application's state evolve in the context of state machine replication.
     * Currently, Tendermint will fill up all fields in `RequestFinalizeBlock`, even if they were

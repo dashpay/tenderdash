@@ -913,6 +913,7 @@ nondeterministic
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | retain_height | [int64](#int64) |  | Blocks below this height may be removed. Defaults to `0` (retain all). |
+| propose_next_block_immediately | [bool](#bool) |  | When `true`, this node does not wait for transactions (`create-empty-blocks-interval`) before proposing round 0 of the next height: the application has block-driven work pending, for example withdrawal transactions to sign. A hint for the local node only, consumed once; a node that restarts in between falls back to the configured wait. Defaults to `false`. |
 
 
 

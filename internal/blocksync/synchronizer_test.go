@@ -213,7 +213,7 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResult() {
 				suite.blockExec.
 					On("FinalizeBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, respH1.Block, respH1.Commit, mock.Anything).
 					Once().
-					Return(sm.State{}, nil)
+					Return(sm.State{}, nil, nil)
 			},
 		},
 		{
@@ -1839,5 +1839,5 @@ func expectApply(exec *mocks.Executor, expect func(*mock.Call)) {
 		On("FinalizeBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(func(_ context.Context, state sm.State, _ sm.CurrentRoundState, _ types.BlockID, _ *types.Block, _ *types.Commit, _ types.VerifiedCommit) sm.State {
 			return state
-		}, nil))
+		}, nil, nil))
 }

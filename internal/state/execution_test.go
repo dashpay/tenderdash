@@ -599,6 +599,71 @@ func TestUpdateValidators(t *testing.T) {
 	}
 }
 
+// TestFinalizeBlockReturnsProposeNextBlockImmediately ensures the application's
+// propose_next_block_immediately hint is handed back to the caller of FinalizeBlock.
+func TestFinalizeBlockReturnsProposeNextBlockImmediately(t *testing.T) {
+	for _, hint := range []bool{false, true} {
+		t.Run(fmt.Sprintf("hint=%v", hint), func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			app := &testApp{ProposeNextBlockImmediately: hint}
+			logger := log.NewNopLogger()
+			cc := abciclient.NewLocalClient(logger, app)
+			proxyApp := proxy.New(cc, logger, proxy.NopMetrics())
+			require.NoError(t, proxyApp.Start(ctx))
+
+			state, stateDB, _ := makeState(t, 1, 1)
+			stateStore := sm.NewStore(stateDB)
+			blockStore := store.NewBlockStore(dbm.NewMemDB())
+			nodeProTxHash := state.Validators.Validators[0].ProTxHash
+			ctx = dash.ContextWithProTxHash(ctx, nodeProTxHash)
+
+			mp := &mpmocks.Mempool{}
+			mp.On("Lock").Return()
+			mp.On("Unlock").Return()
+			mp.On("FlushAppConn", mock.Anything).Return(nil)
+			mp.On("Update",
+				mock.Anything,
+				mock.Anything,
+				mock.Anything,
+				mock.Anything,
+				mock.Anything,
+				mock.Anything,
+				mock.Anything).Return(nil)
+			mp.On("ReapMaxBytesMaxGas", mock.Anything, mock.Anything).Return(types.Txs{})
+
+			eventBus := eventbus.NewDefault(logger)
+			require.NoError(t, eventBus.Start(ctx))
+
+			blockExec := sm.NewBlockExecutor(
+				stateStore,
+				proxyApp,
+				mp,
+				sm.EmptyEvidencePool{},
+				blockStore,
+				eventBus,
+			)
+
+			block, uncommittedState, err := blockExec.CreateProposalBlock(
+				ctx,
+				1,
+				0,
+				state,
+				types.NewCommit(state.LastBlockHeight, 0, state.LastBlockID, nil, nil),
+				nodeProTxHash,
+				1,
+			)
+			require.NoError(t, err)
+
+			_, resp, err := blockExec.FinalizeBlock(ctx, state, uncommittedState, block.BlockID(nil), block, new(types.Commit), types.VerifiedCommit{})
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+			assert.Equal(t, hint, resp.ProposeNextBlockImmediately)
+		})
+	}
+}
+
 // TestFinalizeBlockValidatorUpdates ensures we update validator set and send an event.
 func TestFinalizeBlockValidatorUpdates(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -688,7 +753,7 @@ func TestFinalizeBlockValidatorUpdates(t *testing.T) {
 	require.NoError(t, err)
 	blockID := block.BlockID(nil)
 	require.NoError(t, err)
-	state, err = blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, new(types.Commit), types.VerifiedCommit{})
+	state, _, err = blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, new(types.Commit), types.VerifiedCommit{})
 	require.NoError(t, err)
 
 	require.Nil(t, err)

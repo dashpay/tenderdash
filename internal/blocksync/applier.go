@@ -111,7 +111,8 @@ func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *ty
 	saveTime := e.observeSince("save", start)
 
 	start = time.Now()
-	e.state, err = e.blockExec.FinalizeBlock(ctx, e.state, uncommittedState, blockID, block, commit, e.lastCommit)
+	// Block sync never proposes, so the response hints are not needed here.
+	e.state, _, err = e.blockExec.FinalizeBlock(ctx, e.state, uncommittedState, blockID, block, commit, e.lastCommit)
 	if err != nil {
 		panic(fmt.Sprintf("failed to finalize committed block (%d:%X): %v", block.Height, block.Hash(), err))
 	}

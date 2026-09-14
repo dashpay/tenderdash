@@ -320,6 +320,7 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockSto
 	s.CommitRound = -1
 	s.LastValidators = state.LastValidators
 	s.TriggeredTimeoutPrecommit = false
+	s.ProposeNextBlockImmediately = false
 
 	s.state = state
 

@@ -109,6 +109,12 @@ type RoundState struct {
 	LastValidators            *types.ValidatorSet `json:"last_validators"`
 	TriggeredTimeoutPrecommit bool                `json:"triggered_timeout_precommit"`
 
+	// ProposeNextBlockImmediately carries ResponseFinalizeBlock.propose_next_block_immediately
+	// from the previous height: round 0 of this height does not wait for
+	// transactions (create-empty-blocks-interval) before the propose step.
+	// Consumed once and not persisted, so a restart falls back to the configured wait.
+	ProposeNextBlockImmediately bool `json:"propose_next_block_immediately"`
+
 	sm.CurrentRoundState `json:"uncommitted_state"`
 }
 

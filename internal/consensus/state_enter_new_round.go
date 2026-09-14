@@ -99,9 +99,14 @@ func (c *EnterNewRoundAction) Execute(ctx context.Context, stateEvent StateEvent
 		c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
 		c.eventPublisher.PublishValidBlockEvent(stateData.RoundState)
 	}
-	// Wait for txs to be available in the mempool
-	// before we enterPropose in round 0. If the last block changed the app hash,
+	// Wait for txs to be available in the mempool before we enterPropose in
+	// round 0, unless the application asked for this block right away when it
+	// finalized the previous one (ResponseFinalizeBlock.propose_next_block_immediately).
 	waitForTxs := c.config.WaitForTxs() && round == 0 && stateData.state.InitialHeight != stateData.Height
+	if waitForTxs && stateData.ProposeNextBlockImmediately {
+		logger.Debug("not waiting for transactions: the application requested this block immediately")
+		waitForTxs = false
+	}
 	if waitForTxs {
 		if c.config.CreateEmptyBlocksInterval > 0 {
 			c.scheduler.ScheduleTimeout(c.config.CreateEmptyBlocksInterval, height, round, cstypes.RoundStepNewRound)
