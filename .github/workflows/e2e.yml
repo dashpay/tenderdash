@@ -23,10 +23,6 @@ jobs:
       CGO_LDFLAGS: "-L/usr/local/lib -ldashbls -lrelic_s -lmimalloc-secure -lgmp"
       CGO_CXXFLAGS: "-I/usr/local/include"
     steps:
-      - uses: actions/setup-go@v7.0.0
-        with:
-          go-version: "1.27.1"
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4.3.0
 
@@ -41,6 +37,23 @@ jobs:
           FILES: |
             go.mod
             go.sum
+
+      # Runs after checkout: the Go module/build cache key is hashed from
+      # repository files, so an earlier setup-go never restores the cache.
+      - uses: actions/setup-go@v7.0.0
+        if: "github.event_name != 'pull_request' || env.GIT_DIFF != ''"
+        with:
+          go-version: "1.27.1"
+          # A dedicated key: the default one (a hash of go.mod) is shared with
+          # tests.yml and lint.yml, whose caches hold -race and lint artifacts
+          # this job does not build. BLS headers are part of the key because
+          # the Go build cache does not track cgo's C dependencies.
+          cache-dependency-path: |
+            go.sum
+            test/e2e/Makefile
+            third_party/bls-signatures/src/include/**
+            third_party/bls-signatures/src/depends/relic/include/**
+            third_party/bls-signatures/src/depends/mimalloc/include/**
 
       - uses: ./.github/actions/bls
         name: Install BLS library
@@ -61,7 +74,10 @@ jobs:
           load: true
           tags: tenderdash/e2e-node
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Both legs read the cache; only the shorter dashcore leg exports it,
+          # keeping the export off the critical rotate leg. An empty value
+          # disables the export.
+          cache-to: ${{ matrix.testnet == 'dashcore' && 'type=gha,mode=max' || '' }}
         if: "github.event_name != 'pull_request' || env.GIT_DIFF != ''"
 
       - name: Run CI ${{ matrix.testnet }} testnet

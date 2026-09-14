@@ -12,6 +12,7 @@ import (
 	"time"
 
 	db "github.com/cometbft/cometbft-db"
+	sync "github.com/sasha-s/go-deadlock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -161,6 +162,9 @@ func TestApp_Tx(t *testing.T) {
 	}
 
 	r := rand.New(rand.NewSource(randomSeed))
+	// rMtx guards r: testNode runs node subtests in parallel, and *rand.Rand is
+	// not safe for concurrent use.
+	var rMtx sync.Mutex
 	for idx, test := range testCases {
 		if test.ShouldSkip {
 			continue
@@ -172,7 +176,9 @@ func TestApp_Tx(t *testing.T) {
 				require.NoError(t, err)
 
 				key := fmt.Sprintf("testapp-tx-%v", node.Name)
+				rMtx.Lock()
 				value := tmrand.StrFromSource(r, 32)
+				rMtx.Unlock()
 				tx := types.Tx(fmt.Sprintf("%v=%v", key, value))
 
 				err = test.BroadcastTx(client)(ctx, tx)
