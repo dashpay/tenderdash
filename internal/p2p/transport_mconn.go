@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"net"
+	"slices"
 	"strconv"
 	"time"
 
@@ -191,7 +192,10 @@ func (m *MConnTransport) Dial(ctx context.Context, endpoint *Endpoint) (Connecti
 		return nil, err
 	}
 
-	return newMConnConnection(m.logger, tcpConn, m.mConnConfig, m.channelDescs), nil
+	m.mtx.Lock()
+	chDescs := m.channelDescs
+	m.mtx.Unlock()
+	return newMConnConnection(m.logger, tcpConn, m.mConnConfig, chDescs), nil
 }
 
 // Close implements Transport.
@@ -213,10 +217,31 @@ func (m *MConnTransport) Close() error {
 // descriptors should be managed by the router. The underlying transport and
 // connections should be agnostic to everything but the channel ID's which are
 // initialized in the handshake.
+//
+// A descriptor whose channel ID is already registered is skipped, so channels
+// registered up front (see NewMConnTransport) are not duplicated when the
+// router opens them. The slice is replaced rather than appended to in place:
+// connections created earlier keep the snapshot they were built from.
 func (m *MConnTransport) AddChannelDescriptors(channelDesc []*ChannelDescriptor) {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
-	m.channelDescs = append(m.channelDescs, channelDesc...)
+	descs := make([]*ChannelDescriptor, len(m.channelDescs), len(m.channelDescs)+len(channelDesc))
+	copy(descs, m.channelDescs)
+	for _, desc := range channelDesc {
+		if slices.ContainsFunc(descs, func(d *ChannelDescriptor) bool { return d.ID == desc.ID }) {
+			continue
+		}
+		// Every channel a node opens should be registered before the transport
+		// starts connecting, because connections already established were built
+		// without this one and drop any peer that speaks on it. Reaching here
+		// is a gap in that up-front list, not a peer's fault - and it is
+		// otherwise invisible, since opening the channel still succeeds.
+		m.logger.Warn("channel registered after the transport was created; "+
+			"peers speaking on it over an existing connection will be dropped",
+			"channel", desc.ID, "name", desc.Name)
+		descs = append(descs, desc)
+	}
+	m.channelDescs = descs
 }
 
 // validateEndpoint validates an endpoint.

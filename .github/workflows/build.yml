@@ -2,6 +2,10 @@ name: Build
 # Tests runs different tests (test_abci_apps, test_abci_cli, test_apps)
 # This workflow runs on every push to master or release branch and  every pull requests
 # All jobs will pass without running if no *{.go, .mod, .sum} files have been modified
+#
+# actions/setup-go runs after checkout: its Go module/build cache is keyed on
+# cache-dependency-path files, which must exist when it runs. Listing this
+# workflow file gives it a cache key distinct from other workflows' caches.
 on:
   pull_request:
   push:
@@ -21,9 +25,6 @@ jobs:
         goos: ["linux"]
     timeout-minutes: 55
     steps:
-      - uses: actions/setup-go@v7.0.0
-        with:
-          go-version: "1.27.1"
       - uses: actions/checkout@v7
       - uses: technote-space/get-diff-action@v6
         with:
@@ -33,6 +34,13 @@ jobs:
             go.mod
             go.sum
             Makefile
+      - uses: actions/setup-go@v7.0.0
+        if: "env.GIT_DIFF != ''"
+        with:
+          go-version: "1.27.1"
+          cache-dependency-path: |
+            go.sum
+            .github/workflows/build.yml
       - uses: ./.github/actions/bls
         name: Install BLS library
         if: "env.GIT_DIFF != ''"
@@ -52,9 +60,6 @@ jobs:
     needs: build
     timeout-minutes: 5
     steps:
-      - uses: actions/setup-go@v7.0.0
-        with:
-          go-version: "1.27.1"
       - uses: actions/checkout@v7
       - uses: technote-space/get-diff-action@v6
         with:
@@ -62,6 +67,13 @@ jobs:
             **/**.go
             go.mod
             go.sum
+      - uses: actions/setup-go@v7.0.0
+        if: "env.GIT_DIFF != ''"
+        with:
+          go-version: "1.27.1"
+          cache-dependency-path: |
+            go.sum
+            .github/workflows/build.yml
       - name: Install BLS library
         uses: ./.github/actions/bls
         if: "env.GIT_DIFF != ''"
@@ -77,9 +89,6 @@ jobs:
     needs: build
     timeout-minutes: 5
     steps:
-      - uses: actions/setup-go@v7.0.0
-        with:
-          go-version: "1.27.1"
       - uses: actions/checkout@v7
       - uses: technote-space/get-diff-action@v6
         with:
@@ -87,6 +96,13 @@ jobs:
             **/**.go
             go.mod
             go.sum
+      - uses: actions/setup-go@v7.0.0
+        if: "env.GIT_DIFF != ''"
+        with:
+          go-version: "1.27.1"
+          cache-dependency-path: |
+            go.sum
+            .github/workflows/build.yml
       - uses: ./.github/actions/bls
         name: Install BLS library
         if: "env.GIT_DIFF != ''"

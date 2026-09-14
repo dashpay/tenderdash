@@ -1,9 +1,11 @@
 package node
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -29,7 +31,6 @@ import (
 	"github.com/dashpay/tenderdash/internal/p2p/pex"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/state/indexer"
-	"github.com/dashpay/tenderdash/internal/statesync"
 	"github.com/dashpay/tenderdash/internal/store"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmnet "github.com/dashpay/tenderdash/libs/net"
@@ -304,6 +305,47 @@ func createPeerManager(
 	return peerManager, closer, nil
 }
 
+// channelDescriptors lists every channel the node's reactors open, so the
+// transport can create each connection with all of them. Reactors open their
+// channels only after the router has started accepting and dialing peers; a
+// connection created before a channel was registered would treat a peer that
+// speaks on it early (e.g. a seed answering on the PEX channel) as a protocol
+// violation and drop the peer with "unknown channel". Registered up front, the
+// router merely drops messages for a channel no reactor has opened yet.
+func channelDescriptors(cfg *config.Config) []*p2p.ChannelDescriptor {
+	descs := []*p2p.ChannelDescriptor{pex.ChannelDescriptor()}
+	if cfg.Mode != config.ModeSeed {
+		descs = append(descs, evidence.GetChannelDescriptor())
+		// p2p.ChannelDescriptors already merges the consensus and state sync
+		// sets, so it is the only p2p set to pull in: adding either of them
+		// again would hand the transport two descriptors per channel ID.
+		for _, desc := range p2p.ChannelDescriptors(cfg) {
+			descs = append(descs, desc)
+		}
+	}
+	slices.SortFunc(descs, func(a, b *p2p.ChannelDescriptor) int { return cmp.Compare(a.ID, b.ID) })
+	return descs
+}
+
+// advertisedChannels lists the channels a node reports to its peers in
+// NodeInfo, derived from channelDescriptors so the two cannot drift apart.
+//
+// p2p.ErrorChannel is deliberately left out: nothing is ever sent to a peer on
+// it. It exists so that Channel.SendError can hand a p2p.PeerError to the
+// router, which consumes it locally and evicts the peer, so a peer has no use
+// for knowing about it.
+func advertisedChannels(cfg *config.Config) []uint16 {
+	descs := channelDescriptors(cfg)
+	ids := make([]uint16, 0, len(descs))
+	for _, desc := range descs {
+		if desc.ID == p2p.ErrorChannel {
+			continue
+		}
+		ids = append(ids, uint16(desc.ID))
+	}
+	return ids
+}
+
 func createRouter(
 	logger log.Logger,
 	p2pMetrics *p2p.Metrics,
@@ -322,7 +364,7 @@ func createRouter(
 	transportConf.RecvRate = cfg.P2P.RecvRate
 	transportConf.MaxPacketMsgPayloadSize = cfg.P2P.MaxPacketMsgPayloadSize
 	transport := p2p.NewMConnTransport(
-		p2pLogger, transportConf, []*p2p.ChannelDescriptor{},
+		p2pLogger, transportConf, channelDescriptors(cfg),
 		p2p.MConnTransportOptions{
 			MaxAcceptedConnections: uint32(cfg.P2P.MaxConnections),
 		},
@@ -371,24 +413,11 @@ func makeNodeInfo(
 			Block: versionInfo.Block,
 			App:   versionInfo.App,
 		},
-		NodeID:  nodeKey.ID,
-		Network: genDoc.ChainID,
-		Version: version.TMCoreSemVer,
-		Channels: tmsync.NewConcurrentSlice(
-			uint16(p2p.BlockSyncChannel),
-			uint16(p2p.ConsensusStateChannel),
-			uint16(p2p.ConsensusDataChannel),
-			uint16(p2p.ConsensusVoteChannel),
-			uint16(p2p.VoteSetBitsChannel),
-			uint16(p2p.MempoolChannel),
-			uint16(evidence.EvidenceChannel),
-			uint16(statesync.SnapshotChannel),
-			uint16(statesync.ChunkChannel),
-			uint16(statesync.LightBlockChannel),
-			uint16(statesync.ParamsChannel),
-			uint16(pex.PexChannel),
-		),
-		Moniker: cfg.Moniker,
+		NodeID:   nodeKey.ID,
+		Network:  genDoc.ChainID,
+		Version:  version.TMCoreSemVer,
+		Channels: tmsync.NewConcurrentSlice(advertisedChannels(cfg)...),
+		Moniker:  cfg.Moniker,
 		Other: types.NodeInfoOther{
 			TxIndex:    txIndexerStatus,
 			RPCAddress: cfg.RPC.ListenAddress,
@@ -404,6 +433,9 @@ func makeNodeInfo(
 	return nodeInfo, nodeInfo.Validate()
 }
 
+// makeSeedNodeInfo builds the NodeInfo of a seed node. It must be called with
+// the seed's own config, as makeSeedNode does: the advertised channels are
+// derived from it, and a seed runs the PEX reactor only.
 func makeSeedNodeInfo(
 	cfg *config.Config,
 	nodeKey types.NodeKey,
@@ -419,7 +451,7 @@ func makeSeedNodeInfo(
 		NodeID:   nodeKey.ID,
 		Network:  genDoc.ChainID,
 		Version:  version.TMCoreSemVer,
-		Channels: tmsync.NewConcurrentSlice[uint16](pex.PexChannel),
+		Channels: tmsync.NewConcurrentSlice(advertisedChannels(cfg)...),
 		Moniker:  cfg.Moniker,
 		Other: types.NodeInfoOther{
 			TxIndex:    "off",
