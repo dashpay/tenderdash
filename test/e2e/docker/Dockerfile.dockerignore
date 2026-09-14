@@ -1,0 +1,16 @@
+# BuildKit uses this file instead of the root .dockerignore when building
+# test/e2e/docker/Dockerfile. Keep the shared entries in sync with the root
+# .dockerignore.
+build
+test/e2e/build
+test/e2e/networks
+test/logs
+test/p2p/data
+third_party/bls-signatures/build
+*.log
+
+# E2E-only: the node build does not use git metadata, and the per-checkout
+# .git contents would otherwise invalidate the `COPY . .` layer cache. Not in
+# the root .dockerignore: DOCKER/Dockerfile stamps the release version via
+# `git describe` in the Makefile.
+.git
