@@ -713,6 +713,8 @@ func (r *Router) handshakePeer(
 // they are closed elsewhere it will cause this method to shut down and return.
 func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connection, channels ChannelIDSet) {
 	r.metrics.PeersConnected.Add(1)
+	// Subscribers may send as soon as Ready publishes PeerStatusUp.
+	sendQueue := r.getOrMakeQueue(peerID, channels)
 	// The generation minted for this connection is captured here, once, and
 	// stamped on every envelope it delivers, so an envelope carries the identity
 	// of the connection that produced it even after a reconnect under the same
@@ -724,7 +726,6 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 	ioCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	sendQueue := r.getOrMakeQueue(peerID, channels)
 	defer func() {
 		r.peerMtx.Lock()
 		delete(r.peerQueues, peerID)
