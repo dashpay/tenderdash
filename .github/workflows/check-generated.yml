@@ -30,6 +30,7 @@ jobs:
           # PATTERNS (minimatch globs) to re-run the check when it changes.
           PATTERNS: |
             **/*.go
+            .mockery.yaml
             .github/workflows/check-generated.yml
 
       - uses: actions/setup-go@v7.0.0
@@ -69,6 +70,10 @@ jobs:
         with:
           PATTERNS: |
             **/*.proto
+            buf.yaml
+            buf.gen.yaml
+            buf.lock
+            .github/workflows/check-generated.yml
 
       - uses: actions/setup-go@v7.0.0
         if: env.GIT_DIFF
