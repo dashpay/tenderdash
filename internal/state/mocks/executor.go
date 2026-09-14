@@ -7,7 +7,7 @@ package mocks
 import (
 	"context"
 
-	abcitypes "github.com/dashpay/tenderdash/abci/types"
+	types0 "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/types"
 	mock "github.com/stretchr/testify/mock"
@@ -281,7 +281,7 @@ func (_c *Executor_ExtendVote_Call) RunAndReturn(run func(ctx context.Context, v
 }
 
 // FinalizeBlock provides a mock function for the type Executor
-func (_mock *Executor) FinalizeBlock(ctx context.Context, state1 state.State, uncommittedState state.CurrentRoundState, blockID types.BlockID, block *types.Block, commit *types.Commit, lastCommit types.VerifiedCommit) (state.State, *abcitypes.ResponseFinalizeBlock, error) {
+func (_mock *Executor) FinalizeBlock(ctx context.Context, state1 state.State, uncommittedState state.CurrentRoundState, blockID types.BlockID, block *types.Block, commit *types.Commit, lastCommit types.VerifiedCommit) (state.State, *types0.ResponseFinalizeBlock, error) {
 	ret := _mock.Called(ctx, state1, uncommittedState, blockID, block, commit, lastCommit)
 
 	if len(ret) == 0 {
@@ -289,9 +289,9 @@ func (_mock *Executor) FinalizeBlock(ctx context.Context, state1 state.State, un
 	}
 
 	var r0 state.State
-	var r1 *abcitypes.ResponseFinalizeBlock
+	var r1 *types0.ResponseFinalizeBlock
 	var r2 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, state.State, state.CurrentRoundState, types.BlockID, *types.Block, *types.Commit, types.VerifiedCommit) (state.State, *abcitypes.ResponseFinalizeBlock, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, state.State, state.CurrentRoundState, types.BlockID, *types.Block, *types.Commit, types.VerifiedCommit) (state.State, *types0.ResponseFinalizeBlock, error)); ok {
 		return returnFunc(ctx, state1, uncommittedState, blockID, block, commit, lastCommit)
 	}
 	if returnFunc, ok := ret.Get(0).(func(context.Context, state.State, state.CurrentRoundState, types.BlockID, *types.Block, *types.Commit, types.VerifiedCommit) state.State); ok {
@@ -299,11 +299,11 @@ func (_mock *Executor) FinalizeBlock(ctx context.Context, state1 state.State, un
 	} else {
 		r0 = ret.Get(0).(state.State)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, state.State, state.CurrentRoundState, types.BlockID, *types.Block, *types.Commit, types.VerifiedCommit) *abcitypes.ResponseFinalizeBlock); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, state.State, state.CurrentRoundState, types.BlockID, *types.Block, *types.Commit, types.VerifiedCommit) *types0.ResponseFinalizeBlock); ok {
 		r1 = returnFunc(ctx, state1, uncommittedState, blockID, block, commit, lastCommit)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*abcitypes.ResponseFinalizeBlock)
+			r1 = ret.Get(1).(*types0.ResponseFinalizeBlock)
 		}
 	}
 	if returnFunc, ok := ret.Get(2).(func(context.Context, state.State, state.CurrentRoundState, types.BlockID, *types.Block, *types.Commit, types.VerifiedCommit) error); ok {
@@ -374,12 +374,12 @@ func (_c *Executor_FinalizeBlock_Call) Run(run func(ctx context.Context, state1 
 	return _c
 }
 
-func (_c *Executor_FinalizeBlock_Call) Return(state11 state.State, responseFinalizeBlock *abcitypes.ResponseFinalizeBlock, err error) *Executor_FinalizeBlock_Call {
+func (_c *Executor_FinalizeBlock_Call) Return(state11 state.State, responseFinalizeBlock *types0.ResponseFinalizeBlock, err error) *Executor_FinalizeBlock_Call {
 	_c.Call.Return(state11, responseFinalizeBlock, err)
 	return _c
 }
 
-func (_c *Executor_FinalizeBlock_Call) RunAndReturn(run func(ctx context.Context, state1 state.State, uncommittedState state.CurrentRoundState, blockID types.BlockID, block *types.Block, commit *types.Commit, lastCommit types.VerifiedCommit) (state.State, *abcitypes.ResponseFinalizeBlock, error)) *Executor_FinalizeBlock_Call {
+func (_c *Executor_FinalizeBlock_Call) RunAndReturn(run func(ctx context.Context, state1 state.State, uncommittedState state.CurrentRoundState, blockID types.BlockID, block *types.Block, commit *types.Commit, lastCommit types.VerifiedCommit) (state.State, *types0.ResponseFinalizeBlock, error)) *Executor_FinalizeBlock_Call {
 	_c.Call.Return(run)
 	return _c
 }
