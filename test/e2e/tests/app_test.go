@@ -29,6 +29,36 @@ const (
 	randomSeed = 4827085738
 )
 
+// TestApp_ProposeNextBlockImmediately checks that a network whose nodes never
+// create empty blocks on their own still produces them when the application
+// sets ResponseFinalizeBlock.propose_next_block_immediately: without the hint a
+// proposer waits for transactions, so an empty block above the initial height
+// can only come from it. The runner keeps the chain running for several blocks
+// after it stops the load generator, which is where these empty blocks appear.
+func TestApp_ProposeNextBlockImmediately(t *testing.T) {
+	testnet := loadTestnet(t)
+	if testnet.CreateEmptyBlocks || !testnet.ProposeNextBlockImmediately {
+		t.Skip("testnet does not combine create_empty_blocks = false with propose_next_block_immediately")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	blocks := fetchBlockChain(ctx, t)
+	require.NotEmpty(t, blocks)
+
+	emptyBlocks := 0
+	for _, block := range blocks {
+		// The initial height never waits for transactions, so it does not count.
+		if block.Height > testnet.InitialHeight && len(block.Txs) == 0 {
+			emptyBlocks++
+		}
+	}
+	require.Greater(t, emptyBlocks, 0,
+		"no empty block above height %d: the propose_next_block_immediately hint did not drive block production",
+		testnet.InitialHeight)
+}
+
 // Tests that any initial state given in genesis has made it into the app.
 func TestApp_InitialState(t *testing.T) {
 	testNode(t, func(ctx context.Context, t *testing.T, node e2e.Node) {

@@ -269,6 +269,24 @@ func TestValUpdates(t *testing.T) {
 	require.Equal(t, fullVals.QuorumHash, resp.ValidatorSetUpdate.QuorumHash)
 }
 
+// TestProposeNextBlockImmediately checks that the config option is passed through to
+// every FinalizeBlock response.
+func TestProposeNextBlockImmediately(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("enabled=%v", enabled), func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			cfg := DefaultConfig(t.TempDir())
+			cfg.ProposeNextBlockImmediately = enabled
+			app := newKvApp(ctx, t, 1, WithConfig(cfg))
+
+			_, resp := makeApplyBlock(ctx, t, app, 1, []byte("key=value"))
+			assert.Equal(t, enabled, resp.ProposeNextBlockImmediately)
+		})
+	}
+}
+
 func makeApplyBlock(
 	ctx context.Context,
 	t *testing.T,

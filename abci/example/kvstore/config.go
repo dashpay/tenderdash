@@ -64,6 +64,11 @@ type Config struct {
 	VoteExtensionDelayMS   uint64 `toml:"vote_extension_delay_ms"`
 	FinalizeBlockDelayMS   uint64 `toml:"finalize_block_delay_ms"`
 
+	// ProposeNextBlockImmediately makes every FinalizeBlock response ask Tenderdash
+	// to propose the next height without waiting for transactions
+	// (ResponseFinalizeBlock.propose_next_block_immediately).
+	ProposeNextBlockImmediately bool `toml:"propose_next_block_immediately"`
+
 	// dash parameters
 	ThesholdPublicKeyUpdate  map[string]string `toml:"threshold_public_key_update"`
 	QuorumHashUpdate         map[string]string `toml:"quorum_hash_update"`

@@ -222,6 +222,7 @@ func MakeConfig(node *e2e.Node) (*config.Config, error) {
 	}
 
 	cfg.Mempool.TxEnqueueTimeout = 10 * time.Millisecond
+	cfg.Consensus.CreateEmptyBlocks = node.Testnet.CreateEmptyBlocks
 
 	cfg.RPC.ListenAddress = "tcp://0.0.0.0:26657"
 	cfg.RPC.PprofListenAddress = ":6060"
@@ -352,6 +353,8 @@ func MakeAppConfig(node *e2e.Node) ([]byte, error) {
 		"check_tx_delay_ms":         node.Testnet.CheckTxDelayMS,
 		"vote_extension_delay_ms":   node.Testnet.VoteExtensionDelayMS,
 		"finalize_block_delay_ms":   node.Testnet.FinalizeBlockDelayMS,
+
+		"propose_next_block_immediately": node.Testnet.ProposeNextBlockImmediately,
 	}
 
 	switch node.Testnet.ABCIProtocol {

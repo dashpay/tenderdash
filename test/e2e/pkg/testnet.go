@@ -94,6 +94,11 @@ type Testnet struct {
 	FinalizeBlockDelayMS   int
 	MaxBlockSize           int64
 	MaxEvidenceSize        int64
+	// CreateEmptyBlocks is the consensus create-empty-blocks option of every node.
+	CreateEmptyBlocks bool
+	// ProposeNextBlockImmediately makes the application ask for the next height in
+	// every FinalizeBlock response.
+	ProposeNextBlockImmediately bool
 
 	// Tenderdash-specific fields
 	GenesisCoreHeight         uint32 // InitialCoreHeight is a core height put into genesis file
@@ -192,42 +197,47 @@ func LoadTestnet(file string) (*Testnet, error) {
 	quorumHash := quorumHashGen.generate()
 
 	testnet := &Testnet{
-		Name:                      filepath.Base(dir),
-		File:                      file,
-		Dir:                       dir,
-		IP:                        ipGen.Network(),
-		InitialHeight:             1,
-		GenesisCoreHeight:         1,
-		InitAppCoreHeight:         0,
-		InitialState:              manifest.InitialState,
-		Validators:                ValidatorsMap{},
-		ValidatorUpdates:          map[int64]ValidatorsMap{},
-		ChainLockUpdates:          map[int64]int64{},
-		Nodes:                     []*Node{},
-		Evidence:                  manifest.Evidence,
-		EvidenceAgeHeight:         EvidenceAgeHeight,
-		EvidenceAgeTime:           EvidenceAgeTime,
-		KeyType:                   bls12381.KeyType,
-		LogLevel:                  manifest.LogLevel,
-		TxSize:                    manifest.TxSize,
-		ABCIProtocol:              Protocol(manifest.ABCIProtocol),
-		PrepareProposalDelayMS:    int(manifest.PrepareProposalDelayMS), //#nosec G115
-		ProcessProposalDelayMS:    int(manifest.ProcessProposalDelayMS), //#nosec G115
-		CheckTxDelayMS:            int(manifest.CheckTxDelayMS),         //#nosec G115
-		VoteExtensionDelayMS:      int(manifest.VoteExtensionDelayMS),   //#nosec G115
-		FinalizeBlockDelayMS:      int(manifest.FinalizeBlockDelayMS),   //#nosec G115
-		MaxBlockSize:              int64(manifest.MaxBlockSize),         //#nosec G115
-		MaxEvidenceSize:           int64(manifest.MaxEvidenceSize),      //#nosec G115
-		ThresholdPublicKey:        ld.ThresholdPubKey,
-		ThresholdPublicKeyUpdates: map[int64]crypto.PubKey{},
-		QuorumType:                btcjson.LLMQType(quorumType),
-		VotingPowerThreshold:      manifest.VotingPowerThreshold,
-		QuorumHash:                quorumHash,
-		QuorumHashUpdates:         map[int64]crypto.QuorumHash{},
-		ConsensusVersionUpdates:   map[int64]int32{},
+		Name:                        filepath.Base(dir),
+		File:                        file,
+		Dir:                         dir,
+		IP:                          ipGen.Network(),
+		InitialHeight:               1,
+		GenesisCoreHeight:           1,
+		InitAppCoreHeight:           0,
+		InitialState:                manifest.InitialState,
+		Validators:                  ValidatorsMap{},
+		ValidatorUpdates:            map[int64]ValidatorsMap{},
+		ChainLockUpdates:            map[int64]int64{},
+		Nodes:                       []*Node{},
+		Evidence:                    manifest.Evidence,
+		EvidenceAgeHeight:           EvidenceAgeHeight,
+		EvidenceAgeTime:             EvidenceAgeTime,
+		KeyType:                     bls12381.KeyType,
+		LogLevel:                    manifest.LogLevel,
+		TxSize:                      manifest.TxSize,
+		ABCIProtocol:                Protocol(manifest.ABCIProtocol),
+		PrepareProposalDelayMS:      int(manifest.PrepareProposalDelayMS), //#nosec G115
+		ProcessProposalDelayMS:      int(manifest.ProcessProposalDelayMS), //#nosec G115
+		CheckTxDelayMS:              int(manifest.CheckTxDelayMS),         //#nosec G115
+		VoteExtensionDelayMS:        int(manifest.VoteExtensionDelayMS),   //#nosec G115
+		FinalizeBlockDelayMS:        int(manifest.FinalizeBlockDelayMS),   //#nosec G115
+		MaxBlockSize:                int64(manifest.MaxBlockSize),         //#nosec G115
+		MaxEvidenceSize:             int64(manifest.MaxEvidenceSize),      //#nosec G115
+		CreateEmptyBlocks:           true,
+		ProposeNextBlockImmediately: manifest.ProposeNextBlockImmediately,
+		ThresholdPublicKey:          ld.ThresholdPubKey,
+		ThresholdPublicKeyUpdates:   map[int64]crypto.PubKey{},
+		QuorumType:                  btcjson.LLMQType(quorumType),
+		VotingPowerThreshold:        manifest.VotingPowerThreshold,
+		QuorumHash:                  quorumHash,
+		QuorumHashUpdates:           map[int64]crypto.QuorumHash{},
+		ConsensusVersionUpdates:     map[int64]int32{},
 	}
 	if len(manifest.KeyType) != 0 {
 		testnet.KeyType = manifest.KeyType
+	}
+	if manifest.CreateEmptyBlocks != nil {
+		testnet.CreateEmptyBlocks = *manifest.CreateEmptyBlocks
 	}
 	if testnet.TxSize <= 0 {
 		testnet.TxSize = 1024
