@@ -46,6 +46,15 @@ var (
 	ErrTargetedDeliveryRequired = errors.New("delivery notification requires a targeted envelope")
 )
 
+// ErrBlockNotFound reports that a peer cannot serve the requested block.
+type ErrBlockNotFound struct {
+	Height int64
+}
+
+func (e *ErrBlockNotFound) Error() string {
+	return fmt.Sprintf("peer does not have block at height %d", e.Height)
+}
+
 type (
 	// Sender is the interface that wraps Send method
 	Sender interface {
@@ -430,7 +439,11 @@ func (c *Client) resolve(ctx context.Context, envelope *p2p.Envelope) error {
 	if !ok {
 		return fmt.Errorf("responseID attribute is missed: %w", ErrCannotResolveResponse)
 	}
-	return c.resolveMessage(ctx, respID, result{Value: envelope.Message})
+	res := result{Value: envelope.Message}
+	if msg, ok := envelope.Message.(*bcproto.NoBlockResponse); ok {
+		res.Err = &ErrBlockNotFound{Height: msg.Height}
+	}
+	return c.resolveMessage(ctx, respID, res)
 }
 
 func (c *Client) resolveMessage(_ctx context.Context, respID string, res result) error {
@@ -618,7 +631,7 @@ func newPromise[T proto.Message](
 func isMessageResolvable(msg proto.Message) bool {
 	// This list should be expanded using other response messages
 	switch msg.(type) {
-	case *bcproto.BlockResponse:
+	case *bcproto.BlockResponse, *bcproto.NoBlockResponse:
 		return true
 	}
 	return false

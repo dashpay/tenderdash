@@ -82,6 +82,12 @@ func DefaultConfig(dir string) Config {
 	}
 }
 
+// ValidatorSetUpdates decodes the configured validator set updates, keyed by
+// the height they apply at.
+func (cfg Config) ValidatorSetUpdates() (map[int64]abci.ValidatorSetUpdate, error) {
+	return cfg.validatorSetUpdates()
+}
+
 // validatorSetUpdates generates a validator set update.
 func (cfg Config) validatorSetUpdates() (map[int64]abci.ValidatorSetUpdate, error) {
 	ret := map[int64]abci.ValidatorSetUpdate{}

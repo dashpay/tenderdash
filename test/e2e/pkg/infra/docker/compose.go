@@ -49,6 +49,9 @@ services:
     command: start --log-level {{ .LogLevel }}
 {{- end }}
     init: true
+{{- if $.CPUSet }}
+    cpuset: "{{ $.CPUSet }}"
+{{- end }}
 {{- if $.Debug }}
     environment:
     - DEBUG=1
@@ -83,10 +86,14 @@ services:
 		*e2e.Testnet
 		PreCompiledAppPath string
 		Debug              bool
+		// CPUSet pins every node container to the given host CPUs (docker
+		// cpuset syntax, e.g. "0-3"), to approximate a smaller CI runner locally.
+		CPUSet string
 	}{
 		Testnet:            testnet,
 		PreCompiledAppPath: os.Getenv("PRE_COMPILED_APP_PATH"),
 		Debug:              os.Getenv("DEBUG") != "",
+		CPUSet:             os.Getenv("E2E_CPUSET"),
 	}
 	var buf bytes.Buffer
 	err = tmpl.Execute(&buf, data)

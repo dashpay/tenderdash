@@ -298,6 +298,12 @@ func (s *Synchronizer) consumeJobResult(ctx context.Context) error {
 		if !errors.As(res.Err, &bfErr) {
 			return nil
 		}
+		var missing *client.ErrBlockNotFound
+		if errors.As(bfErr.err, &missing) && missing.Height == bfErr.height {
+			s.peerStore.RecordMissingBlock(bfErr.peerID, bfErr.height)
+			s.jobGen.pushBack(bfErr.height)
+			return nil
+		}
 		s.jobGen.pushBack(bfErr.height)
 		// One failed request is usually a timeout under load, not a bad peer.
 		// Dropping the peer also fails its other in-flight requests, each of
