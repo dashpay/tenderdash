@@ -1495,15 +1495,37 @@ func testWALRoundsSkipper(t *testing.T, slowProposer bool) {
 	require.NoError(t, err)
 	ctx = dash.ContextWithProTxHash(ctx, proTxHash)
 
-	cs := newStateWithConfigAndBlockStore(ctx, t, logger, cfg, state, privVal, app, blockStore)
+	stopReplay := make(chan struct{})
+	replayStopped := make(chan struct{})
+	cs := newStateWithConfigAndBlockStore(ctx, t, logger, cfg, state, privVal, app, blockStore,
+		WithStopFunc(func(cs *State) bool {
+			select {
+			case <-stopReplay:
+			default:
+				if cs.GetStateData().Height < chainLen+2 {
+					return false
+				}
+			}
+			close(replayStopped)
+			return true
+		}),
+	)
 
 	commit := blockStore.commits[len(blockStore.commits)-1]
 	require.Equal(t, int64(4), commit.Height)
 	require.GreaterOrEqual(t, maxRound, commit.Round)
 
 	require.NoError(t, cs.Start(ctx))
-	defer cs.Stop()
-	t.Cleanup(cs.Wait)
+	defer func() {
+		close(stopReplay)
+		<-replayStopped
+		cs.Stop()
+		cs.Wait()
+		// The stop predicate bypasses receiveRoutine's WAL and queue shutdown.
+		cs.wal.Stop()
+		cs.wal.Wait()
+		cs.msgInfoQueue.stop()
+	}()
 
 	newBlockSub, err := cs.eventBus.SubscribeWithArgs(ctx, pubsub.SubscribeArgs{
 		ClientID: testSubscriber,
@@ -1516,6 +1538,7 @@ func testWALRoundsSkipper(t *testing.T, slowProposer bool) {
 	require.NoError(t, err)
 	eventNewBlock := msg.Data().(types.EventDataNewBlock)
 	require.Equal(t, chainLen+1, eventNewBlock.Block.Height)
+	<-replayStopped
 	commit = blockStore.commits[chainLen-1]
 	require.Equal(t, chainLen, commit.Height)
 	require.GreaterOrEqual(t, maxRound, commit.Round)
