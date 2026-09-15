@@ -56,7 +56,7 @@ func makeAndCommitGoodBlock(
 	require.NoError(t, err)
 	// Simulate a lastCommit for this block from all validators for the next height
 	commit, _ := makeValidCommit(ctx, t, height, blockID, state.Validators, privVals)
-	state, err = blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, commit, types.VerifiedCommit{})
+	state, _, err = blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, commit, types.VerifiedCommit{})
 	require.NoError(t, err)
 
 	return state, blockID, commit
@@ -239,6 +239,8 @@ type testApp struct {
 
 	Misbehavior        []abci.Misbehavior
 	ValidatorSetUpdate *abci.ValidatorSetUpdate
+	// ProposeNextBlockImmediately is returned from FinalizeBlock.
+	ProposeNextBlockImmediately bool
 }
 
 var _ abci.Application = (*testApp)(nil)
@@ -250,7 +252,7 @@ func (app *testApp) Info(_ context.Context, _req *abci.RequestInfo) (*abci.Respo
 func (app *testApp) FinalizeBlock(_ context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
 	app.Misbehavior = req.Misbehavior
 
-	return &abci.ResponseFinalizeBlock{}, nil
+	return &abci.ResponseFinalizeBlock{ProposeNextBlockImmediately: app.ProposeNextBlockImmediately}, nil
 }
 
 func (app *testApp) CheckTx(_ context.Context, _req *abci.RequestCheckTx) (*abci.ResponseCheckTx, error) {

@@ -79,6 +79,10 @@ type Executor interface {
 		lastCommit types.VerifiedCommit,
 	) error
 
+	// FinalizeBlock commits the block to the application and returns the new
+	// state together with the application's ResponseFinalizeBlock, whose hints
+	// that are not part of the state (propose_next_block_immediately) the
+	// consensus engine acts on.
 	FinalizeBlock(
 		ctx context.Context,
 		state State,
@@ -87,7 +91,7 @@ type Executor interface {
 		block *types.Block,
 		commit *types.Commit,
 		lastCommit types.VerifiedCommit,
-	) (State, error)
+	) (State, *abci.ResponseFinalizeBlock, error)
 
 	ApplyBlock(
 		ctx context.Context,
@@ -541,7 +545,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	block *types.Block,
 	commit *types.Commit,
 	lastCommit types.VerifiedCommit,
-) (State, error) {
+) (State, *abci.ResponseFinalizeBlock, error) {
 	// This is the only ValidateBlockWithRoundState on the ApplyBlock path, so it
 	// must not be removed: ApplyBlock deliberately calls ProcessProposal with
 	// verify=false and relies on this call instead. The consensus path validates
@@ -553,7 +557,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	// is the state and ABCI responses written below.
 	stages := blockExec.metrics.startStages()
 	if err := blockExec.ValidateBlockWithRoundState(ctx, state, uncommittedState, block, lastCommit); err != nil {
-		return state, ErrInvalidBlock{err}
+		return state, nil, ErrInvalidBlock{err}
 	}
 	stages.done("finalize_validate")
 
@@ -563,28 +567,28 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 		ProcessProposal: uncommittedState.Params.ToProcessProposal(),
 	}
 	if err := blockExec.store.SaveABCIResponses(block.Height, abciResponses); err != nil {
-		return state, err
+		return state, nil, err
 	}
 	stages.done("finalize_save_abci_responses")
 
 	startTime := time.Now().UnixNano()
 	fbResp, err := execBlockWithoutState(ctx, blockExec.appClient, block, commit, blockExec.logger)
 	if err != nil {
-		return state, ErrInvalidBlock{err}
+		return state, nil, ErrInvalidBlock{err}
 	}
 	endTime := time.Now().UnixNano()
 	blockExec.metrics.BlockProcessingTime.Observe(float64(endTime-startTime) / 1000000)
 	stages.done("finalize_block_abci")
 
 	if state, err = state.Update(blockID, &block.Header, &uncommittedState); err != nil {
-		return state, fmt.Errorf("commit failed for application: %w", err)
+		return state, nil, fmt.Errorf("commit failed for application: %w", err)
 	}
 	stages.done("finalize_state_update")
 
 	// Lock mempool, commit app state, update mempoool.
 	err = blockExec.flushMempool(ctx, state, block, uncommittedState.TxResults)
 	if err != nil {
-		return state, fmt.Errorf("commit failed for application: %w", err)
+		return state, nil, fmt.Errorf("commit failed for application: %w", err)
 	}
 	stages.done("finalize_mempool")
 
@@ -593,7 +597,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	stages.done("finalize_evidence_pool")
 
 	if err = blockExec.store.Save(state); err != nil {
-		return state, err
+		return state, nil, err
 	}
 	stages.done("finalize_save_state")
 
@@ -612,7 +616,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	}
 	stages.done("finalize_publish_events")
 
-	return state, nil
+	return state, fbResp, nil
 }
 
 // ApplyBlock validates the block against the state, executes it against the app using ProcessProposal ABCI request,
@@ -637,7 +641,9 @@ func (blockExec *BlockExecutor) ApplyBlock(
 	if err != nil {
 		return state, err
 	}
-	return blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, commit, lastCommit)
+	// Replay never proposes, so the response hints are not needed here.
+	state, _, err = blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, commit, lastCommit)
+	return state, err
 }
 
 // ExtendVote gets vote-extensions from ABCI and updates vote.VoteExtensions with this value

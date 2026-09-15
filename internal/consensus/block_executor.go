@@ -7,6 +7,7 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
+	abci "github.com/dashpay/tenderdash/abci/types"
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/eventemitter"
@@ -89,7 +90,7 @@ func (c *blockExecutor) mustEnsureProcess(ctx context.Context, rs *cstypes.Round
 	}
 }
 
-func (c *blockExecutor) finalize(ctx context.Context, stateData *StateData, commit *types.Commit) (sm.State, error) {
+func (c *blockExecutor) finalize(ctx context.Context, stateData *StateData, commit *types.Commit) (sm.State, *abci.ResponseFinalizeBlock, error) {
 	block := stateData.ProposalBlock
 	blockParts := stateData.ProposalBlockParts
 	return c.blockExec.FinalizeBlock(

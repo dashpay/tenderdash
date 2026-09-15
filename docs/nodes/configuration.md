@@ -494,6 +494,13 @@ setting `create-empty-blocks-interval`: with `"10s"`, an empty block follows
 roughly ten seconds after the last one. The interval only paces empty blocks —
 when transactions arrive, a block is proposed without waiting for it.
 
+Regardless of `create-empty-blocks-interval`, the application can ask for the
+next block without the wait by setting `propose_next_block_immediately` in its
+`ResponseFinalizeBlock`. Round 0 of the following height then enters the
+propose step as soon as `timeout-commit` has passed, exactly as if a
+transaction were waiting in the mempool. The hint is local to the node and
+consumed once; it is not persisted across restarts.
+
 ### create-empty-blocks = false
 
 In this setting, blocks are created when transactions received.

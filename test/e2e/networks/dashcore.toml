@@ -11,6 +11,12 @@ log_level = "debug"
 max_block_size = 262144   # 0.25 MB
 max_evidence_size = 52428 # 50 kB
 
+# Nodes never create empty blocks on their own; the application asks for the
+# next block in every FinalizeBlock response instead, so the chain keeps moving
+# once the load generator stops (TestApp_ProposeNextBlockImmediately).
+create_empty_blocks = false
+propose_next_block_immediately = true
+
 [chainlock_updates]
 1000 = 3450
 1004 = 3451

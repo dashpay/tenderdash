@@ -110,7 +110,7 @@ func TestBlockApplierApply(t *testing.T) {
 				mockBlockExec.
 					On("FinalizeBlock", mock.Anything, initialState, sm.CurrentRoundState{}, blockH1ID, blockH1, commitH1, types.VerifiedCommit{}).
 					Once().
-					Return(state, nil)
+					Return(state, nil, nil)
 			},
 		},
 		{
@@ -161,7 +161,7 @@ func TestBlockApplierApply(t *testing.T) {
 				mockBlockExec.
 					On("FinalizeBlock", mock.Anything, initialState, sm.CurrentRoundState{}, blockH1ID, blockH1, commitH1, types.VerifiedCommit{}).
 					Once().
-					Return(state, errors.New("eeeeeeeee"))
+					Return(state, nil, errors.New("eeeeeeeee"))
 			},
 			wantPanic: true,
 		},
@@ -308,7 +308,7 @@ func TestBlockApplierSavesBlockBeforeFinalize(t *testing.T) {
 		On("FinalizeBlock", mock.Anything, initialState, sm.CurrentRoundState{}, block.BlockID(blockParts), block, commit, types.VerifiedCommit{}).
 		Once().
 		Run(func(mock.Arguments) { calls = append(calls, "finalize") }).
-		Return(state, nil)
+		Return(state, nil, nil)
 
 	applier := newBlockApplier(mockBlockExec, mockBlockStore, applierWithState(initialState))
 	require.NoError(t, applier.Apply(ctx, block, commit))
@@ -339,7 +339,7 @@ func TestBlockApplierRecordsStageMetrics(t *testing.T) {
 	mockBlockExec.On("ProcessProposal", mock.Anything, blockH1, commitH1.Round, initialState, true, types.VerifiedCommit{}).
 		Twice().Return(sm.CurrentRoundState{}, nil)
 	mockBlockExec.On("FinalizeBlock", mock.Anything, initialState, sm.CurrentRoundState{}, mock.Anything, blockH1, commitH1, types.VerifiedCommit{}).
-		Twice().Return(initialState, nil)
+		Twice().Return(initialState, nil, nil)
 
 	hist := metricspy.NewHistogram("stage")
 	m := consensus.NopMetrics()
@@ -440,7 +440,7 @@ func TestBlockApplierOffersTheVerifiedCommitForward(t *testing.T) {
 		blockExec.On("ProcessProposal", mock.Anything, blockH1, commitH1.Round, mock.Anything, true, none).
 			Once().Return(sm.CurrentRoundState{}, nil)
 		blockExec.On("FinalizeBlock", mock.Anything, mock.Anything, mock.Anything, blockH1ID, blockH1, commitH1, none).
-			Once().Return(initialState, nil)
+			Once().Return(initialState, nil, nil)
 		applier := newBlockApplier(blockExec, blockStore, applierWithState(initialState))
 		require.NoError(t, applier.Apply(ctx, blockH1, commitH1))
 		return applier, blockExec
@@ -452,7 +452,7 @@ func TestBlockApplierOffersTheVerifiedCommitForward(t *testing.T) {
 		blockExec.On("ProcessProposal", mock.Anything, blockH2, commitH2.Round, mock.Anything, true, lastCommit).
 			Once().Return(sm.CurrentRoundState{}, nil)
 		blockExec.On("FinalizeBlock", mock.Anything, mock.Anything, mock.Anything, blockH2ID, blockH2, commitH2, lastCommit).
-			Once().Return(initialState, nil)
+			Once().Return(initialState, nil, nil)
 	}
 
 	t.Run("the next block is offered the previous commit's verification", func(t *testing.T) {

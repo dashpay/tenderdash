@@ -87,6 +87,38 @@ func TestMempoolProgressAfterCreateEmptyBlocksInterval(t *testing.T) {
 	ensureNewEventOnChannel(t, newBlockCh)   // until the CreateEmptyBlocksInterval has passed
 }
 
+// TestMempoolProgressWhenAppRequestsNextBlockImmediately checks that
+// ResponseFinalizeBlock.propose_next_block_immediately makes round 0 of the next
+// height skip the create-empty-blocks-interval wait, and only that height.
+func TestMempoolProgressWhenAppRequestsNextBlockImmediately(t *testing.T) {
+	baseConfig := configSetup(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	config, err := ResetConfig(t, "consensus_mempool_txs_available_test")
+	require.NoError(t, err)
+
+	// Long enough that no empty block is created on its own within the test.
+	config.Consensus.CreateEmptyBlocksInterval = 10 * ensureTimeout
+	state, privVals := makeGenesisState(ctx, t, baseConfig, genesisStateArgs{
+		Validators: 1,
+		Power:      types.DefaultDashVotingPower,
+		Params:     factory.ConsensusParams()})
+	app := NewCounterApplication()
+	// Only the first block asks for the next one right away.
+	app.proposeNextBlockImmediatelyAtHeight = 1
+	cs := newStateWithConfig(ctx, t, log.NewNopLogger(), config, state, privVals[0], app)
+	stateData := cs.GetStateData()
+	assertMempool(t, cs.txNotifier).EnableTxsAvailable()
+
+	newBlockCh := subscribe(ctx, t, cs.eventBus, types.EventQueryNewBlock)
+	startTestRound(ctx, cs, stateData.Height, stateData.Round)
+
+	ensureNewEventOnChannel(t, newBlockCh)   // first block gets committed
+	ensureNewEventOnChannel(t, newBlockCh)   // second block follows without waiting for txs
+	ensureNoNewEventOnChannel(t, newBlockCh) // third block waits for txs again
+}
+
 func TestMempoolProgressInHigherRound(t *testing.T) {
 	baseConfig := configSetup(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -279,6 +311,10 @@ type CounterApplication struct {
 	txCount        int
 	mempoolTxCount int
 	mu             sync.Mutex
+
+	// proposeNextBlockImmediatelyAtHeight, when non-zero, is the height whose
+	// FinalizeBlock response asks for the next block without waiting for txs.
+	proposeNextBlockImmediatelyAtHeight int64
 }
 
 func NewCounterApplication() *CounterApplication {
@@ -310,8 +346,11 @@ func (app *CounterApplication) txResults(txs [][]byte) []*abci.ExecTxResult {
 	return respTxs
 }
 
-func (app *CounterApplication) FinalizeBlock(_ context.Context, _req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
-	return &abci.ResponseFinalizeBlock{}, nil
+func (app *CounterApplication) FinalizeBlock(_ context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
+	return &abci.ResponseFinalizeBlock{
+		ProposeNextBlockImmediately: app.proposeNextBlockImmediatelyAtHeight != 0 &&
+			req.Height == app.proposeNextBlockImmediatelyAtHeight,
+	}, nil
 }
 
 func (app *CounterApplication) CheckTx(_ context.Context, req *abci.RequestCheckTx) (*abci.ResponseCheckTx, error) {

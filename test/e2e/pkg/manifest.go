@@ -126,6 +126,19 @@ type Manifest struct {
 	FinalizeBlockDelayMS   uint64 `toml:"finalize_block_delay_ms"`
 	MaxBlockSize           uint64 `toml:"max_block_size"`
 	MaxEvidenceSize        uint64 `toml:"max_evidence_size"`
+
+	// CreateEmptyBlocks sets the consensus `create-empty-blocks` option of every
+	// node. Defaults to true. With false, a proposer waits for transactions (or
+	// for the application's propose_next_block_immediately hint) before
+	// proposing round 0 of a height.
+	CreateEmptyBlocks *bool `toml:"create_empty_blocks"`
+
+	// ProposeNextBlockImmediately makes the application ask for the next height
+	// right away in every FinalizeBlock response
+	// (ResponseFinalizeBlock.propose_next_block_immediately). Combined with
+	// create_empty_blocks = false it is the only thing that keeps the chain
+	// moving while no transactions arrive.
+	ProposeNextBlockImmediately bool `toml:"propose_next_block_immediately"`
 }
 
 // ManifestNode represents a node in a testnet manifest.
