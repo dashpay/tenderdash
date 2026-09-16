@@ -1,17 +1,82 @@
-## [1.8.0]
+## [1.8.0] - 2026-09-16
 
 ### Bug Fixes
 
-- Require configured browser origins for light-proxy WebSockets via `rpc.cors-allowed-origins` (including same-host origins); an empty list rejects Origin-bearing requests, while clients without Origin remain supported.
-- Preserve committed-block downloads across round timeouts and announce their part-set target to peers (#1415).
-- Bound stalled block-response cleanup while allowing actively progressing transfers to continue.
-- Authenticate state-sync validator thresholds against locally stored genesis parameters.
-- Reject partially populated validator public-key shares in light blocks.
-- Apply valid late commits when the complete block is retained after rejecting conflicting proposal metadata, and fetch the committed block if it differs from the retained one.
-- Check complete block IDs before applying commits and validate proposals arriving after their blocks (#1439).
-- Bound how far statesync backfill fetches ahead of verification, so peers serving faster than this node verifies cannot grow the fetched-but-unverified backlog across the whole backfill span.
-- Don't disconnect a backfill peer over a vote-extension count mismatch, which an honest peer running a different extension configuration produces.
-- Update `google.golang.org/grpc` to v1.83.2, fixing heap exhaustion via HTTP/2 DATA frame fragmentation (CVE-2026-84304).
+- Block ID validation and proposal handling (#1439)
+- Do not apply a commit whose block we no longer hold (#1437)
+- Apply late commits for completed blocks (#1441)
+- Full-node privval error, backfill failure visibility, docs refresh (#1425)
+- Bound catch-up block-part resends and restore round timeouts in reactor test (#1418)
+- Report the offending height, not the parsed zero
+- Format the node-ID resolver address with JoinHostPort
+- Detect lint base and pass CGO flags to local gates
+- Bound backfill backpressure, spare honest peers on extension-count mismatch, patch grpc CVE (#1451)
+- Harden remote input handling (#1442)
+- Recover committed blocks across stale proposals and round changes (#1415)
+- [**breaking**] Require configured WebSocket origins (#1453)
+- Don't propose at historical heights after a bad block-sync handover (#1416)
+- Wire the never-connected state sync metrics into /status (#1426)
+- Initialize peer routing before publishing readiness (#1464)
+- Restore state sync and fix the p2p startup race that slow the test networks (#1460)
+
+### Documentation
+
+- File post-1.7.0 entries under 1.8.0
+
+### Features
+
+- Route PR reviews through shared ownership policy (#1455)
+- Let the application ask for the next block without waiting for transactions (#1466)
+
+### Miscellaneous Tasks
+
+- Bump Go to 1.27.1 (#1438)
+- Bump Go to 1.26.6 (#1417)
+- Merge v1.8-dev into synchronization branch
+- Merge v1.7-dev into v1.8-dev
+
+### Performance
+
+- Per-stage apply histograms and an unsafe-no-fsync switch for profiling (#1430)
+- Verify a commit once, not again as the next block's LastCommit (#1427)
+
+### Testing
+
+- Freeze clocks in vote rate burst tests (#1454)
+- Deflake TestWALRoundsSkipper (#1457)
+
+### Build
+
+- Bump docker/login-action from 4.5.2 to 4.6.0 (#1407)
+- Bump docker/setup-buildx-action from 4.2.0 to 4.3.0 (#1424)
+- Bump github.com/fxamacker/cbor/v2 from 2.9.2 to 2.9.3 (#1421)
+- Bump google.golang.org/grpc from 1.82.1 to 1.83.2 (#1433)
+- Bump github.com/golangci/golangci-lint/v2 (#1432)
+- Bump github.com/go-pkgz/jrpc from 0.4.0 to 0.4.2 (#1423)
+- Make the lint target reproduce the CI gate
+- Drop the unused BASE_BRANCH variable
+- Bump golang.org/x/time from 0.15.0 to 0.16.0 (#1445)
+- Bump golang.org/x/crypto from 0.55.0 to 0.56.0 (#1446)
+- Bump golang.org/x/sys from 0.47.0 to 0.48.0 (#1449)
+- Bump github.com/prometheus/common from 0.70.1 to 0.71.0 (#1447)
+- Bump github.com/prometheus/client_model from 0.6.2 to 0.6.3 (#1448)
+- Bump golang.org/x/sync from 0.22.0 to 0.23.0 (#1444)
+- Sync Makefile golangci-lint pin with CI (v2.12 -> v2.13)
+
+### Ci
+
+- Vet every package, including the ones no workflow builds
+- Replace abandoned github/super-linter fork with upstream, pinned by SHA (#1450)
+- Re-pin the shared review engine and drop the redundant input (#1461)
+- Re-pin PR Hygiene and adopt the suite name (#1462)
+- Re-pin PR Hygiene (#1463)
+- Cut avoidable setup time from the e2e workflow (#1459)
+- Re-pin PR Hygiene (#1465)
+- Restore the Go cache in build, govulncheck and check-generated (#1458)
+- Re-pin PR Hygiene (#1467)
+- Re-pin PR Hygiene to cut its GitHub request volume (#1468)
+- Re-pin PR Hygiene so the sweep reaches every pull request (#1473)
+- Re-pin PR Hygiene so its runs queue instead of cancelling (#1474)
 
 ## [1.7.0] - 2026-08-17
 
@@ -50,6 +115,7 @@
 ### Miscellaneous Tasks
 
 - Bump Go to 1.26.5 (#1395)
+- Update changelog and version to 1.7.0
 
 ### Performance
 
@@ -630,3 +696,4 @@
 ### Build
 
 - Bump github.com/stretchr/testify from 1.8.2 to 1.9.0 (#817)
+
