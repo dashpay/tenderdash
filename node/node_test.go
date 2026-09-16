@@ -30,6 +30,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/eventbus"
 	"github.com/dashpay/tenderdash/internal/evidence"
 	"github.com/dashpay/tenderdash/internal/mempool"
+	mempoolmocks "github.com/dashpay/tenderdash/internal/mempool/mocks"
 	"github.com/dashpay/tenderdash/internal/proxy"
 	"github.com/dashpay/tenderdash/internal/pubsub"
 	sm "github.com/dashpay/tenderdash/internal/state"
@@ -42,6 +43,7 @@ import (
 	"github.com/dashpay/tenderdash/libs/service"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
 	"github.com/dashpay/tenderdash/privval"
+	"github.com/dashpay/tenderdash/rpc/coretypes"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -99,6 +101,50 @@ func TestNodeStartStop(t *testing.T) {
 	n.Wait()
 
 	require.False(t, n.IsRunning(), "node must shut down")
+}
+
+func TestNodeAsyncBroadcastLifecycleWithoutListener(t *testing.T) {
+	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
+	require.NoError(t, err)
+	cfg.RPC.ListenAddress = ""
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	ns, err := newDefaultNode(ctx, cfg, log.NewNopLogger())
+	require.NoError(t, err)
+	n := ns.(*nodeImpl)
+	mp := mempoolmocks.NewMempool(t)
+	entered := make(chan struct{})
+	finished := make(chan struct{})
+	mp.EXPECT().CheckTx(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		RunAndReturn(func(ctx context.Context, _ types.Tx, _ func(*abci.ResponseCheckTx), _ mempool.TxInfo) error {
+			close(entered)
+			<-ctx.Done()
+			close(finished)
+			return ctx.Err()
+		}).Once()
+	n.rpcEnv.Mempool = mp
+	t.Cleanup(func() {
+		cancel()
+		n.Wait()
+	})
+	require.NoError(t, n.Start(ctx))
+	res, err := n.RPCEnvironment().BroadcastTxAsync(t.Context(), &coretypes.RequestBroadcastTx{Tx: types.Tx("tx")})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("CheckTx did not start")
+	}
+	cancel()
+	n.Wait()
+	select {
+	case <-finished:
+	default:
+		t.Fatal("node stopped without draining its async broadcast")
+	}
+	_, err = n.RPCEnvironment().BroadcastTxAsync(t.Context(), &coretypes.RequestBroadcastTx{Tx: types.Tx("stopped")})
+	require.ErrorIs(t, err, context.Canceled)
 }
 
 // TestNodeFullModeRequiresCoreRPCHost ensures that constructing a full node

@@ -37,6 +37,20 @@ func TestEnsureRoot(t *testing.T) {
 	ensureFiles(t, tmpDir, "data")
 }
 
+func TestAsyncBroadcastConfiguration(t *testing.T) {
+	cfg := DefaultConfig()
+	require.Equal(t, 100, cfg.RPC.MaxConcurrentBroadcastTxAsync)
+	rootDir := t.TempDir()
+	EnsureRoot(rootDir)
+	cfg.RPC.MaxConcurrentBroadcastTxAsync = 7
+	require.NoError(t, WriteConfigFile(rootDir, cfg))
+	data, err := os.ReadFile(filepath.Join(rootDir, defaultConfigFilePath))
+	require.NoError(t, err)
+	require.Contains(t, string(data), "max-concurrent-broadcast-tx-async = 7")
+	cfg.RPC.MaxConcurrentBroadcastTxAsync = 0
+	require.NoError(t, cfg.RPC.ValidateBasic())
+}
+
 func TestEnsureTestRoot(t *testing.T) {
 	testName := "ensureTestRoot"
 

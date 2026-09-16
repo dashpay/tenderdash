@@ -306,6 +306,11 @@ timeout-broadcast-tx-commit = "{{ .RPC.TimeoutBroadcastTxCommit }}"
 # the transaction is rejected with an error.
 timeout-broadcast-tx = "{{ .RPC.TimeoutBroadcastTx }}"
 
+# Maximum unfinished async broadcasts per node; 0 uses the default of 100.
+# New async broadcasts are rejected with "Too many requests" when full.
+# Accepted broadcasts survive client disconnects and are canceled at node shutdown.
+max-concurrent-broadcast-tx-async = {{ .RPC.MaxConcurrentBroadcastTxAsync }}
+
 # Maximum size of request body, in bytes
 max-body-bytes = {{ .RPC.MaxBodyBytes }}
 
