@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	sm "github.com/dashpay/tenderdash/internal/state"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -22,13 +23,17 @@ func TestVerifyConsensusParams(t *testing.T) {
 
 	invalid := types.DefaultConsensusParams()
 	invalid.Timeout.Vote = -1
+	threshold := uint64(1)
+	withUnsignedThreshold := *types.DefaultConsensusParams()
+	withUnsignedThreshold.Validator.VotingPowerThreshold = &threshold
 
 	testCases := []struct {
-		name     string
-		params   types.ConsensusParams
-		hash     tmbytes.HexBytes
-		errorIs  string
-		expectOK bool
+		name             string
+		params           types.ConsensusParams
+		hash             tmbytes.HexBytes
+		trustedThreshold *uint64
+		errorIs          string
+		expectOK         bool
 	}{
 		{
 			name:     "valid params with a matching hash",
@@ -54,12 +59,32 @@ func TestVerifyConsensusParams(t *testing.T) {
 			hash:    tmbytes.HexBytes("not the params hash"),
 			errorIs: "invalid consensus params",
 		},
+		{
+			name:             "voting threshold matches trusted local state",
+			params:           withUnsignedThreshold,
+			hash:             withUnsignedThreshold.HashConsensusParams(),
+			trustedThreshold: &threshold,
+			expectOK:         true,
+		},
+		{
+			name:    "voting threshold has no trusted local value",
+			params:  withUnsignedThreshold,
+			hash:    withUnsignedThreshold.HashConsensusParams(),
+			errorIs: "does not match trusted local state",
+		},
+		{
+			name:             "voting threshold differs from trusted local state",
+			params:           *valid,
+			hash:             valid.HashConsensusParams(),
+			trustedThreshold: &threshold,
+			errorIs:          "does not match trusted local state",
+		},
 	}
 
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			err := verifyConsensusParams(tc.params, tc.hash, height)
+			err := verifyConsensusParams(tc.params, tc.hash, height, tc.trustedThreshold)
 			if tc.expectOK {
 				require.NoError(t, err)
 				return
@@ -68,4 +93,26 @@ func TestVerifyConsensusParams(t *testing.T) {
 			assert.Contains(t, err.Error(), tc.errorIs)
 		})
 	}
+}
+
+func TestApplyVotingPowerThreshold(t *testing.T) {
+	const threshold = uint64(123)
+	validators, _ := types.RandValidatorSet(4)
+	lastValidators := validators.Copy()
+	state := sm.State{
+		Validators:     validators,
+		LastValidators: lastValidators,
+		ConsensusParams: types.ConsensusParams{
+			Validator: types.ValidatorParams{VotingPowerThreshold: ptr(threshold)},
+		},
+	}
+
+	applyVotingPowerThreshold(&state)
+
+	require.Equal(t, threshold, state.Validators.VotingPowerThreshold)
+	require.Equal(t, threshold, state.LastValidators.VotingPowerThreshold)
+}
+
+func ptr[T any](value T) *T {
+	return &value
 }

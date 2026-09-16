@@ -106,7 +106,7 @@ func (c *Client) compareNewHeaderWithWitness(ctx context.Context, errc chan erro
 		return
 	}
 
-	if !bytes.Equal(h.Hash(), lightBlock.Hash()) {
+	if !bytes.Equal(h.Hash(), lightBlock.Hash()) || !h.Equals(lightBlock.Header) {
 		c.logger.Debug(
 			"conflicting header received by witness",
 			"height", h.Height,

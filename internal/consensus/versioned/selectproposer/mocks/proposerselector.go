@@ -119,7 +119,7 @@ type ProposerSelector_GetProposer_Call struct {
 // GetProposer is a helper method to define mock.On call
 //   - height int64
 //   - round int32
-func (_e *ProposerSelector_Expecter) GetProposer(height interface{}, round interface{}) *ProposerSelector_GetProposer_Call {
+func (_e *ProposerSelector_Expecter) GetProposer(height any, round any) *ProposerSelector_GetProposer_Call {
 	return &ProposerSelector_GetProposer_Call{Call: _e.mock.On("GetProposer", height, round)}
 }
 
@@ -178,7 +178,7 @@ type ProposerSelector_MustGetProposer_Call struct {
 // MustGetProposer is a helper method to define mock.On call
 //   - height int64
 //   - round int32
-func (_e *ProposerSelector_Expecter) MustGetProposer(height interface{}, round interface{}) *ProposerSelector_MustGetProposer_Call {
+func (_e *ProposerSelector_Expecter) MustGetProposer(height any, round any) *ProposerSelector_MustGetProposer_Call {
 	return &ProposerSelector_MustGetProposer_Call{Call: _e.mock.On("MustGetProposer", height, round)}
 }
 
@@ -235,7 +235,7 @@ type ProposerSelector_UpdateHeightRound_Call struct {
 // UpdateHeightRound is a helper method to define mock.On call
 //   - height int64
 //   - round int32
-func (_e *ProposerSelector_Expecter) UpdateHeightRound(height interface{}, round interface{}) *ProposerSelector_UpdateHeightRound_Call {
+func (_e *ProposerSelector_Expecter) UpdateHeightRound(height any, round any) *ProposerSelector_UpdateHeightRound_Call {
 	return &ProposerSelector_UpdateHeightRound_Call{Call: _e.mock.On("UpdateHeightRound", height, round)}
 }
 

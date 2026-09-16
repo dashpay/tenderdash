@@ -129,7 +129,7 @@ type Connection_Handshake_Call struct {
 //   - duration time.Duration
 //   - nodeInfo types.NodeInfo
 //   - privKey crypto.PrivKey
-func (_e *Connection_Expecter) Handshake(context1 interface{}, duration interface{}, nodeInfo interface{}, privKey interface{}) *Connection_Handshake_Call {
+func (_e *Connection_Expecter) Handshake(context1 any, duration any, nodeInfo any, privKey any) *Connection_Handshake_Call {
 	return &Connection_Handshake_Call{Call: _e.mock.On("Handshake", context1, duration, nodeInfo, privKey)}
 }
 
@@ -256,7 +256,7 @@ type Connection_ReceiveMessage_Call struct {
 
 // ReceiveMessage is a helper method to define mock.On call
 //   - context1 context.Context
-func (_e *Connection_Expecter) ReceiveMessage(context1 interface{}) *Connection_ReceiveMessage_Call {
+func (_e *Connection_Expecter) ReceiveMessage(context1 any) *Connection_ReceiveMessage_Call {
 	return &Connection_ReceiveMessage_Call{Call: _e.mock.On("ReceiveMessage", context1)}
 }
 
@@ -273,8 +273,8 @@ func (_c *Connection_ReceiveMessage_Call) Run(run func(context1 context.Context)
 	return _c
 }
 
-func (_c *Connection_ReceiveMessage_Call) Return(v p2p.ChannelID, bytes []byte, err error) *Connection_ReceiveMessage_Call {
-	_c.Call.Return(v, bytes, err)
+func (_c *Connection_ReceiveMessage_Call) Return(channelID p2p.ChannelID, bytes []byte, err error) *Connection_ReceiveMessage_Call {
+	_c.Call.Return(channelID, bytes, err)
 	return _c
 }
 
@@ -328,8 +328,8 @@ func (_c *Connection_RemoteEndpoint_Call) RunAndReturn(run func() p2p.Endpoint) 
 }
 
 // SendMessage provides a mock function for the type Connection
-func (_mock *Connection) SendMessage(context1 context.Context, v p2p.ChannelID, bytes []byte) error {
-	ret := _mock.Called(context1, v, bytes)
+func (_mock *Connection) SendMessage(context1 context.Context, channelID p2p.ChannelID, bytes []byte) error {
+	ret := _mock.Called(context1, channelID, bytes)
 
 	if len(ret) == 0 {
 		panic("no return value specified for SendMessage")
@@ -337,7 +337,7 @@ func (_mock *Connection) SendMessage(context1 context.Context, v p2p.ChannelID, 
 
 	var r0 error
 	if returnFunc, ok := ret.Get(0).(func(context.Context, p2p.ChannelID, []byte) error); ok {
-		r0 = returnFunc(context1, v, bytes)
+		r0 = returnFunc(context1, channelID, bytes)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -351,13 +351,13 @@ type Connection_SendMessage_Call struct {
 
 // SendMessage is a helper method to define mock.On call
 //   - context1 context.Context
-//   - v p2p.ChannelID
+//   - channelID p2p.ChannelID
 //   - bytes []byte
-func (_e *Connection_Expecter) SendMessage(context1 interface{}, v interface{}, bytes interface{}) *Connection_SendMessage_Call {
-	return &Connection_SendMessage_Call{Call: _e.mock.On("SendMessage", context1, v, bytes)}
+func (_e *Connection_Expecter) SendMessage(context1 any, channelID any, bytes any) *Connection_SendMessage_Call {
+	return &Connection_SendMessage_Call{Call: _e.mock.On("SendMessage", context1, channelID, bytes)}
 }
 
-func (_c *Connection_SendMessage_Call) Run(run func(context1 context.Context, v p2p.ChannelID, bytes []byte)) *Connection_SendMessage_Call {
+func (_c *Connection_SendMessage_Call) Run(run func(context1 context.Context, channelID p2p.ChannelID, bytes []byte)) *Connection_SendMessage_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -385,7 +385,7 @@ func (_c *Connection_SendMessage_Call) Return(err error) *Connection_SendMessage
 	return _c
 }
 
-func (_c *Connection_SendMessage_Call) RunAndReturn(run func(context1 context.Context, v p2p.ChannelID, bytes []byte) error) *Connection_SendMessage_Call {
+func (_c *Connection_SendMessage_Call) RunAndReturn(run func(context1 context.Context, channelID p2p.ChannelID, bytes []byte) error) *Connection_SendMessage_Call {
 	_c.Call.Return(run)
 	return _c
 }

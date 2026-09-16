@@ -399,10 +399,21 @@ func setupCoreServer(cfg *Config) (*mockcoreserver.JRPCServer, error) {
 	privValKeyPath := filepath.Clean(tmhome + "/" + tmcfg.PrivValidator.Key)
 	privValStatePath := filepath.Clean(tmhome + "/" + tmcfg.PrivValidator.State)
 	filePV, _ := privval.LoadFilePV(privValKeyPath, privValStatePath)
+	// Serve every quorum of the validator set schedule in full, as Dash Core
+	// does: state sync authenticates light block validator sets against it.
+	validatorSetUpdates, err := cfg.App().ValidatorSetUpdates()
+	if err != nil {
+		return nil, fmt.Errorf("decoding validator set updates: %w", err)
+	}
+	quorums, err := mockcoreserver.QuorumsFromValidatorSetUpdates(btcjson.LLMQType_5_60, validatorSetUpdates)
+	if err != nil {
+		return nil, err
+	}
 	coreServer := &mockcoreserver.MockCoreServer{
 		ChainID:  cfg.ChainID,
 		LLMQType: btcjson.LLMQType_5_60,
 		FilePV:   filePV,
+		Quorums:  quorums,
 	}
 	srv = mockcoreserver.WithMethods(
 		srv,

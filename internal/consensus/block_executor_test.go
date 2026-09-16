@@ -229,6 +229,7 @@ func (suite *BlockExecutorTestSuite) TestProcess() {
 						round,
 						stateData.state,
 						true,
+						types.VerifiedCommit{},
 					).
 					Once().
 					Return(tc.wantCRS, wantErr)

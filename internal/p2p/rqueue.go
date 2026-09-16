@@ -78,6 +78,9 @@ func (q *simpleQueue) run(ctx context.Context) {
 			default:
 				if len(pq) > q.maxSize {
 					sort.Sort(pq)
+					for _, dropped := range pq[q.maxSize:] {
+						dropped.envelope.NotifyDelivery()
+					}
 					pq = pq[:q.maxSize]
 				}
 			}
@@ -85,6 +88,9 @@ func (q *simpleQueue) run(ctx context.Context) {
 		case <-ticker.C:
 			if len(pq) > q.maxSize {
 				sort.Sort(pq)
+				for _, dropped := range pq[q.maxSize:] {
+					dropped.envelope.NotifyDelivery()
+				}
 				pq = pq[:q.maxSize]
 			}
 			if len(pq) > 0 {
@@ -96,12 +102,14 @@ func (q *simpleQueue) run(ctx context.Context) {
 		case <-signal:
 		SEND:
 			for len(pq) > 0 {
+				next := pq[0].envelope
 				select {
 				case <-ctx.Done():
 					return
 				case <-q.closeCh:
 					return
-				case q.output <- heap.Pop(&pq).(*pqEnvelope).envelope:
+				case q.output <- next:
+					heap.Pop(&pq)
 					continue SEND
 				default:
 					break SEND

@@ -240,7 +240,7 @@ type BlockStore_LoadBlock_Call struct {
 
 // LoadBlock is a helper method to define mock.On call
 //   - height int64
-func (_e *BlockStore_Expecter) LoadBlock(height interface{}) *BlockStore_LoadBlock_Call {
+func (_e *BlockStore_Expecter) LoadBlock(height any) *BlockStore_LoadBlock_Call {
 	return &BlockStore_LoadBlock_Call{Call: _e.mock.On("LoadBlock", height)}
 }
 
@@ -293,7 +293,7 @@ type BlockStore_LoadBlockByHash_Call struct {
 
 // LoadBlockByHash is a helper method to define mock.On call
 //   - hash []byte
-func (_e *BlockStore_Expecter) LoadBlockByHash(hash interface{}) *BlockStore_LoadBlockByHash_Call {
+func (_e *BlockStore_Expecter) LoadBlockByHash(hash any) *BlockStore_LoadBlockByHash_Call {
 	return &BlockStore_LoadBlockByHash_Call{Call: _e.mock.On("LoadBlockByHash", hash)}
 }
 
@@ -346,7 +346,7 @@ type BlockStore_LoadBlockCommit_Call struct {
 
 // LoadBlockCommit is a helper method to define mock.On call
 //   - height int64
-func (_e *BlockStore_Expecter) LoadBlockCommit(height interface{}) *BlockStore_LoadBlockCommit_Call {
+func (_e *BlockStore_Expecter) LoadBlockCommit(height any) *BlockStore_LoadBlockCommit_Call {
 	return &BlockStore_LoadBlockCommit_Call{Call: _e.mock.On("LoadBlockCommit", height)}
 }
 
@@ -399,7 +399,7 @@ type BlockStore_LoadBlockMeta_Call struct {
 
 // LoadBlockMeta is a helper method to define mock.On call
 //   - height int64
-func (_e *BlockStore_Expecter) LoadBlockMeta(height interface{}) *BlockStore_LoadBlockMeta_Call {
+func (_e *BlockStore_Expecter) LoadBlockMeta(height any) *BlockStore_LoadBlockMeta_Call {
 	return &BlockStore_LoadBlockMeta_Call{Call: _e.mock.On("LoadBlockMeta", height)}
 }
 
@@ -452,7 +452,7 @@ type BlockStore_LoadBlockMetaByHash_Call struct {
 
 // LoadBlockMetaByHash is a helper method to define mock.On call
 //   - hash []byte
-func (_e *BlockStore_Expecter) LoadBlockMetaByHash(hash interface{}) *BlockStore_LoadBlockMetaByHash_Call {
+func (_e *BlockStore_Expecter) LoadBlockMetaByHash(hash any) *BlockStore_LoadBlockMetaByHash_Call {
 	return &BlockStore_LoadBlockMetaByHash_Call{Call: _e.mock.On("LoadBlockMetaByHash", hash)}
 }
 
@@ -506,7 +506,7 @@ type BlockStore_LoadBlockPart_Call struct {
 // LoadBlockPart is a helper method to define mock.On call
 //   - height int64
 //   - index int
-func (_e *BlockStore_Expecter) LoadBlockPart(height interface{}, index interface{}) *BlockStore_LoadBlockPart_Call {
+func (_e *BlockStore_Expecter) LoadBlockPart(height any, index any) *BlockStore_LoadBlockPart_Call {
 	return &BlockStore_LoadBlockPart_Call{Call: _e.mock.On("LoadBlockPart", height, index)}
 }
 
@@ -610,7 +610,7 @@ type BlockStore_LoadSeenCommitAt_Call struct {
 
 // LoadSeenCommitAt is a helper method to define mock.On call
 //   - height int64
-func (_e *BlockStore_Expecter) LoadSeenCommitAt(height interface{}) *BlockStore_LoadSeenCommitAt_Call {
+func (_e *BlockStore_Expecter) LoadSeenCommitAt(height any) *BlockStore_LoadSeenCommitAt_Call {
 	return &BlockStore_LoadSeenCommitAt_Call{Call: _e.mock.On("LoadSeenCommitAt", height)}
 }
 
@@ -670,7 +670,7 @@ type BlockStore_PruneBlocks_Call struct {
 
 // PruneBlocks is a helper method to define mock.On call
 //   - height int64
-func (_e *BlockStore_Expecter) PruneBlocks(height interface{}) *BlockStore_PruneBlocks_Call {
+func (_e *BlockStore_Expecter) PruneBlocks(height any) *BlockStore_PruneBlocks_Call {
 	return &BlockStore_PruneBlocks_Call{Call: _e.mock.On("PruneBlocks", height)}
 }
 
@@ -712,7 +712,7 @@ type BlockStore_SaveBlock_Call struct {
 //   - block *types.Block
 //   - blockParts *types.PartSet
 //   - seenCommit *types.Commit
-func (_e *BlockStore_Expecter) SaveBlock(block interface{}, blockParts interface{}, seenCommit interface{}) *BlockStore_SaveBlock_Call {
+func (_e *BlockStore_Expecter) SaveBlock(block any, blockParts any, seenCommit any) *BlockStore_SaveBlock_Call {
 	return &BlockStore_SaveBlock_Call{Call: _e.mock.On("SaveBlock", block, blockParts, seenCommit)}
 }
 

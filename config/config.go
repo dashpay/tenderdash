@@ -234,6 +234,15 @@ type BaseConfig struct { //nolint: maligned
 	// Default: 0
 	DeadlockDetection time.Duration `mapstructure:"deadlock-detection"`
 
+	// UnsafeNoFsync makes block store and state store writes return before
+	// they have reached the disk. It exists to take the cost of fsync out of a
+	// block sync benchmark. Never enable it on a node whose data matters: a
+	// power loss can leave the stores behind the application, and the node
+	// will refuse to start. See store.WithUnsafeNoFsync.
+	//
+	// Default: false
+	UnsafeNoFsync bool `mapstructure:"unsafe-no-fsync"`
+
 	Other map[string]interface{} `mapstructure:",remain"`
 }
 
@@ -1013,7 +1022,8 @@ type StateSyncConfig struct {
 	DiscoveryTime time.Duration `mapstructure:"discovery-time"`
 
 	// Number of times to retry state sync. When retries are exhausted, the node will
-	// fall back to the regular block sync. Set to 0 to disable retries. Default is 3.
+	// fall back to the regular block sync. Set to 0 to retry
+	// indefinitely, never falling back to block sync. Default is 3.
 	//
 	// Note that in pessimistic case, it will take at least `discovery-time * retries` before
 	// falling back to block sync.
@@ -1113,7 +1123,14 @@ type ConsensusConfig struct {
 	// has to be manual (useful for tests)
 	DontAutoPropose bool `mapstructure:"dont-auto-propose'"`
 
-	// Reactor sleep duration parameters
+	// Reactor sleep duration parameters. PeerGossipSleepDuration also sets the
+	// gossip tick a lagging peer's catch-up part-set replay is metered against
+	// (internal/consensus/gossiper.go's catchupResendInterval, currently a fixed
+	// 500ms quiet gap between passes that does NOT scale with this value):
+	// raising this past that value disables the throttle entirely, since every
+	// tick then already exceeds the gap it is meant to enforce. Lowering it
+	// does not shrink the gap — it only fits more ticks (and so more sends of
+	// a multi-part block) into that same fixed window before it applies.
 	PeerGossipSleepDuration     time.Duration `mapstructure:"peer-gossip-sleep-duration"`
 	PeerQueryMaj23SleepDuration time.Duration `mapstructure:"peer-query-maj23-sleep-duration"`
 

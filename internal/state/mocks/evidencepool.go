@@ -64,7 +64,7 @@ type EvidencePool_AddEvidence_Call struct {
 // AddEvidence is a helper method to define mock.On call
 //   - context1 context.Context
 //   - evidence types.Evidence
-func (_e *EvidencePool_Expecter) AddEvidence(context1 interface{}, evidence interface{}) *EvidencePool_AddEvidence_Call {
+func (_e *EvidencePool_Expecter) AddEvidence(context1 any, evidence any) *EvidencePool_AddEvidence_Call {
 	return &EvidencePool_AddEvidence_Call{Call: _e.mock.On("AddEvidence", context1, evidence)}
 }
 
@@ -121,7 +121,7 @@ type EvidencePool_CheckEvidence_Call struct {
 // CheckEvidence is a helper method to define mock.On call
 //   - context1 context.Context
 //   - evidenceList types.EvidenceList
-func (_e *EvidencePool_Expecter) CheckEvidence(context1 interface{}, evidenceList interface{}) *EvidencePool_CheckEvidence_Call {
+func (_e *EvidencePool_Expecter) CheckEvidence(context1 any, evidenceList any) *EvidencePool_CheckEvidence_Call {
 	return &EvidencePool_CheckEvidence_Call{Call: _e.mock.On("CheckEvidence", context1, evidenceList)}
 }
 
@@ -188,7 +188,7 @@ type EvidencePool_PendingEvidence_Call struct {
 
 // PendingEvidence is a helper method to define mock.On call
 //   - maxBytes int64
-func (_e *EvidencePool_Expecter) PendingEvidence(maxBytes interface{}) *EvidencePool_PendingEvidence_Call {
+func (_e *EvidencePool_Expecter) PendingEvidence(maxBytes any) *EvidencePool_PendingEvidence_Call {
 	return &EvidencePool_PendingEvidence_Call{Call: _e.mock.On("PendingEvidence", maxBytes)}
 }
 
@@ -230,7 +230,7 @@ type EvidencePool_Update_Call struct {
 //   - context1 context.Context
 //   - state1 state.State
 //   - evidenceList types.EvidenceList
-func (_e *EvidencePool_Expecter) Update(context1 interface{}, state1 interface{}, evidenceList interface{}) *EvidencePool_Update_Call {
+func (_e *EvidencePool_Expecter) Update(context1 any, state1 any, evidenceList any) *EvidencePool_Update_Call {
 	return &EvidencePool_Update_Call{Call: _e.mock.On("Update", context1, state1, evidenceList)}
 }
 

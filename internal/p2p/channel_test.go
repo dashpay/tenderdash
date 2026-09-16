@@ -11,9 +11,15 @@ import (
 	"github.com/fortytw2/leaktest"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/proto/tendermint/blocksync"
 	p2pproto "github.com/dashpay/tenderdash/proto/tendermint/p2p"
 )
+
+func TestBlockSyncSendQueueLeavesRoomForControlMessages(t *testing.T) {
+	descriptor := ChannelDescriptors(config.TestConfig())[BlockSyncChannel]
+	require.GreaterOrEqual(t, descriptor.SendQueueCapacity, 4)
+}
 
 type channelInternal struct {
 	In    chan Envelope

@@ -108,6 +108,17 @@ type Connection interface {
 	fmt.Stringer
 }
 
+// DeliveryConnection reports packet progress and completion for queued messages.
+type DeliveryConnection interface {
+	SendMessageWithCompletion(
+		ctx context.Context,
+		chID ChannelID,
+		msg []byte,
+		onProgress func(),
+		onSent func(),
+	) error
+}
+
 // Endpoint represents a transport connection endpoint, either local or remote.
 //
 // Endpoints are not necessarily networked (see e.g. MemoryTransport) but all

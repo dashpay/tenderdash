@@ -62,6 +62,17 @@ func NewWebsocketManager(logger log.Logger, funcMap map[string]*RPCFunc, wsConnO
 // (e.g. "http://*.example.com"), mirroring the CORS allow-list semantics.
 // logger is used to warn about unusable allow-list entries at compile time.
 func OriginChecker(logger log.Logger, allowedOrigins []string) func(*http.Request) bool {
+	return originChecker(logger, allowedOrigins, true)
+}
+
+// OriginAllowlistChecker requires Origin-bearing requests to match allowedOrigins,
+// including same-host requests. Origin-less clients are accepted. Matching uses
+// the same case-insensitive exact and wildcard rules as OriginChecker.
+func OriginAllowlistChecker(logger log.Logger, allowedOrigins []string) func(*http.Request) bool {
+	return originChecker(logger, allowedOrigins, false)
+}
+
+func originChecker(logger log.Logger, allowedOrigins []string, allowSameHost bool) func(*http.Request) bool {
 	matchers := compileOriginMatchers(logger, allowedOrigins)
 	return func(r *http.Request) bool {
 		origin := r.Header.Get("Origin")
@@ -72,7 +83,7 @@ func OriginChecker(logger log.Logger, allowedOrigins []string) func(*http.Reques
 		if err != nil {
 			return false
 		}
-		if strings.EqualFold(u.Host, r.Host) {
+		if allowSameHost && strings.EqualFold(u.Host, r.Host) {
 			return true
 		}
 		origin = strings.ToLower(origin)

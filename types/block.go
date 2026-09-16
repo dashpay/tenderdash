@@ -606,6 +606,20 @@ func (h *Header) Hash() tmbytes.HexBytes {
 	})
 }
 
+// Equals compares every wire field of two headers. Hash is intentionally not
+// used here: legacy block hashes omit fields whose encoding was unsupported,
+// including CoreChainLockedHeight.
+func (h *Header) Equals(other *Header) bool {
+	if h == nil || other == nil {
+		return h == nil && other == nil
+	}
+	left := h.ToProto()
+	right := other.ToProto()
+	left.Time = left.Time.Round(0).UTC()
+	right.Time = right.Time.Round(0).UTC()
+	return proto.Equal(left, right)
+}
+
 // StringIndented returns an indented string representation of the header.
 func (h *Header) StringIndented(indent string) string {
 	if h == nil {

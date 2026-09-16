@@ -63,7 +63,7 @@ type Store_Bootstrap_Call struct {
 
 // Bootstrap is a helper method to define mock.On call
 //   - state1 state.State
-func (_e *Store_Expecter) Bootstrap(state1 interface{}) *Store_Bootstrap_Call {
+func (_e *Store_Expecter) Bootstrap(state1 any) *Store_Bootstrap_Call {
 	return &Store_Bootstrap_Call{Call: _e.mock.On("Bootstrap", state1)}
 }
 
@@ -222,7 +222,7 @@ type Store_LoadABCIResponses_Call struct {
 
 // LoadABCIResponses is a helper method to define mock.On call
 //   - n int64
-func (_e *Store_Expecter) LoadABCIResponses(n interface{}) *Store_LoadABCIResponses_Call {
+func (_e *Store_Expecter) LoadABCIResponses(n any) *Store_LoadABCIResponses_Call {
 	return &Store_LoadABCIResponses_Call{Call: _e.mock.On("LoadABCIResponses", n)}
 }
 
@@ -282,7 +282,7 @@ type Store_LoadConsensusParams_Call struct {
 
 // LoadConsensusParams is a helper method to define mock.On call
 //   - n int64
-func (_e *Store_Expecter) LoadConsensusParams(n interface{}) *Store_LoadConsensusParams_Call {
+func (_e *Store_Expecter) LoadConsensusParams(n any) *Store_LoadConsensusParams_Call {
 	return &Store_LoadConsensusParams_Call{Call: _e.mock.On("LoadConsensusParams", n)}
 }
 
@@ -345,7 +345,7 @@ type Store_LoadValidators_Call struct {
 // LoadValidators is a helper method to define mock.On call
 //   - n int64
 //   - blockStore selectproposer.BlockStore
-func (_e *Store_Expecter) LoadValidators(n interface{}, blockStore interface{}) *Store_LoadValidators_Call {
+func (_e *Store_Expecter) LoadValidators(n any, blockStore any) *Store_LoadValidators_Call {
 	return &Store_LoadValidators_Call{Call: _e.mock.On("LoadValidators", n, blockStore)}
 }
 
@@ -401,7 +401,7 @@ type Store_PruneStates_Call struct {
 
 // PruneStates is a helper method to define mock.On call
 //   - n int64
-func (_e *Store_Expecter) PruneStates(n interface{}) *Store_PruneStates_Call {
+func (_e *Store_Expecter) PruneStates(n any) *Store_PruneStates_Call {
 	return &Store_PruneStates_Call{Call: _e.mock.On("PruneStates", n)}
 }
 
@@ -452,7 +452,7 @@ type Store_Save_Call struct {
 
 // Save is a helper method to define mock.On call
 //   - state1 state.State
-func (_e *Store_Expecter) Save(state1 interface{}) *Store_Save_Call {
+func (_e *Store_Expecter) Save(state1 any) *Store_Save_Call {
 	return &Store_Save_Call{Call: _e.mock.On("Save", state1)}
 }
 
@@ -504,7 +504,7 @@ type Store_SaveABCIResponses_Call struct {
 // SaveABCIResponses is a helper method to define mock.On call
 //   - n int64
 //   - aBCIResponses state0.ABCIResponses
-func (_e *Store_Expecter) SaveABCIResponses(n interface{}, aBCIResponses interface{}) *Store_SaveABCIResponses_Call {
+func (_e *Store_Expecter) SaveABCIResponses(n any, aBCIResponses any) *Store_SaveABCIResponses_Call {
 	return &Store_SaveABCIResponses_Call{Call: _e.mock.On("SaveABCIResponses", n, aBCIResponses)}
 }
 
@@ -562,7 +562,7 @@ type Store_SaveValidatorSets_Call struct {
 //   - n int64
 //   - n1 int64
 //   - validatorSet *types.ValidatorSet
-func (_e *Store_Expecter) SaveValidatorSets(n interface{}, n1 interface{}, validatorSet interface{}) *Store_SaveValidatorSets_Call {
+func (_e *Store_Expecter) SaveValidatorSets(n any, n1 any, validatorSet any) *Store_SaveValidatorSets_Call {
 	return &Store_SaveValidatorSets_Call{Call: _e.mock.On("SaveValidatorSets", n, n1, validatorSet)}
 }
 

@@ -28,9 +28,11 @@ type (
 		numFailures int32
 		height      int64
 		base        int64
-		peerID      types.NodeID
-		recvMonitor *flowrate.Monitor
-		startAt     time.Time
+		// missingThrough records unavailable history independently of advertised status.
+		missingThrough int64
+		peerID         types.NodeID
+		recvMonitor    *flowrate.Monitor
+		startAt        time.Time
 	}
 )
 
@@ -182,6 +184,14 @@ func (p *InMemPeerStore) AddFailure(peerID types.NodeID, maxFailures int32) bool
 	return tooMany
 }
 
+// RecordMissingBlock completes a request and excludes the peer's unavailable history.
+func (p *InMemPeerStore) RecordMissingBlock(peerID types.NodeID, height int64) {
+	p.store.Update(peerID, func(_ types.NodeID, peer *PeerData) {
+		peer.addPending(-1)
+		peer.missingThrough = max(peer.missingThrough, height)
+	})
+}
+
 // FindTimedoutPeers finds and returns the timed out peers
 func (p *InMemPeerStore) FindTimedoutPeers() []PeerData {
 	return p.Query(store.AndX(
@@ -220,7 +230,7 @@ func peerNumPendingCond(val int32, op string) store.QueryFunc[types.NodeID, Peer
 
 func heightBetweenPeerHeightRange(height int64) store.QueryFunc[types.NodeID, PeerData] {
 	return func(peerID types.NodeID, peer PeerData) bool {
-		return height >= peer.base && height <= peer.height
+		return height >= peer.base && height <= peer.height && height > peer.missingThrough
 	}
 }
 

@@ -1,6 +1,7 @@
 package consensus
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -8,6 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dashpay/tenderdash/dash"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -44,7 +48,7 @@ func TestHandleCommitVerifyErrorClassification(t *testing.T) {
 		},
 		{
 			name:      "wrong quorum hash does not evict",
-			err:       fmt.Errorf("invalid commit -- wrong quorum hash: validator set uses %X, commit has %X", []byte{0x1}, []byte{0x2}),
+			err:       types.ErrInvalidCommitQuorumHash{Expected: []byte{0x1}, Actual: []byte{0x2}},
 			wantEvict: false,
 		},
 		{
@@ -134,10 +138,11 @@ func TestHandleCommitVerifyErrorRecordsPeerVerificationBudgetDrop(t *testing.T) 
 	}
 }
 
-// TestHandleCommitVerifyErrorNilQueue ensures a nil queue (as used by tests that
-// build the action directly) is tolerated rather than panicking.
+// TestHandleCommitVerifyErrorNilQueue ensures a nil peer-error queue is tolerated
+// rather than panicking. The queue is optional; metrics are not, and every
+// production construction supplies them.
 func TestHandleCommitVerifyErrorNilQueue(t *testing.T) {
-	action := &TryAddCommitAction{}
+	action := &TryAddCommitAction{metrics: NopMetrics()}
 	assert.NotPanics(t, func() {
 		action.handleCommitVerifyError(types.ErrInvalidCommitSignature{}, "peer", false)
 	})
@@ -149,9 +154,131 @@ func TestHandleCommitVerifyErrorQueueFull(t *testing.T) {
 	queue := &chanQueue[peerErrorMsg]{ch: make(chan peerErrorMsg, 1)}
 	queue.ch <- peerErrorMsg{PeerID: "other"}
 
-	action := &TryAddCommitAction{peerErrorQueue: queue}
+	action := &TryAddCommitAction{peerErrorQueue: queue, metrics: NopMetrics()}
 	assert.NotPanics(t, func() {
 		action.handleCommitVerifyError(types.ErrInvalidCommitSignature{}, "peer", false)
 	})
 	assert.Len(t, queue.ch, 1, "the pre-existing report must be preserved")
+}
+
+// TestTryAddCommitWithAssembledBlockAndStaleProposal covers a commit that arrives
+// after the block it commits has been fully assembled, while a Proposal for a
+// block the network dropped is still around: the +2/3 prevote majority that
+// retargeted ProposalBlockParts left the Proposal untouched
+// (addVoteUpdateValidBlockMw). Deciding from that Proposal rejects the commit,
+// and because the part set is already complete no later part can retry it while
+// the parked StateData.Commit turns every further commit into a no-op — the node
+// stalls at this height holding the very block it needs
+// (dashpay/tenderdash#1414).
+func TestTryAddCommitWithAssembledBlockAndStaleProposal(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cfg := configSetup(t)
+
+	n := newCommitFixture(ctx, t, cfg, types.BlockPartSizeBytes, 0)
+	stateData := n.node.GetStateData()
+
+	staleProposal := types.NewProposal(
+		n.block.Height, n.block.CoreChainLockedHeight, 0, -1, factory.MakeBlockID(), n.block.Time)
+
+	stateData.Proposal = staleProposal
+	stateData.ProposalBlock = n.block
+	stateData.ProposalBlockParts = n.parts
+	stateData.updateRoundStep(n.commit.Round, cstypes.RoundStepPrevote)
+
+	ctx = dash.ContextWithProTxHash(ctx, n.node.privValidator.ProTxHash)
+	ctx = msgInfoWithCtx(ctx, msgInfo{Msg: &CommitMessage{n.commit}, PeerID: n.peerID})
+
+	require.NoError(t, n.node.ctrl.Dispatch(ctx, &TryAddCommitEvent{Commit: n.commit, PeerID: n.peerID}, &stateData))
+	assert.Equal(t, int64(2), stateData.Height,
+		"a commit for the block we hold must be applied rather than dropped over a proposal that outlived its own block")
+}
+
+// A future-round commit must leave its block ready to download after the round transition.
+func TestTryAddCommitForFutureRoundParksCommitAndPartSet(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cfg := configSetup(t)
+
+	const futureRound = int32(1)
+	n := newCommitFixture(ctx, t, cfg, types.BlockPartSizeBytes, futureRound)
+	stateData := n.node.GetStateData()
+
+	stateData.Proposal = types.NewProposal(
+		n.block.Height, n.block.CoreChainLockedHeight, 0, -1, factory.MakeBlockID(), n.block.Time)
+	stateData.updateRoundStep(0, cstypes.RoundStepPrevote)
+	require.Less(t, stateData.Round, n.commit.Round, "the commit must name a round ahead of ours")
+
+	ctx = dash.ContextWithProTxHash(ctx, n.node.privValidator.ProTxHash)
+	ctx = msgInfoWithCtx(ctx, msgInfo{Msg: &CommitMessage{n.commit}, PeerID: n.peerID})
+
+	require.NoError(t, n.node.ctrl.Dispatch(ctx, &TryAddCommitEvent{Commit: n.commit, PeerID: n.peerID}, &stateData))
+
+	assert.Equal(t, futureRound, stateData.Round, "a verified commit for a later round must move us to that round")
+	assert.Same(t, n.commit, stateData.Commit, "the commit must be kept until the block it commits arrives")
+	require.NotNil(t, stateData.ProposalBlockParts, "the node must be ready to receive the committed block")
+	assert.True(t, stateData.ProposalBlockParts.HasHeader(n.commit.BlockID.PartSetHeader),
+		"the part set must target the committed block")
+}
+
+// TestTryAddCommitAppliesAssembledBlockBeforeProposeStep covers the lagging node
+// of dashpay/tenderdash#1414: the block arrives by gossip after a polka and the
+// Proposal never does. Without a Proposal the round step cannot leave Propose, so
+// keying the commit on the step parks it behind a condition nothing can satisfy —
+// the part set completes exactly once and every later commit is short-circuited.
+// Whether the commit can be applied is a question about the block we hold, not
+// about the step we are in.
+func TestTryAddCommitAppliesAssembledBlockBeforeProposeStep(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cfg := configSetup(t)
+
+	n := newCommitFixture(ctx, t, cfg, types.BlockPartSizeBytes, 0)
+	stateData := n.node.GetStateData()
+
+	stateData.Proposal = nil
+	stateData.ProposalBlock = n.block
+	stateData.ProposalBlockParts = n.parts
+	stateData.updateRoundStep(n.commit.Round, cstypes.RoundStepPropose)
+	require.True(t, stateData.ProposalBlockParts.IsComplete(), "no further part can arrive to retry the commit")
+	require.False(t, stateData.isProposalComplete(), "without a Proposal the step cannot leave Propose")
+
+	ctx = dash.ContextWithProTxHash(ctx, n.node.privValidator.ProTxHash)
+	ctx = msgInfoWithCtx(ctx, msgInfo{Msg: &CommitMessage{n.commit}, PeerID: n.peerID})
+
+	require.NoError(t, n.node.ctrl.Dispatch(ctx, &TryAddCommitEvent{Commit: n.commit, PeerID: n.peerID}, &stateData))
+	assert.Equal(t, int64(2), stateData.Height,
+		"a commit for a block we hold complete must be applied, whatever step the missing proposal left us in")
+}
+
+// TestCommitVerifyFailureReasonSeparatesTheClasses pins the distinction the
+// metric exists to make. A quorum-hash disagreement says this node's validator
+// set is stale and it will finalize nothing until that is fixed; a forged
+// signature says the sender is dishonest; an exhausted budget says neither, only
+// that this node shed work. Collapsing them would make the one class that
+// indicates a local fault indistinguishable from peer noise.
+func TestCommitVerifyFailureReasonSeparatesTheClasses(t *testing.T) {
+	testCases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"stale validator set", types.ErrInvalidCommitQuorumHash{}, "quorum_hash"},
+		{"vote extension mismatch", types.ErrVoteExtensionCountMismatch{}, "extension_count"},
+		{"forged threshold signature", types.ErrInvalidCommitSignature{}, "invalid_signature"},
+		{"local shed", types.ErrVerificationBudgetExhausted, "budget"},
+		{"unclassified", errors.New("something else"), "other"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, commitVerifyFailureReason(tc.err))
+		})
+		// Every one of these reaches handleCommitVerifyError wrapped by
+		// readyToApplyCommit. Matching on the bare error would put all of them in
+		// "other", and the counter would read zero while the condition fires.
+		t.Run(tc.name+" wrapped", func(t *testing.T) {
+			wrapped := fmt.Errorf("error verifying commit: %w", tc.err)
+			assert.Equal(t, tc.want, commitVerifyFailureReason(wrapped))
+		})
+	}
 }

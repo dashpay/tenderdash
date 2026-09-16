@@ -201,8 +201,8 @@ func TestSigsRecoverer_UsingVoteSet(t *testing.T) {
 func TestSignsRecovererErrors(t *testing.T) {
 	blockID := makeBlockID([]byte("blockhash"), 1000, []byte("partshash"), nil)
 
-	// DEFAULT (non-threshold) extensions exercise the count/type guards without
-	// requiring recoverable threshold signatures.
+	// DEFAULT extensions are ignored because they do not carry recoverable
+	// threshold signature shares.
 	twoExts := func() VoteExtensions {
 		return mockVoteExtensions(t,
 			tmproto.VoteExtensionType_DEFAULT, "a",
@@ -227,12 +227,12 @@ func TestSignsRecovererErrors(t *testing.T) {
 			expectErr: false,
 		},
 		{
-			name: "mismatched extension counts",
+			name: "non-recoverable extension counts are ignored",
 			votes: []*Vote{
 				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: twoExts()},
 				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: oneExt()},
 			},
-			expectErr: true,
+			expectErr: false,
 		},
 		{
 			name: "non-precommit vote carrying extensions",

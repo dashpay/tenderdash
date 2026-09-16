@@ -219,6 +219,7 @@ func (s *pqScheduler) process(ctx context.Context) {
 									"capacity", s.capacity)
 
 								s.metrics.PeerPendingSendBytes.With("peer_id", string(pqEnvTmp.envelope.To)).Add(float64(-pqEnvTmp.size))
+								pqEnvTmp.envelope.NotifyDelivery()
 
 								// dequeue/drop from the priority queue
 								heap.Remove(s.pq, pqEnvTmp.index)
@@ -245,6 +246,7 @@ func (s *pqScheduler) process(ctx context.Context) {
 						"priority", pqEnv.priority,
 						"msg_size", pqEnv.size,
 						"capacity", s.capacity)
+					pqEnv.envelope.NotifyDelivery()
 				}
 			}
 
@@ -268,6 +270,7 @@ func (s *pqScheduler) process(ctx context.Context) {
 				select {
 				case s.dequeueCh <- pqEnv.envelope:
 				case <-s.closeCh:
+					pqEnv.envelope.NotifyDelivery()
 					return
 				}
 			}

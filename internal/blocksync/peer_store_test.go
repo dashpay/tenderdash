@@ -48,6 +48,23 @@ func TestInMemPeerStoreBasicOperations(t *testing.T) {
 	require.True(t, inmem.IsZero())
 }
 
+func TestMissingBlockRangeSurvivesReorderedReplies(t *testing.T) {
+	peerID := types.NodeID("snapshot peer")
+	peers := NewInMemPeerStore(newPeerData(peerID, 1000, 1030))
+	peers.Update(peerID, AddNumPending(2))
+	peers.RecordMissingBlock(peerID, 1005)
+	peers.Upsert(newPeerData(peerID, 1000, 1040))
+	peers.RecordMissingBlock(peerID, 1000)
+	require.False(t, peers.HasPeerForHeight(1005))
+	require.True(t, peers.HasPeerForHeight(1006))
+	peer, found := peers.Get(peerID)
+	require.True(t, found)
+	require.Zero(t, peer.numPending)
+	peers.Delete(peerID)
+	peers.RecordMissingBlock(peerID, 1005)
+	require.True(t, peers.IsZero(), "a late result must not recreate a removed peer")
+}
+
 func TestInMemPeerStoreFindPeer(t *testing.T) {
 	fakeClock := clockwork.NewFakeClock()
 	flowrate.Now = func() time.Time {

@@ -37,11 +37,14 @@ const (
 var (
 	ErrInvalidProposalNotSet     = errors.New("error invalid proposal not set")
 	ErrInvalidProposalForCommit  = errors.New("error invalid proposal for commit")
+	ErrInvalidProposalForPartSet = errors.New("error invalid proposal for the block parts being collected")
+	ErrInvalidProposalBlockID    = errors.New("proposal block ID does not describe the assembled block")
 	ErrUnableToVerifyProposal    = errors.New("error unable to verify proposal")
 	ErrInvalidProposalSignature  = errors.New("error invalid proposal signature")
 	ErrInvalidProposalCoreHeight = errors.New("error invalid proposal core height")
 	ErrInvalidProposalPOLRound   = errors.New("error invalid proposal POL round")
 	ErrAddingVote                = errors.New("error adding vote")
+	ErrProposalBlockNotSet       = errors.New("proposal block is not set")
 
 	ErrPrivValidatorNotSet = errors.New("priv-validator is not set")
 )
@@ -198,6 +201,8 @@ type State struct {
 	voteSigner     *voteSigner
 	ctrl           *Controller
 	roundScheduler *roundScheduler
+	// holds back proposals while the node catches up after a block-sync handover
+	catchup        *catchupTracker
 	msgMiddlewares []msgMiddlewareFunc
 
 	stopFn func(cs *State) bool
@@ -330,6 +335,7 @@ func NewState(
 		wal:      wal,
 	}
 	cs.roundScheduler = &roundScheduler{timeoutTicker: cs.timeoutTicker}
+	cs.catchup = &catchupTracker{}
 	propler := NewProposaler(cs.logger, cs.metrics, cs.privValidator, cs.msgInfoQueue, cs.blockExecutor)
 	cs.ctrl = NewController(cs, wal, cs.statsMsgQueue, propler)
 	subs := []eventemitter.Subscriber{propler, cs.blockExecutor, cs.stateDataStore, cs.voteSigner}

@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 func thresholdRecoverExtension(payload string) *tmproto.VoteExtension {
@@ -86,4 +87,14 @@ func TestValidateThresholdVoteExtensions_RejectsOverBound(t *testing.T) {
 	err := validateThresholdVoteExtensions(extensions)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "too many threshold vote extensions")
+}
+
+func TestThresholdVoteExtensionLimitMatchesCommitVerification(t *testing.T) {
+	extensions := make(tmproto.VoteExtensions, types.MaxVoteExtensions, types.MaxVoteExtensions+1)
+	for i := range extensions {
+		extensions[i] = thresholdRecoverExtension(fmt.Sprintf("payload%d", i))
+	}
+	require.NoError(t, validateThresholdVoteExtensions(extensions))
+	extensions = append(extensions, thresholdRecoverExtension("one more"))
+	require.ErrorContains(t, validateThresholdVoteExtensions(extensions), "too many threshold vote extensions")
 }

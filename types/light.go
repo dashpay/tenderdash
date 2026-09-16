@@ -48,7 +48,15 @@ func (lb LightBlock) ValidateBasic(chainID string) error {
 	if err := lb.ValidatorSet.ValidateBasic(); err != nil {
 		return fmt.Errorf("invalid validator set: %w", err)
 	}
-
+	hasCompletePublicKeys := lb.ValidatorSet.HasCompletePublicKeys()
+	if !hasCompletePublicKeys && lb.ValidatorSet.HasAnyPublicKeys() {
+		return errors.New("invalid validator set: public-key shares must be all present or all absent")
+	}
+	if hasCompletePublicKeys && !lb.ValidatorSet.HasPublicKeys {
+		if err := lb.ValidatorSet.ValidatePublicKeys(); err != nil {
+			return fmt.Errorf("invalid validator public-key shares: %w", err)
+		}
+	}
 	// Validate StateID height
 	stateID := lb.StateID().Hash()
 

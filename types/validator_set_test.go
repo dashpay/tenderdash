@@ -1253,8 +1253,8 @@ func TestValidatorSet_ValidateBasic_QuorumTypeUnsupported(t *testing.T) {
 // reported as ErrInvalidCommitSignature. Only a failed threshold-signature check
 // earns that type: it is the one failure no honest node can produce, since a
 // commit is stored only after it verifies. Wrong block ID and wrong quorum hash
-// are reachable by an honest relayer or a forked peer, so they must stay
-// untyped — callers evict peers on the typed error alone.
+// are reachable by an honest relayer or a forked peer, so they must carry some
+// other type — callers evict peers on ErrInvalidCommitSignature alone.
 func TestVerifyCommitInvalidSignatureIsTyped(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1306,6 +1306,8 @@ func TestVerifyCommitInvalidSignatureIsTyped(t *testing.T) {
 		require.Error(t, err)
 		assert.NotErrorAs(t, err, &ErrInvalidCommitSignature{},
 			"a quorum-hash disagreement is a fork/config mismatch, not forgery")
+		assert.ErrorAs(t, err, &ErrInvalidCommitQuorumHash{},
+			"the disagreement must be typed so callers can classify it as peer-triggerable")
 	})
 
 	t.Run("wrong height is not typed", func(t *testing.T) {

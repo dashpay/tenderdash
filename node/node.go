@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -126,6 +127,17 @@ func makeNode(
 	dbProvider config.DBProvider,
 	logger log.Logger,
 ) (service.Service, error) {
+	// Full nodes need a Dash Core RPC connection: the state sync light client
+	// providers verify quorum threshold signatures via Dash Core. Without
+	// core-rpc-host the only fallback would be a mock client backed by a local
+	// private validator, which a full node does not have. Validate this up
+	// front, before any resources (databases, event sinks) are opened.
+	if cfg.Mode == config.ModeFull && cfg.PrivValidator.CoreRPCHost == "" {
+		return nil, errors.New("a full node requires a Dash Core RPC connection for light client " +
+			"verification: set core-rpc-host in the [priv-validator] section of config.toml " +
+			"(and core-rpc-username/core-rpc-password as needed)")
+	}
+
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithCancel(ctx)
 
@@ -137,7 +149,16 @@ func makeNode(
 	}
 	closers = append(closers, dbCloser)
 
-	stateStore := sm.NewStore(stateDB, logger.With("module", "state_store"))
+	stateStoreOpts := []sm.StoreOption{sm.StoreWithLogger(logger.With("module", "state_store"))}
+	if cfg.UnsafeNoFsync {
+		// Here and in initDBs are the only places the policy is applied:
+		// tooling that opens the same databases (rollback, reindex, inspect)
+		// keeps durable writes.
+		stateStoreOpts = append(stateStoreOpts, sm.StoreWithUnsafeNoFsync())
+		logger.Error("unsafe-no-fsync is set: block store and state store writes are not durable; " +
+			"a power loss can leave this node unable to start. Never use this on a node whose data matters")
+	}
+	stateStore := sm.NewStore(stateDB, stateStoreOpts...)
 
 	genDoc, err := genesisDocProvider()
 	if err != nil {
@@ -205,18 +226,11 @@ func makeNode(
 		// Special handling on non-Validator nodes
 		logger.Info("this node is NOT a validator")
 
-		if cfg.PrivValidator.CoreRPCHost != "" {
-			dashCoreRPCClient, err = DefaultDashCoreRPCClient(cfg, logger.With("module", core.ModuleName))
-			if err != nil {
-				return nil, fmt.Errorf("failed to create Dash Core RPC client: %w", err)
-			}
-		} else {
-			llmqType := genDoc.QuorumType
-			if err := llmqType.Validate(); err != nil {
-				return nil, fmt.Errorf("invalid genesis quorum type %d: %w", llmqType, err)
-			}
-			// This is used for light client verification only
-			dashCoreRPCClient = core.NewMockClient(cfg.ChainID(), llmqType, privValidator, false)
+		// core-rpc-host is validated at the top of makeNode; the client feeds
+		// the state sync light client providers.
+		dashCoreRPCClient, err = DefaultDashCoreRPCClient(cfg, logger.With("module", core.ModuleName))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Dash Core RPC client: %w", err)
 		}
 	}
 
@@ -391,7 +405,7 @@ func makeNode(
 	// FIXME The way we do phased startups (e.g. replay -> block sync -> consensus) is very messy,
 	// we should clean this whole thing up. See:
 	// https://github.com/dashpay/tenderdash/issues/4644
-	node.services = append(node.services, statesync.NewReactor(
+	ssReactor := statesync.NewReactor(
 		genDoc.ChainID,
 		genDoc.InitialHeight,
 		*cfg.StateSync,
@@ -423,7 +437,9 @@ func makeNode(
 		stateSync,
 		dashCoreRPCClient,
 		csState,
-	))
+	)
+	node.services = append(node.services, ssReactor)
+	node.rpcEnv.StateSyncMetricer = ssReactor
 
 	if cfg.Mode == config.ModeValidator {
 		if privValidator != nil {

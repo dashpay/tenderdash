@@ -74,7 +74,7 @@ type Application_ApplySnapshotChunk_Call struct {
 // ApplySnapshotChunk is a helper method to define mock.On call
 //   - context1 context.Context
 //   - requestApplySnapshotChunk *types.RequestApplySnapshotChunk
-func (_e *Application_Expecter) ApplySnapshotChunk(context1 interface{}, requestApplySnapshotChunk interface{}) *Application_ApplySnapshotChunk_Call {
+func (_e *Application_Expecter) ApplySnapshotChunk(context1 any, requestApplySnapshotChunk any) *Application_ApplySnapshotChunk_Call {
 	return &Application_ApplySnapshotChunk_Call{Call: _e.mock.On("ApplySnapshotChunk", context1, requestApplySnapshotChunk)}
 }
 
@@ -142,7 +142,7 @@ type Application_CheckTx_Call struct {
 // CheckTx is a helper method to define mock.On call
 //   - context1 context.Context
 //   - requestCheckTx *types.RequestCheckTx
-func (_e *Application_Expecter) CheckTx(context1 interface{}, requestCheckTx interface{}) *Application_CheckTx_Call {
+func (_e *Application_Expecter) CheckTx(context1 any, requestCheckTx any) *Application_CheckTx_Call {
 	return &Application_CheckTx_Call{Call: _e.mock.On("CheckTx", context1, requestCheckTx)}
 }
 
@@ -210,7 +210,7 @@ type Application_ExtendVote_Call struct {
 // ExtendVote is a helper method to define mock.On call
 //   - context1 context.Context
 //   - requestExtendVote *types.RequestExtendVote
-func (_e *Application_Expecter) ExtendVote(context1 interface{}, requestExtendVote interface{}) *Application_ExtendVote_Call {
+func (_e *Application_Expecter) ExtendVote(context1 any, requestExtendVote any) *Application_ExtendVote_Call {
 	return &Application_ExtendVote_Call{Call: _e.mock.On("ExtendVote", context1, requestExtendVote)}
 }
 
@@ -278,7 +278,7 @@ type Application_FinalizeBlock_Call struct {
 // FinalizeBlock is a helper method to define mock.On call
 //   - context1 context.Context
 //   - requestFinalizeBlock *types.RequestFinalizeBlock
-func (_e *Application_Expecter) FinalizeBlock(context1 interface{}, requestFinalizeBlock interface{}) *Application_FinalizeBlock_Call {
+func (_e *Application_Expecter) FinalizeBlock(context1 any, requestFinalizeBlock any) *Application_FinalizeBlock_Call {
 	return &Application_FinalizeBlock_Call{Call: _e.mock.On("FinalizeBlock", context1, requestFinalizeBlock)}
 }
 
@@ -346,7 +346,7 @@ type Application_Info_Call struct {
 // Info is a helper method to define mock.On call
 //   - context1 context.Context
 //   - requestInfo *types.RequestInfo
-func (_e *Application_Expecter) Info(context1 interface{}, requestInfo interface{}) *Application_Info_Call {
+func (_e *Application_Expecter) Info(context1 any, requestInfo any) *Application_Info_Call {
 	return &Application_Info_Call{Call: _e.mock.On("Info", context1, requestInfo)}
 }
 
@@ -414,7 +414,7 @@ type Application_InitChain_Call struct {
 // InitChain is a helper method to define mock.On call
 //   - context1 context.Context
 //   - requestInitChain *types.RequestInitChain
-func (_e *Application_Expecter) InitChain(context1 interface{}, requestInitChain interface{}) *Application_InitChain_Call {
+func (_e *Application_Expecter) InitChain(context1 any, requestInitChain any) *Application_InitChain_Call {
 	return &Application_InitChain_Call{Call: _e.mock.On("InitChain", context1, requestInitChain)}
 }
 
@@ -482,7 +482,7 @@ type Application_ListSnapshots_Call struct {
 // ListSnapshots is a helper method to define mock.On call
 //   - context1 context.Context
 //   - requestListSnapshots *types.RequestListSnapshots
-func (_e *Application_Expecter) ListSnapshots(context1 interface{}, requestListSnapshots interface{}) *Application_ListSnapshots_Call {
+func (_e *Application_Expecter) ListSnapshots(context1 any, requestListSnapshots any) *Application_ListSnapshots_Call {
 	return &Application_ListSnapshots_Call{Call: _e.mock.On("ListSnapshots", context1, requestListSnapshots)}
 }
 
@@ -550,7 +550,7 @@ type Application_LoadSnapshotChunk_Call struct {
 // LoadSnapshotChunk is a helper method to define mock.On call
 //   - context1 context.Context
 //   - requestLoadSnapshotChunk *types.RequestLoadSnapshotChunk
-func (_e *Application_Expecter) LoadSnapshotChunk(context1 interface{}, requestLoadSnapshotChunk interface{}) *Application_LoadSnapshotChunk_Call {
+func (_e *Application_Expecter) LoadSnapshotChunk(context1 any, requestLoadSnapshotChunk any) *Application_LoadSnapshotChunk_Call {
 	return &Application_LoadSnapshotChunk_Call{Call: _e.mock.On("LoadSnapshotChunk", context1, requestLoadSnapshotChunk)}
 }
 
@@ -618,7 +618,7 @@ type Application_OfferSnapshot_Call struct {
 // OfferSnapshot is a helper method to define mock.On call
 //   - context1 context.Context
 //   - requestOfferSnapshot *types.RequestOfferSnapshot
-func (_e *Application_Expecter) OfferSnapshot(context1 interface{}, requestOfferSnapshot interface{}) *Application_OfferSnapshot_Call {
+func (_e *Application_Expecter) OfferSnapshot(context1 any, requestOfferSnapshot any) *Application_OfferSnapshot_Call {
 	return &Application_OfferSnapshot_Call{Call: _e.mock.On("OfferSnapshot", context1, requestOfferSnapshot)}
 }
 
@@ -686,7 +686,7 @@ type Application_PrepareProposal_Call struct {
 // PrepareProposal is a helper method to define mock.On call
 //   - context1 context.Context
 //   - requestPrepareProposal *types.RequestPrepareProposal
-func (_e *Application_Expecter) PrepareProposal(context1 interface{}, requestPrepareProposal interface{}) *Application_PrepareProposal_Call {
+func (_e *Application_Expecter) PrepareProposal(context1 any, requestPrepareProposal any) *Application_PrepareProposal_Call {
 	return &Application_PrepareProposal_Call{Call: _e.mock.On("PrepareProposal", context1, requestPrepareProposal)}
 }
 
@@ -754,7 +754,7 @@ type Application_ProcessProposal_Call struct {
 // ProcessProposal is a helper method to define mock.On call
 //   - context1 context.Context
 //   - requestProcessProposal *types.RequestProcessProposal
-func (_e *Application_Expecter) ProcessProposal(context1 interface{}, requestProcessProposal interface{}) *Application_ProcessProposal_Call {
+func (_e *Application_Expecter) ProcessProposal(context1 any, requestProcessProposal any) *Application_ProcessProposal_Call {
 	return &Application_ProcessProposal_Call{Call: _e.mock.On("ProcessProposal", context1, requestProcessProposal)}
 }
 
@@ -822,7 +822,7 @@ type Application_Query_Call struct {
 // Query is a helper method to define mock.On call
 //   - context1 context.Context
 //   - requestQuery *types.RequestQuery
-func (_e *Application_Expecter) Query(context1 interface{}, requestQuery interface{}) *Application_Query_Call {
+func (_e *Application_Expecter) Query(context1 any, requestQuery any) *Application_Query_Call {
 	return &Application_Query_Call{Call: _e.mock.On("Query", context1, requestQuery)}
 }
 
@@ -890,7 +890,7 @@ type Application_VerifyVoteExtension_Call struct {
 // VerifyVoteExtension is a helper method to define mock.On call
 //   - context1 context.Context
 //   - requestVerifyVoteExtension *types.RequestVerifyVoteExtension
-func (_e *Application_Expecter) VerifyVoteExtension(context1 interface{}, requestVerifyVoteExtension interface{}) *Application_VerifyVoteExtension_Call {
+func (_e *Application_Expecter) VerifyVoteExtension(context1 any, requestVerifyVoteExtension any) *Application_VerifyVoteExtension_Call {
 	return &Application_VerifyVoteExtension_Call{Call: _e.mock.On("VerifyVoteExtension", context1, requestVerifyVoteExtension)}
 }
 

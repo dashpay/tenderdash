@@ -133,6 +133,54 @@ func waitForHeight(ctx context.Context, testnet *e2e.Testnet, height int64) (*ty
 	}
 }
 
+// waitForNetworkHeight waits until the network - any started node with state -
+// reaches height, and errors once the highest height seen has not increased
+// for WaitForHeightTimeout. Unlike waitForHeight it does not wait for every
+// node: a node still looking for peers keeps catching up in the background,
+// and the callers that need the whole network at a height use waitForHeight.
+func waitForNetworkHeight(ctx context.Context, testnet *e2e.Testnet, height int64) error {
+	var (
+		clients      = map[string]*rpchttp.HTTP{}
+		maxHeight    int64
+		lastIncrease = time.Now()
+	)
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		for _, node := range testnet.Nodes {
+			if node.Stateless() || !node.HasStarted {
+				continue
+			}
+			client, ok := clients[node.Name]
+			if !ok {
+				var err error
+				if client, err = node.Client(); err != nil {
+					continue
+				}
+				clients[node.Name] = client
+			}
+			status, err := client.Status(ctx)
+			if err != nil {
+				continue
+			}
+			if h := status.SyncInfo.LatestBlockHeight; h > maxHeight {
+				maxHeight, lastIncrease = h, time.Now()
+			}
+			if maxHeight >= height {
+				return nil
+			}
+		}
+		if time.Since(lastIncrease) >= WaitForHeightTimeout {
+			return fmt.Errorf("network stalled at height %d while waiting for height %d", maxHeight, height)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
 // waitForNode waits for a node to become available and catch up to the given block height.
 func waitForNode(ctx context.Context, logger log.Logger, node *e2e.Node, height int64) (*rpctypes.ResultStatus, error) {
 	// If the node is the light client or seed note, we do not check for the last height.

@@ -47,17 +47,42 @@ type Executor interface {
 		round int32,
 		state State,
 		verify bool,
+		lastCommit types.VerifiedCommit,
 	) (CurrentRoundState, error)
 
-	ValidateBlock(ctx context.Context, state State, block *types.Block) error
+	// ValidateBlock, ValidateBlockWithRoundState, FinalizeBlock, ApplyBlock and
+	// ProcessProposal (used only when verify is set) take lastCommit,
+	// block.LastCommit with the proof of its verification if
+	// the caller holds one. The proof spares the threshold verification only
+	// when it covers exactly the verification the block's validation would run;
+	// anything else, including a VerifiedCommit without proof, is verified in
+	// full. block.LastCommit is always what is verified: the commit lastCommit
+	// holds is never read in its place.
+	ValidateBlock(ctx context.Context, state State, block *types.Block, lastCommit types.VerifiedCommit) error
+
+	// VerifyCommit checks that commit is state.Validators' commit for the block
+	// blockID at height. On success it returns commit with the proof of that
+	// verification, which the caller can offer back as lastCommit when commit
+	// reappears as the next block's LastCommit.
+	VerifyCommit(
+		state State,
+		blockID types.BlockID,
+		height int64,
+		commit *types.Commit,
+	) (types.VerifiedCommit, error)
 
 	ValidateBlockWithRoundState(
 		ctx context.Context,
 		state State,
 		uncommittedState CurrentRoundState,
 		block *types.Block,
+		lastCommit types.VerifiedCommit,
 	) error
 
+	// FinalizeBlock commits the block to the application and returns the new
+	// state together with the application's ResponseFinalizeBlock, whose hints
+	// that are not part of the state (propose_next_block_immediately) the
+	// consensus engine acts on.
 	FinalizeBlock(
 		ctx context.Context,
 		state State,
@@ -65,7 +90,8 @@ type Executor interface {
 		blockID types.BlockID,
 		block *types.Block,
 		commit *types.Commit,
-	) (State, error)
+		lastCommit types.VerifiedCommit,
+	) (State, *abci.ResponseFinalizeBlock, error)
 
 	ApplyBlock(
 		ctx context.Context,
@@ -73,6 +99,7 @@ type Executor interface {
 		blockID types.BlockID,
 		block *types.Block,
 		commit *types.Commit,
+		lastCommit types.VerifiedCommit,
 	) (State, error)
 
 	VerifyVoteExtension(ctx context.Context, vote *types.Vote) error
@@ -159,7 +186,7 @@ func NewBlockExecutor(
 	return blockExec
 }
 
-// Copy returns a new instance of BlockExecutor and applies option functions
+// Copy returns a new instance of BlockExecutor and applies option functions.
 func (blockExec *BlockExecutor) Copy(opts ...func(e *BlockExecutor)) *BlockExecutor {
 	copied := &BlockExecutor{
 		eventPublisher: blockExec.eventPublisher,
@@ -334,8 +361,10 @@ func (blockExec *BlockExecutor) ProcessProposal(
 	round int32,
 	state State,
 	verify bool,
+	lastCommit types.VerifiedCommit,
 ) (CurrentRoundState, error) {
 	version := block.Version.ToProto()
+	stages := blockExec.metrics.startStages()
 	resp, err := blockExec.appClient.ProcessProposal(ctx, &abci.RequestProcessProposal{
 		Hash:               block.Header.Hash(),
 		Height:             block.Header.Height,
@@ -370,6 +399,8 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		return CurrentRoundState{}, fmt.Errorf("invalid tx results: %w", err)
 	}
 
+	stages.done("process_proposal_abci")
+
 	rp := RoundParamsFromProcessProposal(resp, block.CoreChainLock, round)
 
 	// update some round state data
@@ -385,14 +416,17 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		return stateChanges, errors.New("invalid App Hash size")
 	}
 
+	stages.done("process_proposal_changeset")
+
 	if verify {
 		// Here we check if the ProcessProposal response matches
 		// block received from proposer, eg. if `uncommittedState`
 		// fields are the same as `block` fields
-		err = blockExec.ValidateBlockWithRoundState(ctx, state, stateChanges, block)
+		err = blockExec.ValidateBlockWithRoundState(ctx, state, stateChanges, block, lastCommit)
 		if err != nil {
 			return stateChanges, ErrInvalidBlock{err}
 		}
+		stages.done("process_proposal_validate")
 	}
 
 	return stateChanges, nil
@@ -402,13 +436,18 @@ func (blockExec *BlockExecutor) ProcessProposal(
 // If the block is invalid, it returns an error.
 // Validation does not mutate state, but does require historical information from the stateDB,
 // ie. to verify evidence from a validator at an old height.
-func (blockExec *BlockExecutor) ValidateBlock(ctx context.Context, state State, block *types.Block) error {
+func (blockExec *BlockExecutor) ValidateBlock(
+	ctx context.Context,
+	state State,
+	block *types.Block,
+	lastCommit types.VerifiedCommit,
+) error {
 	hash := block.Hash()
 	if _, ok := blockExec.cache[hash.String()]; ok {
 		return nil
 	}
 
-	err := validateBlock(state, block)
+	err := validateBlock(state, block, lastCommit, blockExec.metrics)
 	if err != nil {
 		return err
 	}
@@ -422,13 +461,27 @@ func (blockExec *BlockExecutor) ValidateBlock(ctx context.Context, state State, 
 	return nil
 }
 
+// VerifyCommit verifies commit against state.Validators as the commit for the
+// block blockID at height. On success it returns commit with the proof of that
+// verification, which the caller offers back as lastCommit when the same commit
+// comes back one height later as the next block's LastCommit.
+func (blockExec *BlockExecutor) VerifyCommit(
+	state State,
+	blockID types.BlockID,
+	height int64,
+	commit *types.Commit,
+) (types.VerifiedCommit, error) {
+	return types.VerifyCommitSignatures(state.Validators, state.ChainID, blockID, height, commit, nil)
+}
+
 func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 	ctx context.Context,
 	state State,
 	uncommittedState CurrentRoundState,
 	block *types.Block,
+	lastCommit types.VerifiedCommit,
 ) error {
-	err := blockExec.ValidateBlock(ctx, state, block)
+	err := blockExec.ValidateBlock(ctx, state, block, lastCommit)
 	if err != nil {
 		return err
 	}
@@ -450,10 +503,14 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 		)
 	}
 
+	// ValidateBlock above normally verifies block.LastCommit, but it short-circuits
+	// on its per-height cache, which is keyed on the block hash alone and so says
+	// nothing about the state the earlier validation ran against. That is why this
+	// second verification exists. lastCommit's proof is safe to skip on instead:
+	// it names the verified data itself, not a block hash.
 	if block.Height > state.InitialHeight {
-		if err := state.LastValidators.VerifyCommit(
-			state.ChainID, state.LastBlockID, block.Height-1, block.LastCommit); err != nil {
-			return fmt.Errorf("error validating block: %w", err)
+		if err := verifyLastCommit(state, block, lastCommit, blockExec.metrics); err != nil {
+			return err
 		}
 	}
 	if !bytes.Equal(block.NextValidatorsHash, uncommittedState.NextValidators.Hash()) {
@@ -487,7 +544,8 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	blockID types.BlockID,
 	block *types.Block,
 	commit *types.Commit,
-) (State, error) {
+	lastCommit types.VerifiedCommit,
+) (State, *abci.ResponseFinalizeBlock, error) {
 	// This is the only ValidateBlockWithRoundState on the ApplyBlock path, so it
 	// must not be removed: ApplyBlock deliberately calls ProcessProposal with
 	// verify=false and relies on this call instead. The consensus path validates
@@ -497,9 +555,11 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	// the time block sync gets here the block has already been delivered to the
 	// app by ProcessProposal and written by blockApplier.Apply; what this guards
 	// is the state and ABCI responses written below.
-	if err := blockExec.ValidateBlockWithRoundState(ctx, state, uncommittedState, block); err != nil {
-		return state, ErrInvalidBlock{err}
+	stages := blockExec.metrics.startStages()
+	if err := blockExec.ValidateBlockWithRoundState(ctx, state, uncommittedState, block, lastCommit); err != nil {
+		return state, nil, ErrInvalidBlock{err}
 	}
+	stages.done("finalize_validate")
 
 	// Save ResponseProcessProposal before FinalizeBlock to be able to recover when app state is ahead of tenderdash state
 	// (eg. when tenderdash fails just after receiving ResponseFinalizeBlock).
@@ -507,36 +567,43 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 		ProcessProposal: uncommittedState.Params.ToProcessProposal(),
 	}
 	if err := blockExec.store.SaveABCIResponses(block.Height, abciResponses); err != nil {
-		return state, err
+		return state, nil, err
 	}
+	stages.done("finalize_save_abci_responses")
 
 	startTime := time.Now().UnixNano()
 	fbResp, err := execBlockWithoutState(ctx, blockExec.appClient, block, commit, blockExec.logger)
 	if err != nil {
-		return state, ErrInvalidBlock{err}
+		return state, nil, ErrInvalidBlock{err}
 	}
 	endTime := time.Now().UnixNano()
 	blockExec.metrics.BlockProcessingTime.Observe(float64(endTime-startTime) / 1000000)
+	stages.done("finalize_block_abci")
 
 	if state, err = state.Update(blockID, &block.Header, &uncommittedState); err != nil {
-		return state, fmt.Errorf("commit failed for application: %w", err)
+		return state, nil, fmt.Errorf("commit failed for application: %w", err)
 	}
+	stages.done("finalize_state_update")
 
 	// Lock mempool, commit app state, update mempoool.
 	err = blockExec.flushMempool(ctx, state, block, uncommittedState.TxResults)
 	if err != nil {
-		return state, fmt.Errorf("commit failed for application: %w", err)
+		return state, nil, fmt.Errorf("commit failed for application: %w", err)
 	}
+	stages.done("finalize_mempool")
 
 	// Update evpool with the latest state.
 	blockExec.evpool.Update(ctx, state, block.Evidence)
+	stages.done("finalize_evidence_pool")
 
 	if err = blockExec.store.Save(state); err != nil {
-		return state, err
+		return state, nil, err
 	}
+	stages.done("finalize_save_state")
 
 	// Prune old heights, if requested by ABCI app
 	blockExec.pruneBlocks(fbResp.RetainHeight)
+	stages.done("finalize_prune")
 
 	// reset the verification cache
 	blockExec.cache = make(map[string]struct{})
@@ -547,8 +614,9 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	if err = es.Publish(blockExec.eventPublisher); err != nil {
 		blockExec.logger.Error("failed publishing event", "err", err)
 	}
+	stages.done("finalize_publish_events")
 
-	return state, nil
+	return state, fbResp, nil
 }
 
 // ApplyBlock validates the block against the state, executes it against the app using ProcessProposal ABCI request,
@@ -563,16 +631,19 @@ func (blockExec *BlockExecutor) ApplyBlock(
 	blockID types.BlockID,
 	block *types.Block,
 	commit *types.Commit,
+	lastCommit types.VerifiedCommit,
 ) (State, error) {
 	// verify is false because FinalizeBlock below runs ValidateBlockWithRoundState
 	// with the same arguments and wraps failures in the same ErrInvalidBlock.
 	// Verifying here as well would validate every block twice, and each pass costs
 	// a threshold signature verification of block.LastCommit.
-	uncommittedState, err := blockExec.ProcessProposal(ctx, block, commit.Round, state, false)
+	uncommittedState, err := blockExec.ProcessProposal(ctx, block, commit.Round, state, false, lastCommit)
 	if err != nil {
 		return state, err
 	}
-	return blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, commit)
+	// Replay never proposes, so the response hints are not needed here.
+	state, _, err = blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, commit, lastCommit)
+	return state, err
 }
 
 // ExtendVote gets vote-extensions from ABCI and updates vote.VoteExtensions with this value

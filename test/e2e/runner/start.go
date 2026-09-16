@@ -88,7 +88,7 @@ func Start(ctx context.Context, logger log.Logger, testnet *e2e.Testnet, ti infr
 
 			networkHeight = node.StartAt
 
-			if _, _, err := waitForHeight(ctx, testnet, networkHeight); err != nil {
+			if err := waitForNetworkHeight(ctx, testnet, networkHeight); err != nil {
 				return err
 			}
 		}

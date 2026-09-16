@@ -53,7 +53,11 @@ func TestRPCParams(t *testing.T) {
 		// id not captured in JSON parsing failures
 		{`{"method": "c", "id": "0", "params": a}`, "invalid character", ""},
 		{`{"method": "c", "id": "0", "params": ["a"]}`, "got 1", `"0"`},
-		{`{"method": "c", "id": "0", "params": ["a", "b"]}`, "invalid number", `"0"`},
+		// The stdlib's exact wording for a malformed json.Number changed
+		// between Go versions (e.g. "invalid number literal" vs "invalid
+		// syntax"); assert on our own error family instead of stdlib
+		// phrasing that Data merely happens to carry.
+		{`{"method": "c", "id": "0", "params": ["a", "b"]}`, "Invalid params", `"0"`},
 		{`{"method": "c", "id": "0", "params": [1, 1]}`, "of type string", `"0"`},
 
 		// no ID - notification

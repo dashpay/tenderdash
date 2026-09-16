@@ -7,6 +7,7 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
+	abci "github.com/dashpay/tenderdash/abci/types"
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/eventemitter"
@@ -62,10 +63,18 @@ func (c *blockExecutor) create(ctx context.Context, rs *cstypes.RoundState, roun
 
 func (c *blockExecutor) ensureProcess(ctx context.Context, rs *cstypes.RoundState, round int32) error {
 	block := rs.ProposalBlock
+	// Above the condition, not inside it: either operand can reach the block,
+	// depending on whether the first short-circuits the second.
+	if block == nil {
+		return fmt.Errorf("%w: height %d, round %d", ErrProposalBlockNotSet, rs.Height, round)
+	}
 	crs := rs.CurrentRoundState
 	if crs.Params.Source != sm.ProcessProposalSource || !crs.MatchesBlock(block.Header, round) {
 		c.logger.Trace("CurrentRoundState is outdated, executing ProcessProposal", "crs", crs)
-		uncommittedState, err := c.blockExec.ProcessProposal(ctx, block, round, c.committedState, true)
+		// consensus holds no proof for the block's LastCommit, so it is verified
+		// in full
+		uncommittedState, err := c.blockExec.ProcessProposal(ctx, block, round, c.committedState, true,
+			types.VerifiedCommit{})
 		if err != nil {
 			return fmt.Errorf("ProcessProposal abci method: %w", err)
 		}
@@ -81,7 +90,7 @@ func (c *blockExecutor) mustEnsureProcess(ctx context.Context, rs *cstypes.Round
 	}
 }
 
-func (c *blockExecutor) finalize(ctx context.Context, stateData *StateData, commit *types.Commit) (sm.State, error) {
+func (c *blockExecutor) finalize(ctx context.Context, stateData *StateData, commit *types.Commit) (sm.State, *abci.ResponseFinalizeBlock, error) {
 	block := stateData.ProposalBlock
 	blockParts := stateData.ProposalBlockParts
 	return c.blockExec.FinalizeBlock(
@@ -95,12 +104,17 @@ func (c *blockExecutor) finalize(ctx context.Context, stateData *StateData, comm
 		},
 		block,
 		commit,
+		// consensus holds no proof for the block's LastCommit, so it is verified
+		// in full
+		types.VerifiedCommit{},
 	)
 }
 
 func (c *blockExecutor) validate(ctx context.Context, stateData *StateData) error {
-	// Validate the block.
-	err := c.blockExec.ValidateBlockWithRoundState(ctx, stateData.state, stateData.CurrentRoundState, stateData.ProposalBlock)
+	// Validate the block. Consensus holds no proof for its LastCommit, so it is
+	// verified in full.
+	err := c.blockExec.ValidateBlockWithRoundState(ctx, stateData.state, stateData.CurrentRoundState,
+		stateData.ProposalBlock, types.VerifiedCommit{})
 	if err != nil {
 		step := stateData.Step.String()
 		return fmt.Errorf("invalid block %X (step %s): %w", step, stateData.CurrentRoundState.AppHash, err)

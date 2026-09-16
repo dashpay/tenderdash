@@ -61,6 +61,12 @@ func TestNodeStartStop(t *testing.T) {
 
 	n, ok := ns.(*nodeImpl)
 	require.True(t, ok)
+
+	// the state sync reactor must be wired into the RPC environment, so that
+	// the /status endpoint reports state sync metrics instead of zeros
+	require.NotNil(t, n.RPCEnvironment().StateSyncMetricer,
+		"statesync reactor is not wired into the RPC env as StateSyncMetricer")
+
 	t.Cleanup(func() {
 		bcancel()
 		n.Wait()
@@ -93,6 +99,52 @@ func TestNodeStartStop(t *testing.T) {
 	n.Wait()
 
 	require.False(t, n.IsRunning(), "node must shut down")
+}
+
+// TestNodeFullModeRequiresCoreRPCHost ensures that constructing a full node
+// without a Dash Core RPC host fails with a descriptive error (instead of
+// panicking) and does not leak resources: the config is validated before any
+// databases or event sinks are opened.
+func TestNodeFullModeRequiresCoreRPCHost(t *testing.T) {
+	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
+	require.NoError(t, err)
+	defer os.RemoveAll(cfg.RootDir)
+
+	cfg.Mode = config.ModeFull
+	cfg.PrivValidator.CoreRPCHost = ""
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	logger := log.NewTestingLogger(t)
+
+	dirEntries := func(dir string) []string {
+		entries, err := os.ReadDir(dir)
+		require.NoError(t, err)
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		return names
+	}
+	before := dirEntries(cfg.DBDir())
+
+	ns, err := newDefaultNode(ctx, cfg, logger)
+	require.Error(t, err)
+	require.Nil(t, ns)
+	require.Contains(t, err.Error(), "core-rpc-host")
+
+	// the check must run before any resources are opened: the data directory
+	// must be untouched (no block/state store DBs were created) ...
+	require.Equal(t, before, dirEntries(cfg.DBDir()),
+		"constructor must not open databases before config validation")
+
+	// ... and a retry must fail with the same config error, not a DB-lock
+	// error from handles leaked by the first attempt
+	ns, err = newDefaultNode(ctx, cfg, logger)
+	require.Error(t, err)
+	require.Nil(t, ns)
+	require.Contains(t, err.Error(), "core-rpc-host")
 }
 
 func getTestNode(ctx context.Context, t *testing.T, conf *config.Config, logger log.Logger) *nodeImpl {
@@ -564,7 +616,7 @@ func TestCreateProposalBlock(t *testing.T) {
 	}
 	assert.EqualValues(t, partSetFromHeader.ByteSize(), partSet.ByteSize())
 
-	err = blockExec.ValidateBlock(ctx, state, block)
+	err = blockExec.ValidateBlock(ctx, state, block, types.VerifiedCommit{})
 	assert.NoError(t, err)
 
 	assert.EqualValues(t, block.Header.ProposedAppVersion, proposedAppVersion)
@@ -974,4 +1026,26 @@ func TestGetRouterConfigWiresMaxIncomingConnectionAttempts(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint(7), opts.MaxIncomingConnectionAttempts,
 		"config max-incoming-connection-attempts must flow into RouterOptions")
+}
+
+// TestInitDBsAppliesUnsafeNoFsyncOnlyWhenConfigured pins where the no-fsync
+// policy enters the node: the block store built for the live node follows
+// the config flag, and nothing else. Other tooling that opens the same
+// databases builds its own stores and keeps durable writes.
+func TestInitDBsAppliesUnsafeNoFsyncOnlyWhenConfigured(t *testing.T) {
+	for _, unsafe := range []bool{false, true} {
+		t.Run(strconv.FormatBool(unsafe), func(t *testing.T) {
+			// the test root name feeds a temp dir pattern, so it cannot
+			// contain the "/" a subtest name has
+			cfg, err := config.ResetTestRoot(t.TempDir(), "TestInitDBsUnsafeNoFsync")
+			require.NoError(t, err)
+			cfg.UnsafeNoFsync = unsafe
+
+			blockStore, _, closer, err := initDBs(cfg, config.DefaultDBProvider)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = closer() })
+
+			require.Equal(t, unsafe, blockStore.UnsafeNoFsync())
+		})
+	}
 }

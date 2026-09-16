@@ -95,7 +95,7 @@ type Store_Delete_Call[K comparable, V any] struct {
 
 // Delete is a helper method to define mock.On call
 //   - key K
-func (_e *Store_Expecter[K, V]) Delete(key interface{}) *Store_Delete_Call[K, V] {
+func (_e *Store_Expecter[K, V]) Delete(key any) *Store_Delete_Call[K, V] {
 	return &Store_Delete_Call[K, V]{Call: _e.mock.On("Delete", key)}
 }
 
@@ -157,7 +157,7 @@ type Store_Get_Call[K comparable, V any] struct {
 
 // Get is a helper method to define mock.On call
 //   - key K
-func (_e *Store_Expecter[K, V]) Get(key interface{}) *Store_Get_Call[K, V] {
+func (_e *Store_Expecter[K, V]) Get(key any) *Store_Get_Call[K, V] {
 	return &Store_Get_Call[K, V]{Call: _e.mock.On("Get", key)}
 }
 
@@ -219,7 +219,7 @@ type Store_GetAndDelete_Call[K comparable, V any] struct {
 
 // GetAndDelete is a helper method to define mock.On call
 //   - key K
-func (_e *Store_Expecter[K, V]) GetAndDelete(key interface{}) *Store_GetAndDelete_Call[K, V] {
+func (_e *Store_Expecter[K, V]) GetAndDelete(key any) *Store_GetAndDelete_Call[K, V] {
 	return &Store_GetAndDelete_Call[K, V]{Call: _e.mock.On("GetAndDelete", key)}
 }
 
@@ -348,7 +348,7 @@ type Store_Put_Call[K comparable, V any] struct {
 // Put is a helper method to define mock.On call
 //   - key K
 //   - data V
-func (_e *Store_Expecter[K, V]) Put(key interface{}, data interface{}) *Store_Put_Call[K, V] {
+func (_e *Store_Expecter[K, V]) Put(key any, data any) *Store_Put_Call[K, V] {
 	return &Store_Put_Call[K, V]{Call: _e.mock.On("Put", key, data)}
 }
 
@@ -407,7 +407,7 @@ type Store_Query_Call[K comparable, V any] struct {
 // Query is a helper method to define mock.On call
 //   - spec store.QueryFunc[K, V]
 //   - limit int
-func (_e *Store_Expecter[K, V]) Query(spec interface{}, limit interface{}) *Store_Query_Call[K, V] {
+func (_e *Store_Expecter[K, V]) Query(spec any, limit any) *Store_Query_Call[K, V] {
 	return &Store_Query_Call[K, V]{Call: _e.mock.On("Query", spec, limit)}
 }
 
@@ -458,9 +458,9 @@ type Store_Update_Call[K comparable, V any] struct {
 // Update is a helper method to define mock.On call
 //   - key K
 //   - updates ...store.UpdateFunc[K, V]
-func (_e *Store_Expecter[K, V]) Update(key interface{}, updates ...interface{}) *Store_Update_Call[K, V] {
+func (_e *Store_Expecter[K, V]) Update(key any, updates ...any) *Store_Update_Call[K, V] {
 	return &Store_Update_Call[K, V]{Call: _e.mock.On("Update",
-		append([]interface{}{key}, updates...)...)}
+		append([]any{key}, updates...)...)}
 }
 
 func (_c *Store_Update_Call[K, V]) Run(run func(key K, updates ...store.UpdateFunc[K, V])) *Store_Update_Call[K, V] {

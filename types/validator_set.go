@@ -172,6 +172,34 @@ func (vals *ValidatorSet) ValidateBasic() error {
 	return vals.validateThreshold()
 }
 
+// HasCompletePublicKeys reports whether every validator carries a public-key
+// share. HasPublicKeys cannot answer this for network data because it is a
+// serialized, peer-controlled flag.
+func (vals *ValidatorSet) HasCompletePublicKeys() bool {
+	if vals.IsNilOrEmpty() {
+		return false
+	}
+	for _, val := range vals.Validators {
+		if val == nil || val.PubKey == nil || len(val.PubKey.Bytes()) == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// HasAnyPublicKeys reports whether at least one validator carries a public-key share.
+func (vals *ValidatorSet) HasAnyPublicKeys() bool {
+	if vals == nil {
+		return false
+	}
+	for _, val := range vals.Validators {
+		if val != nil && val.PubKey != nil && len(val.PubKey.Bytes()) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // validateThreshold sanity-checks the quorum voting threshold against the total
 // voting power.
 //
@@ -297,20 +325,42 @@ func (vals *ValidatorSet) IsNilOrEmpty() bool {
 
 // ThresholdPublicKeyValid returns true if threshold public key is valid.
 func (vals *ValidatorSet) ThresholdPublicKeyValid() error {
+	return vals.thresholdPublicKeyValid(vals.HasPublicKeys)
+}
+
+// ValidatePublicKeys validates every share and reconstructs the threshold key.
+// It is independent of HasPublicKeys so callers can validate network data before
+// trusting that serialized availability flag.
+func (vals *ValidatorSet) ValidatePublicKeys() error {
+	if vals.IsNilOrEmpty() {
+		return ErrValidatorSetNilOrEmpty
+	}
+	for idx, val := range vals.Validators {
+		if val == nil {
+			return fmt.Errorf("invalid validator pub key #%d: validator is nil", idx)
+		}
+		if err := val.ValidatePubKey(); err != nil {
+			return fmt.Errorf("invalid validator pub key #%d: %w", idx, err)
+		}
+	}
+	return vals.thresholdPublicKeyValid(true)
+}
+
+func (vals *ValidatorSet) thresholdPublicKeyValid(hasPublicKeys bool) error {
 	if vals.ThresholdPublicKey == nil {
 		return errors.New("threshold public key is not set")
 	}
 	if len(vals.ThresholdPublicKey.Bytes()) != bls12381.PubKeySize {
 		return errors.New("threshold public key is wrong size")
 	}
-	if len(vals.Validators) == 1 && vals.HasPublicKeys {
+	if len(vals.Validators) == 1 && hasPublicKeys {
 		if vals.Validators[0].PubKey == nil {
 			return errors.New("validator public key is not set")
 		}
 		if !vals.Validators[0].PubKey.Equals(vals.ThresholdPublicKey) {
 			return errors.New("incorrect threshold public key")
 		}
-	} else if len(vals.Validators) > 1 && vals.HasPublicKeys {
+	} else if len(vals.Validators) > 1 && hasPublicKeys {
 		// if we have validators and our node is in the validator set then verify the recovered threshold public key
 		recoveredThresholdPublicKey, err := bls12381.RecoverThresholdPublicKeyFromPublicKeys(
 			vals.GetPublicKeys(),
@@ -909,6 +959,32 @@ func (vals *ValidatorSet) VerifyCommitWithBudget(
 	return vals.verifyCommit(chainID, blockID, height, commit, budget)
 }
 
+// VerifyCommitUnlessVerified verifies commit exactly as VerifyCommit does,
+// unless verified carries proof of that very verification: the same chain,
+// height, block ID, quorum and threshold key, and a commit whose signed content
+// and signatures are unchanged. It reports whether the verification was
+// skipped.
+//
+// Anything verified's proof does not cover — including the zero
+// VerifiedCommit, the only proof-less value code outside this package can
+// hold — falls through to VerifyCommit's own check and reports its errors
+// unchanged, so callers can keep telling a forged commit from an honest
+// disagreement by the error's type.
+//
+// commit is what is verified. The commit verified holds is never consulted.
+func (vals *ValidatorSet) VerifyCommitUnlessVerified(
+	chainID string,
+	blockID BlockID,
+	height int64,
+	commit *Commit,
+	verified VerifiedCommit,
+) (skipped bool, err error) {
+	if verified.proof.checkMatches(chainID, vals, blockID, height, commit) == nil {
+		return true, nil
+	}
+	return false, vals.verifyCommit(chainID, blockID, height, commit, nil)
+}
+
 func (vals *ValidatorSet) verifyCommit(
 	chainID string,
 	blockID BlockID,
@@ -916,36 +992,34 @@ func (vals *ValidatorSet) verifyCommit(
 	commit *Commit,
 	budget VerificationBudget,
 ) error {
-	// Validate Height and BlockID.
-	if height != commit.Height {
-		return NewErrInvalidCommitHeight(height, commit.Height)
-	}
-	if !blockID.Equals(commit.BlockID) {
-		return fmt.Errorf("invalid commit -- wrong block ID: want %v, got %v",
-			blockID, commit.BlockID)
-	}
+	_, _, err := vals.verifyCommitReportingSigns(chainID, blockID, height, commit, budget)
+	return err
+}
 
-	canonVote, err := commit.GetCanonicalVote()
+// verifyCommitReportingSigns verifies commit and, on success, reports the
+// signing data that was checked and the signatures it was checked against, so
+// a caller can later establish that a commit still holds what this
+// verification covered without repeating it.
+func (vals *ValidatorSet) verifyCommitReportingSigns(
+	chainID string,
+	blockID BlockID,
+	height int64,
+	commit *Commit,
+	budget VerificationBudget,
+) (QuorumSignData, QuorumSigns, error) {
+	quorumSigns, err := vals.commitSignData(chainID, blockID, height, commit)
 	if err != nil {
-		return err
+		return QuorumSignData{}, QuorumSigns{}, err
 	}
-	quorumSigns, err := makeVerifyQuorumSigns(chainID, vals.QuorumType, vals.QuorumHash, canonVote.ToProto())
-	if err != nil {
-		return err
-	}
-	if !vals.QuorumHash.Equal(commit.QuorumHash) {
-		return fmt.Errorf("invalid commit -- wrong quorum hash: validator set uses %X, commit has %X",
-			vals.QuorumHash, commit.QuorumHash)
-
-	}
+	signs := NewQuorumSignsFromCommit(commit)
 	if budget != nil {
-		err = quorumSigns.VerifyWithBudget(vals.ThresholdPublicKey, NewQuorumSignsFromCommit(commit), budget)
+		err = quorumSigns.VerifyWithBudget(vals.ThresholdPublicKey, signs, budget)
 	} else {
-		err = quorumSigns.Verify(vals.ThresholdPublicKey, NewQuorumSignsFromCommit(commit))
+		err = quorumSigns.Verify(vals.ThresholdPublicKey, signs)
 	}
 	if err != nil {
 		if errors.Is(err, ErrVerificationBudgetExhausted) {
-			return err
+			return QuorumSignData{}, QuorumSigns{}, err
 		}
 		// A vote-extension count mismatch is an application/version disagreement an
 		// honest peer can produce (it stores and relays a commit whose extension
@@ -953,19 +1027,52 @@ func (vals *ValidatorSet) verifyCommit(
 		// caller does not evict the sender for it.
 		var countMismatch ErrVoteExtensionCountMismatch
 		if errors.As(err, &countMismatch) {
-			return err
+			return QuorumSignData{}, QuorumSigns{}, err
 		}
 		// Otherwise the threshold signature itself is forged: a node stores a commit
 		// only after it verifies, so no honest peer relays one with a bad signature.
 		// Typed so the caller can evict the sender.
-		return ErrInvalidCommitSignature{
+		return QuorumSignData{}, QuorumSigns{}, ErrInvalidCommitSignature{
 			QuorumType:         vals.QuorumType,
 			QuorumHash:         vals.QuorumHash,
 			ThresholdPublicKey: vals.ThresholdPublicKey,
 			Err:                err,
 		}
 	}
-	return nil
+	return quorumSigns, signs, nil
+}
+
+// commitSignData runs every check verifyCommit makes before it touches a
+// signature and returns the signing data the signatures are verified against.
+// A commitProof re-runs it on the commit it is offered, so the two
+// cannot come to disagree about what those checks are.
+func (vals *ValidatorSet) commitSignData(
+	chainID string,
+	blockID BlockID,
+	height int64,
+	commit *Commit,
+) (QuorumSignData, error) {
+	// Validate Height and BlockID.
+	if height != commit.Height {
+		return QuorumSignData{}, NewErrInvalidCommitHeight(height, commit.Height)
+	}
+	if !blockID.Equals(commit.BlockID) {
+		return QuorumSignData{}, fmt.Errorf("invalid commit -- wrong block ID: want %v, got %v",
+			blockID, commit.BlockID)
+	}
+
+	canonVote, err := commit.GetCanonicalVote()
+	if err != nil {
+		return QuorumSignData{}, err
+	}
+	quorumSigns, err := makeVerifyQuorumSigns(chainID, vals.QuorumType, vals.QuorumHash, canonVote.ToProto())
+	if err != nil {
+		return QuorumSignData{}, err
+	}
+	if !vals.QuorumHash.Equal(commit.QuorumHash) {
+		return QuorumSignData{}, ErrInvalidCommitQuorumHash{Expected: vals.QuorumHash, Actual: commit.QuorumHash}
+	}
+	return quorumSigns, nil
 }
 
 //-----------------
@@ -1008,6 +1115,20 @@ func (e ErrInvalidCommitSignature) Error() string {
 }
 
 func (e ErrInvalidCommitSignature) Unwrap() error { return e.Err }
+
+// ErrInvalidCommitQuorumHash is returned when a commit names a quorum other than
+// the one this node's validator set uses. A peer that has already rotated, or
+// that has not yet, produces this without misbehaving, so the sender must not be
+// evicted for it.
+type ErrInvalidCommitQuorumHash struct {
+	Expected crypto.QuorumHash
+	Actual   crypto.QuorumHash
+}
+
+func (e ErrInvalidCommitQuorumHash) Error() string {
+	return fmt.Sprintf("invalid commit -- wrong quorum hash: validator set uses %X, commit has %X",
+		e.Expected, e.Actual)
+}
 
 func (vals *ValidatorSet) ABCIEquivalentValidatorUpdates() *abci.ValidatorSetUpdate {
 	var valUpdates []abci.ValidatorUpdate

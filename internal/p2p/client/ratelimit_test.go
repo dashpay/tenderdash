@@ -83,6 +83,36 @@ func TestRecvRateLimitHandler(t *testing.T) {
 	assertRateLimits(t, sent, Limit, Burst, TestTimeSeconds)
 }
 
+func TestRecvRateLimitHandlerGarbageCollectsServingLimiters(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	clock := clockwork.NewFakeClock()
+	fakeHandler := newMockConsumer(t)
+	fakeHandler.On("Handle", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+	mw := WithRecvRateLimitPerPeerHandlerWithBurst(
+		ctx,
+		1,
+		1,
+		func(*p2p.Envelope) uint { return 1 },
+		true,
+		log.NewNopLogger(),
+		WithRateLimitClock(clock),
+	)(fakeHandler).(*recvRateLimitPerPeerHandler)
+	require.NoError(t, clock.BlockUntilContext(ctx, 1), "garbage collector did not start")
+
+	peerID := types.NodeID("0102030405060708090a0b0c0d0e0f1011121314")
+	require.NoError(t, mw.Handle(ctx, &Client{}, &p2p.Envelope{From: peerID}))
+	_, ok := mw.limiters.Load(peerID)
+	require.True(t, ok)
+
+	clock.Advance((PeerRateLimitLifetime + 1) * time.Second)
+	require.Eventually(t, func() bool {
+		_, exists := mw.limiters.Load(peerID)
+		return !exists
+	}, time.Second, time.Millisecond)
+}
+
 // TestSendRateLimit tests the rate limit for sending messages using p2p.client.
 //
 // Each peer should have his own, independent rate limit.

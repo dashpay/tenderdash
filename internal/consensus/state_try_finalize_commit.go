@@ -44,6 +44,8 @@ func (cs *TryFinalizeCommitAction) Execute(ctx context.Context, stateEvent State
 		return nil
 	}
 
+	// The block alone: not having it here is routine, so this returns quietly
+	// where the same question panics in applyCommit below.
 	if !stateData.ProposalBlock.HashesTo(blockID.Hash) {
 		// TODO: this happens every time if we're not a validator (ugly logs)
 		// TODO: ^^ wait, why does it matter that we're a validator?
@@ -73,6 +75,8 @@ func (cs *TryFinalizeCommitAction) finalizeCommit(ctx context.Context, ctrl *Con
 	blockID, ok := stateData.Votes.Precommits(stateData.CommitRound).TwoThirdsMajority()
 	block, blockParts := stateData.ProposalBlock, stateData.ProposalBlockParts
 
+	// Decomposed rather than asked through holdsProposalBlock: each arm names
+	// which half broke, and that name is all the operator gets from a panic.
 	if !ok {
 		panic("cannot finalize commit; commit does not have 2/3 majority")
 	}

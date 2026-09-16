@@ -276,8 +276,8 @@ func (suite *SyncerTestSuite) TestSyncAny() {
 	suite.Require().Equal(expectState, newState)
 	suite.Require().Equal(commit, lastCommit)
 
-	suite.Require().Equal(expectState.LastBlockHeight, suite.syncer.lastSyncedSnapshotHeight)
-	suite.Require().True(suite.syncer.avgChunkTime > 0)
+	suite.Require().Equal(expectState.LastBlockHeight, suite.syncer.LastSyncedSnapshotHeight())
+	suite.Require().Positive(suite.syncer.AvgChunkTime())
 }
 
 func (suite *SyncerTestSuite) TestSyncAnyNoSnapshots() {

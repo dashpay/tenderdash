@@ -78,6 +78,18 @@ abci = "socket"
 # so the app can decide if we should keep the connection or not
 filter-peers = false
 
+# If set to positive duration, deadlock detection is enabled and set to the given time.
+# Use 0 to disable.
+# Default: 0
+deadlock-detection = "0s"
+
+# If true, block store and state store writes return before they have reached
+# the disk. This exists to take the cost of fsync out of a block sync benchmark
+# and nothing else. Never enable it on a node whose data matters: a power loss
+# can leave the stores behind the application, and the node will refuse to start.
+# Default: false
+unsafe-no-fsync = false
+
 
 #######################################################
 ###       Priv Validator Configuration              ###
@@ -122,6 +134,11 @@ laddr = "tcp://127.0.0.1:26657"
 # Default value '[]' disables cors support
 # Use '["*"]' to allow any origin
 cors-allowed-origins = []
+
+# This list also permits browser WebSocket origins for `tenderdash light <chainID>`.
+# An empty list rejects all requests carrying Origin, including same-host requests.
+# Clients without Origin remain supported. Add explicit browser origins as needed;
+# wildcard matching follows RPC CORS rules, and ["*"] explicitly allows any origin.
 
 # A list of methods the client is allowed to use with cross-domain requests
 cors-allowed-methods = ["HEAD", "GET", "POST", ]
@@ -349,17 +366,15 @@ use-p2p = false
 # for example: "host.example.com:2125"
 rpc-servers = ""
 
-# The hash and height of a trusted block. Must be within the trust-period.
-trust-height = 0
-trust-hash = ""
-
-# The trust period should be set so that Tendermint can detect and gossip misbehavior before
-# it is considered expired. For chains based on the Cosmos SDK, one day less than the unbonding
-# period should suffice.
-trust-period = "168h0m0s"
-
 # Time to spend discovering snapshots before initiating a restore.
 discovery-time = "15s"
+
+# Number of times to retry state sync. When retries are exhausted, the node will
+# fall back to the regular block sync. Set to 0 to retry
+# indefinitely, never falling back to block sync. Default is 3.
+# Note that in pessimistic case, it will take at least (discovery-time * retries) before
+# falling back to block sync.
+retries = 3
 
 # Temporary directory for state sync snapshot chunks, defaults to os.TempDir().
 # The synchronizer will create a new, randomly named directory within this directory
@@ -478,6 +493,13 @@ created as soon as the previous one is committed. You can space them out by
 setting `create-empty-blocks-interval`: with `"10s"`, an empty block follows
 roughly ten seconds after the last one. The interval only paces empty blocks —
 when transactions arrive, a block is proposed without waiting for it.
+
+Regardless of `create-empty-blocks-interval`, the application can ask for the
+next block without the wait by setting `propose_next_block_immediately` in its
+`ResponseFinalizeBlock`. Round 0 of the following height then enters the
+propose step as soon as `timeout-commit` has passed, exactly as if a
+transaction were waiting in the mempool. The hint is local to the node and
+consumed once; it is not persisted across restarts.
 
 ### create-empty-blocks = false
 

@@ -198,11 +198,6 @@ func admitAfterAdvance(
 	return <-admitted
 }
 
-func drainVerificationBudget(budget *rateVerificationBudget) {
-	for budget.Allow(1) {
-	}
-}
-
 func sumInts(values []int) int {
 	total := 0
 	for _, v := range values {

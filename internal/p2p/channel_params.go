@@ -66,7 +66,7 @@ func ChannelDescriptors(cfg *config.Config) map[ChannelID]*ChannelDescriptor {
 		BlockSyncChannel: {
 			ID:                 BlockSyncChannel,
 			Priority:           6,
-			SendQueueCapacity:  1000,
+			SendQueueCapacity:  4,
 			RecvBufferCapacity: 1024,
 			RecvMessageCapacity: types.MaxBlockSizeBytes +
 				p2pproto.BlockResponseMessagePrefixSize +

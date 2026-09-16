@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	"github.com/dashpay/tenderdash/libs/log"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -34,13 +35,28 @@ func (c *AddCommitAction) Execute(ctx context.Context, stateEvent StateEvent) er
 		return err
 	}
 
+	// updateStateData clears ProposalBlock when the round state was holding some
+	// other block, having pointed the part set at the committed one instead. There
+	// is nothing to apply until that block arrives, and its completing part
+	// dispatches this event again.
+	if stateData.ProposalBlock == nil {
+		log.FromCtxOrNop(ctx).Debug("commit is for a block we do not have yet; waiting for it",
+			"height", commit.Height,
+			"round", commit.Round,
+			"commit_block", commit.BlockID.Hash,
+		)
+		return nil
+	}
+
 	stateData.updateRoundStep(stateData.Round, cstypes.RoundStepApplyCommit)
 	stateData.CommitRound = commit.Round
 	stateData.CommitTime = tmtime.Now()
 	c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
 
 	// The commit is all good, let's apply it to the state
-	_ = stateEvent.Ctrl.Dispatch(ctx, &ApplyCommitEvent{Commit: commit}, stateData)
+	if err := stateEvent.Ctrl.Dispatch(ctx, &ApplyCommitEvent{Commit: commit}, stateData); err != nil {
+		return err
+	}
 
 	// This will relay the commit to peers
 	err = c.eventPublisher.PublishCommitEvent(commit)

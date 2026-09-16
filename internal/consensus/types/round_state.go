@@ -109,6 +109,12 @@ type RoundState struct {
 	LastValidators            *types.ValidatorSet `json:"last_validators"`
 	TriggeredTimeoutPrecommit bool                `json:"triggered_timeout_precommit"`
 
+	// ProposeNextBlockImmediately carries ResponseFinalizeBlock.propose_next_block_immediately
+	// from the previous height: round 0 of this height does not wait for
+	// transactions (create-empty-blocks-interval) before the propose step.
+	// Consumed once and not persisted, so a restart falls back to the configured wait.
+	ProposeNextBlockImmediately bool `json:"propose_next_block_immediately"`
+
 	sm.CurrentRoundState `json:"uncommitted_state"`
 }
 
@@ -172,9 +178,18 @@ func (rs *RoundState) NewRoundEvent() types.EventDataNewRound {
 	}
 }
 
-// BlockID returns block ID from proposal or constructs new block ID from ProposalBlock and ProposalBlockParts.
-// cs.Proposal is not guaranteed to be set when this function is called
+// BlockID returns the block ID this round state stands behind.
+//
+// A Proposal's BlockID is the proposer's claim about a block; the block and the
+// parts it was assembled from are the block itself. When both are available the
+// derived value is returned, because this BlockID reaches a vote signature and a
+// claim must not. The Proposal is used only when there is no block to derive
+// from, and cs.Proposal is not guaranteed to be set at all.
 func (rs *RoundState) BlockID() types.BlockID {
+	if rs.ProposalBlock != nil && rs.ProposalBlockParts != nil {
+		return rs.ProposalBlock.BlockID(rs.ProposalBlockParts)
+	}
+
 	if rs.Proposal != nil && rs.Height == rs.Proposal.Height && rs.Round == rs.Proposal.Round {
 		return rs.Proposal.BlockID
 	}
@@ -220,7 +235,8 @@ func (rs RoundState) NewValidBlockMessage() *tmcons.NewValidBlock {
 		Round:              rs.Round,
 		BlockPartSetHeader: psHeader.ToProto(),
 		BlockParts:         rs.ProposalBlockParts.BitArray().ToProto(),
-		IsCommit:           rs.Step == RoundStepApplyCommit,
+		IsCommit: rs.Step == RoundStepApplyCommit ||
+			(rs.Commit != nil && rs.Commit.Height == rs.Height && psHeader.Equals(rs.Commit.BlockID.PartSetHeader)),
 	}
 }
 

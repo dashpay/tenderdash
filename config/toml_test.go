@@ -121,3 +121,20 @@ func checkConfig(t *testing.T, configFile string) {
 		}
 	}
 }
+
+// The no-fsync switch removes durability, so the generated file must show it
+// off by default and carry the warning next to it, where an operator reading
+// the file will see it before turning it on.
+func TestGeneratedConfigShowsUnsafeNoFsyncOffWithWarning(t *testing.T) {
+	tmpDir := t.TempDir()
+	EnsureRoot(tmpDir)
+	require.NoError(t, WriteConfigFile(tmpDir, DefaultConfig()))
+
+	data, err := os.ReadFile(filepath.Join(tmpDir, defaultConfigFilePath))
+	require.NoError(t, err)
+	rendered := string(data)
+
+	require.Contains(t, rendered, "unsafe-no-fsync = false")
+	require.Contains(t, rendered, "Never enable it on a node whose data matters")
+	require.False(t, DefaultConfig().UnsafeNoFsync, "the default must be durable writes")
+}

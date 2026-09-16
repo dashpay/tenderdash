@@ -54,15 +54,17 @@ func TestMaxOpenConnections(t *testing.T) {
 
 	go Serve(ctx, l, mux, logger, config) //nolint:errcheck // ignore for tests
 
-	// Make N GET calls to the server.
+	// Make N GET calls to the server. Share one Client (safe for concurrent
+	// use) across all goroutines so its idle connections can be closed in
+	// one place once the calls are done, below.
 	attempts := max * 2
+	c := http.Client{Timeout: 3 * time.Second}
 	var wg sync.WaitGroup
 	var failed int32
 	for i := 0; i < attempts; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			c := http.Client{Timeout: 3 * time.Second}
 			r, err := c.Get("http://" + l.Addr().String())
 			if err != nil {
 				atomic.AddInt32(&failed, 1)
@@ -72,6 +74,15 @@ func TestMaxOpenConnections(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+
+	// Since Go 1.27, Response.Body.Close() drains and reuses the underlying
+	// connection instead of closing it outright (see the Go 1.27 release
+	// notes for net/http). This test never reads the response body, so the
+	// requests above leave healthy, idle keep-alive connections in the
+	// Client's pool. Close them explicitly so the server-side handler
+	// goroutines they'd otherwise keep parked in a read wait don't trip the
+	// leaktest check registered above.
+	c.CloseIdleConnections()
 
 	// We expect some Gets to fail as the server's accept queue is filled,
 	// but most should succeed.

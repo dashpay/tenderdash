@@ -36,26 +36,25 @@ type backfillProbeResult struct {
 	err           error
 }
 
-// TestBackfillFetchVerifyBackpressure measures how far the backfill fetch workers
-// run ahead of the single verification loop, and what that costs in heap.
+// TestBackfillFetchVerifyBackpressure asserts that the backfill fetch workers
+// cannot run further ahead of the single verification loop than the block queue's
+// fetch-ahead bound admits, and measures what the bounded backlog costs in heap.
 //
-// The fetch workers hand their results to the verifier through blockQueue.pending,
-// an unbounded map, and nextHeight allocates the next height without reference to
-// how far verification has fallen behind. Verification is one serialized loop that
-// spends a BLS commit verification per block, so the queue holds whatever the
-// fetchers gain: the depth grows only while aggregate fetch throughput exceeds
-// verification throughput, which is a property of the deployment rather than of
-// the code. This probe pins the fetch side at the fastest it can go, serving from
-// memory, to measure the depth the design permits when it does.
+// Fetching a light block costs a round trip; verifying one costs a BLS commit
+// check on a single serialized loop. Wherever aggregate fetch throughput exceeds
+// verification throughput - a property of the deployment rather than of the code -
+// the fetched-but-unverified backlog grows until something stops it, and
+// blockQueue.maxFetchAhead is the only thing that does. This probe pins the fetch
+// side at the fastest it can go, serving from memory, so that the bound is what
+// the measurement finds.
 //
-// The probe reports the peak fetched-but-unverified depth against the backfill span.
-// A design with backpressure bounds that depth by the number of fetch workers,
-// independent of span; a design without one bounds it only by the span itself, so
+// Every span asserts the same ceiling, which is why several are run: a bounded
+// design holds the same depth whatever span it is given, whereas without a bound
 // the peak tracks the span and the heap cost tracks it with it.
 //
-// Opt-in, and must run without -race: it is a measurement rather than an assertion,
-// it takes minutes at the larger spans, and it samples a progress counter that the
-// verify loop increments unlocked.
+// Opt-in, and must run without -race: it takes minutes at the larger spans, and it
+// samples Reactor.BackFilledBlocks, a counter the verify loop increments without
+// taking the reactor lock its reader holds.
 //
 //	BACKFILL_PROBE=1 go test ./internal/statesync/ \
 //	    -run TestBackfillFetchVerifyBackpressure -v
@@ -163,6 +162,10 @@ func runBackfillProbe(t *testing.T, span int64) backfillProbeResult {
 	runtime.ReadMemStats(&base)
 	baseHeapInuse := base.HeapInuse
 
+	// The sampler owns the measurements below and is stopped, and awaited, before
+	// they are read; closeCh cannot serve for that, since the response handlers
+	// share it and must outlive the run.
+	samplerStop := make(chan struct{})
 	samplerDone := make(chan struct{})
 	go func() {
 		defer close(samplerDone)
@@ -171,7 +174,7 @@ func runBackfillProbe(t *testing.T, span int64) backfillProbeResult {
 		var ms runtime.MemStats
 		for {
 			select {
-			case <-closeCh:
+			case <-samplerStop:
 				return
 			case <-ticker.C:
 				verified := rts.reactor.BackFilledBlocks()
@@ -204,12 +207,34 @@ func runBackfillProbe(t *testing.T, span int64) backfillProbeResult {
 		5*time.Second,
 	)
 	duration := time.Since(runStart)
+	close(samplerStop)
+	<-samplerDone
 
 	verified := rts.reactor.BackFilledBlocks()
 	t.Logf("span=%d verified=%d served=%d peakGap=%d gapAtHalf=%d heap=%.1f->%.1f MiB in %s (chain build %s) err=%v",
 		span, verified, served.Load(), peakGap, gapAtHalf,
 		float64(baseHeapInuse)/(1<<20), float64(peakHeapInuse)/(1<<20),
 		duration.Round(time.Millisecond), buildDuration.Round(time.Millisecond), err)
+
+	// The queue admits this many heights fetched but not yet verified, and nothing
+	// else limits the fetch side here: every response is served from memory by
+	// handlers that never fail or stall.
+	//
+	// The tolerance is the instrument's, not the bound's. This samples served
+	// minus Reactor.BackFilledBlocks, and the verify loop frees a slot in
+	// queue.success() a few statements before it bumps that counter, so the
+	// fetcher which takes the freed slot can serve inside the window and be
+	// counted against a verification that has already happened. The loop is
+	// serial, so at most one verification is ever in that window.
+	fetchAhead := int64(rts.reactor.cfg.Fetchers) * backfillFetchAheadPerFetcher
+	require.LessOrEqual(t, peakGap, fetchAhead+1,
+		"fetching ran %d blocks ahead of verification, past the %d the bound admits",
+		peakGap, fetchAhead)
+
+	// The bound must cost the happy path nothing: these peers are honest and
+	// answer everything, so the whole span still has to be backfilled.
+	require.NoError(t, err, "an honest, responsive peer set must still complete the backfill")
+	require.EqualValues(t, span, verified, "every height in the span must be verified")
 
 	return backfillProbeResult{
 		span:          span,

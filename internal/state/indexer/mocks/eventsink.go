@@ -76,7 +76,7 @@ type EventSink_GetTxByHash_Call struct {
 
 // GetTxByHash is a helper method to define mock.On call
 //   - bytes []byte
-func (_e *EventSink_Expecter) GetTxByHash(bytes interface{}) *EventSink_GetTxByHash_Call {
+func (_e *EventSink_Expecter) GetTxByHash(bytes any) *EventSink_GetTxByHash_Call {
 	return &EventSink_GetTxByHash_Call{Call: _e.mock.On("GetTxByHash", bytes)}
 }
 
@@ -136,7 +136,7 @@ type EventSink_HasBlock_Call struct {
 
 // HasBlock is a helper method to define mock.On call
 //   - n int64
-func (_e *EventSink_Expecter) HasBlock(n interface{}) *EventSink_HasBlock_Call {
+func (_e *EventSink_Expecter) HasBlock(n any) *EventSink_HasBlock_Call {
 	return &EventSink_HasBlock_Call{Call: _e.mock.On("HasBlock", n)}
 }
 
@@ -187,7 +187,7 @@ type EventSink_IndexBlockEvents_Call struct {
 
 // IndexBlockEvents is a helper method to define mock.On call
 //   - eventDataNewBlockHeader types0.EventDataNewBlockHeader
-func (_e *EventSink_Expecter) IndexBlockEvents(eventDataNewBlockHeader interface{}) *EventSink_IndexBlockEvents_Call {
+func (_e *EventSink_Expecter) IndexBlockEvents(eventDataNewBlockHeader any) *EventSink_IndexBlockEvents_Call {
 	return &EventSink_IndexBlockEvents_Call{Call: _e.mock.On("IndexBlockEvents", eventDataNewBlockHeader)}
 }
 
@@ -238,7 +238,7 @@ type EventSink_IndexTxEvents_Call struct {
 
 // IndexTxEvents is a helper method to define mock.On call
 //   - txResults []*types.TxResult
-func (_e *EventSink_Expecter) IndexTxEvents(txResults interface{}) *EventSink_IndexTxEvents_Call {
+func (_e *EventSink_Expecter) IndexTxEvents(txResults any) *EventSink_IndexTxEvents_Call {
 	return &EventSink_IndexTxEvents_Call{Call: _e.mock.On("IndexTxEvents", txResults)}
 }
 
@@ -301,7 +301,7 @@ type EventSink_SearchBlockEvents_Call struct {
 // SearchBlockEvents is a helper method to define mock.On call
 //   - context1 context.Context
 //   - query1 *query.Query
-func (_e *EventSink_Expecter) SearchBlockEvents(context1 interface{}, query1 interface{}) *EventSink_SearchBlockEvents_Call {
+func (_e *EventSink_Expecter) SearchBlockEvents(context1 any, query1 any) *EventSink_SearchBlockEvents_Call {
 	return &EventSink_SearchBlockEvents_Call{Call: _e.mock.On("SearchBlockEvents", context1, query1)}
 }
 
@@ -369,7 +369,7 @@ type EventSink_SearchTxEvents_Call struct {
 // SearchTxEvents is a helper method to define mock.On call
 //   - context1 context.Context
 //   - query1 *query.Query
-func (_e *EventSink_Expecter) SearchTxEvents(context1 interface{}, query1 interface{}) *EventSink_SearchTxEvents_Call {
+func (_e *EventSink_Expecter) SearchTxEvents(context1 any, query1 any) *EventSink_SearchTxEvents_Call {
 	return &EventSink_SearchTxEvents_Call{Call: _e.mock.On("SearchTxEvents", context1, query1)}
 }
 

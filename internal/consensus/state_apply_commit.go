@@ -2,6 +2,7 @@ package consensus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	sm "github.com/dashpay/tenderdash/internal/state"
@@ -46,6 +47,17 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 
 	block, blockParts := stateData.ProposalBlock, stateData.ProposalBlockParts
 
+	// Parked commits and locally assembled commits bypass TryAddCommit's block check.
+	if commit != nil {
+		ready, err := verifyCommitBlock(ctx, c.logger, stateData, commit)
+		if err != nil {
+			return err
+		}
+		if !ready {
+			return errors.New("cannot apply commit without its proposal block")
+		}
+	}
+
 	c.blockExec.mustEnsureProcess(ctx, &stateData.RoundState, round)
 	c.blockExec.mustValidate(ctx, stateData)
 
@@ -76,7 +88,7 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 	}
 
 	// Create a copy of the state for staging and an event cache for txs.
-	stateCopy, err := c.blockExec.finalize(ctx, stateData, commit)
+	stateCopy, finalizeResp, err := c.blockExec.finalize(ctx, stateData, commit)
 	if err != nil {
 		c.logger.Error("failed to apply block", "err", err)
 		// If something went wrong within ABCI client, it can stop and we can't recover from it.
@@ -91,6 +103,17 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 
 	// NewHeightStep!
 	stateData.updateToState(stateCopy, commit, c.blockStore)
+
+	// The application may ask us not to wait for transactions before proposing
+	// the next height (ResponseFinalizeBlock.propose_next_block_immediately).
+	// updateToState cleared the previous hint, so it only ever applies to the
+	// height that follows the block just finalized.
+	if finalizeResp.GetProposeNextBlockImmediately() {
+		c.logger.Debug("application requested the next block without waiting for transactions",
+			"height", stateData.Height)
+		stateData.ProposeNextBlockImmediately = true
+	}
+
 	err = stateData.Save()
 	if err != nil {
 		return err

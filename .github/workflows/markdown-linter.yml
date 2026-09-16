@@ -10,6 +10,9 @@ on:
       - master
       - v[0-9]+.[0-9]+-dev
 
+permissions:
+  contents: read
+  statuses: write
 jobs:
   build:
     name: Super linter
@@ -17,10 +20,16 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y libpcap-dev
       - name: Lint Code Base
-        uses: github/super-linter@v5
+        # v8.7.0 (github/super-linter was an abandoned fork, 791 commits behind
+        # upstream, frozen at v7 since 2024-08-29; its v7 coordinates are affected
+        # by CVE-2026-25761 (command injection via crafted filenames) with no fix
+        # ever backported). Pinned by commit SHA per supply-chain policy.
+        uses: super-linter/super-linter@4ce20838b8ab83717e78138c5b3a1407148e0918 # v8.7.0
         env:
           VALIDATE_ALL_CODEBASE: true
           DEFAULT_BRANCH: master

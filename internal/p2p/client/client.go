@@ -32,12 +32,28 @@ const (
 	ResponseIDAttribute = "ResponseID"
 )
 
-const peerTimeout = 15 * time.Second
+const (
+	// peerTimeout leaves ample room for bounded stall detection and cleanup.
+	peerTimeout            = 60 * time.Second
+	deliveryStallTimeout   = 10 * time.Second
+	deliveryCleanupTimeout = 5 * time.Second
+)
 
 var (
-	ErrPeerNotResponded      = errors.New("peer did not send us anything")
-	ErrCannotResolveResponse = errors.New("cannot resolve a result")
+	ErrPeerNotResponded         = errors.New("peer did not send us anything")
+	ErrCannotResolveResponse    = errors.New("cannot resolve a result")
+	ErrDeliveryStalled          = errors.New("outbound delivery stalled")
+	ErrTargetedDeliveryRequired = errors.New("delivery notification requires a targeted envelope")
 )
+
+// ErrBlockNotFound reports that a peer cannot serve the requested block.
+type ErrBlockNotFound struct {
+	Height int64
+}
+
+func (e *ErrBlockNotFound) Error() string {
+	return fmt.Sprintf("peer does not have block at height %d", e.Height)
+}
 
 type (
 	// Sender is the interface that wraps Send method
@@ -283,6 +299,60 @@ func (c *Client) Send(ctx context.Context, msg any) error {
 	return c.SendN(ctx, msg, 1)
 }
 
+// SendAndWaitForDelivery sends a targeted envelope and waits until the
+// transport completes the message or the router drops it.
+func (c *Client) SendAndWaitForDelivery(ctx context.Context, envelope p2p.Envelope) error {
+	if envelope.To == "" || envelope.Broadcast {
+		return ErrTargetedDeliveryRequired
+	}
+	delivered := envelope.EnableDeliveryNotification()
+	progress := envelope.DeliveryProgress()
+	if err := c.Send(ctx, envelope); err != nil {
+		return err
+	}
+	stallTimer := c.clock.NewTimer(deliveryStallTimeout)
+	defer stallTimer.Stop()
+	for {
+		select {
+		case <-delivered:
+			return nil
+		case <-progress:
+			resetTimer(stallTimer, deliveryStallTimeout)
+		case <-stallTimer.Chan():
+			stallErr := fmt.Errorf("%w: no transport progress for %s", ErrDeliveryStalled, deliveryStallTimeout)
+			if err := c.Send(ctx, p2p.PeerError{
+				NodeID: envelope.To,
+				Err:    stallErr,
+				Fatal:  true,
+			}); err != nil {
+				return errors.Join(stallErr, err)
+			}
+			cleanupTimer := c.clock.NewTimer(deliveryCleanupTimeout)
+			defer cleanupTimer.Stop()
+			select {
+			case <-delivered:
+				return stallErr
+			case <-cleanupTimer.Chan():
+				return fmt.Errorf("%w: peer cleanup did not complete within %s", stallErr, deliveryCleanupTimeout)
+			case <-ctx.Done():
+				return errors.Join(stallErr, ctx.Err())
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+func resetTimer(timer clockwork.Timer, d time.Duration) {
+	if !timer.Stop() {
+		select {
+		case <-timer.Chan():
+		default:
+		}
+	}
+	timer.Reset(d)
+}
+
 // SendN sends p2p message to a peer, consuming `nTokens` from rate limiter.
 //
 // Allowed `msg` types are: p2p.Envelope or p2p.PeerError
@@ -315,6 +385,7 @@ func (c *Client) SendN(ctx context.Context, msg any, nTokens int) error {
 			if !ok {
 				c.logger.Debug("dropping message due to rate limit",
 					"channel", t.ChannelID, "peer", t.To, "message", t.Message)
+				t.NotifyDelivery()
 				return nil
 			}
 		}
@@ -368,7 +439,11 @@ func (c *Client) resolve(ctx context.Context, envelope *p2p.Envelope) error {
 	if !ok {
 		return fmt.Errorf("responseID attribute is missed: %w", ErrCannotResolveResponse)
 	}
-	return c.resolveMessage(ctx, respID, result{Value: envelope.Message})
+	res := result{Value: envelope.Message}
+	if msg, ok := envelope.Message.(*bcproto.NoBlockResponse); ok {
+		res.Err = &ErrBlockNotFound{Height: msg.Height}
+	}
+	return c.resolveMessage(ctx, respID, res)
 }
 
 func (c *Client) resolveMessage(_ctx context.Context, respID string, res result) error {
@@ -556,7 +631,7 @@ func newPromise[T proto.Message](
 func isMessageResolvable(msg proto.Message) bool {
 	// This list should be expanded using other response messages
 	switch msg.(type) {
-	case *bcproto.BlockResponse:
+	case *bcproto.BlockResponse, *bcproto.NoBlockResponse:
 		return true
 	}
 	return false
@@ -567,6 +642,21 @@ func isMessageResolvable(msg proto.Message) bool {
 func ResponseFuncFromEnvelope(channel *Client, envelope *p2p.Envelope) func(ctx context.Context, msg proto.Message) error {
 	return func(ctx context.Context, msg proto.Message) error {
 		return channel.Send(ctx, p2p.Envelope{
+			ChannelID: envelope.ChannelID,
+			Attributes: map[string]string{
+				ResponseIDAttribute: envelope.Attributes[RequestIDAttribute],
+			},
+			To:      envelope.From,
+			Message: msg,
+		})
+	}
+}
+
+// DeliveryResponseFuncFromEnvelope creates a response function that waits for
+// the transport to complete a large response or for the router to drop it.
+func DeliveryResponseFuncFromEnvelope(channel *Client, envelope *p2p.Envelope) func(context.Context, proto.Message) error {
+	return func(ctx context.Context, msg proto.Message) error {
+		return channel.SendAndWaitForDelivery(ctx, p2p.Envelope{
 			ChannelID: envelope.ChannelID,
 			Attributes: map[string]string{
 				ResponseIDAttribute: envelope.Attributes[RequestIDAttribute],

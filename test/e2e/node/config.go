@@ -24,6 +24,9 @@ type Config struct {
 	PrivValKey       string                       `toml:"privval_key"`
 	PrivValState     string                       `toml:"privval_state"`
 	KeyType          string                       `toml:"key_type"`
+	// ProposeNextBlockImmediately makes every FinalizeBlock response ask Tenderdash
+	// to propose the next height without waiting for transactions.
+	ProposeNextBlockImmediately bool `toml:"propose_next_block_immediately"`
 
 	// dash parameters
 	ThesholdPublicKeyUpdate map[string]string `toml:"threshold_public_key_update"`
@@ -42,6 +45,8 @@ func (cfg *Config) App() *kvstore.Config {
 		KeyType:          cfg.KeyType,
 		ValidatorUpdates: cfg.ValidatorUpdates,
 		PersistInterval:  cfg.PersistInterval,
+
+		ProposeNextBlockImmediately: cfg.ProposeNextBlockImmediately,
 		// dash params
 		ThesholdPublicKeyUpdate: cfg.ThesholdPublicKeyUpdate,
 		QuorumHashUpdate:        cfg.QuorumHashUpdate,

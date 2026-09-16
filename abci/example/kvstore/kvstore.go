@@ -458,7 +458,9 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 			return nil, err
 		}
 	}
-	resp := &abci.ResponseFinalizeBlock{}
+	resp := &abci.ResponseFinalizeBlock{
+		ProposeNextBlockImmediately: app.cfg.ProposeNextBlockImmediately,
+	}
 	if app.RetainBlocks > 0 && app.LastCommittedState.GetHeight() >= app.RetainBlocks {
 		resp.RetainHeight = app.LastCommittedState.GetHeight() - app.RetainBlocks + 1
 	}

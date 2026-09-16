@@ -1,3 +1,5 @@
+# Keep in sync with test/e2e/docker/Dockerfile.dockerignore, which replaces
+# this file for the E2E image build.
 build
 test/e2e/build
 test/e2e/networks

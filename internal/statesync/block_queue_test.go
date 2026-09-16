@@ -23,6 +23,15 @@ var (
 	stopTime          = time.Date(2019, 1, 1, 1, 0, 0, 0, time.UTC)
 	endTime           = stopTime.Add(-1 * time.Second)
 	numWorkers        = 1
+
+	// testFetchAhead is small enough that the concurrent tests run against the
+	// fetch-ahead bound rather than past it.
+	testFetchAhead int64 = 8
+
+	// spanFetchAhead admits the whole height span at once, for the tests that
+	// deliberately drain every height without verifying any. The bound itself is
+	// covered by TestBlockQueueBoundsFetchAhead.
+	spanFetchAhead = startHeight - stopHeight + 1
 )
 
 func TestBlockQueueBasic(t *testing.T) {
@@ -32,7 +41,7 @@ func TestBlockQueueBasic(t *testing.T) {
 	peerID, err := types.NewNodeID("0011223344556677889900112233445566778899")
 	require.NoError(t, err)
 
-	queue := newBlockQueue(startHeight, stopHeight, 1, stopTime, 1)
+	queue := newBlockQueue(startHeight, stopHeight, 1, stopTime, 1, testFetchAhead)
 	wg := &sync.WaitGroup{}
 
 	// asynchronously fetch blocks and add it to the queue
@@ -82,7 +91,7 @@ func TestBlockQueueWithFailures(t *testing.T) {
 	peerID, err := types.NewNodeID("0011223344556677889900112233445566778899")
 	require.NoError(t, err)
 
-	queue := newBlockQueue(startHeight, stopHeight, 1, stopTime, 200)
+	queue := newBlockQueue(startHeight, stopHeight, 1, stopTime, 200, testFetchAhead)
 	wg := &sync.WaitGroup{}
 
 	failureRate := 4
@@ -135,7 +144,7 @@ func TestBlockQueueBlocks(t *testing.T) {
 
 	peerID, err := types.NewNodeID("0011223344556677889900112233445566778899")
 	require.NoError(t, err)
-	queue := newBlockQueue(startHeight, stopHeight, 1, stopTime, 2)
+	queue := newBlockQueue(startHeight, stopHeight, 1, stopTime, 2, spanFetchAhead)
 	expectedHeight := startHeight
 	retryHeight := stopHeight + 2
 
@@ -189,7 +198,7 @@ func TestBlockQueueAcceptsNoMoreBlocks(t *testing.T) {
 
 	peerID, err := types.NewNodeID("0011223344556677889900112233445566778899")
 	require.NoError(t, err)
-	queue := newBlockQueue(startHeight, stopHeight, 1, stopTime, 1)
+	queue := newBlockQueue(startHeight, stopHeight, 1, stopTime, 1, spanFetchAhead)
 	defer queue.close()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -218,7 +227,7 @@ func TestBlockQueueStopTime(t *testing.T) {
 	peerID, err := types.NewNodeID("0011223344556677889900112233445566778899")
 	require.NoError(t, err)
 
-	queue := newBlockQueue(startHeight, stopHeight, 1, stopTime, 1)
+	queue := newBlockQueue(startHeight, stopHeight, 1, stopTime, 1, testFetchAhead)
 	wg := &sync.WaitGroup{}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -265,7 +274,7 @@ func TestBlockQueueInitialHeight(t *testing.T) {
 	require.NoError(t, err)
 	const initialHeight int64 = 120
 
-	queue := newBlockQueue(startHeight, stopHeight, initialHeight, stopTime, 1)
+	queue := newBlockQueue(startHeight, stopHeight, initialHeight, stopTime, 1, testFetchAhead)
 	wg := &sync.WaitGroup{}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -310,7 +319,7 @@ loop:
 // than a close-of-closed-channel panic.
 func TestBlockQueueTerminationIsIdempotent(t *testing.T) {
 	reason := errors.New("every usable peer was quarantined")
-	queue := newBlockQueue(startHeight, stopHeight, 1, stopTime, 1)
+	queue := newBlockQueue(startHeight, stopHeight, 1, stopTime, 1, testFetchAhead)
 
 	queue.fail(reason)
 	require.NotPanics(t, queue.close, "close after a terminal failure must be a no-op")
@@ -333,7 +342,7 @@ func TestBlockQueueDiscardPeer(t *testing.T) {
 	goodPeer, err := types.NewNodeID("1122334455667788990011223344556677889900")
 	require.NoError(t, err)
 
-	queue := newBlockQueue(startHeight, stopHeight, 1, stopTime, 1)
+	queue := newBlockQueue(startHeight, stopHeight, 1, stopTime, 1, testFetchAhead)
 	// verifyHeight sits at startHeight, so responses below it stay pending.
 	queue.add(mockLBResp(ctx, t, badPeer, startHeight-1, endTime))
 	queue.add(mockLBResp(ctx, t, goodPeer, startHeight-2, endTime))
@@ -344,6 +353,85 @@ func TestBlockQueueDiscardPeer(t *testing.T) {
 	require.Contains(t, queue.pending, startHeight-2, "other peers' responses must be untouched")
 	require.Zero(t, queue.retries, "re-queueing an evicted peer's work must not charge the retry budget")
 	require.Equal(t, startHeight-1, heap.Pop(queue.failed), "the dropped height must be re-queued for another peer")
+}
+
+// TestBlockQueueBoundsFetchAhead asserts that the queue stops allocating heights
+// once as many are fetched-but-unverified as the bound admits, and releases
+// exactly one more per verified block.
+//
+// Fetching is cheap beside verifying - one serialized loop paying a BLS commit
+// check - so peers that answer faster than this node verifies decide the depth
+// of the backlog unless the allocator consults verification progress. Bounding
+// it makes the backlog a property of the fetcher count rather than of the
+// backfill span, which on a new node joining an established chain is the
+// difference between a fixed cost and an unbounded one.
+func TestBlockQueueBoundsFetchAhead(t *testing.T) {
+	const maxFetchAhead int64 = 4
+
+	queue := newBlockQueue(startHeight, stopHeight, 1, stopTime, 1, maxFetchAhead)
+	defer queue.close()
+
+	for i := int64(0); i < maxFetchAhead; i++ {
+		require.Equal(t, startHeight-i, requireHeight(t, queue.nextHeight()),
+			"the queue must fill the fetch pipeline up to its bound")
+	}
+
+	blocked := queue.nextHeight()
+	requireNoHeight(t, blocked, "fetching must not run further ahead than the bound admits")
+
+	queue.success()
+	require.Equal(t, startHeight-maxFetchAhead, requireHeight(t, blocked),
+		"a verified block must release the next height to the waiting fetcher")
+
+	requireNoHeight(t, queue.nextHeight(),
+		"a verified block must release exactly one height, not reopen the pipeline")
+}
+
+// TestBlockQueueRetriesOutrankFetchAheadBound asserts that a height needing a
+// re-fetch reaches a fetcher even when the bound is saturated.
+//
+// It is the bound's one hard requirement: every height inside the bound is one
+// the verify loop must still see, so withholding a re-fetch would leave the loop
+// waiting on a height nobody is allowed to request - a bound that deadlocks the
+// run it was added to protect.
+func TestBlockQueueRetriesOutrankFetchAheadBound(t *testing.T) {
+	const maxFetchAhead int64 = 2
+
+	queue := newBlockQueue(startHeight, stopHeight, 1, stopTime, 10, maxFetchAhead)
+	defer queue.close()
+
+	first := requireHeight(t, queue.nextHeight())
+	requireHeight(t, queue.nextHeight())
+
+	blocked := queue.nextHeight()
+	requireNoHeight(t, blocked, "the bound must stop the queue allocating a fresh height")
+
+	queue.retry(first)
+	require.Equal(t, first, requireHeight(t, blocked),
+		"a height that must be re-fetched has to reach a fetcher even at the bound")
+}
+
+// requireHeight reads the height the queue handed a fetcher. The queue populates
+// the channel under its own lock before returning it, so a height that is coming
+// is already there and no waiting is needed to tell the two apart.
+func requireHeight(t *testing.T, ch <-chan int64) int64 {
+	t.Helper()
+	select {
+	case height := <-ch:
+		return height
+	default:
+		require.FailNow(t, "the queue handed out no height")
+		return 0
+	}
+}
+
+func requireNoHeight(t *testing.T, ch <-chan int64, msg string) {
+	t.Helper()
+	select {
+	case height := <-ch:
+		require.Fail(t, msg, "the queue handed out height %d", height)
+	default:
+	}
 }
 
 func mockLBResp(ctx context.Context, t *testing.T, peer types.NodeID, height int64, time time.Time) lightBlockResponse {

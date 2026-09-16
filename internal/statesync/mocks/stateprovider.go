@@ -76,7 +76,7 @@ type StateProvider_AppHash_Call struct {
 // AppHash is a helper method to define mock.On call
 //   - ctx context.Context
 //   - height uint64
-func (_e *StateProvider_Expecter) AppHash(ctx interface{}, height interface{}) *StateProvider_AppHash_Call {
+func (_e *StateProvider_Expecter) AppHash(ctx any, height any) *StateProvider_AppHash_Call {
 	return &StateProvider_AppHash_Call{Call: _e.mock.On("AppHash", ctx, height)}
 }
 
@@ -144,7 +144,7 @@ type StateProvider_Commit_Call struct {
 // Commit is a helper method to define mock.On call
 //   - ctx context.Context
 //   - height uint64
-func (_e *StateProvider_Expecter) Commit(ctx interface{}, height interface{}) *StateProvider_Commit_Call {
+func (_e *StateProvider_Expecter) Commit(ctx any, height any) *StateProvider_Commit_Call {
 	return &StateProvider_Commit_Call{Call: _e.mock.On("Commit", ctx, height)}
 }
 
@@ -210,7 +210,7 @@ type StateProvider_State_Call struct {
 // State is a helper method to define mock.On call
 //   - ctx context.Context
 //   - height uint64
-func (_e *StateProvider_Expecter) State(ctx interface{}, height interface{}) *StateProvider_State_Call {
+func (_e *StateProvider_Expecter) State(ctx any, height any) *StateProvider_State_Call {
 	return &StateProvider_State_Call{Call: _e.mock.On("State", ctx, height)}
 }
 

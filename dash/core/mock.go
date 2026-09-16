@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
-	"strconv"
+	"sync"
 
 	"github.com/dashpay/dashd-go/btcjson"
 
@@ -19,6 +19,13 @@ type MockClient struct {
 	llmqType btcjson.LLMQType
 	localPV  types.PrivValidator
 	canSign  bool
+	mu       sync.RWMutex
+	quorums  map[mockQuorumKey]*btcjson.QuorumInfoResult
+}
+
+type mockQuorumKey struct {
+	quorumType btcjson.LLMQType
+	quorumHash string
 }
 
 func NewMockClient(chainID string, llmqType btcjson.LLMQType, localPV types.PrivValidator, canSign bool) *MockClient {
@@ -30,7 +37,33 @@ func NewMockClient(chainID string, llmqType btcjson.LLMQType, localPV types.Priv
 		llmqType: llmqType,
 		localPV:  localPV,
 		canSign:  canSign,
+		quorums:  make(map[mockQuorumKey]*btcjson.QuorumInfoResult),
 	}
+}
+
+// SetValidatorSet makes QuorumInfo return the complete quorum represented by
+// vals. It keeps integration tests faithful to Dash Core, which returns every
+// valid member rather than only the local mock validator.
+func (mc *MockClient) SetValidatorSet(vals *types.ValidatorSet) {
+	if vals == nil {
+		panic("validator set must be set")
+	}
+	info := &btcjson.QuorumInfoResult{
+		Type:            vals.QuorumType.Name(),
+		QuorumHash:      vals.QuorumHash.String(),
+		QuorumPublicKey: vals.ThresholdPublicKey.HexString(),
+		Members:         make([]btcjson.QuorumMember, 0, len(vals.Validators)),
+	}
+	for _, validator := range vals.Validators {
+		info.Members = append(info.Members, btcjson.QuorumMember{
+			ProTxHash:   validator.ProTxHash.String(),
+			PubKeyShare: validator.PubKey.HexString(),
+			Valid:       true,
+		})
+	}
+	mc.mu.Lock()
+	mc.quorums[mockQuorumKey{quorumType: vals.QuorumType, quorumHash: vals.QuorumHash.String()}] = info
+	mc.mu.Unlock()
 }
 
 // Close closes the underlying connection
@@ -47,6 +80,12 @@ func (mc *MockClient) QuorumInfo(
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 ) (*btcjson.QuorumInfoResult, error) {
+	mc.mu.RLock()
+	info := mc.quorums[mockQuorumKey{quorumType: quorumType, quorumHash: quorumHash.String()}]
+	mc.mu.RUnlock()
+	if info != nil {
+		return info, nil
+	}
 	ctx := context.Background()
 	var members []btcjson.QuorumMember
 	proTxHash, err := mc.localPV.GetProTxHash(ctx)
@@ -75,10 +114,10 @@ func (mc *MockClient) QuorumInfo(
 	}
 	return &btcjson.QuorumInfoResult{
 		Height:          uint32(height),
-		Type:            strconv.Itoa(int(quorumType)),
+		Type:            quorumType.Name(),
 		QuorumHash:      quorumHash.String(),
 		Members:         members,
-		QuorumPublicKey: tpk.String(),
+		QuorumPublicKey: tpk.HexString(),
 	}, nil
 }
 

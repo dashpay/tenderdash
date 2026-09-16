@@ -32,6 +32,7 @@ type EnterProposeAction struct {
 	eventPublisher  *EventPublisher
 	proposalCreator cstypes.ProposalCreator
 	replayMode      bool
+	catchup         *catchupTracker
 }
 
 func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent) error {
@@ -98,6 +99,14 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 	// In replay mode, we don't propose blocks.
 	if c.replayMode {
 		logger.Debug("enter propose step; our turn to propose but in replay mode, not proposing")
+		return nil
+	}
+	// A block built here would carry present-day application state into a height
+	// the network committed long ago. The round times out and rolls on, the same
+	// as for any proposer that stays silent.
+	if !c.catchup.mayPropose(height) {
+		logger.Warn("propose step; our turn to propose but the node is still catching up, not proposing",
+			"node_proTxHash", proTxHash.ShortString())
 		return nil
 	}
 

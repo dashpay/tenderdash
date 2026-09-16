@@ -108,7 +108,7 @@ type Channel_Receive_Call struct {
 
 // Receive is a helper method to define mock.On call
 //   - context1 context.Context
-func (_e *Channel_Expecter) Receive(context1 interface{}) *Channel_Receive_Call {
+func (_e *Channel_Expecter) Receive(context1 any) *Channel_Receive_Call {
 	return &Channel_Receive_Call{Call: _e.mock.On("Receive", context1)}
 }
 
@@ -160,7 +160,7 @@ type Channel_Send_Call struct {
 // Send is a helper method to define mock.On call
 //   - context1 context.Context
 //   - envelope p2p.Envelope
-func (_e *Channel_Expecter) Send(context1 interface{}, envelope interface{}) *Channel_Send_Call {
+func (_e *Channel_Expecter) Send(context1 any, envelope any) *Channel_Send_Call {
 	return &Channel_Send_Call{Call: _e.mock.On("Send", context1, envelope)}
 }
 
@@ -217,7 +217,7 @@ type Channel_SendError_Call struct {
 // SendError is a helper method to define mock.On call
 //   - context1 context.Context
 //   - peerError p2p.PeerError
-func (_e *Channel_Expecter) SendError(context1 interface{}, peerError interface{}) *Channel_SendError_Call {
+func (_e *Channel_Expecter) SendError(context1 any, peerError any) *Channel_SendError_Call {
 	return &Channel_SendError_Call{Call: _e.mock.On("SendError", context1, peerError)}
 }
 

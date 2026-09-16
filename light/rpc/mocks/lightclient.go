@@ -109,7 +109,7 @@ type LightClient_Status_Call struct {
 
 // Status is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *LightClient_Expecter) Status(ctx interface{}) *LightClient_Status_Call {
+func (_e *LightClient_Expecter) Status(ctx any) *LightClient_Status_Call {
 	return &LightClient_Status_Call{Call: _e.mock.On("Status", ctx)}
 }
 
@@ -171,7 +171,7 @@ type LightClient_TrustedLightBlock_Call struct {
 
 // TrustedLightBlock is a helper method to define mock.On call
 //   - height int64
-func (_e *LightClient_Expecter) TrustedLightBlock(height interface{}) *LightClient_TrustedLightBlock_Call {
+func (_e *LightClient_Expecter) TrustedLightBlock(height any) *LightClient_TrustedLightBlock_Call {
 	return &LightClient_TrustedLightBlock_Call{Call: _e.mock.On("TrustedLightBlock", height)}
 }
 
@@ -234,7 +234,7 @@ type LightClient_Update_Call struct {
 // Update is a helper method to define mock.On call
 //   - ctx context.Context
 //   - now time.Time
-func (_e *LightClient_Expecter) Update(ctx interface{}, now interface{}) *LightClient_Update_Call {
+func (_e *LightClient_Expecter) Update(ctx any, now any) *LightClient_Update_Call {
 	return &LightClient_Update_Call{Call: _e.mock.On("Update", ctx, now)}
 }
 
@@ -303,7 +303,7 @@ type LightClient_VerifyLightBlockAtHeight_Call struct {
 //   - ctx context.Context
 //   - height int64
 //   - now time.Time
-func (_e *LightClient_Expecter) VerifyLightBlockAtHeight(ctx interface{}, height interface{}, now interface{}) *LightClient_VerifyLightBlockAtHeight_Call {
+func (_e *LightClient_Expecter) VerifyLightBlockAtHeight(ctx any, height any, now any) *LightClient_VerifyLightBlockAtHeight_Call {
 	return &LightClient_VerifyLightBlockAtHeight_Call{Call: _e.mock.On("VerifyLightBlockAtHeight", ctx, height, now)}
 }
 

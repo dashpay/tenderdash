@@ -172,7 +172,7 @@ type Client_MasternodeListJSON_Call struct {
 
 // MasternodeListJSON is a helper method to define mock.On call
 //   - filter string
-func (_e *Client_Expecter) MasternodeListJSON(filter interface{}) *Client_MasternodeListJSON_Call {
+func (_e *Client_Expecter) MasternodeListJSON(filter any) *Client_MasternodeListJSON_Call {
 	return &Client_MasternodeListJSON_Call{Call: _e.mock.On("MasternodeListJSON", filter)}
 }
 
@@ -334,7 +334,7 @@ type Client_QuorumInfo_Call struct {
 // QuorumInfo is a helper method to define mock.On call
 //   - quorumType btcjson.LLMQType
 //   - quorumHash crypto.QuorumHash
-func (_e *Client_Expecter) QuorumInfo(quorumType interface{}, quorumHash interface{}) *Client_QuorumInfo_Call {
+func (_e *Client_Expecter) QuorumInfo(quorumType any, quorumHash any) *Client_QuorumInfo_Call {
 	return &Client_QuorumInfo_Call{Call: _e.mock.On("QuorumInfo", quorumType, quorumHash)}
 }
 
@@ -404,7 +404,7 @@ type Client_QuorumSign_Call struct {
 //   - requestID bytes.HexBytes
 //   - messageHash bytes.HexBytes
 //   - quorumHash bytes.HexBytes
-func (_e *Client_Expecter) QuorumSign(quorumType interface{}, requestID interface{}, messageHash interface{}, quorumHash interface{}) *Client_QuorumSign_Call {
+func (_e *Client_Expecter) QuorumSign(quorumType any, requestID any, messageHash any, quorumHash any) *Client_QuorumSign_Call {
 	return &Client_QuorumSign_Call{Call: _e.mock.On("QuorumSign", quorumType, requestID, messageHash, quorumHash)}
 }
 
@@ -483,7 +483,7 @@ type Client_QuorumVerify_Call struct {
 //   - messageHash bytes.HexBytes
 //   - signature bytes.HexBytes
 //   - quorumHash bytes.HexBytes
-func (_e *Client_Expecter) QuorumVerify(quorumType interface{}, requestID interface{}, messageHash interface{}, signature interface{}, quorumHash interface{}) *Client_QuorumVerify_Call {
+func (_e *Client_Expecter) QuorumVerify(quorumType any, requestID any, messageHash any, signature any, quorumHash any) *Client_QuorumVerify_Call {
 	return &Client_QuorumVerify_Call{Call: _e.mock.On("QuorumVerify", quorumType, requestID, messageHash, signature, quorumHash)}
 }
 

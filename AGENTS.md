@@ -76,6 +76,8 @@ make format
 - Create feature branches from the development branch; open PRs back into it.
 - Keep commits focused and well-described.
 - Use conventional commit format for commit and PR titles.
+- Do not manually edit or generate `CHANGELOG.md` for development changes.
+  The release script generates the changelog as part of the release process.
 - PR descriptions: read `.github/PULL_REQUEST_TEMPLATE.md`, fill in every
   section, base content on the full diff against the target branch.
 

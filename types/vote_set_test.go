@@ -899,6 +899,19 @@ func signAddPrecommitWithExtCount(
 	idx, extCount int,
 	blockID BlockID,
 ) (bool, error) {
+	return signAddPrecommitWithExtensions(ctx, t, voteSet, privVal, idx, blockID,
+		thresholdVoteExtensionsOfLen(t, extCount))
+}
+
+func signAddPrecommitWithExtensions(
+	ctx context.Context,
+	t testing.TB,
+	voteSet *VoteSet,
+	privVal PrivValidator,
+	idx int,
+	blockID BlockID,
+	extensions VoteExtensions,
+) (bool, error) {
 	t.Helper()
 	proTxHash, err := privVal.GetProTxHash(ctx)
 	require.NoError(t, err)
@@ -909,9 +922,81 @@ func signAddPrecommitWithExtCount(
 		Round:              voteSet.GetRound(),
 		Type:               tmproto.PrecommitType,
 		BlockID:            blockID,
-		VoteExtensions:     thresholdVoteExtensionsOfLen(t, extCount),
+		VoteExtensions:     extensions,
 	}
 	return signAddVote(ctx, privVal, vote, voteSet)
+}
+
+func TestVoteSet_AddVote_IgnoresNonRecoverableExtensionsWhenGrouping(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const numValidators = 10
+	voteSet, valSet, privValidators := randVoteSet(ctx, t, 10, 0, tmproto.PrecommitType, numValidators)
+	blockID := makeBlockIDRandom()
+
+	for i := 0; i < numValidators; i++ {
+		extensions := thresholdVoteExtensionsOfLen(t, 2)
+		extensions = append(extensions, MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
+			Type:      tmproto.VoteExtensionType_DEFAULT,
+			Extension: []byte(strconv.Itoa(i)),
+		})...)
+		added, err := signAddPrecommitWithExtensions(
+			ctx, t, voteSet, privValidators[i], i, blockID, extensions,
+		)
+		require.NoError(t, err)
+		require.True(t, added)
+	}
+
+	require.True(t, voteSet.HasTwoThirdsMajority())
+	commit := voteSet.MakeCommit()
+	require.Len(t, commit.ThresholdVoteExtensions, 2)
+	require.NoError(t, valSet.VerifyCommit(voteSet.ChainID(), blockID, 10, commit))
+}
+
+func TestVoteSet_AddVote_DistinguishesEquivalentExtensionTypes(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const numValidators = 10
+	voteSet, _, privValidators := randVoteSet(ctx, t, 10, 0, tmproto.PrecommitType, numValidators)
+	blockID := makeBlockIDRandom()
+	canonical := MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
+		Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+		Extension: []byte("canonical"),
+	})
+	item, err := canonical[0].SignItem(
+		voteSet.chainID, 10, 0, voteSet.valSet.QuorumType, voteSet.valSet.QuorumHash,
+	)
+	require.NoError(t, err)
+	rawPayload := append([]byte(nil), item.MsgHash...)
+	for left, right := 0, len(rawPayload)-1; left < right; left, right = left+1, right-1 {
+		rawPayload[left], rawPayload[right] = rawPayload[right], rawPayload[left]
+	}
+	raw := MustVoteExtensionsFromProto(t, &tmproto.VoteExtension{
+		Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
+		Extension: rawPayload,
+	})
+	rawItem, err := raw[0].SignItem(
+		voteSet.chainID, 10, 0, voteSet.valSet.QuorumType, voteSet.valSet.QuorumHash,
+	)
+	require.NoError(t, err)
+	require.Equal(t, item.SignHash, rawItem.SignHash, "fixture must exercise equivalent signing data")
+
+	for i := 0; i < numValidators; i++ {
+		extensions := raw.Copy()
+		if i < 4 {
+			extensions = canonical.Copy()
+		}
+		added, err := signAddPrecommitWithExtensions(
+			ctx, t, voteSet, privValidators[i], i, blockID, extensions,
+		)
+		require.NoError(t, err)
+		require.True(t, added)
+	}
+
+	require.False(t, voteSet.HasTwoThirdsMajority(),
+		"different extension types must not combine into a recovery-threshold group")
 }
 
 // TestVoteSet_AddVote_InconsistentVoteExtensionCountDoesNotHalt is a regression
@@ -1056,13 +1141,10 @@ func TestVoteSet_AddVote_SubThirdCommitGateUsesRecoveryThreshold(t *testing.T) {
 	require.NoError(t, valSet.VerifyCommit(voteSet.ChainID(), blockID, height, commit))
 }
 
-// TestVoteSet_AddVote_NoRecoverableExtensionCountPanics verifies that the
-// retained hard-fail backstop still fires for the genuinely unattributable case:
-// every validator has voted yet no extension count is backed by the recovery
-// threshold voting power (here a > 1/3 split, 4 vs 6 of 10, with the recovery
-// threshold at 7). This is a BFT-safety violation, so there is no safe way to
-// continue and the node must fail hard rather than silently stall forever.
-func TestVoteSet_AddVote_NoRecoverableExtensionCountPanics(t *testing.T) {
+// If no extension vector has recovery-threshold support, the round must time
+// out without crashing the process. Remote votes can cause this split, so a
+// panic would turn a recoverable liveness failure into a node-wide DoS.
+func TestVoteSet_AddVote_NoRecoverableExtensionVectorDoesNotPanic(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -1084,21 +1166,14 @@ func TestVoteSet_AddVote_NoRecoverableExtensionCountPanics(t *testing.T) {
 		return 2
 	}
 
-	sawPanic := false
-	for i := 0; i < numValidators && !sawPanic; i++ {
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					sawPanic = true
-				}
-			}()
+	require.NotPanics(t, func() {
+		for i := 0; i < numValidators; i++ {
 			added, err := signAddPrecommitWithExtCount(ctx, t, voteSet, privValidators[i], i, extCountFor(i), blockID)
 			require.NoError(t, err)
 			require.True(t, added)
-		}()
-	}
+		}
+	})
 
-	require.True(t, sawPanic, "the backstop hard-fail must fire when no count reaches the recovery threshold and all have voted")
 	require.False(t, voteSet.HasTwoThirdsMajority(), "no commit may be produced when recovery is impossible")
 }
 

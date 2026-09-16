@@ -208,6 +208,12 @@ func PrometheusMetrics(namespace string, labelsAndValues ...string) *Metrics {
 			Name:      "state_channel_drops",
 			Help:      "Number of State and VoteSetBits channel messages dropped over the per-peer or node-wide ceiling.",
 		}, labels).With(labelsAndValues...),
+		CommitVerifyFailures: prometheus.NewCounterFrom(stdprometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: MetricsSubsystem,
+			Name:      "commit_verify_failures",
+			Help:      "Number of peer commits refused by verification labeled by the class of refusal.",
+		}, append(labels, "reason")).With(labelsAndValues...),
 		ProposalVerifyFailures: prometheus.NewCounterFrom(stdprometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: MetricsSubsystem,
@@ -264,6 +270,14 @@ func PrometheusMetrics(namespace string, labelsAndValues ...string) *Metrics {
 			Name:      "peer_lane_max_depth",
 			Help:      "Largest number of messages queued in any single peer lane.",
 		}, labels).With(labelsAndValues...),
+		BlockSyncApplyStageDuration: prometheus.NewHistogramFrom(stdprometheus.HistogramOpts{
+			Namespace: namespace,
+			Subsystem: MetricsSubsystem,
+			Name:      "block_sync_apply_stage_duration",
+			Help:      "Time spent in each stage of applying a block during block sync, in milliseconds.",
+
+			Buckets: stdprometheus.ExponentialBucketsRange(0.01, 1000, 12),
+		}, append(labels, "stage")).With(labelsAndValues...),
 	}
 }
 
@@ -300,6 +314,7 @@ func NopMetrics() *Metrics {
 		PeerLaneDrops:                discard.NewCounter(),
 		BlockPartProofDrops:          discard.NewCounter(),
 		StateChannelDrops:            discard.NewCounter(),
+		CommitVerifyFailures:         discard.NewCounter(),
 		ProposalVerifyFailures:       discard.NewCounter(),
 		ProposalReceiveCount:         discard.NewCounter(),
 		ProposalCreateCount:          discard.NewCounter(),
@@ -309,5 +324,6 @@ func NopMetrics() *Metrics {
 		VerificationBudgetSaturation: discard.NewGauge(),
 		PeerLaneActiveCount:          discard.NewGauge(),
 		PeerLaneMaxDepth:             discard.NewGauge(),
+		BlockSyncApplyStageDuration:  discard.NewHistogram(),
 	}
 }

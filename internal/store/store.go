@@ -33,12 +33,51 @@ The store can be assumed to contain all contiguous blocks between base and heigh
 */
 type BlockStore struct {
 	db dbm.DB
+
+	// unsafeNoFsync drops the fsync from every write. See WithUnsafeNoFsync.
+	unsafeNoFsync bool
+}
+
+// Option configures a BlockStore at construction.
+type Option func(*BlockStore)
+
+// WithUnsafeNoFsync makes every write to the block store return before it has
+// reached the disk. It exists for benchmarking: on macOS Go's File.Sync issues
+// F_FULLFSYNC, which costs several milliseconds per call and swamps everything
+// else in a block sync profile, while on Linux the same call is a plain fsync
+// costing a fraction of that. Dropping it takes durability out of the
+// measurement.
+//
+// Never use it on a node whose data matters: a power loss can leave the block
+// store behind the application, which the replayer rejects with
+// ErrAppBlockHeightTooHigh.
+func WithUnsafeNoFsync() Option {
+	return func(bs *BlockStore) {
+		bs.unsafeNoFsync = true
+	}
 }
 
 // NewBlockStore returns a new BlockStore with the given DB,
 // initialized to the last height that was committed to the DB.
-func NewBlockStore(db dbm.DB) *BlockStore {
-	return &BlockStore{db}
+func NewBlockStore(db dbm.DB, opts ...Option) *BlockStore {
+	bs := &BlockStore{db: db}
+	for _, opt := range opts {
+		opt(bs)
+	}
+	return bs
+}
+
+// UnsafeNoFsync reports whether this store's writes skip the fsync. It exists
+// so callers that wire the store from config can assert what they built.
+func (bs *BlockStore) UnsafeNoFsync() bool { return bs.unsafeNoFsync }
+
+// writeBatch commits a batch durably, unless the store was built with
+// WithUnsafeNoFsync.
+func (bs *BlockStore) writeBatch(batch dbm.Batch) error {
+	if bs.unsafeNoFsync {
+		return batch.Write()
+	}
+	return batch.WriteSync()
 }
 
 // Base returns the first known contiguous block height, or 0 for empty block stores.
@@ -402,7 +441,7 @@ func (bs *BlockStore) DeleteBlock(height int64) (uint64, error) {
 	}
 
 	// Write all deletions atomically
-	if err := batch.WriteSync(); err != nil {
+	if err := bs.writeBatch(batch); err != nil {
 		return 0, fmt.Errorf("failed to write deletions for height %d: %w", height, err)
 	}
 
@@ -454,7 +493,7 @@ func (bs *BlockStore) pruneRange(
 	}
 
 	// once we looped over all keys we do a final flush to disk
-	if err := batch.WriteSync(); err != nil {
+	if err := bs.writeBatch(batch); err != nil {
 		return totalPruned, err
 	}
 	totalPruned += pruned
@@ -512,7 +551,7 @@ func (bs *BlockStore) SaveBlock(block *types.Block, blockParts *types.PartSet, s
 		panic(err)
 	}
 
-	if err := batch.WriteSync(); err != nil {
+	if err := bs.writeBatch(batch); err != nil {
 		panic(err)
 	}
 
@@ -640,7 +679,7 @@ func (bs *BlockStore) SaveSignedHeader(sh *types.SignedHeader, blockID types.Blo
 		return fmt.Errorf("unable to save commit: %w", err)
 	}
 
-	if err := batch.WriteSync(); err != nil {
+	if err := bs.writeBatch(batch); err != nil {
 		return err
 	}
 

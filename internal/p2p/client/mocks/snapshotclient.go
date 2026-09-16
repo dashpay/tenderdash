@@ -79,7 +79,7 @@ type SnapshotClient_GetChunk_Call struct {
 //   - height uint64
 //   - format uint32
 //   - index uint32
-func (_e *SnapshotClient_Expecter) GetChunk(ctx interface{}, peerID interface{}, height interface{}, format interface{}, index interface{}) *SnapshotClient_GetChunk_Call {
+func (_e *SnapshotClient_Expecter) GetChunk(ctx any, peerID any, height any, format any, index any) *SnapshotClient_GetChunk_Call {
 	return &SnapshotClient_GetChunk_Call{Call: _e.mock.On("GetChunk", ctx, peerID, height, format, index)}
 }
 
@@ -163,7 +163,7 @@ type SnapshotClient_GetLightBlock_Call struct {
 //   - ctx context.Context
 //   - peerID types.NodeID
 //   - height uint64
-func (_e *SnapshotClient_Expecter) GetLightBlock(ctx interface{}, peerID interface{}, height interface{}) *SnapshotClient_GetLightBlock_Call {
+func (_e *SnapshotClient_Expecter) GetLightBlock(ctx any, peerID any, height any) *SnapshotClient_GetLightBlock_Call {
 	return &SnapshotClient_GetLightBlock_Call{Call: _e.mock.On("GetLightBlock", ctx, peerID, height)}
 }
 
@@ -237,7 +237,7 @@ type SnapshotClient_GetParams_Call struct {
 //   - ctx context.Context
 //   - peerID types.NodeID
 //   - height uint64
-func (_e *SnapshotClient_Expecter) GetParams(ctx interface{}, peerID interface{}, height interface{}) *SnapshotClient_GetParams_Call {
+func (_e *SnapshotClient_Expecter) GetParams(ctx any, peerID any, height any) *SnapshotClient_GetParams_Call {
 	return &SnapshotClient_GetParams_Call{Call: _e.mock.On("GetParams", ctx, peerID, height)}
 }
 
@@ -299,7 +299,7 @@ type SnapshotClient_GetSnapshots_Call struct {
 // GetSnapshots is a helper method to define mock.On call
 //   - ctx context.Context
 //   - peerID types.NodeID
-func (_e *SnapshotClient_Expecter) GetSnapshots(ctx interface{}, peerID interface{}) *SnapshotClient_GetSnapshots_Call {
+func (_e *SnapshotClient_Expecter) GetSnapshots(ctx any, peerID any) *SnapshotClient_GetSnapshots_Call {
 	return &SnapshotClient_GetSnapshots_Call{Call: _e.mock.On("GetSnapshots", ctx, peerID)}
 }
 

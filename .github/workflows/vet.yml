@@ -1,0 +1,47 @@
+---
+# Vet runs `go vet` over every package in the repository.
+#
+# The Test workflow builds only packages that have test files, so a package
+# without tests is never compiled or vetted there, and Lint reports findings
+# only on changed lines. A defect in an untested package therefore reaches
+# neither gate. This job has no trigger filter for that reason: it is bounded
+# by a compile the other workflows already perform, and the one thing a filter
+# could do for it is stop it running.
+
+name: Vet
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - v[0-9]+.[0-9]+-dev
+
+jobs:
+  vet:
+    name: go vet
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CGO_LDFLAGS: "-L/usr/local/lib -ldashbls -lrelic_s -lmimalloc-secure -lgmp"
+      CGO_CXXFLAGS: "-I/usr/local/include"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      # Pinned exactly rather than to a range: vet's diagnostics differ between
+      # toolchain releases, so a floating version would change what this gate
+      # enforces without anyone changing the repository.
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version: "1.26.6"
+
+      # cmd/abcidump imports gopacket/pcap, which is cgo.
+      - name: Install libpcap
+        run: sudo apt-get update && sudo apt-get install --yes libpcap-dev
+
+      - uses: ./.github/actions/bls
+        name: Install BLS library
+
+      - name: Run go vet
+        run: make vet

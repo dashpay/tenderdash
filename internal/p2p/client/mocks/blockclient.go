@@ -77,7 +77,7 @@ type BlockClient_GetBlock_Call struct {
 //   - ctx context.Context
 //   - height int64
 //   - peerID types.NodeID
-func (_e *BlockClient_Expecter) GetBlock(ctx interface{}, height interface{}, peerID interface{}) *BlockClient_GetBlock_Call {
+func (_e *BlockClient_Expecter) GetBlock(ctx any, height any, peerID any) *BlockClient_GetBlock_Call {
 	return &BlockClient_GetBlock_Call{Call: _e.mock.On("GetBlock", ctx, height, peerID)}
 }
 
@@ -138,7 +138,7 @@ type BlockClient_GetSyncStatus_Call struct {
 
 // GetSyncStatus is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *BlockClient_Expecter) GetSyncStatus(ctx interface{}) *BlockClient_GetSyncStatus_Call {
+func (_e *BlockClient_Expecter) GetSyncStatus(ctx any) *BlockClient_GetSyncStatus_Call {
 	return &BlockClient_GetSyncStatus_Call{Call: _e.mock.On("GetSyncStatus", ctx)}
 }
 
@@ -190,7 +190,7 @@ type BlockClient_Send_Call struct {
 // Send is a helper method to define mock.On call
 //   - ctx context.Context
 //   - msg any
-func (_e *BlockClient_Expecter) Send(ctx interface{}, msg interface{}) *BlockClient_Send_Call {
+func (_e *BlockClient_Expecter) Send(ctx any, msg any) *BlockClient_Send_Call {
 	return &BlockClient_Send_Call{Call: _e.mock.On("Send", ctx, msg)}
 }
 
