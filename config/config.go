@@ -604,6 +604,10 @@ type RPCConfig struct {
 	// the transaction is rejected with an error.
 	TimeoutBroadcastTx time.Duration `mapstructure:"timeout-broadcast-tx"`
 
+	// Maximum unfinished async broadcasts per node; 0 uses the default of 100.
+	// Saturated nodes reject new async broadcasts without queuing them.
+	MaxConcurrentBroadcastTxAsync int `mapstructure:"max-concurrent-broadcast-tx-async"`
+
 	// Maximum size of request body, in bytes
 	MaxBodyBytes int64 `mapstructure:"max-body-bytes"`
 
@@ -650,8 +654,9 @@ func DefaultRPCConfig() *RPCConfig {
 		EventLogWindowSize:           30 * time.Second,
 		EventLogMaxItems:             0,
 
-		TimeoutBroadcastTxCommit: 10 * time.Second,
-		TimeoutBroadcastTx:       0,
+		TimeoutBroadcastTxCommit:      10 * time.Second,
+		TimeoutBroadcastTx:            0,
+		MaxConcurrentBroadcastTxAsync: 100,
 
 		MaxBodyBytes:   int64(1000000), // 1MB
 		MaxHeaderBytes: 1 << 20,        // same as the net/http default
@@ -692,6 +697,9 @@ func (cfg *RPCConfig) ValidateBasic() error {
 	}
 	if cfg.TimeoutBroadcastTx < 0 {
 		return errors.New("timeout-broadcast-tx can't be negative")
+	}
+	if cfg.MaxConcurrentBroadcastTxAsync < 0 {
+		return errors.New("max-concurrent-broadcast-tx-async can't be negative")
 	}
 	if cfg.MaxBodyBytes < 0 {
 		return errors.New("max-body-bytes can't be negative")

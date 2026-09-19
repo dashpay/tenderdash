@@ -127,6 +127,7 @@ func TestRPCConfigValidateBasic(t *testing.T) {
 
 	fieldsToTest := []string{
 		"MaxOpenConnections",
+		"MaxConcurrentBroadcastTxAsync",
 		"MaxSubscriptionClients",
 		"MaxSubscriptionsPerClient",
 		"TimeoutBroadcastTxCommit",
