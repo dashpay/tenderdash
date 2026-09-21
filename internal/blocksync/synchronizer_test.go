@@ -200,7 +200,11 @@ func (suite *SynchronizerTestSuite) assertHandoverWaitsForConsumer(beforeApply b
 	}
 	suite.Equal(int64(1), applier.State().LastBlockHeight)
 	if beforeApply {
-		applyCtx = <-finalizing
+		select {
+		case applyCtx = <-finalizing:
+		default:
+			suite.T().Fatal("consumer stopped without finalizing the received block")
+		}
 		suite.NoError(applyCtx.Err(), "handover must not cancel a received block's application")
 	}
 	// The application context retains node shutdown cancellation after handover.
