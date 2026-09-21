@@ -1003,6 +1003,7 @@ func (r *Reactor) handleSnapshotMessage(ctx context.Context, envelope *p2p.Envel
 		}
 
 		if !syncer.snapshots.AcceptResponse(envelope.From) {
+			logger.Debug("ignoring snapshot response outside of discovery allowance", "peer", envelope.From)
 			return nil
 		}
 

@@ -122,7 +122,7 @@ func TestSnapshotPoolPeerPayloadLimit(t *testing.T) {
 func TestSnapshotPoolBoundedBookkeeping(t *testing.T) {
 	p := newSnapshotPool()
 	for i := 0; i < maxSnapshots+20; i++ {
-		_, err := p.Add(types.NodeID(fmt.Sprint(i)), &snapshot{Height: uint64(i + 1), Version: uint32(i)})
+		_, err := p.Add(types.NodeID(fmt.Sprint(i)), &snapshot{Height: uint64(i + 1), Version: uint32(i), Hash: []byte{1}})
 		require.NoError(t, err)
 	}
 	require.Len(t, p.snapshots, maxSnapshots)
@@ -130,7 +130,7 @@ func TestSnapshotPoolBoundedBookkeeping(t *testing.T) {
 	require.LessOrEqual(t, len(p.versionIndex), maxSnapshots)
 	require.LessOrEqual(t, len(p.peerIndex), maxSnapshotAssociations)
 	for i := 0; i < maxSnapshots+20; i++ {
-		p.Reject(&snapshot{Height: uint64(i + 1)})
+		p.Reject(&snapshot{Height: uint64(i + 1), Version: uint32(i), Hash: []byte{1}})
 		p.RejectVersion(uint32(i))
 		p.RejectPeer(types.NodeID(fmt.Sprint(i)))
 	}
@@ -216,7 +216,7 @@ func TestSnapshotPoolDetachedActiveCountsTowardObjectLimit(t *testing.T) {
 	active := p.TakeBest()
 	p.RemovePeer("active-peer")
 	for i := 0; i < maxSnapshots; i++ {
-		_, err = p.Add(types.NodeID(fmt.Sprint(i)), &snapshot{Height: uint64(i + 2)})
+		_, err = p.Add(types.NodeID(fmt.Sprint(i)), &snapshot{Height: uint64(i + 2), Hash: []byte{1}})
 		require.NoError(t, err)
 	}
 	require.Same(t, active, p.active)
@@ -247,4 +247,18 @@ func TestSnapshotPoolReadmissionWhileDetachedActive(t *testing.T) {
 	p.RemovePeer("returning-peer")
 	require.Zero(t, p.retainedBytes)
 	require.Empty(t, p.keys)
+}
+
+// TestSnapshotPoolRejectsEmptyHash asserts that a snapshot without a hash is never admitted,
+// because it cannot be restored and would otherwise rank first and abort state sync.
+func TestSnapshotPoolRejectsEmptyHash(t *testing.T) {
+	p := newSnapshotPool()
+	for _, hash := range [][]byte{nil, {}} {
+		added, err := p.Add("peer", &snapshot{Height: ^uint64(0), Version: 1, Hash: hash})
+		require.NoError(t, err)
+		require.False(t, added)
+	}
+	require.Empty(t, p.snapshots)
+	require.Zero(t, p.retainedBytes)
+	require.Nil(t, p.TakeBest())
 }

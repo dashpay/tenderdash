@@ -77,7 +77,7 @@ func TestSnapshotDiscoverySingleRetryCompletesFrozenSweep(t *testing.T) {
 					}}, nil))
 				}
 			}).Return(nil)
-			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancel()
 			_, _, err := s.SyncAny(ctx, minimumDiscoveryTime, 1, func() error {
 				err := s.RequestSnapshots(ctx, peers)

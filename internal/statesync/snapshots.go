@@ -107,6 +107,10 @@ func newSnapshotPool() *snapshotPool {
 // snapshot height is verified using the light client, and the expected app hash
 // is set for the snapshot.
 func (p *snapshotPool) Add(peerID types.NodeID, snapshot *snapshot) (bool, error) {
+	// An empty hash cannot be restored: newChunkQueue rejects it and aborts state sync.
+	if snapshot.Hash.IsZero() {
+		return false, nil
+	}
 	p.Lock()
 	defer p.Unlock()
 	size := len(snapshot.Hash) + len(snapshot.Metadata)
@@ -190,14 +194,20 @@ func (p *snapshotPool) GetPeer(snapshot *snapshot) types.NodeID {
 	return peers[rand.Intn(len(peers))] //nolint:gosec // G404: Use of weak random number generator
 }
 
+// keyOf returns the pooled key of a snapshot, falling back to hashing it when the pool does not
+// track the pointer. Callers must hold the pool lock.
+func (p *snapshotPool) keyOf(s *snapshot) snapshotKey {
+	if key, ok := p.keys[s]; ok {
+		return key
+	}
+	return s.Key()
+}
+
 // GetPeers returns the peers for a snapshot.
 func (p *snapshotPool) GetPeers(snapshot *snapshot) []types.NodeID {
 	p.Lock()
 	defer p.Unlock()
-	key, ok := p.keys[snapshot]
-	if !ok {
-		key = snapshot.Key()
-	}
+	key := p.keyOf(snapshot)
 
 	peers := make([]types.NodeID, 0, len(p.snapshotPeers[key]))
 	for _, peer := range p.snapshotPeers[key] {
@@ -266,7 +276,7 @@ func (p *snapshotPool) sorterFactory(candidates []*snapshot) func(int, int) bool
 			return true
 		case a.Height < b.Height:
 			return false
-		case len(p.snapshotPeers[p.keys[a]]) > len(p.snapshotPeers[p.keys[b]]):
+		case len(p.snapshotPeers[p.keyOf(a)]) > len(p.snapshotPeers[p.keyOf(b)]):
 			return true
 		case a.Version > b.Version:
 			return true
@@ -282,10 +292,7 @@ func (p *snapshotPool) sorterFactory(candidates []*snapshot) func(int, int) bool
 func (p *snapshotPool) Reject(snapshot *snapshot) {
 	p.Lock()
 	defer p.Unlock()
-	key, ok := p.keys[snapshot]
-	if !ok {
-		key = snapshot.Key()
-	}
+	key := p.keyOf(snapshot)
 
 	rememberRejection(p.snapshotBlacklist, &p.snapshotRejections, key)
 	p.removeSnapshot(key)

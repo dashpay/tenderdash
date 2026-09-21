@@ -148,6 +148,7 @@ func (s *syncer) AddSnapshot(peerID types.NodeID, snapshot *snapshot) (bool, err
 // AddPeer requests snapshots from a newly connected peer if the batch has capacity.
 func (s *syncer) AddPeer(ctx context.Context, peerID types.NodeID) error {
 	if !s.snapshots.RequestPeer(peerID) {
+		s.logger.Debug("Not requesting snapshots from peer; batch is full, peer already asked, or peer rejected", "peer", peerID)
 		return nil
 	}
 	s.logger.Debug("Requesting snapshots from peer", "peer", peerID)
