@@ -95,6 +95,11 @@ func TestSyncFullQueueTeardown(t *testing.T) {
 					<-syncDone
 					t.Error("Sync teardown blocked on a full chunk queue")
 				}
+				if attempt+1 < attempts {
+					// Sync waits for deliveries itself, so retry does not need to join addDone first.
+					q.RetryAll()
+					require.Empty(t, q.applyCh)
+				}
 				select {
 				case <-addDone:
 				case <-time.After(time.Second):
@@ -103,9 +108,6 @@ func TestSyncFullQueueTeardown(t *testing.T) {
 				cancel()
 				require.Nil(t, s.chunkQueue)
 				require.EqualValues(t, attempt+1, s.SnapshotChunksCount())
-				if attempt+1 < attempts {
-					q.RetryAll()
-				}
 			}
 		})
 	}
@@ -159,6 +161,33 @@ func waitForReceivedChunk(t *testing.T, q *chunkQueue, id byte) {
 		defer q.mtx.Unlock()
 		return q.items[tmbytes.HexBytes{id}.String()].status == receivedStatus
 	}, time.Second, time.Millisecond)
+}
+
+func TestAddChunkAfterCancellation(t *testing.T) {
+	for _, deadline := range []bool{false, true} {
+		name := "canceled"
+		if deadline {
+			name = "deadline exceeded"
+		}
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			if deadline {
+				ctx, cancel = context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+				defer cancel()
+			}
+			q, err := newChunkQueue(&snapshot{Height: 3, Version: 1, Hash: []byte{1}}, t.TempDir(), 0)
+			require.NoError(t, err)
+			defer func() { require.NoError(t, q.Close()) }()
+			q.Enqueue([]byte{1})
+			_, err = q.Dequeue()
+			require.NoError(t, err)
+			s := &syncer{logger: log.NewNopLogger(), chunkQueue: q, chunkCtx: ctx}
+			added, err := s.AddChunk(&chunk{Height: 3, Version: 1, ID: []byte{1}})
+			require.NoError(t, err)
+			require.False(t, added)
+		})
+	}
 }
 
 func TestSyncCancellationUnblocksFullChunkQueue(t *testing.T) {

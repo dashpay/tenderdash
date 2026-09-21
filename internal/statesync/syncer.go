@@ -96,7 +96,7 @@ type syncer struct {
 }
 
 // AddChunk adds a chunk to the chunk queue, if any. It returns false if the chunk has already
-// been added to the queue, or an error if there's no sync in progress.
+// been added to the queue or the sync attempt was canceled, or an error if there's no sync in progress.
 func (s *syncer) AddChunk(chunk *chunk) (bool, error) {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
@@ -112,6 +112,10 @@ func (s *syncer) AddChunk(chunk *chunk) (bool, error) {
 	if err != nil {
 		if errors.Is(err, errNilSnapshot) {
 			s.logger.Error("Can't add a chunk because of a snapshot is nil", keyVals...)
+			return false, nil
+		}
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			s.logger.Debug("Ignoring chunk delivered during sync teardown", keyVals...)
 			return false, nil
 		}
 		return false, err
