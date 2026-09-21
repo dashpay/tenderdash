@@ -236,10 +236,9 @@ func (s *Synchronizer) OnStart(ctx context.Context) error {
 	go s.runHandler(s.ctx, s.produceJob)
 	go func() {
 		defer close(s.consumerDone)
-		s.runHandler(s.ctx, func(context.Context) error {
-			// Handover stops fetching, but only node shutdown may cancel application.
-			// Stopping the worker pool releases an idle Receive using this context.
-			return s.consumeJobResult(ctx)
+		s.runHandler(s.ctx, func(handlerCtx context.Context) error {
+			// Handover cancels consumer I/O; only node shutdown may cancel application.
+			return s.consumeJobResult(handlerCtx, ctx)
 		})
 	}()
 	return nil
@@ -292,7 +291,7 @@ func (s *Synchronizer) produceJob(ctx context.Context) error {
 	return nil
 }
 
-func (s *Synchronizer) consumeJobResult(ctx context.Context) error {
+func (s *Synchronizer) consumeJobResult(ctx, applyCtx context.Context) error {
 	res, err := s.workerPool.Receive(ctx)
 	if err != nil {
 		if errors.Is(err, workerpool.ErrWorkerPoolStopped) ||
@@ -355,7 +354,7 @@ func (s *Synchronizer) consumeJobResult(ctx context.Context) error {
 			"peer", resp.PeerID,
 			"reason", err.Error())
 	}
-	failed, err := s.applyBlock(ctx)
+	failed, err := s.applyBlock(applyCtx)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			// Cancellation is our own doing, so no peer is at fault. The response stays
