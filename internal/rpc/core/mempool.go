@@ -19,24 +19,26 @@ import (
 //-----------------------------------------------------------------------------
 // NOTE: tx should be signed, but this is only checked at the app level (not by Tendermint!)
 
-// BroadcastTxAsync returns right away, with no response. Does not wait for
-// CheckTx nor DeliverTx results.
+// BroadcastTxAsync returns the transaction hash after admission, without waiting for
+// CheckTx or DeliverTx. It returns ErrTooManyRequests when async capacity is exhausted.
 // More:
 // https://docs.tendermint.com/master/rpc/#/Tx/broadcast_tx_async
 // Deprecated and should be removed in 0.37
-func (env *Environment) BroadcastTxAsync(_ctx context.Context, req *coretypes.RequestBroadcastTx) (*coretypes.ResultBroadcastTx, error) {
+func (env *Environment) BroadcastTxAsync(ctx context.Context, req *coretypes.RequestBroadcastTx) (*coretypes.ResultBroadcastTx, error) {
+	ctx, err := env.asyncBroadcasts.acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var cancel context.CancelFunc
+	if env.Config.TimeoutBroadcastTx > 0 {
+		ctx, cancel = context.WithTimeout(ctx, env.Config.TimeoutBroadcastTx)
+	} else {
+		ctx, cancel = context.WithCancel(ctx)
+	}
+	// Local callers may reuse the request as soon as this method returns.
+	req = &coretypes.RequestBroadcastTx{Tx: append(types.Tx(nil), req.Tx...)}
 	go func() {
-		var (
-			ctx    context.Context
-			cancel context.CancelFunc
-		)
-		// We need to create a new context here, because the original context
-		// may be canceled after parent function returns.
-		if env.Config.TimeoutBroadcastTx > 0 {
-			ctx, cancel = context.WithTimeout(context.Background(), env.Config.TimeoutBroadcastTx)
-		} else {
-			ctx, cancel = context.WithCancel(context.Background())
-		}
+		defer env.asyncBroadcasts.release()
 		defer cancel()
 
 		if res, err := env.BroadcastTx(ctx, req); err != nil || res.Code != abci.CodeTypeOK {

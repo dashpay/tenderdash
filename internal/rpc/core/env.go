@@ -89,6 +89,8 @@ type Environment struct {
 
 	Config config.RPCConfig
 
+	asyncBroadcasts asyncBroadcasts
+
 	// cache of chunked genesis data.
 	genChunks []string
 }

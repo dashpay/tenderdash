@@ -153,7 +153,7 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
   /broadcast_tx_async:
     get:
-      summary: Returns right away, with no response. Does not wait for CheckTx nor DeliverTx results.
+      summary: Returns the transaction hash after admission without waiting for CheckTx or DeliverTx.
       deprecated: true
       tags:
         - Tx
@@ -163,10 +163,17 @@ paths:
         removed in v0.37. Use `broadcast_tx`.
 
         This method submits the transaction and returns immediately without
-        waiting for the transaction to be checked (CheckTx) or committed.  Too
+        waiting for the transaction to be checked (CheckTx) or committed.  To
         know when the transaction is included in a block, you can check for the
         transaction event using JSON-RPC.  See
         https://docs.tendermint.com/master/app-dev/subscribing-to-events-via-websocket.html
+
+        Admission is bounded by `rpc.max-concurrent-broadcast-tx-async` (default
+        100; zero selects the default). When full, the node returns JSON-RPC
+        error -32004, "Too many requests", without submitting the transaction.
+        Accepted submissions continue after the response or client disconnect,
+        subject to `rpc.timeout-broadcast-tx` and node shutdown. A returned hash
+        does not guarantee that the transaction passes CheckTx or is committed.
 
         See https://docs.tendermint.com/master/tendermint-core/using-tendermint.html#formatting
         for formatting/encoding rules.

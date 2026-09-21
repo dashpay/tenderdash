@@ -579,10 +579,18 @@ func (n *nodeImpl) OnStart(ctx context.Context) error {
 	n.rpcEnv.NodeInfo = n.nodeInfo
 	// Start the RPC server before the P2P server
 	// so we can eg. receive txs for the first block
+	if err := n.rpcEnv.StartAsyncBroadcasts(ctx); err != nil {
+		return err
+	}
 	if n.config.RPC.ListenAddress != "" {
 		var err error
 		n.rpcListeners, err = n.rpcEnv.StartService(ctx, n.config)
 		if err != nil {
+			stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			if stopErr := n.rpcEnv.StopAsyncBroadcasts(stopCtx); stopErr != nil {
+				n.logger.Error("Failed to stop async broadcasts after RPC startup failure", "err", stopErr)
+			}
 			return err
 		}
 	}
@@ -593,6 +601,11 @@ func (n *nodeImpl) OnStart(ctx context.Context) error {
 // OnStop stops the Node. It implements service.Service.
 func (n *nodeImpl) OnStop() {
 	n.logger.Info("Stopping Node")
+	stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	if err := n.rpcEnv.StopAsyncBroadcasts(stopCtx); err != nil {
+		n.logger.Error("Async broadcasts did not finish during shutdown", "err", err)
+	}
+	cancel()
 	// stop the listeners / external services first
 	for _, l := range n.rpcListeners {
 		n.logger.Info("Closing rpc listener", "listener", l)
