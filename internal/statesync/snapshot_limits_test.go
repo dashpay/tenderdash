@@ -225,3 +225,26 @@ func TestSnapshotPoolDetachedActiveCountsTowardObjectLimit(t *testing.T) {
 	p.Release()
 	require.Len(t, p.keys, maxSnapshots-1)
 }
+
+func TestSnapshotPoolReadmissionWhileDetachedActive(t *testing.T) {
+	p := newSnapshotPool()
+	input := &snapshot{Height: 1, Version: 1, Hash: []byte{1}, Metadata: []byte{2, 3}}
+	_, err := p.Add("original-peer", input)
+	require.NoError(t, err)
+	active := p.TakeBest()
+	p.RemovePeer("original-peer")
+	require.Empty(t, p.peerBytes)
+	require.Equal(t, 3, p.retainedBytes)
+	added, err := p.Add("returning-peer", input)
+	require.NoError(t, err)
+	require.True(t, added)
+	require.NotSame(t, active, p.Best())
+	require.Equal(t, 6, p.retainedBytes, "both owned payload copies remain live")
+	require.Equal(t, 3, p.peerBytes["returning-peer"])
+	p.Release()
+	require.Equal(t, 3, p.retainedBytes)
+	require.Len(t, p.keys, 1)
+	p.RemovePeer("returning-peer")
+	require.Zero(t, p.retainedBytes)
+	require.Empty(t, p.keys)
+}

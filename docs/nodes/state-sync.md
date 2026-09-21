@@ -107,8 +107,12 @@ Snapshot advertisements retain the existing 4,000,000-byte network message limit
 there is no smaller limit on application metadata. The node retains at most
 64 MiB of unique snapshot hash and metadata payload, including the snapshot being
 restored, and charges at most 40,000,000 bytes of advertised payload to each peer.
-Shared snapshots count once globally and once for each supplying peer. The pool
-owns copies of the payload and releases its charge when it releases the data.
+Shared snapshots count once globally and once for each supplying peer. Removing
+an association releases that peer's charge immediately, while an active snapshot
+remains globally charged until restoration cleanup finishes. If the same snapshot
+is admitted again while a removed active copy is still in use, both owned copies
+consume the global budget until the old copy is released. The pool owns copies
+of the payload and releases its charge when it releases the data.
 These limits bound retained discovery payload, not process RSS, transport receive
 queues, decoded messages in flight, chunk data, or application state.
 
