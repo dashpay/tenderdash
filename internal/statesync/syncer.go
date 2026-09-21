@@ -76,6 +76,7 @@ type syncer struct {
 
 	mtx        sync.RWMutex
 	chunkQueue *chunkQueue
+	chunkCtx   context.Context
 	metrics    *Metrics
 
 	// avgChunkTime, lastSyncedSnapshotHeight and totalSnapshots are written by
@@ -107,7 +108,7 @@ func (s *syncer) AddChunk(chunk *chunk) (bool, error) {
 		"version", chunk.Version,
 		"chunkID", chunk.ID,
 	}
-	added, err := s.chunkQueue.Add(chunk)
+	added, err := s.chunkQueue.add(s.chunkCtx, chunk)
 	if err != nil {
 		if errors.Is(err, errNilSnapshot) {
 			s.logger.Error("Can't add a chunk because of a snapshot is nil", keyVals...)
@@ -297,9 +298,13 @@ func (s *syncer) Sync(ctx context.Context, snapshot *snapshot, queue *chunkQueue
 		s.mtx.Unlock()
 		return sm.State{}, nil, errors.New("a state sync is already in progress")
 	}
+	chunkCtx, cancelChunks := context.WithCancel(ctx)
 	s.chunkQueue = queue
+	s.chunkCtx = chunkCtx
 	s.mtx.Unlock()
 	defer s.releaseChunkQueue()
+	// Unblock deliveries holding the read lock before releaseChunkQueue takes the write lock.
+	defer cancelChunks()
 
 	hctx, hcancel := context.WithTimeout(ctx, 30*time.Second)
 	defer hcancel()
