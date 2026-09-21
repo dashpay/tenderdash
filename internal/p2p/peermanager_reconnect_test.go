@@ -26,13 +26,6 @@ func reconnectManager(t *testing.T, options p2p.PeerManagerOptions) *p2p.PeerMan
 	return manager
 }
 
-func addReconnectPeer(t *testing.T, manager *p2p.PeerManager, address p2p.NodeAddress) {
-	t.Helper()
-	added, err := manager.Add(address)
-	require.NoError(t, err)
-	require.True(t, added)
-}
-
 func TestPeerManager_PersistentReconnect(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -52,11 +45,11 @@ func TestPeerManager_PersistentReconnect(t *testing.T) {
 				MaxConnectedUpgrade:      1,
 				DisconnectCooldownPeriod: 50 * time.Millisecond,
 			})
-			addReconnectPeer(t, manager, persistent)
+			addAddressToPeerManager(t, manager, persistent)
 			require.Equal(t, persistent, manager.TryDialNext())
 			require.NoError(t, manager.Dialed(persistent))
 			manager.Disconnected(t.Context(), persistent.NodeID)
-			addReconnectPeer(t, manager, ordinary)
+			addAddressToPeerManager(t, manager, ordinary)
 			require.NoError(t, manager.Dialed(ordinary))
 
 			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
@@ -96,13 +89,13 @@ func TestPeerManager_OutgoingUpgradeLimits(t *testing.T) {
 				MaxConnectedUpgrade:    tc.upgrades,
 				PeerScores:             map[types.NodeID]p2p.PeerScore{b.NodeID: 2},
 			})
-			addReconnectPeer(t, manager, a)
+			addAddressToPeerManager(t, manager, a)
 			require.Equal(t, a, manager.TryDialNext())
 			if !tc.dialing {
 				require.NoError(t, manager.Dialed(a))
 			}
-			addReconnectPeer(t, manager, b)
-			addReconnectPeer(t, manager, c)
+			addAddressToPeerManager(t, manager, b)
+			addAddressToPeerManager(t, manager, c)
 			require.Zero(t, manager.TryDialNext())
 		})
 	}
@@ -119,11 +112,11 @@ func TestPeerManager_OutgoingUpgradeVictim(t *testing.T) {
 			outgoing.NodeID: 2, incoming.NodeID: 1,
 		},
 	})
-	addReconnectPeer(t, manager, outgoing)
+	addAddressToPeerManager(t, manager, outgoing)
 	require.NoError(t, manager.Dialed(outgoing))
-	addReconnectPeer(t, manager, incoming)
+	addAddressToPeerManager(t, manager, incoming)
 	require.NoError(t, manager.Accepted(incoming.NodeID))
-	addReconnectPeer(t, manager, persistent)
+	addAddressToPeerManager(t, manager, persistent)
 	require.Equal(t, persistent, manager.TryDialNext())
 	require.NoError(t, manager.Dialed(persistent))
 	victim, err := manager.TryEvictNext()
@@ -141,9 +134,9 @@ func TestPeerManager_OutgoingUpgradeFailureRetry(t *testing.T) {
 		MinRetryTime:           20 * time.Millisecond,
 		MaxRetryTime:           20 * time.Millisecond,
 	})
-	addReconnectPeer(t, manager, ordinary)
+	addAddressToPeerManager(t, manager, ordinary)
 	require.NoError(t, manager.Dialed(ordinary))
-	addReconnectPeer(t, manager, persistent)
+	addAddressToPeerManager(t, manager, persistent)
 	require.Equal(t, persistent, manager.TryDialNext())
 	require.NoError(t, manager.DialFailed(t.Context(), persistent))
 	victim, err := manager.TryEvictNext()
@@ -168,9 +161,9 @@ func TestPeerManager_OutgoingUpgradeVictimDisconnected(t *testing.T) {
 		MaxOutgoingConnections: 1,
 		MaxConnectedUpgrade:    1,
 	})
-	addReconnectPeer(t, manager, ordinary)
+	addAddressToPeerManager(t, manager, ordinary)
 	require.NoError(t, manager.Dialed(ordinary))
-	addReconnectPeer(t, manager, persistent)
+	addAddressToPeerManager(t, manager, persistent)
 	require.Equal(t, persistent, manager.TryDialNext())
 	manager.Disconnected(t.Context(), ordinary.NodeID)
 	require.NoError(t, manager.Dialed(persistent))
@@ -187,10 +180,10 @@ func TestPeerManager_OutgoingUpgradeConcurrent(t *testing.T) {
 		MaxOutgoingConnections: 1,
 		MaxConnectedUpgrade:    1,
 	})
-	addReconnectPeer(t, manager, a)
+	addAddressToPeerManager(t, manager, a)
 	require.NoError(t, manager.Dialed(a))
-	addReconnectPeer(t, manager, b)
-	addReconnectPeer(t, manager, c)
+	addAddressToPeerManager(t, manager, b)
+	addAddressToPeerManager(t, manager, c)
 	results := make(chan p2p.NodeAddress, 8)
 	var wg sync.WaitGroup
 	for range cap(results) {
@@ -222,10 +215,10 @@ func TestPeerManager_OutgoingUpgradeReservation(t *testing.T) {
 		MaxOutgoingConnections: 1,
 		MaxConnectedUpgrade:    2,
 	})
-	addReconnectPeer(t, manager, ordinary)
+	addAddressToPeerManager(t, manager, ordinary)
 	require.NoError(t, manager.Dialed(ordinary))
-	addReconnectPeer(t, manager, b)
-	addReconnectPeer(t, manager, c)
+	addAddressToPeerManager(t, manager, b)
+	addAddressToPeerManager(t, manager, c)
 	address := manager.TryDialNext()
 	require.NotZero(t, address)
 	require.Zero(t, manager.TryDialNext(), "two upgrade slots cannot reserve the same victim")
@@ -237,4 +230,59 @@ func TestPeerManager_OutgoingUpgradeReservation(t *testing.T) {
 	victim, err := manager.TryEvictNext()
 	require.NoError(t, err)
 	require.Equal(t, ordinary.NodeID, victim)
+}
+
+func TestPeerManager_DialedRejectsOrdinaryAtOutgoingCapacity(t *testing.T) {
+	connected, ordinary := reconnectAddress("a"), reconnectAddress("b")
+	manager := reconnectManager(t, p2p.PeerManagerOptions{
+		MaxConnected:           3,
+		MaxOutgoingConnections: 1,
+		MaxConnectedUpgrade:    1,
+	})
+	addAddressToPeerManager(t, manager, connected)
+	require.NoError(t, manager.Dialed(connected))
+	addAddressToPeerManager(t, manager, ordinary)
+
+	require.EqualError(t, manager.Dialed(ordinary), "already connected to maximum number of outgoing peers")
+	require.False(t, manager.IsDialingOrConnected(ordinary.NodeID))
+}
+
+func TestPeerManager_DialedRejectsUpgradeWithoutVictim(t *testing.T) {
+	persistent, victim := reconnectAddress("a"), reconnectAddress("b")
+	manager := reconnectManager(t, p2p.PeerManagerOptions{
+		PersistentPeers:        []types.NodeID{persistent.NodeID},
+		MaxConnected:           4,
+		MaxOutgoingConnections: 1,
+		MaxConnectedUpgrade:    1,
+	})
+	addAddressToPeerManager(t, manager, victim)
+	require.NoError(t, manager.Dialed(victim))
+	addAddressToPeerManager(t, manager, persistent)
+	require.Equal(t, persistent, manager.TryDialNext())
+	require.NoError(t, manager.SetProtectedPeers([]types.NodeID{victim.NodeID}))
+
+	require.EqualError(t, manager.Dialed(persistent), "no connected peer available to upgrade")
+	require.False(t, manager.IsDialingOrConnected(persistent.NodeID))
+	evicted, err := manager.TryEvictNext()
+	require.NoError(t, err)
+	require.Empty(t, evicted)
+}
+
+func TestPeerManager_ProtectedPeerOutgoingUpgrade(t *testing.T) {
+	ordinary, protected := reconnectAddress("a"), reconnectAddress("b")
+	manager := reconnectManager(t, p2p.PeerManagerOptions{
+		MaxConnected:           2,
+		MaxOutgoingConnections: 1,
+		MaxConnectedUpgrade:    1,
+	})
+	require.NoError(t, manager.SetProtectedPeers([]types.NodeID{protected.NodeID}))
+	addAddressToPeerManager(t, manager, ordinary)
+	require.NoError(t, manager.Dialed(ordinary))
+	addAddressToPeerManager(t, manager, protected)
+
+	require.Equal(t, protected, manager.TryDialNext())
+	require.NoError(t, manager.Dialed(protected))
+	evicted, err := manager.TryEvictNext()
+	require.NoError(t, err)
+	require.Equal(t, ordinary.NodeID, evicted)
 }

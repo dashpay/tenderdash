@@ -13,19 +13,26 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
-type reconnectJitterSource struct {
+const (
+	retryWaitTimeout = time.Second
+	retryTimeJitter  = 200 * time.Millisecond
+	fixedRetryJitter = 100 * time.Millisecond
+)
+
+type fixedJitterSource struct {
 	calls int
 }
 
-func (s *reconnectJitterSource) Int63() int64 {
+func (s *fixedJitterSource) Int63() int64 {
 	s.calls++
 	if s.calls == 1 {
 		return 0
 	}
-	return int64(100 * time.Millisecond)
+	// Int63n(retryTimeJitter) returns this unchanged because it is below the configured range.
+	return int64(fixedRetryJitter)
 }
 
-func (*reconnectJitterSource) Seed(int64) {}
+func (*fixedJitterSource) Seed(int64) {}
 
 func TestPeerManager_DialNext_UpgradeRetryJitter(t *testing.T) {
 	persistent := NodeAddress{Protocol: "memory", NodeID: types.NodeID(strings.Repeat("a", 40))}
@@ -37,18 +44,22 @@ func TestPeerManager_DialNext_UpgradeRetryJitter(t *testing.T) {
 		MaxOutgoingConnections: 1,
 		MaxConnectedUpgrade:    1,
 		MinRetryTime:           10 * time.Millisecond,
-		RetryTimeJitter:        200 * time.Millisecond,
+		RetryTimeJitter:        retryTimeJitter,
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, manager.Close()) })
-	manager.rand = rand.New(&reconnectJitterSource{})
+	manager.rand = rand.New(&fixedJitterSource{})
 	_, err = manager.Add(ordinary)
 	require.NoError(t, err)
 	require.NoError(t, manager.Dialed(ordinary))
 	_, err = manager.Add(persistent)
 	require.NoError(t, err)
 	require.Equal(t, persistent, manager.TryDialNext())
-	<-manager.dialWaker.Sleep()
+	select {
+	case <-manager.dialWaker.Sleep():
+	case <-time.After(retryWaitTimeout):
+		t.Fatal("timed out waiting to drain the pending dial wake")
+	}
 	require.NoError(t, manager.DialFailed(t.Context(), persistent))
 
 	// Retry eligibility must be rechecked when jitter extends the initial delay.
@@ -130,6 +141,9 @@ func TestPeerManager_DialNext_WakeDuringRetry(t *testing.T) {
 		result <- address
 	}()
 	waitForDialWake(t, manager)
+	// Process a controlled wake while only the retry timer can make the peer eligible.
+	manager.dialWaker.Wake()
+	waitForDialWake(t, manager)
 	_, err = manager.Add(b)
 	require.NoError(t, err)
 	select {
@@ -138,6 +152,33 @@ func TestPeerManager_DialNext_WakeDuringRetry(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("dialer ignored newly available peer while retry timer was pending")
 	}
+}
+
+func TestPeerManager_DialedRejectsOutgoingUpgradeCeiling(t *testing.T) {
+	ordinary, firstUpgrade, nextUpgrade := retryAddress("a"), retryAddress("b"), retryAddress("d")
+	manager := newRetryManager(t, PeerManagerOptions{
+		PersistentPeers:        []types.NodeID{firstUpgrade.NodeID, nextUpgrade.NodeID},
+		MaxConnected:           3,
+		MaxOutgoingConnections: 1,
+		MaxConnectedUpgrade:    1,
+	})
+	_, err := manager.Add(ordinary)
+	require.NoError(t, err)
+	require.NoError(t, manager.Dialed(ordinary))
+	_, err = manager.Add(firstUpgrade)
+	require.NoError(t, err)
+	require.Equal(t, firstUpgrade, manager.TryDialNext())
+	require.NoError(t, manager.Dialed(firstUpgrade))
+	_, err = manager.Add(nextUpgrade)
+	require.NoError(t, err)
+
+	manager.mtx.Lock()
+	manager.dialing[nextUpgrade.NodeID] = true
+	manager.upgrading[ordinary.NodeID] = nextUpgrade.NodeID
+	manager.mtx.Unlock()
+
+	require.EqualError(t, manager.Dialed(nextUpgrade), "already connected to maximum number of outgoing peers")
+	require.False(t, manager.IsDialingOrConnected(nextUpgrade.NodeID))
 }
 
 func retryAddress(id string) NodeAddress {
@@ -154,6 +195,6 @@ func newRetryManager(t *testing.T, options PeerManagerOptions) *PeerManager {
 
 func waitForDialWake(t *testing.T, manager *PeerManager) {
 	t.Helper()
-	// Add/DialFailed queued a wake; consuming it proves DialNext reached its wait.
-	require.Eventually(t, func() bool { return len(manager.dialWaker.Sleep()) == 0 }, time.Second, time.Millisecond)
+	// A drained queue proves DialNext processed the previously queued wake.
+	require.Eventually(t, func() bool { return len(manager.dialWaker.Sleep()) == 0 }, retryWaitTimeout, time.Millisecond)
 }
