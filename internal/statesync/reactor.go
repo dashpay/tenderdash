@@ -32,6 +32,10 @@ import (
 var (
 	_ service.Service = (*Reactor)(nil)
 	_ Metricer        = (*Reactor)(nil)
+
+	// consensusParamsResponseTimeout is the time the P2P state provider waits
+	// before performing a secondary call.
+	consensusParamsResponseTimeout = 5 * time.Second
 )
 
 const (
@@ -59,10 +63,6 @@ const (
 
 	// initStateProviderRetries defines how many times state provider initialization will be retried
 	initStateProviderRetries = 3
-
-	// consensusParamsResponseTimeout is the time the p2p state provider waits
-	// before performing a secondary call
-	consensusParamsResponseTimeout = 5 * time.Second
 
 	// maxLightBlockRequestRetries is the amount of retries acceptable before
 	// the backfill process aborts
@@ -293,6 +293,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 			stateProvider, err := newP2PStateProvider(ctx, chainID, initialHeight,
 				providers,
 				paramsCh,
+				&r.paramsRequests,
 				r.logger.With("module", "stateprovider"),
 				r.dashCoreClient,
 				trustedThreshold,
@@ -1198,7 +1199,10 @@ func (r *Reactor) handleParamsMessage(ctx context.Context, envelope *p2p.Envelop
 			return err
 		}
 	case *ssproto.ParamsResponse:
-		r.paramsRequests.respond(envelope, msg)
+		r.logger.Debug("received consensus params response", "peer", envelope.From, "height", msg.Height)
+		if !r.paramsRequests.respond(envelope, msg) {
+			r.logger.Debug("discarded unmatched consensus params response", "peer", envelope.From, "height", msg.Height)
+		}
 
 	default:
 		return fmt.Errorf("handleParamsMessage received unknown message: %T", msg)
@@ -1541,8 +1545,5 @@ func (r *Reactor) getStateProvider() StateProvider {
 func (r *Reactor) setStateProvider(sp StateProvider) {
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
-	if provider, ok := sp.(*stateProviderP2P); ok {
-		provider.paramsRequests = &r.paramsRequests
-	}
 	r.stateProvider = sp
 }

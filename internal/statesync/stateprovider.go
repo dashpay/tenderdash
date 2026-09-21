@@ -241,26 +241,13 @@ type stateProviderP2P struct {
 	trustedVotingPowerThreshold *uint64
 }
 
-// NewP2PStateProvider creates a light client state
-// provider but uses a dispatcher connected to the P2P layer
-func NewP2PStateProvider(
-	ctx context.Context,
-	chainID string,
-	initialHeight int64,
-	providers []lightprovider.Provider,
-	paramsSendCh p2p.Channel,
-	logger log.Logger,
-	dashCoreClient dashcore.Client,
-) (StateProvider, error) {
-	return newP2PStateProvider(ctx, chainID, initialHeight, providers, paramsSendCh, logger, dashCoreClient, nil)
-}
-
 func newP2PStateProvider(
 	ctx context.Context,
 	chainID string,
 	initialHeight int64,
 	providers []lightprovider.Provider,
 	paramsSendCh p2p.Channel,
+	paramsRequests *paramsRequests,
 	logger log.Logger,
 	dashCoreClient dashcore.Client,
 	trustedVotingPowerThreshold *uint64,
@@ -279,7 +266,7 @@ func newP2PStateProvider(
 		lc:                          lc,
 		initialHeight:               initialHeight,
 		paramsSendCh:                paramsSendCh,
-		paramsRequests:              &paramsRequests{},
+		paramsRequests:              paramsRequests,
 		dashCoreClient:              dashCoreClient,
 		trustedVotingPowerThreshold: cloneUint64Ptr(trustedVotingPowerThreshold),
 	}, nil
@@ -611,41 +598,58 @@ func (s *stateProviderP2P) consensusParams(ctx context.Context, height int64) (t
 				defer wg.Done()
 				defer workers.Done()
 
-				timer := time.NewTimer(0)
-				defer timer.Stop()
 				var iterCount int64
 
 				for {
-					iterCount++
 					request := s.paramsRequests.register(ctx, peer, requestHeight)
-					var response <-chan types.ConsensusParams
-					var disconnected <-chan struct{}
-					if request != nil {
-						response, disconnected = request.response, request.ctx.Done()
+					if request == nil {
+						timer := time.NewTimer(consensusParamsResponseTimeout)
+						select {
+						case <-timer.C:
+						case <-ctx.Done():
+							timer.Stop()
+							return
+						}
+						continue
+					}
+
+					var (
+						params          types.ConsensusParams
+						received        bool
+						requestTimedOut bool
+						stop            bool
+					)
+					func() {
+						defer s.paramsRequests.remove(request)
 						if err := s.paramsSendCh.Send(request.ctx, p2p.Envelope{
 							To:      peer,
 							Message: &ssproto.ParamsRequest{Height: requestHeight},
 						}); err != nil {
-							s.paramsRequests.remove(request)
-							if ctx.Err() != nil || !errors.Is(err, context.Canceled) {
-								return
-							}
-							continue
+							stop = ctx.Err() != nil || !errors.Is(err, context.Canceled)
+							return
 						}
+
+						nextIter := iterCount + 1
+						timer := time.NewTimer(time.Duration(nextIter)*consensusParamsResponseTimeout +
+							time.Duration(100*rand.Int63n(nextIter))*time.Millisecond) //nolint:gosec
+						defer timer.Stop()
+						select {
+						case <-timer.C:
+							requestTimedOut = true
+						case <-request.ctx.Done():
+						case <-ctx.Done():
+							stop = true
+						case params = <-request.response:
+							received = true
+						}
+					}()
+					if requestTimedOut {
+						iterCount++
 					}
-
-					// jitter+backoff the retry loop
-					timer.Reset(time.Duration(iterCount)*consensusParamsResponseTimeout +
-						time.Duration(100*rand.Int63n(iterCount))*time.Millisecond) //nolint:gosec
-
-					select {
-					case <-timer.C:
-					case <-disconnected:
-					case <-ctx.Done():
-						s.paramsRequests.remove(request)
+					if stop {
 						return
-					case params := <-response:
-						s.paramsRequests.remove(request)
+					}
+					if received {
 						select {
 						case <-ctx.Done():
 							return
@@ -653,7 +657,6 @@ func (s *stateProviderP2P) consensusParams(ctx context.Context, height int64) (t
 							return
 						}
 					}
-					s.paramsRequests.remove(request)
 				}
 
 			}(peer)

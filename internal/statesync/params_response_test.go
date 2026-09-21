@@ -20,6 +20,8 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
+const paramsTestDeadline = time.Second
+
 func TestParamsResponseCorrelation(t *testing.T) {
 	peerA := types.NodeID("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	peerB := types.NodeID("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
@@ -66,12 +68,37 @@ func TestParamsResponseCorrelation(t *testing.T) {
 	}
 }
 
-func TestParamsResponseIdle(t *testing.T) {
-	ctx := context.Background()
-	r := &Reactor{logger: log.NewNopLogger()}
-	start := time.Now()
-	deliverParams(t, ctx, r, "peer", 100, 1)
-	require.Less(t, time.Since(start), 250*time.Millisecond)
+func TestParamsResponseWithoutPendingRequestDoesNotBlock(t *testing.T) {
+	const unsolicitedResponseTimeout = 100 * time.Millisecond
+
+	peer := types.NodeID("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	r, sp, _ := newParamsTestProvider(t, peer)
+	logger := log.NewTestingLoggerWithLevel(t, log.LogLevelDebug)
+	logger.AssertContains("received consensus params response")
+	logger.AssertContains("discarded unmatched consensus params response")
+	r.logger = logger
+	require.Same(t, sp, r.getStateProvider())
+
+	done := make(chan error, 1)
+	go func() {
+		done <- r.handleMessage(context.Background(), &p2p.Envelope{
+			ChannelID: ParamsChannel,
+			From:      peer,
+			ConnID:    1,
+			Message: &ssproto.ParamsResponse{
+				Height:          100,
+				ConsensusParams: types.DefaultConsensusParams().ToProto(),
+			},
+		}, nil)
+	}()
+
+	// An unsolicited response must not wait for a state-provider receiver.
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(unsolicitedResponseTimeout):
+		t.Fatal("unsolicited response blocked")
+	}
 }
 
 func TestParamsRequestsLifecycle(t *testing.T) {
@@ -98,13 +125,105 @@ func TestParamsRequestsLifecycle(t *testing.T) {
 	deliverParams(t, ctx, r, peer, 100, 2)
 	require.Len(t, current.response, 1)
 	r.paramsRequests.remove(current)
-	require.Empty(t, r.paramsRequests.pending)
+	require.Empty(t, pendingParamsRequests(&r.paramsRequests))
+	replaced := r.paramsRequests.register(ctx, peer, 100)
+	r.paramsRequests.update(p2p.PeerUpdate{NodeID: peer, Status: p2p.PeerStatusUp, ConnID: 3})
+	select {
+	case <-replaced.ctx.Done():
+	default:
+		t.Fatal("connection replacement did not release pending request")
+	}
+	require.Empty(t, pendingParamsRequests(&r.paramsRequests))
 	canceled := r.paramsRequests.register(ctx, peer, 101)
 	cancel()
-	deliverParams(t, context.Background(), r, peer, 101, 2)
+	deliverParams(t, context.Background(), r, peer, 101, 3)
 	require.Empty(t, canceled.response)
-	require.Empty(t, r.paramsRequests.pending)
+	require.Empty(t, pendingParamsRequests(&r.paramsRequests))
 	require.Nil(t, r.paramsRequests.register(ctx, peer, 101))
+}
+
+func TestParamsRequestTimeoutRetriesAndCleansUp(t *testing.T) {
+	setConsensusParamsResponseTimeout(t, 10*time.Millisecond)
+	peer := types.NodeID("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	r, sp, outbound := newParamsTestProvider(t, peer)
+	r.paramsRequests.update(p2p.PeerUpdate{NodeID: peer, Status: p2p.PeerStatusUp, ConnID: 1})
+
+	ctx, cancel := context.WithTimeout(context.Background(), paramsTestDeadline)
+	defer cancel()
+	result := make(chan error, 1)
+	go func() { _, err := sp.consensusParams(ctx, 100); result <- err }()
+
+	receiveParamsRequest(t, ctx, outbound, peer, 100)
+	old := requireOnlyPendingParamsRequest(t, &r.paramsRequests)
+	receiveParamsRequest(t, ctx, outbound, peer, 100)
+	pendingAfterRetry := pendingParamsRequests(&r.paramsRequests)
+	oldReleased := false
+	select {
+	case <-old.ctx.Done():
+		oldReleased = true
+	default:
+	}
+
+	deliverParams(t, ctx, r, peer, 100, 1)
+	select {
+	case err := <-result:
+		require.NoError(t, err)
+	case <-ctx.Done():
+		t.Fatal("retried request did not complete")
+	}
+	require.True(t, oldReleased, "timed-out request context was not released")
+	require.Len(t, pendingAfterRetry, 1)
+	require.NotContains(t, pendingAfterRetry, old)
+	require.Empty(t, pendingParamsRequests(&r.paramsRequests))
+}
+
+func TestParamsRequestReconnectUsesNewGenerationWithoutBackoff(t *testing.T) {
+	const (
+		responseTimeout     = 100 * time.Millisecond
+		disconnectSettle    = 20 * time.Millisecond
+		reconnectSendCutoff = 150 * time.Millisecond
+	)
+	setConsensusParamsResponseTimeout(t, responseTimeout)
+	peer := types.NodeID("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	r, sp, outbound := newParamsTestProvider(t, peer)
+	r.paramsRequests.update(p2p.PeerUpdate{NodeID: peer, Status: p2p.PeerStatusUp, ConnID: 1})
+
+	ctx, cancel := context.WithTimeout(context.Background(), paramsTestDeadline)
+	defer cancel()
+	result := make(chan error, 1)
+	go func() { _, err := sp.consensusParams(ctx, 100); result <- err }()
+
+	receiveParamsRequest(t, ctx, outbound, peer, 100)
+	old := requireOnlyPendingParamsRequest(t, &r.paramsRequests)
+	r.paramsRequests.update(p2p.PeerUpdate{NodeID: peer, Status: p2p.PeerStatusDown, ConnID: 1})
+	select {
+	case <-old.ctx.Done():
+	case <-ctx.Done():
+		t.Fatal("disconnect did not wake pending request")
+	}
+	// Let the worker observe the disconnected registry before reconnecting.
+	time.Sleep(disconnectSettle)
+	reconnectedAt := time.Now()
+	r.paramsRequests.update(p2p.PeerUpdate{NodeID: peer, Status: p2p.PeerStatusUp, ConnID: 2})
+	receiveParamsRequestBefore(t, outbound, peer, 100, reconnectSendCutoff)
+	require.Less(t, time.Since(reconnectedAt), reconnectSendCutoff)
+	current := requireOnlyPendingParamsRequest(t, &r.paramsRequests)
+	require.Equal(t, uint64(2), current.connID)
+
+	deliverParams(t, ctx, r, peer, 100, 1)
+	select {
+	case err := <-result:
+		t.Fatalf("old connection response completed request: %v", err)
+	default:
+	}
+	require.Empty(t, current.response)
+	deliverParams(t, ctx, r, peer, 100, 2)
+	select {
+	case err := <-result:
+		require.NoError(t, err)
+	case <-ctx.Done():
+		t.Fatal("new connection response did not complete request")
+	}
 }
 
 func TestParamsRequestWitnessesAndCancellation(t *testing.T) {
@@ -159,10 +278,68 @@ func newParamsTestProvider(t *testing.T, peers ...types.NodeID) (*Reactor, *stat
 	lc, err := light.NewClientFromTrustedStore("test", primary, witnesses, lightdb.New(dbm.NewMemDB()), coremocks.NewClient(t))
 	require.NoError(t, err)
 	outbound := make(chan p2p.Envelope, len(peers))
-	sp := &stateProviderP2P{lc: lc, paramsSendCh: p2p.NewChannel(ParamsChannel, "params", nil, outbound, nil)}
 	r := &Reactor{logger: log.NewNopLogger()}
+	sp := &stateProviderP2P{
+		lc:             lc,
+		paramsSendCh:   p2p.NewChannel(ParamsChannel, "params", nil, outbound, nil),
+		paramsRequests: &r.paramsRequests,
+	}
 	r.setStateProvider(sp)
 	return r, sp, outbound
+}
+
+func setConsensusParamsResponseTimeout(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	original := consensusParamsResponseTimeout
+	consensusParamsResponseTimeout = timeout
+	t.Cleanup(func() { consensusParamsResponseTimeout = original })
+}
+
+func pendingParamsRequests(requests *paramsRequests) []*paramsRequest {
+	requests.mtx.Lock()
+	defer requests.mtx.Unlock()
+	pending := make([]*paramsRequest, 0, len(requests.pending))
+	for request := range requests.pending {
+		pending = append(pending, request)
+	}
+	return pending
+}
+
+func requireOnlyPendingParamsRequest(t *testing.T, requests *paramsRequests) *paramsRequest {
+	t.Helper()
+	pending := pendingParamsRequests(requests)
+	require.Len(t, pending, 1)
+	return pending[0]
+}
+
+func receiveParamsRequest(
+	t *testing.T,
+	ctx context.Context,
+	outbound <-chan p2p.Envelope,
+	peer types.NodeID,
+	height uint64,
+) {
+	t.Helper()
+	select {
+	case request := <-outbound:
+		require.Equal(t, peer, request.To)
+		require.Equal(t, height, request.Message.(*ssproto.ParamsRequest).Height)
+	case <-ctx.Done():
+		t.Fatal("consensus params request was not sent")
+	}
+}
+
+func receiveParamsRequestBefore(
+	t *testing.T,
+	outbound <-chan p2p.Envelope,
+	peer types.NodeID,
+	height uint64,
+	timeout time.Duration,
+) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	receiveParamsRequest(t, ctx, outbound, peer, height)
 }
 
 func deliverParams(t *testing.T, ctx context.Context, r *Reactor, peer types.NodeID, height, connID uint64) {
@@ -204,41 +381,67 @@ func TestParamsRequestCanceledSend(t *testing.T) {
 	require.Empty(t, r.paramsRequests.pending)
 }
 
-func TestParamsRequestDisconnectCancelsSend(t *testing.T) {
+func TestParamsRequestDisconnectCancelsBlockedSendAndContinues(t *testing.T) {
+	const continuationTimeout = 50 * time.Millisecond
+	setConsensusParamsResponseTimeout(t, 100*time.Millisecond)
 	peer := types.NodeID("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	r, sp, _ := newParamsTestProvider(t, peer)
 	r.paramsRequests.update(p2p.PeerUpdate{NodeID: peer, Status: p2p.PeerStatusUp, ConnID: 1})
 	sending := make(chan struct{})
 	stopped := make(chan struct{})
+	resumeSend := make(chan struct{})
+	continued := make(chan struct{})
 	channel := p2pmocks.NewChannel(t)
 	channel.On("Send", mock.Anything, mock.Anything).Return(func(ctx context.Context, _ p2p.Envelope) error {
 		close(sending)
 		<-ctx.Done()
 		close(stopped)
+		<-resumeSend
+		return ctx.Err()
+	}).Once()
+	channel.On("Send", mock.Anything, mock.Anything).Return(func(ctx context.Context, _ p2p.Envelope) error {
+		close(continued)
+		<-ctx.Done()
 		return ctx.Err()
 	}).Once()
 	sp.paramsSendCh = channel
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	t.Cleanup(cancel)
 	result := make(chan error, 1)
 	go func() { _, err := sp.consensusParams(ctx, 100); result <- err }()
 	select {
 	case <-sending:
-	case <-time.After(time.Second):
+	case <-time.After(paramsTestDeadline):
 		t.Fatal("send not started")
 	}
-	deliverParams(t, ctx, r, peer, 100, 1)
 	r.paramsRequests.update(p2p.PeerUpdate{NodeID: peer, Status: p2p.PeerStatusDown})
 	select {
 	case <-stopped:
-	case <-time.After(time.Second):
+	case <-time.After(paramsTestDeadline):
 		t.Fatal("disconnect did not cancel blocked send")
+	}
+	select {
+	case err := <-result:
+		t.Fatalf("per-request cancellation stopped worker: %v", err)
+	default:
+	}
+	r.paramsRequests.update(p2p.PeerUpdate{NodeID: peer, Status: p2p.PeerStatusUp, ConnID: 2})
+	close(resumeSend)
+	select {
+	case <-continued:
+	case <-time.After(continuationTimeout):
+		t.Fatal("worker did not continue after reconnect")
+	}
+	select {
+	case err := <-result:
+		t.Fatalf("worker returned before parent cancellation: %v", err)
+	default:
 	}
 	cancel()
 	select {
 	case err := <-result:
 		require.ErrorIs(t, err, context.Canceled)
-	case <-time.After(time.Second):
+	case <-time.After(paramsTestDeadline):
 		t.Fatal("request did not stop")
 	}
 }
