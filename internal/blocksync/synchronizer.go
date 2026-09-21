@@ -165,8 +165,9 @@ type (
 		// (live before the goroutines spawn, so it never observes a start-race)
 		// and canceled in OnStop so Stop releases the handlers even when the
 		// caller's context is still live.
-		ctx    context.Context
-		cancel context.CancelFunc
+		ctx          context.Context
+		cancel       context.CancelFunc
+		consumerDone chan struct{}
 	}
 	OptionFunc func(v *Synchronizer)
 )
@@ -230,15 +231,25 @@ func (s *Synchronizer) OnStart(ctx context.Context) error {
 	s.lastAdvance = s.clock.Now()
 	s.lastMonitorUpdate = s.lastAdvance
 	s.ctx, s.cancel = context.WithCancel(ctx)
+	s.consumerDone = make(chan struct{})
 	s.workerPool.Run(s.ctx)
 	go s.runHandler(s.ctx, s.produceJob)
-	go s.runHandler(s.ctx, s.consumeJobResult)
+	go func() {
+		defer close(s.consumerDone)
+		s.runHandler(s.ctx, func(context.Context) error {
+			// Handover stops fetching, but only node shutdown may cancel application.
+			// Stopping the worker pool releases an idle Receive using this context.
+			return s.consumeJobResult(ctx)
+		})
+	}()
 	return nil
 }
 
 func (s *Synchronizer) OnStop() {
 	s.cancel()
 	s.workerPool.Stop(context.Background())
+	// Finish all application work before consensus reads the final state.
+	<-s.consumerDone
 }
 
 func (s *Synchronizer) produceJob(ctx context.Context) error {

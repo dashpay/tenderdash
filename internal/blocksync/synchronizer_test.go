@@ -115,6 +115,72 @@ func (suite *SynchronizerTestSuite) TestBasic() {
 	sync.Stop()
 }
 
+func (suite *SynchronizerTestSuite) TestHandoverPreservesInFlightFinalization() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	resp, err := BlockResponseFromProto(suite.responses[0], "peer")
+	suite.Require().NoError(err)
+	resultCh := make(chan workerpool.Result, 1)
+	resultCh <- workerpool.Result{Value: resp}
+	wp := workerpool.New(0, workerpool.WithResultCh(resultCh))
+	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+	pool := NewSynchronizer(1, suite.client, applier, WithWorkerPool(wp))
+	finalizing := make(chan context.Context, 1)
+	release := make(chan struct{})
+	suite.store.On("SaveBlock", mock.Anything, mock.Anything, mock.Anything).Once()
+	suite.blockExec.On("ValidateBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(nil).Once()
+	suite.blockExec.On("VerifyCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(types.VerifiedCommit{}, nil).Once()
+	suite.blockExec.On("ProcessProposal", mock.Anything, mock.Anything, mock.Anything, mock.Anything, true, mock.Anything).
+		Return(sm.CurrentRoundState{}, nil).Once()
+	finalState := suite.initialState.Copy()
+	finalState.LastBlockHeight = 1
+	suite.blockExec.On("FinalizeBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		resp.Block, resp.Commit, mock.Anything).
+		Run(func(args mock.Arguments) {
+			finalizing <- args.Get(0).(context.Context)
+			<-release
+		}).Return(finalState, nil, nil).Once()
+	suite.Require().NoError(pool.Start(ctx))
+	defer pool.Stop()
+	// Release the application before cleanup stops the synchronizer.
+	defer close(release)
+	var applyCtx context.Context
+	select {
+	case applyCtx = <-finalizing:
+	case <-time.After(5 * time.Second):
+		suite.T().Fatal("finalization did not start")
+	}
+	stopped := make(chan struct{})
+	go func() {
+		pool.Stop()
+		close(stopped)
+	}()
+	select {
+	case <-pool.ctx.Done():
+	case <-time.After(5 * time.Second):
+		suite.T().Fatal("handover did not stop handlers")
+	}
+	suite.NoError(applyCtx.Err(), "handover must not cancel in-flight finalization")
+	select {
+	case <-stopped:
+		suite.T().Error("handover returned before finalization completed")
+	default:
+	}
+	// Unblock without closing twice in deferred cleanup.
+	release <- struct{}{}
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		suite.T().Fatal("synchronizer did not stop")
+	}
+	suite.Equal(int64(1), applier.State().LastBlockHeight)
+	// The application context retains node shutdown cancellation after handover.
+	cancel()
+	suite.ErrorIs(applyCtx.Err(), context.Canceled)
+}
+
 func (suite *SynchronizerTestSuite) TestProduceJob() {
 	ctx := context.Background()
 	peer1 := newPeerData("peer1", 1, 1000)
