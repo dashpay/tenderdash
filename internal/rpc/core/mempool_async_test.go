@@ -241,6 +241,54 @@ func TestBroadcastTxAsyncUninitialized(t *testing.T) {
 	require.NoError(t, env.StopAsyncBroadcasts(t.Context()))
 }
 
+func TestBroadcastTxAsyncStopIdleWithCanceledContext(t *testing.T) {
+	env := &Environment{Config: *config.DefaultRPCConfig()}
+	require.NoError(t, env.StartAsyncBroadcasts(t.Context()))
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	for range 2 {
+		require.NoError(t, env.StopAsyncBroadcasts(ctx))
+	}
+}
+
+func TestBroadcastTxAsyncConcurrentStopAfterTimeout(t *testing.T) {
+	cfg := *config.DefaultRPCConfig()
+	cfg.MaxConcurrentBroadcastTxAsync = 2
+	entered := make(chan struct{})
+	finish := make(chan struct{})
+	unblock := sync.OnceFunc(func() { close(finish) })
+	env := asyncTestEnvironment(t, cfg, func(ctx context.Context, _ types.Tx, _ func(*abci.ResponseCheckTx)) error {
+		close(entered)
+		<-finish
+		return ctx.Err()
+	})
+	t.Cleanup(unblock)
+	_, err := env.BroadcastTxAsync(t.Context(), &coretypes.RequestBroadcastTx{Tx: types.Tx("stalled")})
+	require.NoError(t, err)
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("CheckTx did not start")
+	}
+	stopCtx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
+	defer cancel()
+	require.ErrorIs(t, env.StopAsyncBroadcasts(stopCtx), context.DeadlineExceeded)
+	_, err = env.BroadcastTxAsync(t.Context(), &coretypes.RequestBroadcastTx{Tx: types.Tx("after stop")})
+	require.ErrorIs(t, err, context.Canceled)
+
+	ctx, cancelStops := context.WithTimeout(t.Context(), time.Second)
+	defer cancelStops()
+	results := make(chan error, 8)
+	for range cap(results) {
+		go func() { results <- env.StopAsyncBroadcasts(ctx) }()
+	}
+	unblock()
+	for range cap(results) {
+		require.NoError(t, <-results)
+	}
+	require.NoError(t, env.StopAsyncBroadcasts(stopCtx))
+}
+
 func TestBroadcastTxAsyncAdmissionDuringShutdown(t *testing.T) {
 	env := asyncTestEnvironment(t, *config.DefaultRPCConfig(), func(ctx context.Context, _ types.Tx, _ func(*abci.ResponseCheckTx)) error {
 		<-ctx.Done()

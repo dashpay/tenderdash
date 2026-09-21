@@ -5,6 +5,8 @@ import (
 	"errors"
 	"sync"
 
+	"golang.org/x/sync/semaphore"
+
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/rpc/coretypes"
 )
@@ -13,9 +15,8 @@ type asyncBroadcasts struct {
 	mu     sync.Mutex
 	ctx    context.Context
 	cancel context.CancelFunc
-	limit  int
-	active int
-	idle   chan struct{}
+	limit  int64
+	slots  *semaphore.Weighted
 }
 
 // StartAsyncBroadcasts initializes async admission before exposing the environment to clients.
@@ -32,13 +33,12 @@ func (env *Environment) StartAsyncBroadcasts(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	a.limit = env.Config.MaxConcurrentBroadcastTxAsync
+	a.limit = int64(env.Config.MaxConcurrentBroadcastTxAsync)
 	if a.limit == 0 {
-		a.limit = config.DefaultRPCConfig().MaxConcurrentBroadcastTxAsync
+		a.limit = int64(config.DefaultRPCConfig().MaxConcurrentBroadcastTxAsync)
 	}
 	a.ctx, a.cancel = context.WithCancel(ctx)
-	a.idle = make(chan struct{})
-	close(a.idle)
+	a.slots = semaphore.NewWeighted(a.limit)
 	return nil
 }
 
@@ -51,19 +51,15 @@ func (env *Environment) StopAsyncBroadcasts(ctx context.Context) error {
 		return nil
 	}
 	a.cancel()
-	idle := a.idle
 	a.mu.Unlock()
-	select {
-	case <-idle:
-		return nil
-	default:
+	// Taking every slot waits for all admitted calls; the fast path also works with an expired ctx.
+	if !a.slots.TryAcquire(a.limit) {
+		if err := a.slots.Acquire(ctx, a.limit); err != nil {
+			return err
+		}
 	}
-	select {
-	case <-idle:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+	a.slots.Release(a.limit)
+	return nil
 }
 
 func (a *asyncBroadcasts) acquire(ctx context.Context) (context.Context, error) {
@@ -78,21 +74,12 @@ func (a *asyncBroadcasts) acquire(ctx context.Context) (context.Context, error) 
 	if err := a.ctx.Err(); err != nil {
 		return nil, err
 	}
-	if a.active >= a.limit {
+	if !a.slots.TryAcquire(1) {
 		return nil, coretypes.ErrTooManyRequests
 	}
-	if a.active == 0 {
-		a.idle = make(chan struct{})
-	}
-	a.active++
 	return a.ctx, nil
 }
 
 func (a *asyncBroadcasts) release() {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.active--
-	if a.active == 0 {
-		close(a.idle)
-	}
+	a.slots.Release(1)
 }
