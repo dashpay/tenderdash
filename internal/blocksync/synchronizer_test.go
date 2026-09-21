@@ -115,6 +115,156 @@ func (suite *SynchronizerTestSuite) TestBasic() {
 	sync.Stop()
 }
 
+func (suite *SynchronizerTestSuite) TestHandoverPreservesInFlightFinalization() {
+	suite.assertHandoverWaitsForConsumer(false)
+}
+
+func (suite *SynchronizerTestSuite) TestHandoverWaitsForReceivedBlock() {
+	suite.assertHandoverWaitsForConsumer(true)
+}
+
+func (suite *SynchronizerTestSuite) assertHandoverWaitsForConsumer(beforeApply bool) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	resp, err := BlockResponseFromProto(suite.responses[0], "peer")
+	suite.Require().NoError(err)
+	resultCh := make(chan workerpool.Result, 1)
+	resultCh <- workerpool.Result{Value: resp}
+	wp := workerpool.New(0, workerpool.WithResultCh(resultCh))
+	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+	pool := NewSynchronizer(1, suite.client, applier, WithWorkerPool(wp))
+	finalizing := make(chan context.Context, 1)
+	paused := make(chan struct{})
+	release := make(chan struct{})
+	if beforeApply {
+		pool.pendingToApply[resp.Block.Height] = *resp
+		pool.logger = &handoverPauseLogger{Logger: log.NewNopLogger(), paused: paused, release: release}
+	}
+	suite.store.On("SaveBlock", mock.Anything, mock.Anything, mock.Anything).Once()
+	suite.blockExec.On("ValidateBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(nil).Once()
+	suite.blockExec.On("VerifyCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(types.VerifiedCommit{}, nil).Once()
+	suite.blockExec.On("ProcessProposal", mock.Anything, mock.Anything, mock.Anything, mock.Anything, true, mock.Anything).
+		Return(sm.CurrentRoundState{}, nil).Once()
+	finalState := suite.initialState.Copy()
+	finalState.LastBlockHeight = 1
+	suite.blockExec.On("FinalizeBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		resp.Block, resp.Commit, mock.Anything).
+		Run(func(args mock.Arguments) {
+			finalizing <- args.Get(0).(context.Context)
+			if !beforeApply {
+				close(paused)
+				<-release
+			}
+		}).Return(finalState, nil, nil).Once()
+	suite.Require().NoError(pool.Start(ctx))
+	defer pool.Stop()
+	// Release the application before cleanup stops the synchronizer.
+	defer close(release)
+	select {
+	case <-paused:
+	case <-time.After(5 * time.Second):
+		suite.T().Fatal("consumer did not reach the handover boundary")
+	}
+	if beforeApply {
+		// State's mutex cannot wait for a consumer that has not entered Apply yet.
+		suite.Equal(int64(0), applier.State().LastBlockHeight)
+	}
+	stopped := make(chan struct{})
+	go func() {
+		pool.Stop()
+		close(stopped)
+	}()
+	select {
+	case <-pool.ctx.Done():
+	case <-time.After(5 * time.Second):
+		suite.T().Fatal("handover did not stop handlers")
+	}
+	select {
+	case <-stopped:
+		suite.T().Error("handover returned before the consumer completed")
+	case <-time.After(100 * time.Millisecond):
+	}
+	var applyCtx context.Context
+	if !beforeApply {
+		applyCtx = <-finalizing
+		suite.NoError(applyCtx.Err(), "handover must not cancel in-flight finalization")
+	}
+	// Unblock without closing twice in deferred cleanup.
+	release <- struct{}{}
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		suite.T().Fatal("synchronizer did not stop")
+	}
+	suite.Equal(int64(1), applier.State().LastBlockHeight)
+	if beforeApply {
+		select {
+		case applyCtx = <-finalizing:
+		default:
+			suite.T().Fatal("consumer stopped without finalizing the received block")
+		}
+		suite.NoError(applyCtx.Err(), "handover must not cancel a received block's application")
+	}
+	// The application context retains node shutdown cancellation after handover.
+	cancel()
+	suite.ErrorIs(applyCtx.Err(), context.Canceled)
+}
+
+type handoverPauseLogger struct {
+	log.Logger
+	paused  chan<- struct{}
+	release <-chan struct{}
+}
+
+func (l *handoverPauseLogger) Info(msg string, _ ...interface{}) {
+	if msg == "dropping duplicate block response" {
+		close(l.paused)
+		<-l.release
+	}
+}
+
+func (suite *SynchronizerTestSuite) TestHandoverCancelsBlockedPeerError() {
+	ctx, cancel := context.WithCancel(context.Background())
+	resultCh := make(chan workerpool.Result, 1)
+	resultCh <- workerpool.Result{Err: &errBlockFetch{peerID: "peer", height: 1, err: errors.New("fetch failed")}}
+	wp := workerpool.New(0, workerpool.WithResultCh(resultCh))
+	pool := NewSynchronizer(1, suite.client, nil, WithWorkerPool(wp))
+	pool.AddPeer(newPeerData("peer", 1, 0))
+	for range maxConsecutiveFailures - 1 {
+		pool.peerStore.AddFailure("peer", maxConsecutiveFailures)
+	}
+	// Model a full error channel whose router no longer drains during handover.
+	errCh := make(chan p2p.PeerError, 1)
+	errCh <- p2p.PeerError{NodeID: "peer", Err: errors.New("previous error")}
+	errorChannel := p2p.NewChannel(p2p.ErrorChannel, "error", nil, nil, errCh)
+	sending := make(chan struct{})
+	suite.client.EXPECT().Send(mock.Anything, mock.Anything).RunAndReturn(func(ctx context.Context, msg any) error {
+		close(sending)
+		return errorChannel.SendError(ctx, msg.(p2p.PeerError))
+	}).Once()
+	suite.Require().NoError(pool.Start(ctx))
+	defer pool.Stop()
+	defer cancel()
+	select {
+	case <-sending:
+	case <-time.After(5 * time.Second):
+		suite.T().Fatal("consumer did not send the peer error")
+	}
+	stopped := make(chan struct{})
+	go func() {
+		pool.Stop()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		suite.T().Fatal("handover is blocked on peer-error delivery")
+	}
+	suite.NoError(ctx.Err(), "handover must leave the parent context live")
+}
+
 func (suite *SynchronizerTestSuite) TestProduceJob() {
 	ctx := context.Background()
 	peer1 := newPeerData("peer1", 1, 1000)
@@ -280,7 +430,7 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResult() {
 		suite.Run(fmt.Sprintf("%d", i), func() {
 			tc.mockFn(pool)
 			resultCh <- tc.result
-			pool.consumeJobResult(ctx)
+			suite.Require().NoError(pool.consumeJobResult(ctx, ctx))
 			sort.Slice(pool.jobGen.pushedBack, func(i, j int) bool {
 				return pool.jobGen.pushedBack[i] < pool.jobGen.pushedBack[j]
 			})
@@ -415,7 +565,7 @@ func (suite *SynchronizerTestSuite) TestConsumeDuplicateThenDrain() {
 	pool.pendingToApply[respH2.Block.Height] = *respH2
 
 	resultCh <- workerpool.Result{Value: duplicateH2}
-	suite.Require().NoError(pool.consumeJobResult(ctx))
+	suite.Require().NoError(pool.consumeJobResult(ctx, ctx))
 	suite.Require().Equal(peerID1, pool.pendingToApply[respH2.Block.Height].PeerID,
 		"the response already held must be kept")
 	suite.Require().Empty(pool.jobGen.pushedBack, "a duplicate must not re-queue the height")
@@ -435,7 +585,7 @@ func (suite *SynchronizerTestSuite) TestConsumeDuplicateThenDrain() {
 	expectApply(suite.blockExec, func(call *mock.Call) { call.Twice() })
 
 	resultCh <- workerpool.Result{Value: respH1}
-	suite.Require().NoError(pool.consumeJobResult(ctx))
+	suite.Require().NoError(pool.consumeJobResult(ctx, ctx))
 
 	suite.Require().Empty(pool.pendingToApply, "both blocks must have been applied")
 	height, _ := pool.GetStatus()
@@ -468,7 +618,7 @@ func (suite *SynchronizerTestSuite) TestDuplicateBlockIsVisibleAtDefaultLogLevel
 	pool.pendingToApply[respH1.Block.Height] = *respH1
 
 	resultCh <- workerpool.Result{Value: duplicateH1}
-	suite.Require().NoError(pool.consumeJobResult(ctx))
+	suite.Require().NoError(pool.consumeJobResult(ctx, ctx))
 
 	suite.Require().Contains(logs.String(), "dropping duplicate block response")
 	suite.Require().Contains(logs.String(), string(peerID2))
@@ -510,7 +660,7 @@ func (suite *SynchronizerTestSuite) TestApplyFailurePunishesSupplyingPeer() {
 		Return(nil)
 
 	resultCh <- workerpool.Result{Value: honestH2}
-	suite.Require().NoError(pool.consumeJobResult(ctx))
+	suite.Require().NoError(pool.consumeJobResult(ctx, ctx))
 
 	// The poisoned height is dropped and re-requested from someone else, so the
 	// synchronizer can still advance.
@@ -543,7 +693,7 @@ func (suite *SynchronizerTestSuite) TestAddBlockDropsAlreadyAppliedHeight() {
 	pool := NewSynchronizer(currentHeight, suite.client, applier, WithWorkerPool(wp))
 
 	resultCh <- workerpool.Result{Value: staleH1}
-	suite.Require().NoError(pool.consumeJobResult(ctx))
+	suite.Require().NoError(pool.consumeJobResult(ctx, ctx))
 
 	suite.Require().Empty(pool.pendingToApply)
 	suite.client.AssertNotCalled(suite.T(), "Send", mock.Anything, mock.Anything)
@@ -748,7 +898,7 @@ func (suite *SynchronizerTestSuite) TestStatusRefreshPreservesFailureCount() {
 		resultCh <- workerpool.Result{
 			Err: &errBlockFetch{peerID: peerID, height: height, err: errors.New("timeout")},
 		}
-		suite.Require().NoError(pool.consumeJobResult(ctx))
+		suite.Require().NoError(pool.consumeJobResult(ctx, ctx))
 	}
 
 	// stop one short of the threshold, then let a status response land mid-run
@@ -806,7 +956,7 @@ func (suite *SynchronizerTestSuite) TestStatusRefreshPreservesPendingRequests() 
 		resultCh <- workerpool.Result{
 			Err: &errBlockFetch{peerID: peerID, height: int64(i + 1), err: errors.New("timeout")},
 		}
-		suite.Require().NoError(pool.consumeJobResult(ctx))
+		suite.Require().NoError(pool.consumeJobResult(ctx, ctx))
 		suite.Require().GreaterOrEqual(numPending(), int32(0),
 			"the pending request count must never go negative")
 	}
@@ -824,7 +974,7 @@ func (suite *SynchronizerTestSuite) TestNoBlockResponseRetriesAnotherPeer() {
 	pool.peerStore.Update(peerID, AddNumPending(1))
 	pool.jobProgressCounter.Add(1)
 	resultCh <- errorResult(peerID, height, &client.ErrBlockNotFound{Height: height})
-	suite.Require().NoError(pool.consumeJobResult(ctx))
+	suite.Require().NoError(pool.consumeJobResult(ctx, ctx))
 	suite.Equal([]int64{height}, pool.jobGen.pushedBack)
 	suite.False(pool.peerStore.HasPeerForHeight(height), "a negative reply invalidates the advertised range")
 
@@ -854,7 +1004,7 @@ func (suite *SynchronizerTestSuite) TestNoBlockResponseForWrongHeightPreservesRa
 	pool.AddPeer(newPeerData(peerID, 1000, 1030))
 	pool.peerStore.Update(peerID, AddNumPending(1))
 	resultCh <- errorResult(peerID, 1000, &client.ErrBlockNotFound{Height: 1030})
-	suite.Require().NoError(pool.consumeJobResult(context.Background()))
+	suite.Require().NoError(pool.consumeJobResult(context.Background(), context.Background()))
 	suite.True(pool.peerStore.HasPeerForHeight(1000))
 	peer, found := pool.peerStore.Get(peerID)
 	suite.Require().True(found)
@@ -1396,7 +1546,7 @@ func (h *backlogHarness) produce(ctx context.Context) *BlockResponse {
 // deliver hands a fetched response to the consumer, as the worker pool would.
 func (h *backlogHarness) deliver(ctx context.Context, resp *BlockResponse) {
 	h.resultCh <- workerpool.Result{Value: resp}
-	h.suite.Require().NoError(h.pool.consumeJobResult(ctx))
+	h.suite.Require().NoError(h.pool.consumeJobResult(ctx, ctx))
 }
 
 // deliverSized delivers a response that reports the given serialized size. The
@@ -1414,7 +1564,7 @@ func (h *backlogHarness) timeout(ctx context.Context, peerID types.NodeID, heigh
 	h.resultCh <- workerpool.Result{
 		Err: &errBlockFetch{peerID: peerID, height: height, err: errors.New("peer did not respond")},
 	}
-	h.suite.Require().NoError(h.pool.consumeJobResult(ctx))
+	h.suite.Require().NoError(h.pool.consumeJobResult(ctx, ctx))
 }
 
 // fillWindow requests heights until production is refused, answering everything
@@ -1860,7 +2010,7 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResultKeepsPeerOnTransientFail
 		resultCh <- workerpool.Result{
 			Err: &errBlockFetch{peerID: peerID, height: int64(i), err: errors.New("timeout")},
 		}
-		suite.Require().NoError(pool.consumeJobResult(ctx))
+		suite.Require().NoError(pool.consumeJobResult(ctx, ctx))
 		suite.Require().Len(pool.peerStore.All(), 1, "peer dropped after %d failures", i)
 	}
 
@@ -1872,7 +2022,7 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResultKeepsPeerOnTransientFail
 	resultCh <- workerpool.Result{
 		Err: &errBlockFetch{peerID: peerID, height: 99, err: errors.New("timeout")},
 	}
-	suite.Require().NoError(pool.consumeJobResult(ctx))
+	suite.Require().NoError(pool.consumeJobResult(ctx, ctx))
 	suite.Require().Empty(pool.peerStore.All(), "peer must be dropped once it exceeds the threshold")
 }
 
