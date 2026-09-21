@@ -792,7 +792,11 @@ func (m *PeerManager) TryDialNext() NodeAddress {
 	return address
 }
 
-// tryDialNext also returns the earliest remaining cooldown or retry delay.
+// tryDialNext returns the next peer address to dial and marks that peer as
+// dialing, or the zero address if none is eligible. The second return value is
+// the shortest disconnect-cooldown or dial-retry delay among the peers examined,
+// or retryNever when no timer is pending; callers must still rely on dialWaker
+// for state changes that no timer can predict.
 func (m *PeerManager) tryDialNext() (NodeAddress, time.Duration) {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
@@ -807,6 +811,7 @@ func (m *PeerManager) tryDialNext() (NodeAddress, time.Duration) {
 	}
 
 	cinfo := m.getConnectedInfo()
+	// Unlike Dialed(), pending dials count here so in-flight probes stay bounded.
 	outgoing := int(cinfo.outgoing) + len(m.dialing)
 	outgoingFull := m.options.MaxOutgoingConnections > 0 && outgoing >= int(m.options.MaxOutgoingConnections)
 	if outgoingFull && outgoing >= int(m.options.MaxOutgoingConnections)+int(m.options.MaxConnectedUpgrade) {
@@ -825,11 +830,7 @@ func (m *PeerManager) tryDialNext() (NodeAddress, time.Duration) {
 
 		var upgradeFromPeer types.NodeID
 		if outgoingFull || (m.options.MaxConnected > 0 && len(m.connected) >= int(m.options.MaxConnected)) {
-			direction := peerConnectionNone
-			if outgoingFull {
-				direction = peerConnectionOutgoing
-			}
-			upgradeFromPeer = m.findUpgradeCandidate(peer.ID, peer.Score(), direction)
+			upgradeFromPeer = m.findUpgradeCandidate(peer.ID, peer.Score(), upgradeDirection(outgoingFull))
 			if upgradeFromPeer == "" {
 				// Lower-ranked peers cannot find a replacement either.
 				return NodeAddress{}, nextRetry
@@ -939,6 +940,8 @@ func (m *PeerManager) Dialed(address NodeAddress, peerOpts ...func(*peerInfo)) e
 	if !ok {
 		return fmt.Errorf("peer %q was removed while dialing", address.NodeID)
 	}
+	// Only established connections count here: this dial was already removed
+	// from m.dialing, and other pending dials do not occupy a slot yet.
 	outgoing := int(m.getConnectedInfo().outgoing)
 	outgoingFull := m.options.MaxOutgoingConnections > 0 && outgoing >= int(m.options.MaxOutgoingConnections)
 	if outgoingFull && (upgradeFromPeer == "" || !peer.hasReservedSlot() ||
@@ -947,11 +950,7 @@ func (m *PeerManager) Dialed(address NodeAddress, peerOpts ...func(*peerInfo)) e
 	}
 	if upgradeFromPeer != "" && (outgoingFull ||
 		(m.options.MaxConnected > 0 && len(m.connected) >= int(m.options.MaxConnected))) {
-		direction := peerConnectionNone
-		if outgoingFull {
-			direction = peerConnectionOutgoing
-		}
-		upgradeFromPeer = m.findUpgradeCandidate(peer.ID, peer.Score(), direction)
+		upgradeFromPeer = m.findUpgradeCandidate(peer.ID, peer.Score(), upgradeDirection(outgoingFull))
 		if upgradeFromPeer == "" {
 			return fmt.Errorf("no connected peer available to upgrade")
 		}
@@ -1543,9 +1542,20 @@ func (m *PeerManager) Status(id types.NodeID) PeerStatus {
 	}
 }
 
+// upgradeDirection returns the connection direction an upgrade victim must
+// have: outgoing when the outgoing slots are full, otherwise any direction.
+func upgradeDirection(outgoingFull bool) peerConnectionDirection {
+	if outgoingFull {
+		return peerConnectionOutgoing
+	}
+	return peerConnectionNone
+}
+
 // findUpgradeCandidate looks for a lower-scored peer that we could evict
 // to make room for the given peer. Returns an empty ID if none is found.
 // If the peer is already being upgraded to, we return that same upgrade.
+// direction restricts victims to peers connected in that direction; here (and
+// only here) peerConnectionNone means any direction.
 // The caller must hold the mutex lock.
 func (m *PeerManager) findUpgradeCandidate(id types.NodeID, score PeerScore, direction peerConnectionDirection) types.NodeID {
 	for from, to := range m.upgrading {
