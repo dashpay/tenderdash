@@ -148,15 +148,16 @@ type PeerManagerOptions struct {
 	MaxConnected uint16
 
 	// MaxOutgoingConnections specifies how many outgoing
-	// connections a node will maintain. It must be lower than MaxConnected. If it is
+	// connections a node will maintain. It must not exceed MaxConnected. If it is
 	// 0, then all connections can be outgoing. Once this limit is
-	// reached, the node will not dial peers, allowing the
-	// remaining peer connections to be used by incoming connections.
+	// reached, the node only probes reserved peers using MaxConnectedUpgrade
+	// slots to replace lower-scored outgoing peers. Pending dials count toward
+	// the limit, leaving the remaining slots for incoming connections.
 	MaxOutgoingConnections uint16
 
 	// MaxConnectedUpgrade is the maximum number of additional connections to
 	// use for probing any better-scored peers to upgrade to when all connection
-	// slots are full. 0 disables peer upgrading.
+	// slots or outgoing slots are full. 0 disables peer upgrading.
 	//
 	// For example, if we are already connected to MaxConnected peers, but we
 	// know or learn about better-scored peers (e.g. configured persistent
@@ -757,20 +758,27 @@ func (m *PeerManager) HasDialedMaxPeers() bool {
 // becomes available. The caller must call Dialed() or DialFailed() for the
 // returned peer.
 func (m *PeerManager) DialNext(ctx context.Context) (NodeAddress, error) {
-	for counter := uint32(0); ; counter++ {
-		if address := m.TryDialNext(); (address != NodeAddress{}) {
+	timer := time.NewTimer(0)
+	defer timer.Stop()
+	for {
+		if err := ctx.Err(); err != nil {
+			return NodeAddress{}, err
+		}
+		address, delay := m.tryDialNext()
+		if address != (NodeAddress{}) {
 			return address, nil
 		}
 
-		// If we have zero peers connected, we need to schedule a retry.
-		// This can happen, for example, when some retry delay is not fulfilled
-		if m.numDialingOrConnected() == 0 {
-			m.scheduleDial(ctx, m.retryDelay(counter+1, false))
+		timer.Stop()
+		var retry <-chan time.Time
+		if delay != retryNever {
+			timer.Reset(delay)
+			retry = timer.C
 		}
 
 		select {
+		case <-retry:
 		case <-m.dialWaker.Sleep():
-			continue
 		case <-ctx.Done():
 			return NodeAddress{}, ctx.Err()
 		}
@@ -780,37 +788,67 @@ func (m *PeerManager) DialNext(ctx context.Context) (NodeAddress, error) {
 // TryDialNext is equivalent to DialNext(), but immediately returns an empty
 // address if no peers or connection slots are available.
 func (m *PeerManager) TryDialNext() NodeAddress {
+	address, _ := m.tryDialNext()
+	return address
+}
+
+// tryDialNext also returns the earliest remaining cooldown or retry delay.
+func (m *PeerManager) tryDialNext() (NodeAddress, time.Duration) {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 
+	nextRetry := retryNever
 	// We allow dialing MaxConnected+MaxConnectedUpgrade peers. Including
 	// MaxConnectedUpgrade allows us to probe additional peers that have a
 	// higher score than any other peers, and if successful evict it.
 	if m.options.MaxConnected > 0 && len(m.connected)+len(m.dialing) >= int(m.options.MaxConnected)+int(m.options.MaxConnectedUpgrade) {
 		m.logger.Trace("max connected reached, skipping dial attempt")
-		return NodeAddress{}
+		return NodeAddress{}, nextRetry
 	}
 
 	cinfo := m.getConnectedInfo()
-	if m.options.MaxOutgoingConnections > 0 && cinfo.outgoing >= m.options.MaxOutgoingConnections {
+	outgoing := int(cinfo.outgoing) + len(m.dialing)
+	outgoingFull := m.options.MaxOutgoingConnections > 0 && outgoing >= int(m.options.MaxOutgoingConnections)
+	if outgoingFull && outgoing >= int(m.options.MaxOutgoingConnections)+int(m.options.MaxConnectedUpgrade) {
 		m.logger.Trace("max outgoing connections reached, skipping dial attempt")
-		return NodeAddress{}
+		return NodeAddress{}, nextRetry
 	}
 
 	for _, peer := range m.store.Ranked() {
+		if outgoingFull && !peer.hasReservedSlot() {
+			continue
+		}
 		if m.dialing[peer.ID] || m.isConnected(peer.ID) {
 			m.logger.Trace("peer dialing or connected, skipping", "peer", peer)
 			continue
 		}
 
-		if !peer.LastDisconnected.IsZero() && time.Since(peer.LastDisconnected) < m.options.DisconnectCooldownPeriod {
+		var upgradeFromPeer types.NodeID
+		if outgoingFull || (m.options.MaxConnected > 0 && len(m.connected) >= int(m.options.MaxConnected)) {
+			direction := peerConnectionNone
+			if outgoingFull {
+				direction = peerConnectionOutgoing
+			}
+			upgradeFromPeer = m.findUpgradeCandidate(peer.ID, peer.Score(), direction)
+			if upgradeFromPeer == "" {
+				// Lower-ranked peers cannot find a replacement either.
+				return NodeAddress{}, nextRetry
+			}
+		}
+
+		if delay := time.Until(peer.LastDisconnected.Add(m.options.DisconnectCooldownPeriod)); delay > 0 {
+			nextRetry = min(nextRetry, delay)
 			m.logger.Trace("peer within disconnect cooldown period, skipping", "peer", peer, "cooldown_period", m.options.DisconnectCooldownPeriod)
 			continue
 		}
 
 		for _, addressInfo := range peer.AddressInfo {
 			delay := m.retryDelay(addressInfo.DialFailures, peer.hasReservedSlot())
-			if time.Since(addressInfo.LastDialFailure) < delay {
+			if delay == retryNever {
+				continue
+			}
+			if remaining := time.Until(addressInfo.LastDialFailure.Add(delay)); remaining > 0 {
+				nextRetry = min(nextRetry, remaining)
 				m.logger.Trace("not dialing peer due to retry delay", "peer", peer, "delay", delay, "last_failure", addressInfo.LastDialFailure)
 				continue
 			}
@@ -820,39 +858,23 @@ func (m *PeerManager) TryDialNext() NodeAddress {
 				continue
 			}
 
-			// We now have an eligible address to dial. If we're full but have
-			// upgrade capacity (as checked above), we find a lower-scored peer
-			// we can replace and mark it as upgrading so noone else claims it.
-			//
-			// If we don't find one, there is no point in trying additional
-			// peers, since they will all have the same or lower score than this
-			// peer (since they're ordered by score via peerStore.Ranked).
-			if m.options.MaxConnected > 0 && len(m.connected) >= int(m.options.MaxConnected) {
-				upgradeFromPeer := m.findUpgradeCandidate(peer.ID, peer.Score())
-				m.logger.Trace("max connected reached, checking upgrade candidate",
-					"peer", peer,
-					"max_connected", m.options.MaxConnected,
-					"connected", len(m.connected),
-					"upgrade_candidate", upgradeFromPeer,
-				)
-				if upgradeFromPeer == "" {
-					return NodeAddress{}
-				}
+			if upgradeFromPeer != "" {
 				m.upgrading[upgradeFromPeer] = peer.ID
 			}
 
 			m.dialing[peer.ID] = true
-			return addressInfo.Address
+			return addressInfo.Address, nextRetry
 		}
 	}
-	return NodeAddress{}
+	return NodeAddress{}, nextRetry
 }
 
 // DialFailed reports a failed dial attempt. This will make the peer available
 // for dialing again when appropriate (possibly after a retry timeout).
-func (m *PeerManager) DialFailed(ctx context.Context, address NodeAddress) error {
+func (m *PeerManager) DialFailed(_ctx context.Context, address NodeAddress) error {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
+	defer m.dialWaker.Wake()
 	m.metrics.PeersConnectedFailure.Add(1)
 
 	delete(m.dialing, address.NodeID)
@@ -878,19 +900,7 @@ func (m *PeerManager) DialFailed(ctx context.Context, address NodeAddress) error
 		return err
 	}
 
-	delay := m.retryDelay(addressInfo.DialFailures, peer.hasReservedSlot())
-	m.scheduleDial(ctx, delay)
-
 	return nil
-}
-
-// scheduleDial will dial peers after some delay
-func (m *PeerManager) scheduleDial(_ctx context.Context, delay time.Duration) {
-	if delay > 0 && delay != retryNever {
-		m.dialWaker.WakeAfter(delay)
-	} else {
-		m.dialWaker.Wake()
-	}
 }
 
 // Dialed marks a peer as successfully dialed. Any further connections will be
@@ -898,6 +908,7 @@ func (m *PeerManager) scheduleDial(_ctx context.Context, delay time.Duration) {
 func (m *PeerManager) Dialed(address NodeAddress, peerOpts ...func(*peerInfo)) error {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
+	defer m.dialWaker.Wake()
 
 	m.metrics.PeersConnectedSuccess.Add(1)
 
@@ -928,6 +939,25 @@ func (m *PeerManager) Dialed(address NodeAddress, peerOpts ...func(*peerInfo)) e
 	if !ok {
 		return fmt.Errorf("peer %q was removed while dialing", address.NodeID)
 	}
+	outgoing := int(m.getConnectedInfo().outgoing)
+	outgoingFull := m.options.MaxOutgoingConnections > 0 && outgoing >= int(m.options.MaxOutgoingConnections)
+	if outgoingFull && (upgradeFromPeer == "" || !peer.hasReservedSlot() ||
+		outgoing >= int(m.options.MaxOutgoingConnections)+int(m.options.MaxConnectedUpgrade)) {
+		return fmt.Errorf("already connected to maximum number of outgoing peers")
+	}
+	if upgradeFromPeer != "" && (outgoingFull ||
+		(m.options.MaxConnected > 0 && len(m.connected) >= int(m.options.MaxConnected))) {
+		direction := peerConnectionNone
+		if outgoingFull {
+			direction = peerConnectionOutgoing
+		}
+		upgradeFromPeer = m.findUpgradeCandidate(peer.ID, peer.Score(), direction)
+		if upgradeFromPeer == "" {
+			return fmt.Errorf("no connected peer available to upgrade")
+		}
+	} else {
+		upgradeFromPeer = ""
+	}
 	now := time.Now().UTC()
 	if peer.Inactive {
 		m.metrics.PeersInactivated.Add(-1)
@@ -948,14 +978,7 @@ func (m *PeerManager) Dialed(address NodeAddress, peerOpts ...func(*peerInfo)) e
 		return err
 	}
 
-	if upgradeFromPeer != "" && m.options.MaxConnected > 0 && len(m.connected) >= int(m.options.MaxConnected) {
-		// Look for an even lower-scored peer that may have appeared since we
-		// started the upgrade.
-		if p, ok := m.store.Get(upgradeFromPeer); ok {
-			if u := m.findUpgradeCandidate(p.ID, p.Score()); u != "" {
-				upgradeFromPeer = u
-			}
-		}
+	if upgradeFromPeer != "" {
 		m.evict[upgradeFromPeer] = true
 		m.evictWaker.Wake()
 	}
@@ -1012,7 +1035,7 @@ func (m *PeerManager) Accepted(peerID types.NodeID, peerOpts ...func(*peerInfo))
 	// peer to replace and if found accept the connection anyway and evict it.
 	var upgradeFromPeer types.NodeID
 	if m.options.MaxConnected > 0 && len(m.connected) >= int(m.options.MaxConnected) {
-		upgradeFromPeer = m.findUpgradeCandidate(peer.ID, peer.Score())
+		upgradeFromPeer = m.findUpgradeCandidate(peer.ID, peer.Score(), peerConnectionNone)
 		if upgradeFromPeer == "" {
 			return fmt.Errorf("already connected to maximum number of peers")
 		}
@@ -1163,17 +1186,6 @@ func (m *PeerManager) Disconnected(ctx context.Context, peerID types.NodeID) {
 	if peer, ok := m.store.Get(peerID); ok {
 		peer.LastDisconnected = time.Now()
 		_ = m.store.Set(peer)
-		// launch a thread to ping the dialWaker when the
-		// disconnected peer can be dialed again.
-		go func() {
-			timer := time.NewTimer(m.options.DisconnectCooldownPeriod)
-			defer timer.Stop()
-			select {
-			case <-timer.C:
-				m.dialWaker.Wake()
-			case <-ctx.Done():
-			}
-		}()
 	}
 
 	if ready {
@@ -1535,7 +1547,7 @@ func (m *PeerManager) Status(id types.NodeID) PeerStatus {
 // to make room for the given peer. Returns an empty ID if none is found.
 // If the peer is already being upgraded to, we return that same upgrade.
 // The caller must hold the mutex lock.
-func (m *PeerManager) findUpgradeCandidate(id types.NodeID, score PeerScore) types.NodeID {
+func (m *PeerManager) findUpgradeCandidate(id types.NodeID, score PeerScore, direction peerConnectionDirection) types.NodeID {
 	for from, to := range m.upgrading {
 		if to == id {
 			return from
@@ -1551,6 +1563,7 @@ func (m *PeerManager) findUpgradeCandidate(id types.NodeID, score PeerScore) typ
 		case candidate.Score() >= score:
 			return "" // no further peers can be scored lower, due to sorting
 		case !m.isConnected(candidate.ID):
+		case direction != peerConnectionNone && m.connected[candidate.ID] != direction:
 		case m.evict[candidate.ID]:
 		case m.evicting[candidate.ID]:
 		case m.upgrading[candidate.ID] != "":
@@ -2108,12 +2121,6 @@ func (m *PeerManager) IsDialingOrConnected(nodeID types.NodeID) bool {
 	defer m.mtx.Unlock()
 	_, ok := m.connected[nodeID]
 	return m.dialing[nodeID] || ok
-}
-
-func (m *PeerManager) numDialingOrConnected() int {
-	m.mtx.Lock()
-	defer m.mtx.Unlock()
-	return len(m.connected) + len(m.dialing)
 }
 
 // SetProTxHashToPeerInfo sets a proTxHash in peerInfo.proTxHash to keep this value in a store
