@@ -236,7 +236,7 @@ type stateProviderP2P struct {
 	lc                          *light.Client
 	initialHeight               int64
 	paramsSendCh                p2p.Channel
-	paramsRecvCh                chan types.ConsensusParams
+	paramsRequests              *paramsRequests
 	dashCoreClient              dashcore.Client
 	trustedVotingPowerThreshold *uint64
 }
@@ -279,7 +279,7 @@ func newP2PStateProvider(
 		lc:                          lc,
 		initialHeight:               initialHeight,
 		paramsSendCh:                paramsSendCh,
-		paramsRecvCh:                make(chan types.ConsensusParams),
+		paramsRequests:              &paramsRequests{},
 		dashCoreClient:              dashCoreClient,
 		trustedVotingPowerThreshold: cloneUint64Ptr(trustedVotingPowerThreshold),
 	}, nil
@@ -578,8 +578,16 @@ func (s *stateProviderP2P) addProvider(p lightprovider.Provider) {
 // receives some response. This operation will block until it receives
 // a response or the context is canceled.
 func (s *stateProviderP2P) consensusParams(ctx context.Context, height int64) (types.ConsensusParams, error) {
+	if height <= 0 {
+		return types.ConsensusParams{}, errors.New("consensus params height must be positive")
+	}
+	requestHeight := uint64(height)
 	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	var workers sync.WaitGroup
+	defer func() {
+		cancel()
+		workers.Wait()
+	}()
 
 	out := make(chan types.ConsensusParams)
 
@@ -598,8 +606,10 @@ func (s *stateProviderP2P) consensusParams(ctx context.Context, height int64) (t
 			}
 
 			wg.Add(1)
+			workers.Add(1)
 			go func(peer types.NodeID) {
 				defer wg.Done()
+				defer workers.Done()
 
 				timer := time.NewTimer(0)
 				defer timer.Stop()
@@ -607,18 +617,21 @@ func (s *stateProviderP2P) consensusParams(ctx context.Context, height int64) (t
 
 				for {
 					iterCount++
-					if err := s.paramsSendCh.Send(ctx, p2p.Envelope{
-						To: peer,
-						Message: &ssproto.ParamsRequest{
-							Height: uint64(height),
-						},
-					}); err != nil {
-						// this only errors if
-						// the context is
-						// canceled which we
-						// don't need to
-						// propagate here
-						return
+					request := s.paramsRequests.register(ctx, peer, requestHeight)
+					var response <-chan types.ConsensusParams
+					var disconnected <-chan struct{}
+					if request != nil {
+						response, disconnected = request.response, request.ctx.Done()
+						if err := s.paramsSendCh.Send(request.ctx, p2p.Envelope{
+							To:      peer,
+							Message: &ssproto.ParamsRequest{Height: requestHeight},
+						}); err != nil {
+							s.paramsRequests.remove(request)
+							if ctx.Err() != nil || !errors.Is(err, context.Canceled) {
+								return
+							}
+							continue
+						}
 					}
 
 					// jitter+backoff the retry loop
@@ -627,13 +640,12 @@ func (s *stateProviderP2P) consensusParams(ctx context.Context, height int64) (t
 
 					select {
 					case <-timer.C:
-						continue
+					case <-disconnected:
 					case <-ctx.Done():
+						s.paramsRequests.remove(request)
 						return
-					case params, ok := <-s.paramsRecvCh:
-						if !ok {
-							return
-						}
+					case params := <-response:
+						s.paramsRequests.remove(request)
 						select {
 						case <-ctx.Done():
 							return
@@ -641,6 +653,7 @@ func (s *stateProviderP2P) consensusParams(ctx context.Context, height int64) (t
 							return
 						}
 					}
+					s.paramsRequests.remove(request)
 				}
 
 			}(peer)
