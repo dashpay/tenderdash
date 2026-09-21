@@ -76,8 +76,9 @@ type syncer struct {
 
 	mtx        sync.RWMutex
 	chunkQueue *chunkQueue
-	chunkCtx   context.Context
-	metrics    *Metrics
+	// chunkCtx is set and cleared together with chunkQueue and canceled when the attempt ends.
+	chunkCtx context.Context
+	metrics  *Metrics
 
 	// avgChunkTime, lastSyncedSnapshotHeight and totalSnapshots are written by
 	// the sync goroutines and read by the RPC metrics getters. totalSnapshots
@@ -96,7 +97,8 @@ type syncer struct {
 }
 
 // AddChunk adds a chunk to the chunk queue, if any. It returns false if the chunk has already
-// been added to the queue or the sync attempt was canceled, or an error if there's no sync in progress.
+// been added to the queue or, on a best-effort basis, if the sync attempt was canceled, and an error
+// if there's no sync in progress. It blocks while the apply buffer is full, until the attempt is canceled.
 func (s *syncer) AddChunk(chunk *chunk) (bool, error) {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
@@ -563,7 +565,7 @@ func (s *syncer) SnapshotChunksCount() int64 {
 }
 
 // fetchChunks requests chunks from peers, receiving allocations from the chunk queue. Chunks
-// will be received from the reactor via syncer.AddChunks() to queue.Add().
+// will be received from the reactor via syncer.AddChunk().
 func (s *syncer) fetchChunks(ctx context.Context, snapshot *snapshot, queue *chunkQueue) {
 	ticker := time.NewTicker(s.retryTimeout)
 	defer ticker.Stop()
@@ -596,7 +598,7 @@ func (s *syncer) fetchChunks(ctx context.Context, snapshot *snapshot, queue *chu
 		if err := s.requestChunk(ctx, snapshot, ID); err != nil {
 			s.logger.Error("failed to request snapshot chunk", "err", err, "chunkID", ID)
 			// retry the chunk
-			s.chunkQueue.Enqueue(ID)
+			queue.Enqueue(ID)
 			return
 		}
 		select {
@@ -605,7 +607,7 @@ func (s *syncer) fetchChunks(ctx context.Context, snapshot *snapshot, queue *chu
 		case <-ticker.C:
 			s.logger.Debug("chunk not received on time, retrying",
 				"chunkID", ID, "timeout", s.retryTimeout)
-			s.chunkQueue.Enqueue(ID)
+			queue.Enqueue(ID)
 		case <-ctx.Done():
 			s.logger.Debug("fetchChunks context done while waiting for chunk")
 			return

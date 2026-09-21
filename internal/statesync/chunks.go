@@ -18,7 +18,7 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
-// errDone is returned by chunkQueue.Next() when all chunks have been returned.
+// Chunk queue errors. errDone is returned by chunkQueue.Next() once the queue is closed.
 var (
 	errDone        = errors.New("chunk queue has completed")
 	errQueueEmpty  = errors.New("requestQueue is empty")
@@ -62,7 +62,7 @@ type (
 		items        map[string]*chunkItem
 		requestQueue []bytes.HexBytes
 		applyCh      chan bytes.HexBytes
-		closed       chan struct{}
+		closed       chan struct{} // closed by Close() to unblock add() and Next()
 		// doneCount counts the number of chunks that have been processed to the done status
 		// if for some reason some chunks have been processed more than once, this number should take them into account
 		doneCount int
@@ -384,10 +384,12 @@ func (q *chunkQueue) RetryAll() {
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
 	// Buffered IDs belong to the previous attempt; their statuses are about to be reset.
-	for len(q.applyCh) > 0 {
+drain:
+	for {
 		select {
 		case <-q.applyCh:
 		default:
+			break drain
 		}
 	}
 	q.requestQueue = make([]bytes.HexBytes, 0, len(q.items))

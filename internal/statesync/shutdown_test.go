@@ -127,7 +127,7 @@ func TestChunkQueueCloseUnblocksAdd(t *testing.T) {
 	require.NoError(t, q.Close())
 	select {
 	case err := <-added:
-		require.Error(t, err)
+		require.ErrorIs(t, err, errNilSnapshot)
 	case <-time.After(time.Second):
 		t.Fatal("Add blocked after Close")
 	}
@@ -170,12 +170,17 @@ func TestAddChunkAfterCancellation(t *testing.T) {
 			name = "deadline exceeded"
 		}
 		t.Run(name, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			cancel()
+			var (
+				ctx    context.Context
+				cancel context.CancelFunc
+			)
 			if deadline {
 				ctx, cancel = context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
-				defer cancel()
+			} else {
+				ctx, cancel = context.WithCancel(context.Background())
+				cancel()
 			}
+			defer cancel()
 			q, err := newChunkQueue(&snapshot{Height: 3, Version: 1, Hash: []byte{1}}, t.TempDir(), 0)
 			require.NoError(t, err)
 			defer func() { require.NoError(t, q.Close()) }()
@@ -227,11 +232,7 @@ func TestSyncCancellationUnblocksFullChunkQueue(t *testing.T) {
 	}
 	addDone := make(chan struct{})
 	go func() { defer close(addDone); _ = deliver(5) }()
-	require.Eventually(t, func() bool {
-		q.mtx.Lock()
-		defer q.mtx.Unlock()
-		return q.items[tmbytes.HexBytes{5}.String()].status == receivedStatus
-	}, time.Second, time.Millisecond)
+	waitForReceivedChunk(t, q, 5)
 	cancel()
 	select {
 	case <-syncDone:
