@@ -57,12 +57,14 @@ Let's break down the settings:
   restore (default: `15s`). Must be `0s` or at least `5s`. With `0s` the node
   gives up as soon as no suitable snapshot is available and falls back to
   block sync.
-- `retries`: Number of times to retry state sync before giving up. When
-  retries are exhausted, the node **falls back to regular block sync**. Set to
-  `0` to retry indefinitely — the node keeps requesting snapshots forever and
-  **never** falls back to block sync (default: `3`). Note that in the
-  pessimistic case it will take at least `discovery-time * retries` before
-  falling back to block sync.
+- `retries`: Number of completed snapshot discovery sweeps before giving up.
+  When retries are exhausted, the node **falls back to regular block sync**. Set
+  to `0` to retry indefinitely — the node keeps requesting snapshots forever and
+  **never** falls back to block sync (default: `3`). Each sweep asks every
+  connected peer (at most 1,024) in batches of 16, one batch per
+  `discovery-time`, so the pessimistic case takes longer than
+  `discovery-time * retries`; see
+  [Snapshot discovery resource limits](#snapshot-discovery-resource-limits).
 - `temp-dir`: Temporary directory for snapshot chunks; defaults to the
   operating system temporary directory (e.g. `/tmp`). The synchronizer creates
   a new, randomly named directory within it and removes it when the sync is
@@ -135,6 +137,9 @@ The `retries` setting counts completed discovery sweeps. A sweep freezes at most
 1,024 connected peers, visits them in batches, and cannot be prolonged by later
 peer arrivals. Successive sweeps rotate through larger connected-peer lists.
 Already retained candidates are tried before discovery is declared exhausted.
+Restoration starts from the best snapshot retained so far, which may come from
+the first batch only; nodes with more than 16 peers can therefore start from a
+slightly older snapshot than the newest one available on the network.
 With no usable responses, a sweep takes up to
 `ceil(min(connected_peers, 1024) / 16) * discovery-time`, with at least one discovery
 interval and a minimum interval of five seconds. Snapshot restoration adds its
