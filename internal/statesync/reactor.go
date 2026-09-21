@@ -256,11 +256,11 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	}
 	r.dispatcher = NewDispatcher(blockCh, r.logger)
 	r.requestSnapshot = func() error {
-		// request snapshots from all currently connected peers
-		return snapshotCh.Send(ctx, p2p.Envelope{
-			Broadcast: true,
-			Message:   &ssproto.SnapshotsRequest{},
-		})
+		syncer := r.getSyncer()
+		if syncer == nil {
+			return nil
+		}
+		return syncer.RequestSnapshots(ctx, r.peers.All())
 	}
 	r.sendBlockError = blockCh.SendError
 
@@ -999,6 +999,10 @@ func (r *Reactor) handleSnapshotMessage(ctx context.Context, envelope *p2p.Envel
 		syncer := r.getSyncer()
 		if syncer == nil {
 			logger.Debug("received unexpected snapshot; no state sync in progress")
+			return nil
+		}
+
+		if !syncer.snapshots.AcceptResponse(envelope.From) {
 			return nil
 		}
 
