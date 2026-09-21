@@ -83,16 +83,8 @@ func TestPoC_HeightVoteSet_UnboundedRoundAllocation(t *testing.T) {
 		"each message still retains more memory than it costs the attacker to send")
 }
 
-// The other side of the same line. A pro-tx hash is public, so naming a real
-// validator costs an attacker nothing either — what it buys is bounded and, now
-// that the vote survives to the signature check, charged.
-//
-// Two rounds per validator is the catch-up allowance a peer legitimately ahead
-// of us needs, so the ceiling is that allowance spent by everyone at once: a
-// height admits at most 2·|valSet| rounds it did not enter itself, and each one
-// costs its sender a verification. Before, the ceiling was the round number
-// space and the cost was nothing.
-func TestPoC_HeightVoteSet_RoundAllocationCeilingUnderRealNames(t *testing.T) {
+// A denied verification must leave the named validator's catch-up allowance intact.
+func TestHeightVoteSetDeniedCatchupVotesLeaveNoState(t *testing.T) {
 	const numValidators = 8
 
 	valSet, _ := types.RandValidatorSet(numValidators)
@@ -114,20 +106,13 @@ func TestPoC_HeightVoteSet_RoundAllocationCeilingUnderRealNames(t *testing.T) {
 
 			added, err := hvs.AddVoteWithVerificationBudget(vote, budget)
 			require.False(t, added)
-			if attempt < 2 {
-				// Within the allowance: the round is entered, and the vote goes
-				// on to the signature check that the budget is asked to fund.
-				require.ErrorIs(t, err, types.ErrVerificationBudgetExhausted)
-			} else {
-				require.ErrorIs(t, err, ErrGotVoteFromUnwantedRound)
-			}
+			require.ErrorIs(t, err, types.ErrVerificationBudgetExhausted)
 		}
 	}
 
-	require.Equal(t, 1+2*numValidators, len(hvs.roundVoteSets),
-		"a height admits at most two attacker-chosen rounds per validator, plus the round it is in")
-	require.Len(t, budget.costs, 2*numValidators,
-		"every round entered cost its sender a verification; a round entered for free is unthrottleable")
+	require.Len(t, hvs.roundVoteSets, 1)
+	require.Empty(t, hvs.peerCatchupRounds)
+	require.Len(t, budget.costs, 4*numValidators)
 }
 
 // Honest catch-up is what the allowance exists for, and it still works: a peer
