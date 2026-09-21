@@ -1095,3 +1095,43 @@ func TestInitDBsAppliesUnsafeNoFsyncOnlyWhenConfigured(t *testing.T) {
 		})
 	}
 }
+
+func TestNodeStartRetryAfterRPCListenFailure(t *testing.T) {
+	for _, multipleListeners := range []bool{false, true} {
+		t.Run(fmt.Sprintf("multiple_listeners=%t", multipleListeners), func(t *testing.T) {
+
+			cfg, err := config.ResetTestRoot(t.TempDir(), strings.ReplaceAll(t.Name(), "/", "-"))
+			require.NoError(t, err)
+			listener, err := net.Listen("tcp", "127.0.0.1:0")
+			require.NoError(t, err)
+			defer listener.Close()
+			cfg.RPC.ListenAddress = "tcp://" + listener.Addr().String()
+			if multipleListeners {
+				first, err := net.Listen("tcp", "127.0.0.1:0")
+				require.NoError(t, err)
+				cfg.RPC.ListenAddress = "tcp://" + first.Addr().String() + "," + cfg.RPC.ListenAddress
+				require.NoError(t, first.Close())
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			ns, err := newDefaultNode(ctx, cfg, log.NewNopLogger())
+			require.NoError(t, err)
+			n := ns.(*nodeImpl)
+			started := false
+			defer func() {
+				cancel()
+				if started {
+					n.Wait()
+				} else {
+					n.OnStop()
+				}
+			}()
+			err = n.Start(ctx)
+			require.ErrorContains(t, err, "address already in use")
+			require.NoError(t, listener.Close())
+			err = n.Start(ctx)
+			started = err == nil
+			require.NoError(t, err, "startup should be retryable after freeing the RPC port")
+		})
+	}
+}

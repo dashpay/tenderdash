@@ -235,6 +235,25 @@ func (env *Environment) StartService(ctx context.Context, conf *config.Config) (
 		cfg.WriteTimeout = conf.RPC.TimeoutBroadcastTxCommit + 1*time.Second
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
+	listeners := make([]net.Listener, len(listenAddrs))
+	var subscriptionDone chan struct{}
+	started := false
+	defer func() {
+		if started {
+			return
+		}
+		cancel()
+		for _, listener := range listeners {
+			if listener != nil {
+				_ = listener.Close()
+			}
+		}
+		if subscriptionDone != nil {
+			<-subscriptionDone
+		}
+	}()
+
 	// If the event log is enabled, subscribe to all events published to the
 	// event bus, and forward them to the event log.
 	if lg := env.EventLog; lg != nil {
@@ -251,7 +270,9 @@ func (env *Environment) StartService(ctx context.Context, conf *config.Config) (
 		if err != nil {
 			return nil, fmt.Errorf("event log subscribe: %w", err)
 		}
+		subscriptionDone = make(chan struct{})
 		go func() {
+			defer close(subscriptionDone)
 			// N.B. Use background for unsubscribe, ctx is already terminated.
 			defer env.EventBus.UnsubscribeAll(context.Background(), subscriberID) //nolint:errcheck
 			for {
@@ -271,7 +292,6 @@ func (env *Environment) StartService(ctx context.Context, conf *config.Config) (
 	}
 
 	// We may expose the RPC over both TCP and a Unix-domain socket.
-	listeners := make([]net.Listener, len(listenAddrs))
 	for i, listenAddr := range listenAddrs {
 		mux := http.NewServeMux()
 		rpcLogger := env.Logger.With("module", "rpc-server")
@@ -344,6 +364,7 @@ func (env *Environment) StartService(ctx context.Context, conf *config.Config) (
 		listeners[i] = listener
 	}
 
+	started = true
 	return listeners, nil
 
 }
