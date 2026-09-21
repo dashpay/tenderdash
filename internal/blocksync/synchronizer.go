@@ -165,8 +165,9 @@ type (
 		// (live before the goroutines spawn, so it never observes a start-race)
 		// and canceled in OnStop so Stop releases the handlers even when the
 		// caller's context is still live.
-		ctx    context.Context
-		cancel context.CancelFunc
+		ctx          context.Context
+		cancel       context.CancelFunc
+		consumerDone chan struct{}
 	}
 	OptionFunc func(v *Synchronizer)
 )
@@ -230,15 +231,24 @@ func (s *Synchronizer) OnStart(ctx context.Context) error {
 	s.lastAdvance = s.clock.Now()
 	s.lastMonitorUpdate = s.lastAdvance
 	s.ctx, s.cancel = context.WithCancel(ctx)
+	s.consumerDone = make(chan struct{})
 	s.workerPool.Run(s.ctx)
 	go s.runHandler(s.ctx, s.produceJob)
-	go s.runHandler(s.ctx, s.consumeJobResult)
+	go func() {
+		defer close(s.consumerDone)
+		s.runHandler(s.ctx, func(handlerCtx context.Context) error {
+			// Handover cancels consumer I/O; only node shutdown may cancel application.
+			return s.consumeJobResult(handlerCtx, ctx)
+		})
+	}()
 	return nil
 }
 
 func (s *Synchronizer) OnStop() {
 	s.cancel()
 	s.workerPool.Stop(context.Background())
+	// Finish all application work before consensus reads the final state.
+	<-s.consumerDone
 }
 
 func (s *Synchronizer) produceJob(ctx context.Context) error {
@@ -281,7 +291,7 @@ func (s *Synchronizer) produceJob(ctx context.Context) error {
 	return nil
 }
 
-func (s *Synchronizer) consumeJobResult(ctx context.Context) error {
+func (s *Synchronizer) consumeJobResult(ctx, applyCtx context.Context) error {
 	res, err := s.workerPool.Receive(ctx)
 	if err != nil {
 		if errors.Is(err, workerpool.ErrWorkerPoolStopped) ||
@@ -344,7 +354,7 @@ func (s *Synchronizer) consumeJobResult(ctx context.Context) error {
 			"peer", resp.PeerID,
 			"reason", err.Error())
 	}
-	failed, err := s.applyBlock(ctx)
+	failed, err := s.applyBlock(applyCtx)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			// Cancellation is our own doing, so no peer is at fault. The response stays
