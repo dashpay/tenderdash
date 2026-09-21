@@ -227,6 +227,46 @@ func (suite *AddVoteTestSuite) TestAddVoteToVoteSet() {
 	}
 }
 
+func (suite *AddVoteTestSuite) TestRejectedCatchupPrevotesPreserveAllowance() {
+	ctx := context.Background()
+	const height = int64(100)
+	stateData := &StateData{
+		RoundState: cstypes.RoundState{
+			Height:     height,
+			Validators: suite.valSet,
+			Votes:      cstypes.NewHeightVoteSet(factory.DefaultTestChainID, height, suite.valSet),
+		},
+	}
+	action := &AddVoteAction{
+		metrics: suite.metrics,
+		prevote: addVoteValidateVoteMw()(addVoteToVoteSetFunc(suite.metrics, suite.publisher)),
+	}
+	for round := int32(10); round < 13; round++ {
+		vote := &types.Vote{
+			Type:               tmproto.PrevoteType,
+			Height:             height,
+			Round:              round,
+			ValidatorIndex:     0,
+			ValidatorProTxHash: suite.valSet.GetByIndex(0).ProTxHash,
+			BlockSignature:     make([]byte, types.SignatureSize),
+		}
+		if round == 12 {
+			suite.Require().NoError(suite.signer.signVotes(ctx, vote))
+		}
+		suite.Require().NoError(vote.ValidateBasic())
+		err := action.Execute(ctx, StateEvent{
+			StateData: stateData,
+			Data:      &AddVoteEvent{Vote: vote},
+		})
+		if round < 12 {
+			suite.Require().ErrorIs(err, types.ErrVoteInvalidBlockSignature)
+		} else {
+			suite.Require().NoError(err)
+			suite.Require().Same(vote, stateData.Votes.Prevotes(round).GetByIndex(0))
+		}
+	}
+}
+
 func (suite *AddVoteTestSuite) TestAddVoteUpdateValidBlockMw() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
