@@ -470,14 +470,19 @@ func (p *snapshotPool) DiscoveryBatch(peers []types.NodeID) []types.NodeID {
 	}
 	p.responses = make(map[types.NodeID]int)
 	p.requestsIssued = 0
-	count := min(len(p.pendingPeers), maxDiscoveryPeers)
-	selected := append([]types.NodeID(nil), p.pendingPeers[:count]...)
-	p.pendingPeers = p.pendingPeers[count:]
+	// Rejected peers are skipped so that they do not consume batch slots.
+	selected := make([]types.NodeID, 0, maxDiscoveryPeers)
+	consumed := 0
+	for consumed < len(p.pendingPeers) && len(selected) < maxDiscoveryPeers {
+		peer := p.pendingPeers[consumed]
+		consumed++
+		if p.requestPeer(peer) {
+			selected = append(selected, peer)
+		}
+	}
+	p.pendingPeers = p.pendingPeers[consumed:]
 	if len(p.pendingPeers) == 0 {
 		p.pendingPeers = nil
-	}
-	for _, peer := range selected {
-		p.requestPeer(peer)
 	}
 	return selected
 }

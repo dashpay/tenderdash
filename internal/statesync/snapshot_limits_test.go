@@ -262,3 +262,23 @@ func TestSnapshotPoolRejectsEmptyHash(t *testing.T) {
 	require.Zero(t, p.retainedBytes)
 	require.Nil(t, p.TakeBest())
 }
+
+// TestSnapshotDiscoveryBatchSkipsRejectedPeers asserts that rejected peers never consume
+// discovery batch slots or discovery intervals.
+func TestSnapshotDiscoveryBatchSkipsRejectedPeers(t *testing.T) {
+	p := newSnapshotPool()
+	peers := make([]types.NodeID, maxDiscoveryPeers+4)
+	for i := range peers {
+		peers[i] = types.NodeID(fmt.Sprint(i))
+	}
+	for _, peer := range peers[:4] {
+		p.RejectPeer(peer)
+	}
+
+	batch := p.DiscoveryBatch(peers)
+	require.Len(t, batch, maxDiscoveryPeers)
+	for _, peer := range peers[:4] {
+		require.NotContains(t, batch, peer)
+	}
+	require.False(t, p.DiscoveryPending(), "rejected peers must not extend the sweep")
+}
