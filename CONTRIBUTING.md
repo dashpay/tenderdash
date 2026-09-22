@@ -177,6 +177,10 @@ typically reserved for release-critical fixes.
 
 Once you have submitted a pull request label the pull request with either `R:minor`, if the change should be included in the next minor release, or `R:major`, if the change is meant for a major release.
 
+#### Requesting an AI Code Review
+
+Apply the `claudius-review` label to your pull request to trigger an automated AI code review (findings are posted as inline PR comments). Re-applying the label after pushing new commits re-runs the review.
+
 Sometimes (often!) pull requests get out-of-date with the development branch, as
 other people merge different pull requests to the development branch. It is our
 convention that pull request authors are responsible for updating their
