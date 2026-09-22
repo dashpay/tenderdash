@@ -40,6 +40,14 @@ jobs:
           memcan_url: ${{ vars.MEMCAN_URL }}
           memcan_api_key: ${{ secrets.MEMCAN_API_KEY }}
           claude_extra_args: "--permission-mode auto"
+          # Clears Claudius-Maginificent's own pending review request on
+          # success — the review itself posts under a different identity, so
+          # GitHub never auto-clears it, and without this every push would
+          # re-trigger a full review forever. No-op for the label trigger.
+          # Requires lklimek/claudius-review-action PR #12 (reviewer_login
+          # input) merged to main — until then this input is silently
+          # ignored by the action.
+          reviewer_login: Claudius-Maginificent
           # Claudius-Maginificent only has triage access to this repo (no git
           # push), so the collaborator-permission API reports it as "read" —
           # below claude-code-action's admin/write bar. It's a trusted bot
