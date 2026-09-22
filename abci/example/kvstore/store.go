@@ -7,15 +7,16 @@ import (
 	"os"
 
 	dbm "github.com/cometbft/cometbft-db"
+	"github.com/creachadair/atomicfile"
 )
 
-// StoreFactory is a factory that offers a reader to read data from, or writer to write data to it.
+// StoreFactory reads state and replaces it after a successful write.
 // Not thread-safe - the caller should control concurrency.
 type StoreFactory interface {
 	// Reader returns new io.ReadCloser to be used to read data from
 	Reader() (io.ReadCloser, error)
-	// Writer returns new io.WriteCloser to be used to write data to
-	Writer() (io.WriteCloser, error)
+	// Write replaces stored state only if write completes successfully.
+	Write(write func(io.Writer) error) error
 }
 
 // memStore stores state in memory.
@@ -38,13 +39,14 @@ func (w *memStore) Reader() (io.ReadCloser, error) {
 	return io.NopCloser(&reader), nil
 }
 
-func (w *memStore) Writer() (io.WriteCloser, error) {
-	return &writerNopCloser{w.buf}, nil
+func (w *memStore) Write(write func(io.Writer) error) error {
+	var next bytes.Buffer
+	if err := write(&next); err != nil {
+		return err
+	}
+	w.buf = &next
+	return nil
 }
-
-type writerNopCloser struct{ io.Writer }
-
-func (writerNopCloser) Close() error { return nil }
 
 type fileStore struct {
 	path string
@@ -66,6 +68,6 @@ func (store *fileStore) Reader() (io.ReadCloser, error) {
 	return f, nil
 }
 
-func (store *fileStore) Writer() (io.WriteCloser, error) {
-	return os.OpenFile(store.path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+func (store *fileStore) Write(write func(io.Writer) error) error {
+	return atomicfile.Tx(store.path, 0600, write)
 }
