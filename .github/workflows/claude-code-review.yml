@@ -3,7 +3,7 @@ name: "Claude review (label: claudius-review, or reviewer: Claudius-Maginificent
 
 "on":
   pull_request:
-    types: [labeled, review_requested, synchronize]
+    types: [labeled, review_requested, ready_for_review, synchronize]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -16,7 +16,7 @@ jobs:
       (
         (github.event.action == 'labeled' && github.event.label.name == 'claudius-review') ||
         (github.event.action == 'review_requested' && github.event.requested_reviewer.login == 'Claudius-Maginificent') ||
-        (github.event.action == 'synchronize' && (
+        (contains(fromJSON('["synchronize", "ready_for_review"]'), github.event.action) && (
           contains(github.event.pull_request.labels.*.name, 'claudius-review') ||
           contains(github.event.pull_request.requested_reviewers.*.login, 'Claudius-Maginificent')
         ))
