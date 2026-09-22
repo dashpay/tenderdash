@@ -32,6 +32,10 @@ import (
 var (
 	_ service.Service = (*Reactor)(nil)
 	_ Metricer        = (*Reactor)(nil)
+
+	// consensusParamsResponseTimeout is the time the P2P state provider waits
+	// before performing a secondary call.
+	consensusParamsResponseTimeout = 5 * time.Second
 )
 
 const (
@@ -59,10 +63,6 @@ const (
 
 	// initStateProviderRetries defines how many times state provider initialization will be retried
 	initStateProviderRetries = 3
-
-	// consensusParamsResponseTimeout is the time the p2p state provider waits
-	// before performing a secondary call
-	consensusParamsResponseTimeout = 5 * time.Second
 
 	// maxLightBlockRequestRetries is the amount of retries acceptable before
 	// the backfill process aborts
@@ -123,8 +123,9 @@ type Reactor struct {
 
 	// Dispatcher is used to multiplex light block requests and responses over multiple
 	// peers used by the p2p state provider and in reverse sync.
-	dispatcher *Dispatcher
-	peers      *peerList
+	dispatcher     *Dispatcher
+	peers          *peerList
+	paramsRequests paramsRequests
 
 	// These will only be set when a state sync is in progress. It is used to feed
 	// received snapshots and chunks into the syncer and manage incoming and outgoing
@@ -292,6 +293,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 			stateProvider, err := newP2PStateProvider(ctx, chainID, initialHeight,
 				providers,
 				paramsCh,
+				&r.paramsRequests,
 				r.logger.With("module", "stateprovider"),
 				r.dashCoreClient,
 				trustedThreshold,
@@ -1197,22 +1199,9 @@ func (r *Reactor) handleParamsMessage(ctx context.Context, envelope *p2p.Envelop
 			return err
 		}
 	case *ssproto.ParamsResponse:
-		r.mtx.RLock()
-		defer r.mtx.RUnlock()
-		r.logger.Debug("received consensus params response", "height", msg.Height)
-
-		cp := types.ConsensusParamsFromProto(msg.ConsensusParams)
-
-		if sp, ok := r.stateProvider.(*stateProviderP2P); ok {
-			select {
-			case sp.paramsRecvCh <- cp:
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(time.Second):
-				return errors.New("failed to send consensus params, stateprovider not ready for response")
-			}
-		} else {
-			r.logger.Debug("received unexpected params response; using RPC state provider", "peer", envelope.From)
+		r.logger.Debug("received consensus params response", "peer", envelope.From, "height", msg.Height)
+		if !r.paramsRequests.respond(envelope, msg) {
+			r.logger.Debug("discarded unmatched consensus params response", "peer", envelope.From, "height", msg.Height)
 		}
 
 	default:
@@ -1314,6 +1303,7 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 }
 
 func (r *Reactor) processPeerUp(ctx context.Context, peerUpdate p2p.PeerUpdate) {
+	r.paramsRequests.update(peerUpdate)
 
 	if peerUpdate.Channels.Contains(SnapshotChannel) &&
 		peerUpdate.Channels.Contains(ChunkChannel) &&
@@ -1345,6 +1335,7 @@ func (r *Reactor) processPeerUp(ctx context.Context, peerUpdate p2p.PeerUpdate) 
 }
 
 func (r *Reactor) processPeerDown(_ctx context.Context, peerUpdate p2p.PeerUpdate) {
+	r.paramsRequests.update(peerUpdate)
 	r.peers.Remove(peerUpdate.NodeID)
 	syncer := r.getSyncer()
 	if syncer != nil {
