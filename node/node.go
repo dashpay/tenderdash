@@ -365,7 +365,6 @@ func makeNode(
 		waitSync,
 		nodeMetrics.consensus,
 	)
-	node.services = append(node.services, csReactor)
 	node.rpcEnv.ConsensusReactor = csReactor
 
 	// Create the blockchain reactor. Note, we do not start block sync if we're
@@ -383,7 +382,13 @@ func makeNode(
 		nodeMetrics.consensus,
 		eventBus,
 	)
-	node.services = append(node.services, bcReactor)
+	if waitSync {
+		// Prepare consensus to receive the handover before starting sync.
+		node.services = append(node.services, csReactor, bcReactor)
+	} else {
+		// Initialize blocksync's state before consensus can commit new blocks.
+		node.services = append(node.services, bcReactor, csReactor)
+	}
 	node.rpcEnv.BlockSyncReactor = bcReactor
 
 	// Make ConsensusReactor. Don't enable fully if doing a state sync and/or block sync first.

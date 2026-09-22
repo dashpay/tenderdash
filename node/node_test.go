@@ -1096,6 +1096,18 @@ func TestInitDBsAppliesUnsafeNoFsyncOnlyWhenConfigured(t *testing.T) {
 	}
 }
 
+type startupCheckedService struct {
+	service.Service
+	check func() error
+}
+
+func (s startupCheckedService) Start(ctx context.Context) error {
+	if err := s.check(); err != nil {
+		return err
+	}
+	return s.Service.Start(ctx)
+}
+
 func TestNodeStartRetryAfterRPCListenFailure(t *testing.T) {
 	for _, multipleListeners := range []bool{false, true} {
 		t.Run(fmt.Sprintf("multiple_listeners=%t", multipleListeners), func(t *testing.T) {
@@ -1119,6 +1131,16 @@ func TestNodeStartRetryAfterRPCListenFailure(t *testing.T) {
 			ns, err := newDefaultNode(ctx, cfg, log.NewNopLogger())
 			require.NoError(t, err)
 			n := ns.(*nodeImpl)
+			for i, reactor := range n.services {
+				if reactor == n.rpcEnv.ConsensusReactor {
+					n.services[i] = startupCheckedService{Service: reactor, check: func() error {
+						if !n.rpcEnv.BlockSyncReactor.IsRunning() {
+							return errors.New("consensus can write blocks before blocksync initializes its state")
+						}
+						return nil
+					}}
+				}
+			}
 			started := false
 			defer func() {
 				cancel()
