@@ -1096,18 +1096,6 @@ func TestInitDBsAppliesUnsafeNoFsyncOnlyWhenConfigured(t *testing.T) {
 	}
 }
 
-type startupCheckedService struct {
-	service.Service
-	check func() error
-}
-
-func (s startupCheckedService) Start(ctx context.Context) error {
-	if err := s.check(); err != nil {
-		return err
-	}
-	return s.Service.Start(ctx)
-}
-
 func TestNodeStartRetryAfterRPCListenFailure(t *testing.T) {
 	for _, multipleListeners := range []bool{false, true} {
 		t.Run(fmt.Sprintf("multiple_listeners=%t", multipleListeners), func(t *testing.T) {
@@ -1131,16 +1119,6 @@ func TestNodeStartRetryAfterRPCListenFailure(t *testing.T) {
 			ns, err := newDefaultNode(ctx, cfg, log.NewNopLogger())
 			require.NoError(t, err)
 			n := ns.(*nodeImpl)
-			for i, reactor := range n.services {
-				if reactor == n.rpcEnv.ConsensusReactor {
-					n.services[i] = startupCheckedService{Service: reactor, check: func() error {
-						if !n.rpcEnv.BlockSyncReactor.IsRunning() {
-							return errors.New("consensus can write blocks before blocksync initializes its state")
-						}
-						return nil
-					}}
-				}
-			}
 			started := false
 			defer func() {
 				cancel()
@@ -1201,4 +1179,75 @@ func TestNodeStartFailureReleasesRPCListeners(t *testing.T) {
 	listener, err = net.Listen("tcp", address)
 	require.NoError(t, err, "startup failure must release the reserved RPC address")
 	require.NoError(t, listener.Close())
+}
+
+// finalizePausedClient holds the first commit between block-store and state-store writes.
+type finalizePausedClient struct {
+	abciclient.Client
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (c *finalizePausedClient) FinalizeBlock(ctx context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
+	if req.Block.Header.Height == 1 {
+		close(c.entered)
+		<-c.release
+	}
+	return c.Client.FinalizeBlock(ctx, req)
+}
+
+type startupPausedService struct {
+	service.Service
+	entered <-chan struct{}
+}
+
+func (s startupPausedService) Start(ctx context.Context) error {
+	if err := s.Service.Start(ctx); err != nil {
+		return err
+	}
+	select {
+	case <-s.entered:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func TestNodeStartDuringFirstCommit(t *testing.T) {
+	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
+	require.NoError(t, err)
+	cfg.Consensus = config.DefaultConsensusConfig()
+	cfg.SetRoot(cfg.RootDir)
+	cfg.RPC.ListenAddress = ""
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	logger := log.NewNopLogger()
+	client, _, err := proxy.ClientFactory(logger, *cfg.Abci, cfg.DBDir())
+	require.NoError(t, err)
+	app := &finalizePausedClient{Client: client, entered: make(chan struct{}), release: make(chan struct{})}
+	ns, err := New(ctx, cfg, logger, app, nil)
+	require.NoError(t, err)
+	n := ns.(*nodeImpl)
+	for i, reactor := range n.services {
+		if reactor == n.rpcEnv.ConsensusReactor {
+			n.services[i] = startupPausedService{Service: reactor, entered: app.entered}
+		}
+	}
+	started := false
+	defer func() {
+		close(app.release)
+		cancel()
+		if started {
+			n.Wait()
+		} else {
+			n.OnStop()
+		}
+	}()
+	err = n.Start(ctx)
+	started = err == nil
+	require.NoError(t, err, "startup must succeed while consensus finalizes its first block")
+	require.EqualValues(t, 1, n.rpcEnv.BlockStore.Height())
+	state, err := n.stateStore.Load()
+	require.NoError(t, err)
+	require.Zero(t, state.LastBlockHeight, "the application has not completed FinalizeBlock")
 }
