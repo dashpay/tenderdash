@@ -1106,10 +1106,12 @@ func TestNodeStartRetryAfterRPCListenFailure(t *testing.T) {
 			require.NoError(t, err)
 			defer listener.Close()
 			cfg.RPC.ListenAddress = "tcp://" + listener.Addr().String()
+			var firstAddress string
 			if multipleListeners {
 				first, err := net.Listen("tcp", "127.0.0.1:0")
 				require.NoError(t, err)
-				cfg.RPC.ListenAddress = "tcp://" + first.Addr().String() + "," + cfg.RPC.ListenAddress
+				firstAddress = first.Addr().String()
+				cfg.RPC.ListenAddress = "tcp://" + firstAddress + "," + cfg.RPC.ListenAddress
 				require.NoError(t, first.Close())
 			}
 			ctx, cancel := context.WithCancel(context.Background())
@@ -1128,14 +1130,53 @@ func TestNodeStartRetryAfterRPCListenFailure(t *testing.T) {
 			}()
 			err = n.Start(ctx)
 			require.ErrorContains(t, err, "address already in use")
-			const additionalChannel uint16 = 0xff
-			n.NodeInfo().AddChannel(additionalChannel)
+			require.False(t, n.rpcEnv.ProxyApp.IsRunning(), "binding RPC must precede starting the app")
+			require.False(t, n.rpcEnv.EventBus.IsRunning())
+			require.False(t, n.router.IsRunning())
+			for _, reactor := range n.services {
+				require.False(t, reactor.IsRunning(), "binding RPC must precede starting reactors")
+			}
+			if multipleListeners {
+				released, err := net.Listen("tcp", firstAddress)
+				require.NoError(t, err, "a failed bind must release earlier RPC listeners")
+				require.NoError(t, released.Close())
+			}
 			require.NoError(t, listener.Close())
 			err = n.Start(ctx)
 			started = err == nil
 			require.NoError(t, err, "startup should be retryable after freeing the RPC port")
-			require.Contains(t, n.NodeInfo().Channels.ToSlice(), additionalChannel,
-				"RPC retries must preserve channels registered by already running services")
 		})
 	}
+}
+
+func TestNodeStartFailureReleasesRPCListeners(t *testing.T) {
+	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
+	require.NoError(t, err)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	address := listener.Addr().String()
+	require.NoError(t, listener.Close())
+	cfg.RPC.ListenAddress = "tcp://" + address
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ns, err := newDefaultNode(ctx, cfg, log.NewNopLogger())
+	require.NoError(t, err)
+	n := ns.(*nodeImpl)
+	defer n.OnStop()
+	app := abcimocks.NewClient(t)
+	appErr := errors.New("application unavailable")
+	app.On("Start", mock.Anything).Run(func(mock.Arguments) {
+		probe, bindErr := net.Listen("tcp", address)
+		if bindErr == nil {
+			require.NoError(t, probe.Close())
+		}
+		require.Error(t, bindErr, "RPC addresses must be reserved before application startup")
+	}).Return(appErr).Once()
+	n.rpcEnv.ProxyApp = app
+
+	require.ErrorIs(t, n.Start(ctx), appErr)
+	listener, err = net.Listen("tcp", address)
+	require.NoError(t, err, "startup failure must release the reserved RPC address")
+	require.NoError(t, listener.Close())
 }
