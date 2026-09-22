@@ -1,6 +1,7 @@
 package statesync
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -17,7 +18,7 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
-// errDone is returned by chunkQueue.Next() when all chunks have been returned.
+// Chunk queue errors. errDone is returned by chunkQueue.Next() once the queue is closed.
 var (
 	errDone        = errors.New("chunk queue has completed")
 	errQueueEmpty  = errors.New("requestQueue is empty")
@@ -61,6 +62,7 @@ type (
 		items        map[string]*chunkItem
 		requestQueue []bytes.HexBytes
 		applyCh      chan bytes.HexBytes
+		closed       chan struct{} // closed by Close() to unblock add() and Next()
 		// doneCount counts the number of chunks that have been processed to the done status
 		// if for some reason some chunks have been processed more than once, this number should take them into account
 		doneCount int
@@ -98,6 +100,7 @@ func newChunkQueue(snapshot *snapshot, tempDir string, bufLen int) (*chunkQueue,
 		dir:      dir,
 		items:    make(map[string]*chunkItem),
 		applyCh:  make(chan bytes.HexBytes, bufLen),
+		closed:   make(chan struct{}),
 	}, nil
 }
 
@@ -158,6 +161,10 @@ func (q *chunkQueue) dequeue() (bytes.HexBytes, error) {
 // that reassembles and applies the snapshot, and (b) the post-restore app-hash
 // comparison against the trusted light block, which provides the end-to-end guarantee.
 func (q *chunkQueue) Add(chunk *chunk) (bool, error) {
+	return q.add(context.Background(), chunk)
+}
+
+func (q *chunkQueue) add(ctx context.Context, chunk *chunk) (bool, error) {
 	if chunk == nil {
 		return false, errChunkNil
 	}
@@ -202,7 +209,13 @@ func (q *chunkQueue) Add(chunk *chunk) (bool, error) {
 	// unlock before sending to applyCh to avoid blocking/deadlock on the applyCh
 	unlockFn()
 
-	q.applyCh <- chunk.ID
+	select {
+	case q.applyCh <- chunk.ID:
+	case <-ctx.Done():
+		return false, ctx.Err()
+	case <-q.closed:
+		return false, errNilSnapshot
+	}
 	// Signal any waiters that the chunk has arrived.
 	q.mtx.Lock()
 	item.closeWaitChs(true)
@@ -219,10 +232,7 @@ func (q *chunkQueue) Close() error {
 		return nil
 	}
 	q.snapshot = nil
-	close(q.applyCh)
-	for len(q.applyCh) > 0 {
-		<-q.applyCh
-	}
+	close(q.closed)
 	for _, item := range q.items {
 		item.closeWaitChs(false)
 	}
@@ -311,12 +321,12 @@ func (q *chunkQueue) load(chunkID bytes.HexBytes) (*chunk, error) {
 // blocks until the chunk is available. Concurrent Next() calls may return the same chunk.
 func (q *chunkQueue) Next() (*chunk, error) {
 	select {
-	case chunkID, ok := <-q.applyCh:
-		if !ok {
-			return nil, errDone // queue closed
-		}
+	case chunkID := <-q.applyCh:
 		q.mtx.Lock()
 		defer q.mtx.Unlock()
+		if q.snapshot == nil {
+			return nil, errDone
+		}
 		loadedChunk, err := q.load(chunkID)
 		if err != nil {
 			return nil, err
@@ -328,6 +338,8 @@ func (q *chunkQueue) Next() (*chunk, error) {
 		item.status = doneStatus
 		q.doneCount++
 		return loadedChunk, nil
+	case <-q.closed:
+		return nil, errDone
 	case <-time.After(chunkTimeout):
 		// Locking is done inside q.Pending
 		pendingChunks := len(q.Pending())
@@ -367,10 +379,19 @@ func (q *chunkQueue) retry(chunkID bytes.HexBytes) {
 	q.items[chunkKey].status = initStatus
 }
 
-// RetryAll schedules all chunks to be retried, without refetching them.
+// RetryAll schedules all chunks to be retried after the current attempt has stopped.
 func (q *chunkQueue) RetryAll() {
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
+	// Buffered IDs belong to the previous attempt; their statuses are about to be reset.
+drain:
+	for {
+		select {
+		case <-q.applyCh:
+		default:
+			break drain
+		}
+	}
 	q.requestQueue = make([]bytes.HexBytes, 0, len(q.items))
 	for _, item := range q.items {
 		q.retry(item.chunkID)
