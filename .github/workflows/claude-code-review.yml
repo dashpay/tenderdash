@@ -46,4 +46,12 @@ jobs:
           # that only ever applies the trigger label or requests itself as
           # reviewer, so allow-list it by name instead of granting real
           # write access.
+          #
+          # TODO: the review_requested trigger above only works once
+          # Claudius-Maginificent is added as an outside collaborator
+          # (Triage role) on dashpay/tenderdash — it isn't yet, GitHub's
+          # reviewer picker only lists actual collaborators, not accounts
+          # with mere public-repo read access. A repo admin needs to add it
+          # via Settings > Collaborators and teams, or:
+          #   gh api --method PUT repos/dashpay/tenderdash/collaborators/Claudius-Maginificent -f permission=triage
           allowed_non_write_users: Claudius-Maginificent
