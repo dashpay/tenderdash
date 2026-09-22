@@ -373,8 +373,8 @@ upnp = {{ .P2P.UPNP }}
 # Maximum number of connections (inbound and outbound).
 max-connections = {{ .P2P.MaxConnections }}
 
-# Maximum number of connections reserved for outgoing
-# connections. Must be less than max-connections
+# Maximum number of outgoing connections. Must not exceed max-connections;
+# 0 means all connections can be outgoing.
 max-outgoing-connections = {{ .P2P.MaxOutgoingConnections }}
 
 # Rate limits the number of incoming connection attempts per IP address.
