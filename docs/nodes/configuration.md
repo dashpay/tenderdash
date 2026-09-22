@@ -369,11 +369,12 @@ rpc-servers = ""
 # Time to spend discovering snapshots before initiating a restore.
 discovery-time = "15s"
 
-# Number of times to retry state sync. When retries are exhausted, the node will
+# Number of completed snapshot discovery sweeps. When retries are exhausted, the node will
 # fall back to the regular block sync. Set to 0 to retry
 # indefinitely, never falling back to block sync. Default is 3.
 # Note that in pessimistic case, it will take at least (discovery-time * retries) before
-# falling back to block sync.
+# falling back to block sync. Each sweep visits at most 1,024 peers in batches of 16;
+# each batch takes one discovery interval. New peer arrivals do not extend a sweep.
 retries = 3
 
 # Temporary directory for state sync snapshot chunks, defaults to os.TempDir().
