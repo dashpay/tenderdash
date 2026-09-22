@@ -80,6 +80,9 @@ make format
   The release script generates the changelog as part of the release process.
 - PR descriptions: read `.github/PULL_REQUEST_TEMPLATE.md`, fill in every
   section, base content on the full diff against the target branch.
+- AI code review (`.github/workflows/claude-code-review.yml`) is opt-in:
+  maintainers trigger it via the `claudius-review` label or by requesting
+  `Claudius-Maginificent` as reviewer. See `CONTRIBUTING.md`.
 
 
 ## Security and Privacy (secrets, keys, logs)
