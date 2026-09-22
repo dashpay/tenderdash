@@ -24,7 +24,7 @@ func (env *Environment) StartAsyncBroadcasts(ctx context.Context) error {
 	a := &env.asyncBroadcasts
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.ctx != nil {
+	if a.cancel != nil {
 		return errors.New("async broadcasts already started")
 	}
 	if err := env.Config.ValidateBasic(); err != nil {
@@ -51,14 +51,21 @@ func (env *Environment) StopAsyncBroadcasts(ctx context.Context) error {
 		return nil
 	}
 	a.cancel()
+	slots, limit := a.slots, a.limit
 	a.mu.Unlock()
 	// Taking every slot waits for all admitted calls; the fast path also works with an expired ctx.
-	if !a.slots.TryAcquire(a.limit) {
-		if err := a.slots.Acquire(ctx, a.limit); err != nil {
+	if !slots.TryAcquire(limit) {
+		if err := slots.Acquire(ctx, limit); err != nil {
 			return err
 		}
 	}
-	a.slots.Release(a.limit)
+	slots.Release(limit)
+	a.mu.Lock()
+	// A concurrent stop may have already drained this instance and allowed a restart.
+	if a.slots == slots {
+		a.cancel = nil
+	}
+	a.mu.Unlock()
 	return nil
 }
 
