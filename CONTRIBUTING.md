@@ -200,9 +200,9 @@ the review starts once the pull request is marked ready for review.
 On success the label and the review request are removed automatically, so
 re-apply one of them to request another review. A push made while either is
 still present (e.g. during a running review) queues a re-run, which fails the
-unless the pusher has write access. Findings of MEDIUM severity
-and above are posted as inline comments; the full report (including LOW
-findings) is linked from the review summary. The bot may submit an approving
+permission check unless the pusher has write access. Findings of MEDIUM
+severity and above are posted as inline comments; the full report (including
+LOW findings) is linked from the review summary. The bot may submit an approving
 review when nothing remains unresolved — it is advisory and does not replace
 human review.
 
