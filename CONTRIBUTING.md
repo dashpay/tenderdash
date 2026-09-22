@@ -177,16 +177,34 @@ typically reserved for release-critical fixes.
 
 Once you have submitted a pull request label the pull request with either `R:minor`, if the change should be included in the next minor release, or `R:major`, if the change is meant for a major release.
 
-#### Requesting an AI Code Review
-
-Apply the `claudius-review` label to your pull request to trigger an automated AI code review (findings are posted as inline PR comments). Re-applying the label after pushing new commits re-runs the review.
-
 Sometimes (often!) pull requests get out-of-date with the development branch, as
 other people merge different pull requests to the development branch. It is our
 convention that pull request authors are responsible for updating their
 branches with the development branch. (This also means that you shouldn't
 update someone else's branch for them; even if it seems like you're doing them
 a favor, you may be interfering with their git flow in some way!)
+
+#### Requesting an AI Code Review
+
+An automated, advisory AI code review can be requested on a non-draft pull
+request in either of two ways:
+
+- apply the `claudius-review` label, or
+- request `Claudius-Maginificent` as a reviewer.
+
+Both require a maintainer (triage access to label or request reviewers, write
+access to pass the review action's permission check), so external contributors
+should ask a maintainer to trigger it. Draft pull requests are skipped silently;
+the review starts once the pull request is marked ready for review.
+
+On success the label and the review request are removed automatically, so
+re-apply one of them to request another review. A push made while either is
+still present (e.g. during a running review) queues a re-run, which fails the
+unless the pusher has write access. Findings of MEDIUM severity
+and above are posted as inline comments; the full report (including LOW
+findings) is linked from the review summary. The bot may submit an approving
+review when nothing remains unresolved — it is advisory and does not replace
+human review.
 
 #### Merging Pull Requests
 

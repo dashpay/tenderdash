@@ -7,7 +7,9 @@ name: "Claude review (label: claudius-review, or reviewer: Claudius-Maginificent
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Queue instead of cancelling: a cancelled run leaves a non-green check and
+  # leaves partial inline comments behind; queued runs re-check existing threads.
+  cancel-in-progress: false
 
 jobs:
   review:
