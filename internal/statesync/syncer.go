@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	stdsync "sync"
 	"sync/atomic"
 	"time"
 
@@ -146,20 +147,40 @@ func (s *syncer) AddSnapshot(peerID types.NodeID, snapshot *snapshot) (bool, err
 			"hash", snapshot.Hash.ShortString())
 	} else {
 		s.logger.Debug("snapshot not added, possibly duplicate or invalid",
-			"height", snapshot.Height, "hash", snapshot.Hash)
+			"height", snapshot.Height, "hash", snapshot.Hash.ShortString())
 	}
 	return added, nil
 }
 
-// AddPeer adds a peer to the pool. For now we just keep it simple and send a
-// single request to discover snapshots, later we may want to do retries and stuff.
+// AddPeer requests snapshots from a newly connected peer if the batch has capacity.
 func (s *syncer) AddPeer(ctx context.Context, peerID types.NodeID) error {
+	if !s.snapshots.RequestPeer(peerID) {
+		s.logger.Debug("Not requesting snapshots from peer; batch is full, peer already asked, or peer rejected", "peer", peerID)
+		return nil
+	}
 	s.logger.Debug("Requesting snapshots from peer", "peer", peerID)
 
-	return s.snapshotCh.Send(ctx, p2p.Envelope{
+	err := s.snapshotCh.Send(ctx, p2p.Envelope{
 		To:      peerID,
 		Message: &ssproto.SnapshotsRequest{},
 	})
+	if err != nil {
+		s.snapshots.CancelRequest(peerID)
+	}
+	return err
+}
+
+// RequestSnapshots requests one bounded batch from a frozen sweep of connected peers.
+func (s *syncer) RequestSnapshots(ctx context.Context, peers []types.NodeID) error {
+	var result error
+	for _, peer := range s.snapshots.DiscoveryBatch(peers) {
+		err := s.snapshotCh.Send(ctx, p2p.Envelope{To: peer, Message: &ssproto.SnapshotsRequest{}})
+		if err != nil {
+			s.snapshots.CancelRequest(peer)
+			result = errors.Join(result, err)
+		}
+	}
+	return result
 }
 
 // RemovePeer removes a peer from the pool.
@@ -193,25 +214,31 @@ func (s *syncer) SyncAny(
 		iters    int
 	)
 
-	for {
-		// we loop one more time than `retries` to check if snapshots requested in previous iterations are available
-		if retries > 0 && snapshot == nil && iters > retries {
-			return sm.State{}, nil, errNoSnapshots
+	defer func() {
+		if queue != nil {
+			if closeErr := queue.Close(); closeErr != nil {
+				s.logger.Error("Failed to clean up chunk queue", "err", closeErr)
+			}
 		}
-
-		iters++
+		s.processingSnapshot = nil
+		s.snapshots.Release()
+	}()
+	for {
 		// If not nil, we're going to retry restoration of the same snapshot.
 		if snapshot == nil {
-			snapshot = s.snapshots.Best()
+			snapshot = s.snapshots.TakeBest()
 			queue = nil
 		}
 		if snapshot == nil {
-			if discoveryTime == 0 {
+			if discoveryTime == 0 || (retries > 0 && iters >= retries && !s.snapshots.DiscoveryPending()) {
 				return sm.State{}, nil, errNoSnapshots
 			}
 			// we re-request snapshots
 			if err := requestSnapshots(); err != nil {
 				return sm.State{}, nil, err
+			}
+			if !s.snapshots.DiscoveryPending() {
+				iters++
 			}
 			s.logger.Info("discovering snapshots",
 				"iterations", iters,
@@ -229,7 +256,6 @@ func (s *syncer) SyncAny(
 			if err != nil {
 				return sm.State{}, nil, fmt.Errorf("failed to create chunk queue: %w", err)
 			}
-			defer queue.Close() // in case we forget to close it elsewhere
 		}
 
 		queue.Enqueue(snapshot.Hash)
@@ -293,6 +319,7 @@ func (s *syncer) SyncAny(
 		snapshot = nil
 		queue = nil
 		s.processingSnapshot = nil
+		s.snapshots.Release()
 	}
 }
 
@@ -347,13 +374,21 @@ func (s *syncer) Sync(ctx context.Context, snapshot *snapshot, queue *chunkQueue
 
 	// Spawn chunk fetchers. They will terminate when the chunk queue is closed or context canceled.
 	fetchCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	var fetchers stdsync.WaitGroup
+	defer func() {
+		cancel()
+		fetchers.Wait()
+	}()
 	fetchStartTime := time.Now()
 
 	// TODO: this approach of creating will be deprecated in favor of new design
 	// This epic https://dashpay.atlassian.net/browse/TD-161 contains all the tasks for refactoring
 	for i := 0; i < s.fetchers; i++ {
-		go s.fetchChunks(fetchCtx, snapshot, queue)
+		fetchers.Add(1)
+		go func() {
+			defer fetchers.Done()
+			s.fetchChunks(fetchCtx, snapshot, queue)
+		}()
 	}
 
 	pctx, pcancel := context.WithTimeout(ctx, 1*time.Minute)
