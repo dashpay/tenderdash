@@ -1,0 +1,44 @@
+---
+name: "Claude review (label: claudius-review)"
+
+"on":
+  pull_request:
+    types: [labeled, synchronize]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: >
+      github.event.pull_request.draft == false &&
+      (
+        (github.event.action == 'labeled' && github.event.label.name == 'claudius-review') ||
+        (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'claudius-review'))
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      id-token: write
+    env:
+      ANTHROPIC_MODEL: ${{ vars.CLAUDE_MODEL || 'opus' }}
+      CLAUDE_CODE_OAUTH_TOKEN_LKLIMEK: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_LKLIMEK }}
+    steps:
+      - name: Claudius Review
+        if: ${{ env.CLAUDE_CODE_OAUTH_TOKEN_LKLIMEK != '' }}
+        uses: lklimek/claudius-review-action@main
+        with:
+          claude_code_oauth_token: ${{ env.CLAUDE_CODE_OAUTH_TOKEN_LKLIMEK }}
+          memcan_url: ${{ vars.MEMCAN_URL }}
+          memcan_api_key: ${{ secrets.MEMCAN_API_KEY }}
+          claude_extra_args: "--permission-mode auto"
+          # Claudius-Maginificent only has triage access to this repo (no git
+          # push), so the collaborator-permission API reports it as "read" —
+          # below claude-code-action's admin/write bar. It's a trusted bot
+          # that only ever applies the trigger label, so allow-list it by
+          # name instead of granting real write access.
+          allowed_non_write_users: Claudius-Maginificent
