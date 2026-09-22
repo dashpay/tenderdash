@@ -75,6 +75,8 @@ type nodeImpl struct {
 	shutdownOps    closer
 	rpcEnv         *rpccore.Environment
 	prometheusSrv  *http.Server
+
+	servicesStarted bool // guarded by BaseService.Start
 }
 
 // newDefaultNode returns a Tendermint node with default settings for the
@@ -478,6 +480,10 @@ func makeNode(
 
 // OnStart starts the Node. It implements service.Service.
 func (n *nodeImpl) OnStart(ctx context.Context) error {
+	if n.servicesStarted {
+		return n.startRPC(dash.ContextWithProTxHash(ctx, n.nodeInfo.ProTxHash))
+	}
+
 	if err := n.rpcEnv.ProxyApp.Start(ctx); err != nil {
 		return fmt.Errorf("error starting proxy app connections: %w", err)
 	}
@@ -577,6 +583,12 @@ func (n *nodeImpl) OnStart(ctx context.Context) error {
 	}
 
 	n.rpcEnv.NodeInfo = n.nodeInfo
+	// RPC binding may fail after services start; retries must not reinitialize their state.
+	n.servicesStarted = true
+	return n.startRPC(ctx)
+}
+
+func (n *nodeImpl) startRPC(ctx context.Context) error {
 	// Start the RPC server before the P2P server
 	// so we can eg. receive txs for the first block
 	if err := n.rpcEnv.StartAsyncBroadcasts(ctx); err != nil {

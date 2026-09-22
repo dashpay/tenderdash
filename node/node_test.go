@@ -1128,10 +1128,14 @@ func TestNodeStartRetryAfterRPCListenFailure(t *testing.T) {
 			}()
 			err = n.Start(ctx)
 			require.ErrorContains(t, err, "address already in use")
+			const additionalChannel uint16 = 0xff
+			n.NodeInfo().AddChannel(additionalChannel)
 			require.NoError(t, listener.Close())
 			err = n.Start(ctx)
 			started = err == nil
 			require.NoError(t, err, "startup should be retryable after freeing the RPC port")
+			require.Contains(t, n.NodeInfo().Channels.ToSlice(), additionalChannel,
+				"RPC retries must preserve channels registered by already running services")
 		})
 	}
 }
