@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -88,6 +89,8 @@ type Environment struct {
 	Logger log.Logger
 
 	Config config.RPCConfig
+
+	asyncBroadcasts asyncBroadcasts
 
 	// cache of chunked genesis data.
 	genChunks []string
@@ -203,20 +206,35 @@ func (env *Environment) latestUncommittedHeight() int64 {
 	return env.BlockStore.Height() + 1
 }
 
-// StartService constructs and starts listeners for the RPC service
-// according to the config object, returning an error if the service
-// cannot be constructed or started. The listeners, which provide
-// access to the service, run until the context is canceled.
-func (env *Environment) StartService(ctx context.Context, conf *config.Config) ([]net.Listener, error) {
+// ListenRPC binds all configured RPC addresses without serving requests.
+// On failure it closes all listeners opened by this call; otherwise the caller owns them.
+func ListenRPC(conf *config.RPCConfig) ([]net.Listener, error) {
+	addresses := strings.SplitAndTrimEmpty(conf.ListenAddress, ",", " ")
+	listeners := make([]net.Listener, 0, len(addresses))
+	for _, address := range addresses {
+		listener, err := rpcserver.Listen(address, conf.MaxOpenConnections)
+		if err != nil {
+			for _, opened := range listeners {
+				err = errors.Join(err, opened.Close())
+			}
+			return nil, err
+		}
+		listeners = append(listeners, listener)
+	}
+	return listeners, nil
+}
+
+// StartService serves RPC on already bound listeners until ctx is canceled.
+// If startup fails, the caller remains responsible for closing the listeners.
+func (env *Environment) StartService(ctx context.Context, conf *config.Config, listeners []net.Listener) error {
 	if err := env.InitGenesisChunks(); err != nil {
-		return nil, err
+		return err
 	}
 
 	env.Listeners = []string{
 		fmt.Sprintf("Listener(@%v)", conf.P2P.ExternalAddress),
 	}
 
-	listenAddrs := strings.SplitAndTrimEmpty(conf.RPC.ListenAddress, ",", " ")
 	routes := NewRoutesMap(env, &RouteOptions{
 		Unsafe: conf.RPC.Unsafe,
 	})
@@ -247,7 +265,7 @@ func (env *Environment) StartService(ctx context.Context, conf *config.Config) (
 			Limit:    1 << 16, // essentially "no limit"
 		})
 		if err != nil {
-			return nil, fmt.Errorf("event log subscribe: %w", err)
+			return fmt.Errorf("event log subscribe: %w", err)
 		}
 		go func() {
 			// N.B. Use background for unsubscribe, ctx is already terminated.
@@ -269,8 +287,7 @@ func (env *Environment) StartService(ctx context.Context, conf *config.Config) (
 	}
 
 	// We may expose the RPC over both TCP and a Unix-domain socket.
-	listeners := make([]net.Listener, len(listenAddrs))
-	for i, listenAddr := range listenAddrs {
+	for _, listener := range listeners {
 		mux := http.NewServeMux()
 		rpcLogger := env.Logger.With("module", "rpc-server")
 		rpcserver.RegisterRPCFuncs(mux, routes, rpcLogger)
@@ -292,14 +309,6 @@ func (env *Environment) StartService(ctx context.Context, conf *config.Config) (
 			)
 			wm.CheckOrigin = rpcserver.OriginChecker(wmLogger, conf.RPC.CORSAllowedOrigins)
 			mux.HandleFunc("/websocket", wm.WebsocketHandler)
-		}
-
-		listener, err := rpcserver.Listen(
-			listenAddr,
-			cfg.MaxOpenConnections,
-		)
-		if err != nil {
-			return nil, err
 		}
 
 		var rootHandler http.Handler = mux
@@ -338,10 +347,7 @@ func (env *Environment) StartService(ctx context.Context, conf *config.Config) (
 				}
 			}()
 		}
-
-		listeners[i] = listener
 	}
 
-	return listeners, nil
-
+	return nil
 }

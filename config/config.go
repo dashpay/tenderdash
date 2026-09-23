@@ -604,6 +604,10 @@ type RPCConfig struct {
 	// the transaction is rejected with an error.
 	TimeoutBroadcastTx time.Duration `mapstructure:"timeout-broadcast-tx"`
 
+	// Maximum unfinished async broadcasts per node; 0 uses the default of 100.
+	// Saturated nodes reject new async broadcasts without queuing them.
+	MaxConcurrentBroadcastTxAsync int `mapstructure:"max-concurrent-broadcast-tx-async"`
+
 	// Maximum size of request body, in bytes
 	MaxBodyBytes int64 `mapstructure:"max-body-bytes"`
 
@@ -650,8 +654,9 @@ func DefaultRPCConfig() *RPCConfig {
 		EventLogWindowSize:           30 * time.Second,
 		EventLogMaxItems:             0,
 
-		TimeoutBroadcastTxCommit: 10 * time.Second,
-		TimeoutBroadcastTx:       0,
+		TimeoutBroadcastTxCommit:      10 * time.Second,
+		TimeoutBroadcastTx:            0,
+		MaxConcurrentBroadcastTxAsync: 100,
 
 		MaxBodyBytes:   int64(1000000), // 1MB
 		MaxHeaderBytes: 1 << 20,        // same as the net/http default
@@ -692,6 +697,9 @@ func (cfg *RPCConfig) ValidateBasic() error {
 	}
 	if cfg.TimeoutBroadcastTx < 0 {
 		return errors.New("timeout-broadcast-tx can't be negative")
+	}
+	if cfg.MaxConcurrentBroadcastTxAsync < 0 {
+		return errors.New("max-concurrent-broadcast-tx-async can't be negative")
 	}
 	if cfg.MaxBodyBytes < 0 {
 		return errors.New("max-body-bytes can't be negative")
@@ -759,8 +767,8 @@ type P2PConfig struct { //nolint: maligned
 	// outbound).
 	MaxConnections uint16 `mapstructure:"max-connections"`
 
-	// MaxOutgoingConnections defines the maximum number of connected peers (inbound and
-	// outbound).
+	// MaxOutgoingConnections defines the maximum number of outgoing connections. It must
+	// not exceed MaxConnections; 0 means all connections can be outgoing.
 	MaxOutgoingConnections uint16 `mapstructure:"max-outgoing-connections"`
 
 	// MaxIncomingConnectionAttempts rate limits the number of incoming connection
@@ -1021,12 +1029,13 @@ type StateSyncConfig struct {
 	// Time to spend discovering snapshots before initiating a restore.
 	DiscoveryTime time.Duration `mapstructure:"discovery-time"`
 
-	// Number of times to retry state sync. When retries are exhausted, the node will
+	// Number of completed snapshot discovery sweeps. When retries are exhausted, the node will
 	// fall back to the regular block sync. Set to 0 to retry
 	// indefinitely, never falling back to block sync. Default is 3.
 	//
 	// Note that in pessimistic case, it will take at least `discovery-time * retries` before
-	// falling back to block sync.
+	// falling back to block sync. Each sweep visits at most 1,024 peers in batches of 16;
+	// each batch takes one discovery interval. New peer arrivals do not extend a sweep.
 	Retries int `mapstructure:"retries"`
 
 	// Temporary directory for state sync snapshot chunks, defaults to os.TempDir().

@@ -306,6 +306,11 @@ timeout-broadcast-tx-commit = "{{ .RPC.TimeoutBroadcastTxCommit }}"
 # the transaction is rejected with an error.
 timeout-broadcast-tx = "{{ .RPC.TimeoutBroadcastTx }}"
 
+# Maximum unfinished async broadcasts per node; 0 uses the default of 100.
+# New async broadcasts are rejected with "Too many requests" when full.
+# Accepted broadcasts survive client disconnects and are canceled at node shutdown.
+max-concurrent-broadcast-tx-async = {{ .RPC.MaxConcurrentBroadcastTxAsync }}
+
 # Maximum size of request body, in bytes
 max-body-bytes = {{ .RPC.MaxBodyBytes }}
 
@@ -368,8 +373,8 @@ upnp = {{ .P2P.UPNP }}
 # Maximum number of connections (inbound and outbound).
 max-connections = {{ .P2P.MaxConnections }}
 
-# Maximum number of connections reserved for outgoing
-# connections. Must be less than max-connections
+# Maximum number of outgoing connections. Must not exceed max-connections;
+# 0 means all connections can be outgoing.
 max-outgoing-connections = {{ .P2P.MaxOutgoingConnections }}
 
 # Rate limits the number of incoming connection attempts per IP address.
@@ -514,11 +519,12 @@ rpc-servers = "{{ StringsJoin .StateSync.RPCServers "," }}"
 # Time to spend discovering snapshots before initiating a restore.
 discovery-time = "{{ .StateSync.DiscoveryTime }}"
 
-# Number of times to retry state sync. When retries are exhausted, the node will
+# Number of completed snapshot discovery sweeps. When retries are exhausted, the node will
 # fall back to the regular block sync. Set to 0 to retry
 # indefinitely, never falling back to block sync. Default is 3.
 # Note that in pessimistic case, it will take at least (discovery-time * retries) before
-# falling back to block sync.
+# falling back to block sync. Each sweep visits at most 1,024 peers in batches of 16;
+# each batch takes one discovery interval. New peer arrivals do not extend a sweep.
 retries = {{ .StateSync.Retries }}
 
 # Temporary directory for state sync snapshot chunks, defaults to os.TempDir().

@@ -365,7 +365,6 @@ func makeNode(
 		waitSync,
 		nodeMetrics.consensus,
 	)
-	node.services = append(node.services, csReactor)
 	node.rpcEnv.ConsensusReactor = csReactor
 
 	// Create the blockchain reactor. Note, we do not start block sync if we're
@@ -383,7 +382,13 @@ func makeNode(
 		nodeMetrics.consensus,
 		eventBus,
 	)
-	node.services = append(node.services, bcReactor)
+	if waitSync {
+		// Prepare consensus to receive the handover before starting sync.
+		node.services = append(node.services, csReactor, bcReactor)
+	} else {
+		// Initialize blocksync's state before consensus can commit new blocks.
+		node.services = append(node.services, bcReactor, csReactor)
+	}
 	node.rpcEnv.BlockSyncReactor = bcReactor
 
 	// Make ConsensusReactor. Don't enable fully if doing a state sync and/or block sync first.
@@ -477,7 +482,20 @@ func makeNode(
 }
 
 // OnStart starts the Node. It implements service.Service.
-func (n *nodeImpl) OnStart(ctx context.Context) error {
+func (n *nodeImpl) OnStart(ctx context.Context) (err error) {
+	// Reserve RPC addresses before starting services; serve only once the node is ready.
+	rpcListeners, err := rpccore.ListenRPC(n.config.RPC)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			for _, listener := range rpcListeners {
+				err = errors.Join(err, listener.Close())
+			}
+		}
+	}()
+
 	if err := n.rpcEnv.ProxyApp.Start(ctx); err != nil {
 		return fmt.Errorf("error starting proxy app connections: %w", err)
 	}
@@ -577,15 +595,21 @@ func (n *nodeImpl) OnStart(ctx context.Context) error {
 	}
 
 	n.rpcEnv.NodeInfo = n.nodeInfo
-	// Start the RPC server before the P2P server
-	// so we can eg. receive txs for the first block
-	if n.config.RPC.ListenAddress != "" {
-		var err error
-		n.rpcListeners, err = n.rpcEnv.StartService(ctx, n.config)
+	if err := n.rpcEnv.StartAsyncBroadcasts(ctx); err != nil {
+		return err
+	}
+	if len(rpcListeners) > 0 {
+		err = n.rpcEnv.StartService(ctx, n.config, rpcListeners)
 		if err != nil {
+			stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			if stopErr := n.rpcEnv.StopAsyncBroadcasts(stopCtx); stopErr != nil {
+				n.logger.Error("Failed to stop async broadcasts after RPC startup failure", "err", stopErr)
+			}
 			return err
 		}
 	}
+	n.rpcListeners = rpcListeners
 
 	return nil
 }
@@ -593,6 +617,11 @@ func (n *nodeImpl) OnStart(ctx context.Context) error {
 // OnStop stops the Node. It implements service.Service.
 func (n *nodeImpl) OnStop() {
 	n.logger.Info("Stopping Node")
+	stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	if err := n.rpcEnv.StopAsyncBroadcasts(stopCtx); err != nil {
+		n.logger.Error("Async broadcasts did not finish during shutdown", "err", err)
+	}
+	cancel()
 	// stop the listeners / external services first
 	for _, l := range n.rpcListeners {
 		n.logger.Info("Closing rpc listener", "listener", l)

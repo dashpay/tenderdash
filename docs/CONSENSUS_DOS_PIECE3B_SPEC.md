@@ -66,7 +66,8 @@ maintained exactly like the existing static `PersistentPeers` set:
   * immune to `DialFailures` subtraction,
   * never selected by `findUpgradeCandidate` (a Sybil at score 0 can never be strictly higher),
   * able to *win* an upgrade on `Accepted`, and ranked first for dialing in `TryDialNext`
-    (which still refuses to dial past `MaxOutgoingConnections`).
+    (past `MaxOutgoingConnections` it dials only reserved peers, probing within the
+    `MaxConnectedUpgrade` allowance to replace a lower-scored outgoing peer).
 * `evictPeerAfterTimeout` and `retryDelay` treat protected like persistent, so the seed-node
   incoming-time evictor cannot drop a quorum peer and dial retries use the shorter
   persistent backoff.

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	stdsync "sync"
 	"sync/atomic"
 	"time"
 
@@ -76,7 +77,9 @@ type syncer struct {
 
 	mtx        sync.RWMutex
 	chunkQueue *chunkQueue
-	metrics    *Metrics
+	// chunkCtx is set and cleared together with chunkQueue and canceled when the attempt ends.
+	chunkCtx context.Context
+	metrics  *Metrics
 
 	// avgChunkTime, lastSyncedSnapshotHeight and totalSnapshots are written by
 	// the sync goroutines and read by the RPC metrics getters. totalSnapshots
@@ -95,7 +98,8 @@ type syncer struct {
 }
 
 // AddChunk adds a chunk to the chunk queue, if any. It returns false if the chunk has already
-// been added to the queue, or an error if there's no sync in progress.
+// been added to the queue or, on a best-effort basis, if the sync attempt was canceled, and an error
+// if there's no sync in progress. It blocks while the apply buffer is full, until the attempt is canceled.
 func (s *syncer) AddChunk(chunk *chunk) (bool, error) {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
@@ -107,10 +111,14 @@ func (s *syncer) AddChunk(chunk *chunk) (bool, error) {
 		"version", chunk.Version,
 		"chunkID", chunk.ID,
 	}
-	added, err := s.chunkQueue.Add(chunk)
+	added, err := s.chunkQueue.add(s.chunkCtx, chunk)
 	if err != nil {
 		if errors.Is(err, errNilSnapshot) {
 			s.logger.Error("Can't add a chunk because of a snapshot is nil", keyVals...)
+			return false, nil
+		}
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			s.logger.Debug("Ignoring chunk delivered during sync teardown", keyVals...)
 			return false, nil
 		}
 		return false, err
@@ -139,20 +147,40 @@ func (s *syncer) AddSnapshot(peerID types.NodeID, snapshot *snapshot) (bool, err
 			"hash", snapshot.Hash.ShortString())
 	} else {
 		s.logger.Debug("snapshot not added, possibly duplicate or invalid",
-			"height", snapshot.Height, "hash", snapshot.Hash)
+			"height", snapshot.Height, "hash", snapshot.Hash.ShortString())
 	}
 	return added, nil
 }
 
-// AddPeer adds a peer to the pool. For now we just keep it simple and send a
-// single request to discover snapshots, later we may want to do retries and stuff.
+// AddPeer requests snapshots from a newly connected peer if the batch has capacity.
 func (s *syncer) AddPeer(ctx context.Context, peerID types.NodeID) error {
+	if !s.snapshots.RequestPeer(peerID) {
+		s.logger.Debug("Not requesting snapshots from peer; batch is full, peer already asked, or peer rejected", "peer", peerID)
+		return nil
+	}
 	s.logger.Debug("Requesting snapshots from peer", "peer", peerID)
 
-	return s.snapshotCh.Send(ctx, p2p.Envelope{
+	err := s.snapshotCh.Send(ctx, p2p.Envelope{
 		To:      peerID,
 		Message: &ssproto.SnapshotsRequest{},
 	})
+	if err != nil {
+		s.snapshots.CancelRequest(peerID)
+	}
+	return err
+}
+
+// RequestSnapshots requests one bounded batch from a frozen sweep of connected peers.
+func (s *syncer) RequestSnapshots(ctx context.Context, peers []types.NodeID) error {
+	var result error
+	for _, peer := range s.snapshots.DiscoveryBatch(peers) {
+		err := s.snapshotCh.Send(ctx, p2p.Envelope{To: peer, Message: &ssproto.SnapshotsRequest{}})
+		if err != nil {
+			s.snapshots.CancelRequest(peer)
+			result = errors.Join(result, err)
+		}
+	}
+	return result
 }
 
 // RemovePeer removes a peer from the pool.
@@ -186,25 +214,31 @@ func (s *syncer) SyncAny(
 		iters    int
 	)
 
-	for {
-		// we loop one more time than `retries` to check if snapshots requested in previous iterations are available
-		if retries > 0 && snapshot == nil && iters > retries {
-			return sm.State{}, nil, errNoSnapshots
+	defer func() {
+		if queue != nil {
+			if closeErr := queue.Close(); closeErr != nil {
+				s.logger.Error("Failed to clean up chunk queue", "err", closeErr)
+			}
 		}
-
-		iters++
+		s.processingSnapshot = nil
+		s.snapshots.Release()
+	}()
+	for {
 		// If not nil, we're going to retry restoration of the same snapshot.
 		if snapshot == nil {
-			snapshot = s.snapshots.Best()
+			snapshot = s.snapshots.TakeBest()
 			queue = nil
 		}
 		if snapshot == nil {
-			if discoveryTime == 0 {
+			if discoveryTime == 0 || (retries > 0 && iters >= retries && !s.snapshots.DiscoveryPending()) {
 				return sm.State{}, nil, errNoSnapshots
 			}
 			// we re-request snapshots
 			if err := requestSnapshots(); err != nil {
 				return sm.State{}, nil, err
+			}
+			if !s.snapshots.DiscoveryPending() {
+				iters++
 			}
 			s.logger.Info("discovering snapshots",
 				"iterations", iters,
@@ -222,7 +256,6 @@ func (s *syncer) SyncAny(
 			if err != nil {
 				return sm.State{}, nil, fmt.Errorf("failed to create chunk queue: %w", err)
 			}
-			defer queue.Close() // in case we forget to close it elsewhere
 		}
 
 		queue.Enqueue(snapshot.Hash)
@@ -286,6 +319,7 @@ func (s *syncer) SyncAny(
 		snapshot = nil
 		queue = nil
 		s.processingSnapshot = nil
+		s.snapshots.Release()
 	}
 }
 
@@ -297,9 +331,13 @@ func (s *syncer) Sync(ctx context.Context, snapshot *snapshot, queue *chunkQueue
 		s.mtx.Unlock()
 		return sm.State{}, nil, errors.New("a state sync is already in progress")
 	}
+	chunkCtx, cancelChunks := context.WithCancel(ctx)
 	s.chunkQueue = queue
+	s.chunkCtx = chunkCtx
 	s.mtx.Unlock()
 	defer s.releaseChunkQueue()
+	// Unblock deliveries holding the read lock before releaseChunkQueue takes the write lock.
+	defer cancelChunks()
 
 	hctx, hcancel := context.WithTimeout(ctx, 30*time.Second)
 	defer hcancel()
@@ -336,13 +374,21 @@ func (s *syncer) Sync(ctx context.Context, snapshot *snapshot, queue *chunkQueue
 
 	// Spawn chunk fetchers. They will terminate when the chunk queue is closed or context canceled.
 	fetchCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	var fetchers stdsync.WaitGroup
+	defer func() {
+		cancel()
+		fetchers.Wait()
+	}()
 	fetchStartTime := time.Now()
 
 	// TODO: this approach of creating will be deprecated in favor of new design
 	// This epic https://dashpay.atlassian.net/browse/TD-161 contains all the tasks for refactoring
 	for i := 0; i < s.fetchers; i++ {
-		go s.fetchChunks(fetchCtx, snapshot, queue)
+		fetchers.Add(1)
+		go func() {
+			defer fetchers.Done()
+			s.fetchChunks(fetchCtx, snapshot, queue)
+		}()
 	}
 
 	pctx, pcancel := context.WithTimeout(ctx, 1*time.Minute)
@@ -554,7 +600,7 @@ func (s *syncer) SnapshotChunksCount() int64 {
 }
 
 // fetchChunks requests chunks from peers, receiving allocations from the chunk queue. Chunks
-// will be received from the reactor via syncer.AddChunks() to queue.Add().
+// will be received from the reactor via syncer.AddChunk().
 func (s *syncer) fetchChunks(ctx context.Context, snapshot *snapshot, queue *chunkQueue) {
 	ticker := time.NewTicker(s.retryTimeout)
 	defer ticker.Stop()
@@ -587,7 +633,7 @@ func (s *syncer) fetchChunks(ctx context.Context, snapshot *snapshot, queue *chu
 		if err := s.requestChunk(ctx, snapshot, ID); err != nil {
 			s.logger.Error("failed to request snapshot chunk", "err", err, "chunkID", ID)
 			// retry the chunk
-			s.chunkQueue.Enqueue(ID)
+			queue.Enqueue(ID)
 			return
 		}
 		select {
@@ -596,7 +642,7 @@ func (s *syncer) fetchChunks(ctx context.Context, snapshot *snapshot, queue *chu
 		case <-ticker.C:
 			s.logger.Debug("chunk not received on time, retrying",
 				"chunkID", ID, "timeout", s.retryTimeout)
-			s.chunkQueue.Enqueue(ID)
+			queue.Enqueue(ID)
 		case <-ctx.Done():
 			s.logger.Debug("fetchChunks context done while waiting for chunk")
 			return

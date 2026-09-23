@@ -363,7 +363,7 @@ func (l *peerList) Remove(peer types.NodeID) {
 func (l *peerList) All() []types.NodeID {
 	l.mtx.Lock()
 	defer l.mtx.Unlock()
-	return l.peers
+	return append([]types.NodeID(nil), l.peers...)
 }
 
 func (l *peerList) Contains(id types.NodeID) bool {

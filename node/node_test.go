@@ -30,6 +30,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/eventbus"
 	"github.com/dashpay/tenderdash/internal/evidence"
 	"github.com/dashpay/tenderdash/internal/mempool"
+	mempoolmocks "github.com/dashpay/tenderdash/internal/mempool/mocks"
 	"github.com/dashpay/tenderdash/internal/proxy"
 	"github.com/dashpay/tenderdash/internal/pubsub"
 	sm "github.com/dashpay/tenderdash/internal/state"
@@ -42,6 +43,7 @@ import (
 	"github.com/dashpay/tenderdash/libs/service"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
 	"github.com/dashpay/tenderdash/privval"
+	"github.com/dashpay/tenderdash/rpc/coretypes"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -99,6 +101,50 @@ func TestNodeStartStop(t *testing.T) {
 	n.Wait()
 
 	require.False(t, n.IsRunning(), "node must shut down")
+}
+
+func TestNodeAsyncBroadcastLifecycleWithoutListener(t *testing.T) {
+	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
+	require.NoError(t, err)
+	cfg.RPC.ListenAddress = ""
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	ns, err := newDefaultNode(ctx, cfg, log.NewNopLogger())
+	require.NoError(t, err)
+	n := ns.(*nodeImpl)
+	mp := mempoolmocks.NewMempool(t)
+	entered := make(chan struct{})
+	finished := make(chan struct{})
+	mp.EXPECT().CheckTx(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		RunAndReturn(func(ctx context.Context, _ types.Tx, _ func(*abci.ResponseCheckTx), _ mempool.TxInfo) error {
+			close(entered)
+			<-ctx.Done()
+			close(finished)
+			return ctx.Err()
+		}).Once()
+	n.rpcEnv.Mempool = mp
+	t.Cleanup(func() {
+		cancel()
+		n.Wait()
+	})
+	require.NoError(t, n.Start(ctx))
+	res, err := n.RPCEnvironment().BroadcastTxAsync(t.Context(), &coretypes.RequestBroadcastTx{Tx: types.Tx("tx")})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("CheckTx did not start")
+	}
+	cancel()
+	n.Wait()
+	select {
+	case <-finished:
+	default:
+		t.Fatal("node stopped without draining its async broadcast")
+	}
+	_, err = n.RPCEnvironment().BroadcastTxAsync(t.Context(), &coretypes.RequestBroadcastTx{Tx: types.Tx("stopped")})
+	require.ErrorIs(t, err, context.Canceled)
 }
 
 // TestNodeFullModeRequiresCoreRPCHost ensures that constructing a full node
@@ -1048,4 +1094,160 @@ func TestInitDBsAppliesUnsafeNoFsyncOnlyWhenConfigured(t *testing.T) {
 			require.Equal(t, unsafe, blockStore.UnsafeNoFsync())
 		})
 	}
+}
+
+func TestNodeStartRetryAfterRPCListenFailure(t *testing.T) {
+	for _, multipleListeners := range []bool{false, true} {
+		t.Run(fmt.Sprintf("multiple_listeners=%t", multipleListeners), func(t *testing.T) {
+
+			cfg, err := config.ResetTestRoot(t.TempDir(), strings.ReplaceAll(t.Name(), "/", "-"))
+			require.NoError(t, err)
+			listener, err := net.Listen("tcp", "127.0.0.1:0")
+			require.NoError(t, err)
+			defer listener.Close()
+			cfg.RPC.ListenAddress = "tcp://" + listener.Addr().String()
+			var firstAddress string
+			if multipleListeners {
+				first, err := net.Listen("tcp", "127.0.0.1:0")
+				require.NoError(t, err)
+				firstAddress = first.Addr().String()
+				cfg.RPC.ListenAddress = "tcp://" + firstAddress + "," + cfg.RPC.ListenAddress
+				require.NoError(t, first.Close())
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			ns, err := newDefaultNode(ctx, cfg, log.NewNopLogger())
+			require.NoError(t, err)
+			n := ns.(*nodeImpl)
+			started := false
+			defer func() {
+				cancel()
+				if started {
+					n.Wait()
+				} else {
+					n.OnStop()
+				}
+			}()
+			err = n.Start(ctx)
+			require.ErrorContains(t, err, "address already in use")
+			require.False(t, n.rpcEnv.ProxyApp.IsRunning(), "binding RPC must precede starting the app")
+			require.False(t, n.rpcEnv.EventBus.IsRunning())
+			require.False(t, n.router.IsRunning())
+			for _, reactor := range n.services {
+				require.False(t, reactor.IsRunning(), "binding RPC must precede starting reactors")
+			}
+			if multipleListeners {
+				released, err := net.Listen("tcp", firstAddress)
+				require.NoError(t, err, "a failed bind must release earlier RPC listeners")
+				require.NoError(t, released.Close())
+			}
+			require.NoError(t, listener.Close())
+			err = n.Start(ctx)
+			started = err == nil
+			require.NoError(t, err, "startup should be retryable after freeing the RPC port")
+		})
+	}
+}
+
+func TestNodeStartFailureReleasesRPCListeners(t *testing.T) {
+	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
+	require.NoError(t, err)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	address := listener.Addr().String()
+	require.NoError(t, listener.Close())
+	cfg.RPC.ListenAddress = "tcp://" + address
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ns, err := newDefaultNode(ctx, cfg, log.NewNopLogger())
+	require.NoError(t, err)
+	n := ns.(*nodeImpl)
+	defer n.OnStop()
+	app := abcimocks.NewClient(t)
+	appErr := errors.New("application unavailable")
+	app.On("Start", mock.Anything).Run(func(mock.Arguments) {
+		probe, bindErr := net.Listen("tcp", address)
+		if bindErr == nil {
+			require.NoError(t, probe.Close())
+		}
+		require.Error(t, bindErr, "RPC addresses must be reserved before application startup")
+	}).Return(appErr).Once()
+	n.rpcEnv.ProxyApp = app
+
+	require.ErrorIs(t, n.Start(ctx), appErr)
+	listener, err = net.Listen("tcp", address)
+	require.NoError(t, err, "startup failure must release the reserved RPC address")
+	require.NoError(t, listener.Close())
+}
+
+// finalizePausedClient holds the first commit between block-store and state-store writes.
+type finalizePausedClient struct {
+	abciclient.Client
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (c *finalizePausedClient) FinalizeBlock(ctx context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
+	if req.Block.Header.Height == 1 {
+		close(c.entered)
+		<-c.release
+	}
+	return c.Client.FinalizeBlock(ctx, req)
+}
+
+type startupPausedService struct {
+	service.Service
+	entered <-chan struct{}
+}
+
+func (s startupPausedService) Start(ctx context.Context) error {
+	if err := s.Service.Start(ctx); err != nil {
+		return err
+	}
+	select {
+	case <-s.entered:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func TestNodeStartDuringFirstCommit(t *testing.T) {
+	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
+	require.NoError(t, err)
+	cfg.Consensus = config.DefaultConsensusConfig()
+	cfg.SetRoot(cfg.RootDir)
+	cfg.RPC.ListenAddress = ""
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	logger := log.NewNopLogger()
+	client, _, err := proxy.ClientFactory(logger, *cfg.Abci, cfg.DBDir())
+	require.NoError(t, err)
+	app := &finalizePausedClient{Client: client, entered: make(chan struct{}), release: make(chan struct{})}
+	ns, err := New(ctx, cfg, logger, app, nil)
+	require.NoError(t, err)
+	n := ns.(*nodeImpl)
+	for i, reactor := range n.services {
+		if reactor == n.rpcEnv.ConsensusReactor {
+			n.services[i] = startupPausedService{Service: reactor, entered: app.entered}
+		}
+	}
+	started := false
+	defer func() {
+		close(app.release)
+		cancel()
+		if started {
+			n.Wait()
+		} else {
+			n.OnStop()
+		}
+	}()
+	err = n.Start(ctx)
+	started = err == nil
+	require.NoError(t, err, "startup must succeed while consensus finalizes its first block")
+	require.EqualValues(t, 1, n.rpcEnv.BlockStore.Height())
+	state, err := n.stateStore.Load()
+	require.NoError(t, err)
+	require.Zero(t, state.LastBlockHeight, "the application has not completed FinalizeBlock")
 }

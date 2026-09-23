@@ -266,14 +266,8 @@ func TestApp_Tx(t *testing.T) {
 
 // Given transactions which take more than the block size,
 // when I submit them to the node,
-// then the first transaction should be committed before the last one.
+// then all transactions should be committed across multiple blocks.
 func TestApp_TxTooBig(t *testing.T) {
-	// Pair of txs, last must be in block later than first
-	type txPair struct {
-		firstTxHash tmbytes.HexBytes
-		lastTxHash  tmbytes.HexBytes
-	}
-
 	/// timeout for broadcast to single node
 	const broadcastTimeout = 10 * time.Second
 	/// Timeout to read response from single node
@@ -297,11 +291,6 @@ func TestApp_TxTooBig(t *testing.T) {
 		})
 	}
 
-	// we will use last client to check if txs were included in block, so we
-	// define it outside the loop
-	var client *http.HTTP
-	outcome := make([]txPair, 0, len(nodes))
-
 	start := time.Now()
 
 	/// Send more txs than we can fit into block
@@ -324,8 +313,7 @@ func TestApp_TxTooBig(t *testing.T) {
 
 	session := rand.Int63()
 
-	var err error
-	client, err = node.Client()
+	client, err := node.Client()
 	require.NoError(t, err)
 
 	// FIXME: ConsensusParams is broken for last height, this is just workaround
@@ -340,7 +328,7 @@ func TestApp_TxTooBig(t *testing.T) {
 
 	tx := make(types.Tx, TxPayloadSize) // first tx is just zeros
 
-	var firstTxHash []byte
+	pending := make(map[string]tmbytes.HexBytes, numTxs)
 	var key string
 
 	for i := 0; i < numTxs; i++ {
@@ -353,69 +341,39 @@ func TestApp_TxTooBig(t *testing.T) {
 		big.NewInt(int64(i)).FillBytes(tx[payloadOffset:])
 		assert.Len(t, tx, TxPayloadSize)
 
-		if i == 0 {
-			firstTxHash = tx.Hash()
-		}
+		hash := tx.Hash()
+		pending[string(hash)] = hash
 
 		_, err = client.BroadcastTxAsync(ctx, tx)
 
-		assert.NoError(t, err, "failed to broadcast tx %06x", i)
+		require.NoError(t, err, "failed to broadcast tx %06x", i)
 	}
-
-	outcome = append(outcome, txPair{
-		firstTxHash: firstTxHash,
-		lastTxHash:  tx.Hash(),
-	})
 
 	t.Logf("submitted txs in %s", time.Since(start).String())
 
-	successful := 0
-	// now we check if these txs were committed within timeout
+	var minHeight, maxHeight int64
+	// Submission order does not determine arrival order at the proposer.
 	require.Eventuallyf(t, func() bool {
-		failed := false
-		successful = 0
-		for _, item := range outcome {
+		for key, hash := range pending {
 			ctx, cancel := context.WithTimeout(mainCtx, readTimeout)
-			defer cancel()
-
-			firstTxHash := item.firstTxHash
-			lastTxHash := item.lastTxHash
-
-			// last tx should be committed later than first
-			lastTxResp, err := client.Tx(ctx, lastTxHash, false)
-			if err == nil {
-				assert.Equal(t, lastTxHash, lastTxResp.Tx.Hash())
-
-				// fetch first tx
-				firstTxResp, err := client.Tx(ctx, firstTxHash, false)
-				assert.NoError(t, err, "first tx should be committed before second")
-				assert.EqualValues(t, firstTxHash, firstTxResp.Tx.Hash())
-
-				firstTxBlock, err := client.Header(ctx, &firstTxResp.Height)
-				assert.NoError(t, err)
-				lastTxBlock, err := client.Header(ctx, &lastTxResp.Height)
-				assert.NoError(t, err)
-
-				t.Logf("first tx in block %d, last tx in block %d, time diff %s",
-					firstTxResp.Height,
-					lastTxResp.Height,
-					lastTxBlock.Header.Time.Sub(firstTxBlock.Header.Time).String(),
-				)
-
-				assert.Less(t, firstTxResp.Height, lastTxResp.Height, "first tx should in block before last tx")
-				successful++
-			} else {
-				failed = true
+			resp, err := client.Tx(ctx, hash, false)
+			cancel()
+			if err != nil {
+				return false
 			}
+			assert.EqualValues(t, hash, resp.Tx.Hash())
+			if minHeight == 0 || resp.Height < minHeight {
+				minHeight = resp.Height
+			}
+			maxHeight = max(maxHeight, resp.Height)
+			delete(pending, key)
 		}
+		return true
+	}, includeInBlockTimeout, time.Second,
+		"submitted transactions were not committed after %s", includeInBlockTimeout)
 
-		return !failed
-	},
-		includeInBlockTimeout, // timeout
-		time.Second,           // interval
-		"submitted transactions were not committed after %s",
-		includeInBlockTimeout.String(),
-	)
+	t.Logf("%d transactions committed across heights %d–%d", numTxs, minHeight, maxHeight)
+	assert.Less(t, minHeight, maxHeight, "transactions exceeding the block size must span multiple blocks")
 }
 
 // Tests that the app version in most recent block is set to height of the block.

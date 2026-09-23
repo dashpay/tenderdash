@@ -57,12 +57,14 @@ Let's break down the settings:
   restore (default: `15s`). Must be `0s` or at least `5s`. With `0s` the node
   gives up as soon as no suitable snapshot is available and falls back to
   block sync.
-- `retries`: Number of times to retry state sync before giving up. When
-  retries are exhausted, the node **falls back to regular block sync**. Set to
-  `0` to retry indefinitely — the node keeps requesting snapshots forever and
-  **never** falls back to block sync (default: `3`). Note that in the
-  pessimistic case it will take at least `discovery-time * retries` before
-  falling back to block sync.
+- `retries`: Number of completed snapshot discovery sweeps before giving up.
+  When retries are exhausted, the node **falls back to regular block sync**. Set
+  to `0` to retry indefinitely — the node keeps requesting snapshots forever and
+  **never** falls back to block sync (default: `3`). Each sweep asks every
+  connected peer (at most 1,024) in batches of 16, one batch per
+  `discovery-time`, so the pessimistic case takes longer than
+  `discovery-time * retries`; see
+  [Snapshot discovery resource limits](#snapshot-discovery-resource-limits).
 - `temp-dir`: Temporary directory for snapshot chunks; defaults to the
   operating system temporary directory (e.g. `/tmp`). The synchronizer creates
   a new, randomly named directory within it and removes it when the sync is
@@ -100,3 +102,46 @@ core-rpc-password = "changeme"
 enable = true
 use-p2p = true
 ```
+
+## Snapshot discovery resource limits
+
+Snapshot advertisements retain the existing 4,000,000-byte network message limit;
+there is no smaller limit on application metadata. The node retains at most
+64 MiB of unique snapshot hash and metadata payload, including the snapshot being
+restored, and charges at most 40,000,000 bytes of advertised payload to each peer.
+Shared snapshots count once globally and once for each supplying peer. Removing
+an association releases that peer's charge immediately, while an active snapshot
+remains globally charged until restoration cleanup finishes. If the same snapshot
+is admitted again while a removed active copy is still in use, both owned copies
+consume the global budget until the old copy is released. The pool owns copies
+of the payload and releases its charge when it releases the data.
+These limits bound retained discovery payload, not process RSS, transport receive
+queues, decoded messages in flight, chunk data, or application state.
+
+The pool also bounds candidates to 1,024 and peer associations to 10,240. Each
+rejection history holds at most 1,024 entries; an older rejection can be considered
+again after it leaves that history. Empty indexes are removed. Under payload
+pressure, advertisements from less represented peers can replace unselected
+candidates from peers retaining more data. The active snapshot is never evicted
+or uncharged before restoration releases it. Admission is an opportunity to try
+a candidate, not a guarantee against malicious peers controlling many identities.
+
+Discovery sends directed requests to batches of at most 16 peers. Each requested
+peer may return ten advertisements, counting duplicates and rejected replies.
+Responses without remaining allowance are ignored without penalizing the peer.
+Late responses remain eligible while that batch's allowance is open; subsequent
+batches replace the allowance. Newly connected peers can use unallocated request
+slots, and otherwise wait for a later discovery sweep.
+
+The `retries` setting counts completed discovery sweeps. A sweep freezes at most
+1,024 connected peers, visits them in batches, and cannot be prolonged by later
+peer arrivals. Successive sweeps rotate through larger connected-peer lists.
+Already retained candidates are tried before discovery is declared exhausted.
+Restoration starts from the best snapshot retained so far, which may come from
+the first batch only; nodes with more than 16 peers can therefore start from a
+slightly older snapshot than the newest one available on the network.
+With no usable responses, a sweep takes up to
+`ceil(min(connected_peers, 1024) / 16) * discovery-time`, with at least one discovery
+interval and a minimum interval of five seconds. Snapshot restoration adds its
+own processing time. Context cancellation interrupts discovery; `retries = 0`
+continues discovery indefinitely as before.

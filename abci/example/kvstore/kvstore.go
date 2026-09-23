@@ -903,12 +903,7 @@ func encodeMsg(data proto.Message) ([]byte, error) {
 
 // persist persists application state according to the config
 func (app *Application) persist() error {
-	out, err := app.store.Writer()
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-	return app.LastCommittedState.Save(out)
+	return app.store.Write(app.LastCommittedState.Save)
 }
 
 // persistInterval persists application state according to persist-interval parameter

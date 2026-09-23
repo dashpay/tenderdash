@@ -1,3 +1,45 @@
+## [1.8.1] - 2026-09-23
+
+### Bug Fixes
+
+- Preserve catch-up allowance for rejected votes (#1479)
+- Preserve in-flight finalization during handover (#1488)
+- Bound asynchronous transaction broadcasts (#1478)
+- Unblock chunk delivery during sync teardown (#1489)
+- Correlate consensus parameter replies with pending requests (#1491)
+- Reconnect persistent peers at outgoing capacity (#1490)
+- Allow node startup retry after listener failure (#1494)
+- Bound retained snapshot discovery resources (#1492)
+- Prevent sync handover and restart failures (#1500)
+
+### Testing
+
+- Check large transaction batches without assuming order (#1493)
+
+### Build
+
+- Bump golang.org/x/crypto from 0.56.0 to 0.57.0 (#1472)
+- Bump golang.org/x/term from 0.45.0 to 0.46.0 (#1471)
+- Bump golang.org/x/net from 0.58.0 to 0.59.0 (#1470)
+- Bump github.com/bufbuild/buf from 1.72.0 to 1.73.0 (#1469)
+- Bump docker/build-push-action from 7.3.0 to 7.4.0 (#1501)
+- Bump docker/setup-buildx-action from 4.3.0 to 4.4.1 (#1502)
+- Bump github.com/fxamacker/cbor/v2 from 2.9.3 to 2.9.4 (#1504)
+
+### Ci
+
+- Re-pin PR Hygiene to read each pull request once (#1480)
+- Wake PR Hygiene only for a comment that can change the answer (#1481)
+- Re-pin PR Hygiene to clone this repository only on its sweep (#1482)
+- Re-pin PR Hygiene to require a green build before asking a human (#1483)
+- PR Hygiene is the merge gate; CODEOWNERS carries no rules (#1486)
+- Re-pin PR Hygiene for state labels and /skip-bots (#1487)
+- Re-pin PR Hygiene for the checklist in the description (#1495)
+- Re-pin PR Hygiene so a bot line says everything about that bot (#1496)
+- Re-pin PR Hygiene to ask a flaky read once more (#1497)
+- Re-pin PR Hygiene for one name for the author limit (#1498)
+- Add Claudius AI code review workflow (#1499)
+
 ## [1.8.0] - 2026-09-16
 
 ### Bug Fixes
@@ -34,6 +76,7 @@
 - Bump Go to 1.26.6 (#1417)
 - Merge v1.8-dev into synchronization branch
 - Merge v1.7-dev into v1.8-dev
+- Update changelog and version to 1.8.0
 
 ### Performance
 

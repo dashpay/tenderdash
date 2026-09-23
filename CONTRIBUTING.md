@@ -184,6 +184,28 @@ branches with the development branch. (This also means that you shouldn't
 update someone else's branch for them; even if it seems like you're doing them
 a favor, you may be interfering with their git flow in some way!)
 
+#### Requesting an AI Code Review
+
+An automated, advisory AI code review can be requested on a non-draft pull
+request in either of two ways:
+
+- apply the `claudius-review` label, or
+- request `Claudius-Maginificent` as a reviewer.
+
+Both require a maintainer (triage access to label or request reviewers, write
+access to pass the review action's permission check), so external contributors
+should ask a maintainer to trigger it. Draft pull requests are skipped silently;
+the review starts once the pull request is marked ready for review.
+
+On success the label and the review request are removed automatically, so
+re-apply one of them to request another review. A push made while either is
+still present (e.g. during a running review) queues a re-run, which fails the
+permission check unless the pusher has write access. Findings of MEDIUM
+severity and above are posted as inline comments; the full report (including
+LOW findings) is linked from the review summary. The bot may submit an approving
+review when nothing remains unresolved — it is advisory and does not replace
+human review.
+
 #### Merging Pull Requests
 
 It is also our convention that authors merge their own pull requests, when possible. External contributors may not have the necessary permissions to do this, in which case, a member of the core team will merge the pull request once it's been approved.

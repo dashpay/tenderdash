@@ -275,8 +275,8 @@ func (r *Reactor) processPeerUpdates(
 func (r *Reactor) SwitchToBlockSync(ctx context.Context, state sm.State) error {
 	r.blockSyncFlag.Store(true)
 	r.initialState = state
-	r.executor.state = state
-	r.synchronizer.height = state.LastBlockHeight + 1
+	r.executor.UpdateState(state)
+	r.synchronizer.setStartHeight(state.LastBlockHeight + 1)
 
 	if err := r.synchronizer.Start(ctx); err != nil {
 		return err
@@ -347,7 +347,9 @@ func (r *Reactor) GetRemainingSyncTime() time.Duration {
 		return time.Duration(0)
 	}
 	targetSyncs := r.synchronizer.targetSyncBlocks()
+	r.synchronizer.mtx.RLock()
 	currentSyncs := r.store.Height() - r.synchronizer.startHeight + 1
+	r.synchronizer.mtx.RUnlock()
 	lastSyncRate := r.synchronizer.getLastSyncRate()
 	if currentSyncs < 0 || lastSyncRate < 0.001 {
 		return time.Duration(0)

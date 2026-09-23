@@ -282,7 +282,8 @@ func verifyTx(tx types.Tx, _ abci.CheckTxType) (abci.ResponseCheckTx, error) {
 				fmt.Errorf("malformed vote extension transaction %X=%X: %w", k, v, err)
 		}
 	}
-	// For TestApp_TxTooBig we need to preserve order of transactions
+	// Prefer earlier transactions when a block fills up. TestApp_TxTooBig only
+	// requires that all of them commit, not that submission order is preserved.
 	var priority int64
 	// in this case, k is defined as fmt.Sprintf("testapp-big-tx-%v-%08x-%d=", node.Name, session, i)
 	// but in general, we take last digit as inverse priority
