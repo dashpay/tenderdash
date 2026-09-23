@@ -222,6 +222,20 @@ func NewSynchronizer(start int64, client client.BlockClient, blockExec *blockApp
 	return bp
 }
 
+// setStartHeight aligns application, fetching and metrics after state sync, before Start.
+func (s *Synchronizer) setStartHeight(height int64) {
+	s.mtx.Lock()
+	s.height = height
+	s.startHeight = height
+	s.mtx.Unlock()
+
+	// Keep the generator in place: peer updates can already call RemovePeer.
+	s.jobGen.mtx.Lock()
+	s.jobGen.height = height
+	s.jobGen.pushedBack = nil
+	s.jobGen.mtx.Unlock()
+}
+
 // OnStart implements service.Service by spawning requesters routine and recording
 // synchronizer's start time.
 func (s *Synchronizer) OnStart(ctx context.Context) error {
