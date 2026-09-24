@@ -36,9 +36,10 @@ func (c *blockExecutor) create(ctx context.Context, rs *cstypes.RoundState, roun
 	}
 
 	// TODO(sergio): wouldn't it be easier if CreateProposalBlock accepted cs.LastCommit directly?
+	committedState := c.getCommittedState()
 	var commit *types.Commit
 	switch {
-	case rs.Height == c.committedState.InitialHeight:
+	case rs.Height == committedState.InitialHeight:
 		// We're creating a proposal for the first block.
 		// The commit is empty, but not nil.
 		commit = types.NewCommit(0, 0, types.BlockID{}, nil, nil)
@@ -52,7 +53,6 @@ func (c *blockExecutor) create(ctx context.Context, rs *cstypes.RoundState, roun
 
 	proposerProTxHash := c.privValidator.ProTxHash
 
-	committedState := c.getCommittedState()
 	ret, uncommittedState, err := c.blockExec.CreateProposalBlock(ctx, rs.Height, round, committedState, commit, proposerProTxHash, c.proposedAppVersion)
 	if err != nil {
 		panic(err)
@@ -73,7 +73,7 @@ func (c *blockExecutor) ensureProcess(ctx context.Context, rs *cstypes.RoundStat
 		c.logger.Trace("CurrentRoundState is outdated, executing ProcessProposal", "crs", crs)
 		// consensus holds no proof for the block's LastCommit, so it is verified
 		// in full
-		uncommittedState, err := c.blockExec.ProcessProposal(ctx, block, round, c.committedState, true,
+		uncommittedState, err := c.blockExec.ProcessProposal(ctx, block, round, c.getCommittedState(), true,
 			types.VerifiedCommit{})
 		if err != nil {
 			return fmt.Errorf("ProcessProposal abci method: %w", err)
