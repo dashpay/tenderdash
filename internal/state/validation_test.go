@@ -94,6 +94,14 @@ func TestValidateBlockHeader(t *testing.T) {
 		malleateBlock func(block *types.Block)
 	}{
 		{"Version wrong1", func(block *types.Block) { block.Version = wrongVersion1 }},
+		{"Known but wrong proposer", func(block *types.Block) {
+			for _, val := range state.Validators.Validators {
+				if !val.ProTxHash.Equal(block.ProposerProTxHash) {
+					block.ProposerProTxHash = val.ProTxHash
+					return
+				}
+			}
+		}},
 		{"ChainID wrong", func(block *types.Block) { block.ChainID = "not-the-real-one" }},
 		{"Height wrong", func(block *types.Block) { block.Height += 10 }},
 		{"Core Height does not match chain lock", func(block *types.Block) {
