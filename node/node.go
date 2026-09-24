@@ -71,7 +71,6 @@ type nodeImpl struct {
 	evPool           *evidence.Pool
 	indexerService   *indexer.Service
 	services         []service.Service
-	rpcListeners     []net.Listener // rpc servers
 	shutdownOps      closer
 	rpcEnv           *rpccore.Environment
 	prometheusSrv    *http.Server
@@ -515,6 +514,10 @@ func (n *nodeImpl) OnStart(ctx context.Context) (err error) {
 	defer func() {
 		if err != nil {
 			cancelAttempt()
+			n.rpcEnv.StopService()
+			if stopErr := n.rpcEnv.StopAsyncBroadcasts(context.Background()); stopErr != nil {
+				n.logger.Error("Failed to stop async broadcasts after startup failure", "err", stopErr)
+			}
 			for _, reactor := range startedReactors {
 				reactor.Wait()
 			}
@@ -645,13 +648,9 @@ func (n *nodeImpl) OnStart(ctx context.Context) (err error) {
 	if len(rpcListeners) > 0 {
 		err = n.rpcEnv.StartService(ctx, n.config, rpcListeners)
 		if err != nil {
-			if stopErr := n.rpcEnv.StopAsyncBroadcasts(context.Background()); stopErr != nil {
-				n.logger.Error("Failed to stop async broadcasts after RPC startup failure", "err", stopErr)
-			}
 			return err
 		}
 	}
-	n.rpcListeners = rpcListeners
 
 	return nil
 }
@@ -659,15 +658,9 @@ func (n *nodeImpl) OnStart(ctx context.Context) (err error) {
 // OnStop stops the Node. It implements service.Service.
 func (n *nodeImpl) OnStop() {
 	n.logger.Info("Stopping Node")
+	n.rpcEnv.StopService()
 	if err := n.rpcEnv.StopAsyncBroadcasts(context.Background()); err != nil {
 		n.logger.Error("Async broadcasts did not finish during shutdown", "err", err)
-	}
-	// stop the listeners / external services first
-	for _, l := range n.rpcListeners {
-		n.logger.Info("Closing rpc listener", "listener", l)
-		if err := l.Close(); err != nil {
-			n.logger.Error("error closing listener", "listener", l, "err", err)
-		}
 	}
 
 	for _, reactor := range n.services {

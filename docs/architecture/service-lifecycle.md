@@ -19,7 +19,8 @@ Shutdown has three phases:
    `Wait`.
 
 `Stopping()` exposes context cancellation separately from completion.
-`Stop` does not join workers. Concurrent or recursive `Stop` calls return
+`Stop` invokes `OnStop` synchronously but does not join registered workers.
+Concurrent or recursive `Stop` calls return
 immediately. A stop during startup cancels the context and schedules `OnStop`
 after successful `OnStart`; hooks never overlap. `OnStop` must not join managed
 workers. Workers may call `Stop`; neither workers nor hooks may call their own
@@ -55,7 +56,8 @@ them. A timeout is not a substitute for completion.
 The service audit covers consensus (state, reactor, ticker, gossip and WAL),
 autofile groups, node and seed owners, event bus and pubsub, indexer, block and
 state sync, mempool, evidence, P2P router/PEX/connections, quorum event handling,
-ABCI clients/servers, proxy wrappers, signer services, and the light RPC wrapper.
+ABCI clients/servers, proxy wrappers, signer services, HTTP/WebSocket RPC servers,
+and the light RPC wrapper.
 Worker-free implementations retain their hooks without artificial workers.
 
 Service-scoped cancel functions, completion channels and custom `Wait` methods
@@ -71,8 +73,15 @@ Those boundaries need their own ownership API before a service can promise to
 join every helper. Router connection/request groups and AutoFile workers are
 joined explicitly rather than converted into unrelated service lifetimes.
 
+RPC shutdown closes admission and joins active handlers, including hijacked
+WebSocket sessions and their subscription workers. Node shutdown then drains
+async broadcasts and reactors, cancels and joins every mempool recheck batch,
+and finally releases application connections and stores.
+
 Retry of a composite service also requires recreating any children that already
 started successfully and were then stopped during rollback. Arbitrary injected
 ABCI clients cannot be recreated by the routed wrapper. The node reserves RPC
 listeners before starting children, so retry after listener failure remains
-supported without restarting successful child lifetimes.
+supported without restarting successful child lifetimes. After a later node
+startup failure, construct a fresh node graph: rollback can also permanently
+close non-service resources such as mempool recheck admission.
