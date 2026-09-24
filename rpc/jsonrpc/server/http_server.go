@@ -60,7 +60,7 @@ func DefaultConfig() *Config {
 // Serve creates a http.Server and calls Serve with the given listener. It
 // wraps handler to recover panics and limit the request body size.
 func Serve(ctx context.Context, listener net.Listener, handler http.Handler, logger log.Logger, config *Config) error {
-	return serve(ctx, handler, logger, config, func(s *http.Server) error {
+	return serve(ctx, listener, handler, logger, config, func(s *http.Server) error {
 		return s.Serve(listener)
 	})
 }
@@ -68,12 +68,14 @@ func Serve(ctx context.Context, listener net.Listener, handler http.Handler, log
 // ServeTLS serves HTTPS and joins all requests, including websocket sessions,
 // before returning. Cancellation is propagated to request contexts.
 func ServeTLS(ctx context.Context, listener net.Listener, handler http.Handler, certFile, keyFile string, logger log.Logger, config *Config) error {
-	return serve(ctx, handler, logger, config, func(s *http.Server) error {
+	return serve(ctx, listener, handler, logger, config, func(s *http.Server) error {
 		return s.ServeTLS(listener, certFile, keyFile)
 	})
 }
 
-func serve(ctx context.Context, handler http.Handler, logger log.Logger, config *Config, run func(*http.Server) error) error {
+func serve(ctx context.Context, listener net.Listener, handler http.Handler, logger log.Logger, config *Config, run func(*http.Server) error) error {
+	// TLS setup can fail before http.Server takes ownership of the listener.
+	defer func() { _ = listener.Close() }()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var mu sync.Mutex
@@ -107,7 +109,9 @@ func serve(ctx context.Context, handler http.Handler, logger log.Logger, config 
 		mu.Lock()
 		stopping = true
 		mu.Unlock()
-		_ = s.Shutdown(context.Background())
+		// Cancellation alone cannot unblock a handler writing to a stalled
+		// client. Close its transport before joining the handler itself.
+		_ = s.Close()
 		requests.Wait()
 	}()
 	err := run(s)

@@ -238,3 +238,83 @@ func TestServeJoinsActiveHandler(t *testing.T) {
 		})
 	}
 }
+
+// blockedWriteListener supplies a connection whose peer never reads responses.
+// net.Pipe makes the first response write block without OS buffer assumptions.
+type blockedWriteListener struct {
+	net.Conn
+	accepted bool
+	closed   chan struct{}
+	once     sync.Once
+	writing  chan struct{}
+}
+
+func (l *blockedWriteListener) Accept() (net.Conn, error) {
+	if !l.accepted {
+		l.accepted = true
+		return &blockedResponseConn{Conn: l.Conn, writing: l.writing}, nil
+	}
+	<-l.closed
+	return nil, net.ErrClosed
+}
+
+func (l *blockedWriteListener) Close() error {
+	l.once.Do(func() { close(l.closed) })
+	return nil
+}
+
+func (l *blockedWriteListener) Addr() net.Addr { return l.LocalAddr() }
+
+type blockedResponseConn struct {
+	net.Conn
+	writing chan struct{}
+	once    sync.Once
+}
+
+func (c *blockedResponseConn) Write(p []byte) (int, error) {
+	c.once.Do(func() { close(c.writing) })
+	return c.Conn.Write(p)
+}
+
+func TestServeCancellationUnblocksResponseWrite(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer serverConn.Close()
+	defer clientConn.Close()
+	listener := &blockedWriteListener{Conn: serverConn, closed: make(chan struct{}), writing: make(chan struct{})}
+	defer listener.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done, handlerDone := make(chan error, 1), make(chan struct{})
+	go func() {
+		done <- Serve(ctx, listener, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			defer close(handlerDone)
+			_, _ = w.Write(make([]byte, 1<<20))
+		}), log.NewNopLogger(), DefaultConfig())
+	}()
+	_, err := io.WriteString(clientConn, "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n")
+	require.NoError(t, err)
+	<-listener.writing
+	cancel()
+	select {
+	case err := <-done:
+		require.ErrorIs(t, err, http.ErrServerClosed)
+	case <-time.After(time.Second):
+		_ = clientConn.Close()
+		<-done
+		t.Fatal("Serve did not unblock an active response write on cancellation")
+	}
+	<-handlerDone
+}
+
+func TestServeTLSClosesListenerOnCertificateError(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer listener.Close()
+	err = ServeTLS(context.Background(), listener, http.NotFoundHandler(), "missing.crt", "missing.key", log.NewNopLogger(), DefaultConfig())
+	require.Error(t, err)
+	conn, err := net.DialTimeout("tcp", listener.Addr().String(), time.Second)
+	if conn != nil {
+		_ = conn.Close()
+	}
+	require.Error(t, err, "TLS setup failure must release the bound listener")
+}
