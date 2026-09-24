@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"runtime"
 	"sort"
+	stdsync "sync"
 	"sync/atomic"
 	"time"
 
@@ -61,7 +62,9 @@ type TxMempool struct {
 	txBySender map[string]*clist.CElement // for sender != ""
 
 	// cancellation function for recheck txs tasks
-	recheckCancel context.CancelFunc
+	recheckCancel   context.CancelFunc
+	rechecksStopped bool
+	recheckWorkers  stdsync.WaitGroup
 }
 
 // NewTxMempool constructs a new, empty priority mempool at the specified
@@ -94,6 +97,18 @@ func NewTxMempool(
 	}
 
 	return txmp
+}
+
+// StopRechecks permanently closes recheck admission and joins all admitted batches.
+// Call it without holding the mempool lock, before closing the ABCI connection.
+func (txmp *TxMempool) StopRechecks() {
+	txmp.mtx.Lock()
+	txmp.rechecksStopped = true
+	if txmp.recheckCancel != nil {
+		txmp.recheckCancel()
+	}
+	txmp.mtx.Unlock()
+	txmp.recheckWorkers.Wait()
 }
 
 // WithPreCheck sets a filter for the mempool to reject a transaction if f(tx)
@@ -762,11 +777,15 @@ func (txmp *TxMempool) handleRecheckResult(tx types.Tx, checkTxRes *abci.Respons
 // Precondition: The mempool is not empty.
 // The caller must hold txmp.mtx exclusively.
 func (txmp *TxMempool) recheckTransactions(ctx context.Context) {
+	if txmp.rechecksStopped {
+		return
+	}
 	// cancel previous recheck if it is still running
 	if txmp.recheckCancel != nil {
 		txmp.recheckCancel()
 	}
-	ctx, txmp.recheckCancel = context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(ctx)
+	txmp.recheckCancel = cancel
 
 	if txmp.Size() == 0 {
 		panic("mempool: cannot run recheck on an empty mempool")
@@ -785,7 +804,10 @@ func (txmp *TxMempool) recheckTransactions(ctx context.Context) {
 
 	// Issue CheckTx calls for each remaining transaction, and when all the
 	// rechecks are complete signal watchers that transactions may be available.
+	txmp.recheckWorkers.Add(1)
 	go func() {
+		defer txmp.recheckWorkers.Done()
+		defer cancel()
 		var g errgroup.Group
 		g.SetLimit(2 * runtime.NumCPU())
 
