@@ -182,3 +182,59 @@ func TestWriteHTTPResponse(t *testing.T) {
 	assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 	assert.Equal(t, `{"code":-32603,"message":"Internal error","data":"foo"}`, string(body))
 }
+
+func TestServeJoinsActiveHandler(t *testing.T) {
+	for _, useTLS := range []bool{false, true} {
+		t.Run(fmt.Sprintf("TLS=%v", useTLS), func(t *testing.T) {
+			listener, err := net.Listen("tcp", "127.0.0.1:0")
+			require.NoError(t, err)
+			type contextKey struct{}
+			ctx, cancel := context.WithCancel(context.WithValue(context.Background(), contextKey{}, "inherited"))
+			defer cancel()
+			entered, canceled, release := make(chan struct{}), make(chan struct{}), make(chan struct{})
+			done := make(chan error, 1)
+			handler := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "inherited", r.Context().Value(contextKey{}))
+				close(entered)
+				<-r.Context().Done()
+				close(canceled)
+				<-release
+			})
+			go func() {
+				if useTLS {
+					done <- ServeTLS(ctx, listener, handler, "test.crt", "test.key", log.NewNopLogger(), DefaultConfig())
+				} else {
+					done <- Serve(ctx, listener, handler, log.NewNopLogger(), DefaultConfig())
+				}
+			}()
+			transport := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+			defer transport.CloseIdleConnections()
+			client := &http.Client{Transport: transport}
+			scheme := "http://"
+			if useTLS {
+				scheme = "https://"
+			}
+			requestDone := make(chan struct{})
+			go func() {
+				defer close(requestDone)
+				resp, err := client.Get(scheme + listener.Addr().String())
+				if err == nil {
+					_ = resp.Body.Close()
+				}
+			}()
+			<-entered
+			cancel()
+			<-canceled
+			select {
+			case err := <-done:
+				close(release)
+				<-requestDone
+				t.Fatalf("Serve returned before active handler completed: %v", err)
+			case <-time.After(100 * time.Millisecond):
+			}
+			close(release)
+			require.ErrorIs(t, <-done, http.ErrServerClosed)
+			<-requestDone
+		})
+	}
+}

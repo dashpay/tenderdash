@@ -654,18 +654,28 @@ func (c *Client) SubscribeWS(ctx context.Context, query string) (*coretypes.Resu
 	if !c.IsRunning() {
 		return nil, fmt.Errorf("light RPC client is not running")
 	}
-	bctx := c.serviceCtx
+	bctx, cancel := context.WithCancel(c.serviceCtx)
 
 	callInfo := rpctypes.GetCallInfo(ctx)
+	stopCancel := context.AfterFunc(callInfo.WSConn.Context(), cancel)
 	out, err := c.next.Subscribe(bctx, callInfo.RemoteAddr(), query) //nolint:staticcheck
 	if err != nil {
+		stopCancel()
+		cancel()
 		return nil, err
 	}
 
+	done := make(chan struct{})
 	if !c.Go(bctx, func(bctx context.Context) {
+		defer close(done)
+		defer cancel()
+		defer stopCancel()
 		for {
 			select {
-			case resultEvent := <-out:
+			case resultEvent, ok := <-out:
+				if !ok {
+					return
+				}
 				// We should have a switch here that performs a validation
 				// depending on the event's type.
 				callInfo.WSConn.TryWriteRPCResponse(bctx, callInfo.RPCRequest.MakeResponse(resultEvent))
@@ -674,7 +684,15 @@ func (c *Client) SubscribeWS(ctx context.Context, query string) (*coretypes.Resu
 			}
 		}
 	}) {
+		stopCancel()
+		cancel()
 		return nil, fmt.Errorf("light RPC client is stopping")
+	}
+
+	if !callInfo.WSConn.Go(func(context.Context) { <-done }) {
+		cancel()
+		<-done
+		return nil, fmt.Errorf("websocket session is stopping")
 	}
 
 	return &coretypes.ResultSubscribe{}, nil
