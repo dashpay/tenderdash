@@ -102,7 +102,11 @@ type Executor interface {
 		lastCommit types.VerifiedCommit,
 	) (State, error)
 
-	// An empty ValidatorProTxHash verifies a complete commit vector after ProcessProposal.
+	// VerifyVoteExtension asks the application to verify vote extensions: those
+	// of one validator's precommit when vote.ValidatorProTxHash is set, or a
+	// commit's threshold-recovered vector, after ProcessProposal of its block,
+	// when it is empty. It returns an error on REJECT and panics if the ABCI
+	// call itself fails.
 	VerifyVoteExtension(ctx context.Context, vote *types.Vote) error
 }
 
@@ -650,8 +654,11 @@ func (blockExec *BlockExecutor) ApplyBlock(
 	return state, err
 }
 
-// VerifyCommitExtensions checks the complete commit vector against the processed block's application context.
-// The empty validator identity distinguishes a quorum commit from an individual precommit.
+// VerifyCommitExtensions asks the application to accept commit's
+// threshold-recovered extension vector. Callers run it after ProcessProposal of
+// the committed block and before saving or finalizing it. The canonical vote it
+// sends has an empty ValidatorProTxHash, which tells the application that this
+// is a commit rather than one validator's precommit.
 func VerifyCommitExtensions(ctx context.Context, executor Executor, commit *types.Commit) error {
 	vote, err := commit.GetCanonicalVote()
 	if err != nil {

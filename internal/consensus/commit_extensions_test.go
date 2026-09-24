@@ -66,6 +66,14 @@ func TestCommitExtensionsRejectedBeforeSaveAndRetried(t *testing.T) {
 				ctx = dash.ContextWithProTxHash(ctx, n.node.privValidator.ProTxHash)
 				ctx = msgInfoWithCtx(ctx, msgInfo{Msg: &CommitMessage{bad}, PeerID: n.peerID})
 				parked := path == "parked" || path == "future" || path == "replay"
+				checker.onVerify = func(*types.Vote) {
+					if !parked {
+						require.Nil(t, sd.Commit, "an unverified commit must not be published in the round state")
+					}
+				}
+				checker.onFinalize = func(commit *types.Commit) {
+					require.Same(t, commit, sd.Commit, "the accepted commit must be published in the round state")
+				}
 				if !parked {
 					sd.ProposalBlock, sd.ProposalBlockParts = n.block, n.parts
 				}
@@ -88,7 +96,7 @@ func TestCommitExtensionsRejectedBeforeSaveAndRetried(t *testing.T) {
 				require.Zero(t, n.node.blockStore.Height())
 				require.Equal(t, n.block.Height, sd.Height)
 				require.Nil(t, sd.Commit, "a rejected parked commit must not block a replacement")
-				require.NoError(t, sd.Save())
+				// The persisted copy, not sd: a restart must not resume the rejected commit.
 				sd = n.node.GetStateData()
 				require.Nil(t, sd.Commit)
 				require.Less(t, sd.Step, cstypes.RoundStepApplyCommit)
@@ -103,6 +111,8 @@ func TestCommitExtensionsRejectedBeforeSaveAndRetried(t *testing.T) {
 	}
 }
 
+// commitCheckingExecutor plays an application that accepts only the expected
+// commit extension vector. Individual precommits go to the wrapped executor.
 type commitCheckingExecutor struct {
 	sm.Executor
 	t        *testing.T
@@ -111,22 +121,46 @@ type commitCheckingExecutor struct {
 	expected []*abci.ExtendVoteExtension
 	store    sm.BlockStore
 	calls    []string
+	// onVerify and onFinalize observe the node while it applies a commit.
+	onVerify   func(vote *types.Vote)
+	onFinalize func(commit *types.Commit)
+	// rejectAll rejects every commit vector, however correct.
+	rejectAll bool
+	// processed remembers each round's result: like Drive, and unlike the
+	// kvstore app, the application processes a block again after proposing in a
+	// later round.
+	processed map[int32]sm.CurrentRoundState
 }
 
 func (e *commitCheckingExecutor) ProcessProposal(ctx context.Context, block *types.Block, round int32,
 	state sm.State, verify bool, last types.VerifiedCommit) (sm.CurrentRoundState, error) {
 	e.calls = append(e.calls, "process")
-	return e.Executor.ProcessProposal(ctx, block, round, state, verify, last)
+	if crs, ok := e.processed[round]; ok {
+		return crs, nil
+	}
+	crs, err := e.Executor.ProcessProposal(ctx, block, round, state, verify, last)
+	if err == nil {
+		if e.processed == nil {
+			e.processed = map[int32]sm.CurrentRoundState{}
+		}
+		e.processed[round] = crs
+	}
+	return crs, err
 }
 
-func (e *commitCheckingExecutor) VerifyVoteExtension(_ context.Context, vote *types.Vote) error {
+func (e *commitCheckingExecutor) VerifyVoteExtension(ctx context.Context, vote *types.Vote) error {
+	if len(vote.ValidatorProTxHash) != 0 {
+		return e.Executor.VerifyVoteExtension(ctx, vote)
+	}
 	require.Zero(e.t, e.store.Height(), "verification must precede persistence")
-	require.Empty(e.t, vote.ValidatorProTxHash)
 	require.Equal(e.t, e.block.Hash(), vote.BlockID.Hash)
 	require.Equal(e.t, e.block.Height, vote.Height)
 	require.Equal(e.t, e.round, vote.Round)
 	e.calls = append(e.calls, "verify")
-	if !reflect.DeepEqual(e.expected, vote.VoteExtensions.ToExtendProto()) {
+	if e.onVerify != nil {
+		e.onVerify(vote)
+	}
+	if e.rejectAll || !reflect.DeepEqual(e.expected, vote.VoteExtensions.ToExtendProto()) {
 		return errors.New("invalid vote extension")
 	}
 	return nil
@@ -136,6 +170,9 @@ func (e *commitCheckingExecutor) FinalizeBlock(ctx context.Context, state sm.Sta
 	id types.BlockID, block *types.Block, commit *types.Commit, last types.VerifiedCommit) (sm.State, *abci.ResponseFinalizeBlock, error) {
 	require.Equal(e.t, block.Height, e.store.Height(), "save must still precede finalization")
 	e.calls = append(e.calls, "finalize")
+	if e.onFinalize != nil {
+		e.onFinalize(commit)
+	}
 	return e.Executor.FinalizeBlock(ctx, state, rs, id, block, commit, last)
 }
 

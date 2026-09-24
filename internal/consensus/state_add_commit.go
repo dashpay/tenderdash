@@ -34,10 +34,13 @@ func (c *AddCommitAction) Execute(ctx context.Context, stateEvent StateEvent) er
 	}
 
 	// updateStateData clears ProposalBlock when the round state was holding some
-	// other block, having pointed the part set at the committed one instead. There
-	// is nothing to apply until that block arrives, and its completing part
-	// dispatches this event again.
+	// other block, having pointed the part set at the committed one instead.
+	// Both callers normally rule this out: TryAddCommit dispatches only for a
+	// held block, and a completing part dispatches the commit parked for it.
+	// Should it happen, the commit is parked here, because a completing part
+	// dispatches this event again only for stateData.Commit.
 	if stateData.ProposalBlock == nil {
+		stateData.Commit = commit
 		log.FromCtxOrNop(ctx).Debug("commit is for a block we do not have yet; waiting for it",
 			"height", commit.Height,
 			"round", commit.Round,

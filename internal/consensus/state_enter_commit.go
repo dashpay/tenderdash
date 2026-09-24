@@ -5,7 +5,6 @@ import (
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	"github.com/dashpay/tenderdash/libs/log"
-	tmtime "github.com/dashpay/tenderdash/libs/time"
 )
 
 type EnterCommitEvent struct {
@@ -52,13 +51,15 @@ func (c *EnterCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 	defer func() {
 		// Done enterCommit:
 		// keep c.Round the same, commitRound points to the right Precommits set.
-		stateData.updateRoundStep(stateData.Round, cstypes.RoundStepApplyCommit)
-		stateData.CommitRound = commitRound
-		stateData.CommitTime = tmtime.Now()
+		stateData.enterApplyCommit(commitRound)
 		c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
 
-		// Maybe finalize immediately.
-		_ = stateEvent.Ctrl.Dispatch(ctx, &TryFinalizeCommitEvent{Height: height}, stateData)
+		// Maybe finalize immediately. A failure has already been handled where it
+		// happened; it is logged here because the vote that got us here is not
+		// at fault.
+		if err := stateEvent.Ctrl.Dispatch(ctx, &TryFinalizeCommitEvent{Height: height}, stateData); err != nil {
+			logger.Error("failed to finalize commit", "error", err)
+		}
 	}()
 
 	blockID, ok := stateData.Votes.Precommits(commitRound).TwoThirdsMajority()

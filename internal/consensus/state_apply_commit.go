@@ -4,17 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/log"
-	tmtime "github.com/dashpay/tenderdash/libs/time"
 	"github.com/dashpay/tenderdash/types"
 )
 
 type ApplyCommitEvent struct {
 	Commit *types.Commit
+	// FromOwnPrecommits marks a commit this node assembled from its own +2/3
+	// precommits, which there is no point assembling again if it is rejected.
+	FromOwnPrecommits bool
 }
 
 // GetType returns ApplyCommitType event-type
@@ -32,6 +33,7 @@ type ApplyCommitAction struct {
 	scheduler      *roundScheduler
 	metrics        *Metrics
 	eventPublisher *EventPublisher
+	candidates     *commitCandidates
 }
 
 func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) error {
@@ -65,26 +67,20 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 	c.blockExec.mustValidate(ctx, stateData)
 
 	if commit != nil {
+		// The application must accept the commit's extension vector before the
+		// block and commit are persisted or finalized. Until it does, the commit
+		// is not published in stateData.Commit, unless adoptCommit parked it there
+		// while its block was missing; TryAddCommit's parked-commit guard keeps
+		// other commits out meanwhile.
 		if err := sm.VerifyCommitExtensions(ctx, c.blockExec.blockExec, commit); err != nil {
-			// Retain the processed block, but allow a replacement for a rejected parked commit.
-			stateData.Commit = nil
-			stateData.CommitRound = -1
-			stateData.CommitTime = time.Time{}
-			stateData.updateRoundStep(stateData.Round, cstypes.RoundStepPrecommit)
-			c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
-			return errors.Join(err, stateData.Save())
+			err = errors.Join(err, c.discardRejectedCommit(stateData))
+			c.recoverFromRejectedCommit(ctx, stateEvent.Ctrl, stateData, commit, event.FromOwnPrecommits)
+			return err
 		}
 		stateData.Commit = commit
-		if stateData.Step != cstypes.RoundStepApplyCommit || stateData.CommitRound != commit.Round {
-			stateData.updateRoundStep(stateData.Round, cstypes.RoundStepApplyCommit)
-			stateData.CommitRound = commit.Round
-			stateData.CommitTime = tmtime.Now()
+		if stateData.enterApplyCommit(commit.Round) {
 			c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
 		}
-	}
-
-	// Save to blockStore
-	if commit != nil {
 		c.blockStore.SaveBlock(block, blockParts, commit)
 	}
 
@@ -152,6 +148,87 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 	// * c.Step is now cstypes.RoundStepNewHeight
 	// * c.StartTime is set to when we will start round0.
 	return nil
+}
+
+// discardRejectedCommit keeps the processed block but forgets the commit, so a
+// replacement for the same block can be applied without processing it again.
+func (c *ApplyCommitAction) discardRejectedCommit(stateData *StateData) error {
+	stateData.discardCommit()
+	if stateData.Step == cstypes.RoundStepApplyCommit {
+		// Only EnterCommit, on +2/3 precommits for the block, reaches this step
+		// before a commit is accepted, so the round had at least reached Precommit.
+		stateData.updateRoundStep(stateData.Round, cstypes.RoundStepPrecommit)
+		c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
+	}
+	return stateData.Save()
+}
+
+// recoverFromRejectedCommit finds another way to finish the height after a
+// commit's extensions were rejected. In order, it tries:
+//
+//  1. the commits peers sent while the rejected one was parked, which they will
+//     not send again (see commitCandidates);
+//  2. this node's own +2/3 precommits for the block, if the rejected commit did
+//     not come from them;
+//  3. the next round: a precommit-wait timeout, whose handler moves the round
+//     on even from a step whose own timeouts have already fired. The new round
+//     clears every peer's record of having sent us a commit, so peers that
+//     have one gossip it again.
+//
+// Replacements go through the same verification as a commit received from the
+// network. Any of them that is rejected lands back here while the loop is
+// running and returns at once, so recovery is iterative. Nothing is applied
+// twice: success moves stateData to the next height, which ends the loop and
+// makes the remaining candidates stale.
+func (c *ApplyCommitAction) recoverFromRejectedCommit(
+	ctx context.Context,
+	ctrl *Controller,
+	stateData *StateData,
+	rejected *types.Commit,
+	fromOwnPrecommits bool,
+) {
+	if c.candidates.recovering {
+		return
+	}
+	c.candidates.recovering = true
+	defer func() { c.candidates.recovering = false }()
+
+	height := stateData.Height
+	pending := func() bool { return stateData.Height == height && stateData.Commit == nil }
+
+	for pending() {
+		candidate, ok := c.candidates.pop(height)
+		if !ok {
+			break
+		}
+		candidateCtx := msgInfoWithCtx(ctx, msgInfo{Msg: &CommitMessage{candidate.commit}, PeerID: candidate.peerID})
+		err := ctrl.Dispatch(candidateCtx, &TryAddCommitEvent{
+			Commit:     candidate.commit,
+			PeerID:     candidate.peerID,
+			FromReplay: candidate.fromReplay,
+		}, stateData)
+		if err != nil {
+			c.logger.Debug("commit received while another was parked cannot replace it",
+				"height", height, "peer", candidate.peerID, "error", err)
+		}
+	}
+
+	if pending() && !fromOwnPrecommits {
+		blockID, ok := stateData.Votes.Precommits(rejected.Round).TwoThirdsMajority()
+		if ok && blockID.Equals(rejected.BlockID) {
+			err := ctrl.Dispatch(ctx, &EnterCommitEvent{Height: height, CommitRound: rejected.Round}, stateData)
+			if err != nil {
+				c.logger.Error("cannot commit from own precommits", "height", height, "error", err)
+			}
+		}
+	}
+
+	if pending() {
+		c.logger.Info("no replacement for the rejected commit; moving to the next round",
+			"height", height, "round", stateData.Round)
+		c.scheduler.ScheduleTimeout(stateData.voteTimeout(stateData.Round),
+			height, stateData.Round, cstypes.RoundStepPrecommitWait)
+	}
 }
 
 func (c *ApplyCommitAction) RecordMetrics(stateData *StateData, height int64, block *types.Block, lastBlockMeta *types.BlockMeta) {

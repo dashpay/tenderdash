@@ -56,12 +56,11 @@ func (cs *TryFinalizeCommitAction) Execute(ctx context.Context, stateEvent State
 		return nil
 	}
 
-	cs.finalizeCommit(ctx, stateEvent.Ctrl, stateData, event.Height)
-	return nil
+	return cs.finalizeCommit(ctx, stateEvent.Ctrl, stateData, event.Height)
 }
 
 // Increment height and goto cstypes.RoundStepNewHeight
-func (cs *TryFinalizeCommitAction) finalizeCommit(ctx context.Context, ctrl *Controller, stateData *StateData, height int64) {
+func (cs *TryFinalizeCommitAction) finalizeCommit(ctx context.Context, ctrl *Controller, stateData *StateData, height int64) error {
 	logger := cs.logger.With("height", height)
 
 	if stateData.Height != height || stateData.Step != cstypes.RoundStepApplyCommit {
@@ -69,7 +68,7 @@ func (cs *TryFinalizeCommitAction) finalizeCommit(ctx context.Context, ctrl *Con
 			"entering finalize commit step",
 			"current", fmt.Sprintf("%v/%v/%v", stateData.Height, stateData.Round, stateData.Step),
 		)
-		return
+		return nil
 	}
 
 	blockID, ok := stateData.Votes.Precommits(stateData.CommitRound).TwoThirdsMajority()
@@ -97,5 +96,5 @@ func (cs *TryFinalizeCommitAction) finalizeCommit(ctx context.Context, ctrl *Con
 
 	precommits := stateData.Votes.Precommits(stateData.CommitRound)
 	seenCommit := precommits.MakeCommit()
-	_ = ctrl.Dispatch(ctx, &ApplyCommitEvent{Commit: seenCommit}, stateData)
+	return ctrl.Dispatch(ctx, &ApplyCommitEvent{Commit: seenCommit, FromOwnPrecommits: true}, stateData)
 }

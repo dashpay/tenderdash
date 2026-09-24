@@ -74,6 +74,7 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo], prop
 		eventPublisher: cs.eventPublisher,
 	}
 	ctrl := &Controller{}
+	candidates := &commitCandidates{}
 	ctrl.actions = map[EventType]ActionHandler{
 		EnterNewRoundType: &EnterNewRoundAction{
 			logger:         cs.logger,
@@ -124,6 +125,7 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo], prop
 			peerErrorQueue:     cs.peerErrorQueue,
 			metrics:            cs.metrics,
 			verificationBudget: cs.verificationBudget,
+			candidates:         candidates,
 		},
 		AddCommitType: &AddCommitAction{
 			eventPublisher:  cs.eventPublisher,
@@ -138,6 +140,7 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo], prop
 			scheduler:      cs.roundScheduler,
 			metrics:        cs.metrics,
 			eventPublisher: cs.eventPublisher,
+			candidates:     candidates,
 		},
 		TryFinalizeCommitType: &TryFinalizeCommitAction{
 			logger:     cs.logger,
