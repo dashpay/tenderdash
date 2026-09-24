@@ -72,6 +72,7 @@ func (app *inconsistentProposalApp) ProcessProposal(
 func TestBlockApplierApply(t *testing.T) {
 	ctx := context.Background()
 	mockBlockExec := mocks.NewExecutor(t)
+	mockBlockExec.On("VerifyVoteExtension", mock.Anything, mock.Anything).Maybe().Return(nil)
 	mockBlockStore := mocks.NewBlockStore(t)
 	valSet, privVals := factory.MockValidatorSet()
 	initialState := fakeInitialState(valSet)
@@ -243,6 +244,7 @@ func TestApplyStatsSubMillisecondPreserved(t *testing.T) {
 func TestBlockApplierDoesNotSaveBlockRejectedByApp(t *testing.T) {
 	ctx := context.Background()
 	mockBlockExec := mocks.NewExecutor(t)
+	mockBlockExec.On("VerifyVoteExtension", mock.Anything, mock.Anything).Maybe().Return(nil)
 	// no SaveBlock expectation: the store must not be touched at all, and the
 	// mock fails the test on any call it was not told to expect
 	mockBlockStore := mocks.NewBlockStore(t)
@@ -277,6 +279,7 @@ func TestBlockApplierDoesNotSaveBlockRejectedByApp(t *testing.T) {
 func TestBlockApplierSavesBlockBeforeFinalize(t *testing.T) {
 	ctx := context.Background()
 	mockBlockExec := mocks.NewExecutor(t)
+	mockBlockExec.On("VerifyVoteExtension", mock.Anything, mock.Anything).Maybe().Return(nil)
 	mockBlockStore := mocks.NewBlockStore(t)
 	valSet, privVals := factory.MockValidatorSet()
 	initialState := fakeInitialState(valSet)
@@ -323,6 +326,7 @@ func TestBlockApplierSavesBlockBeforeFinalize(t *testing.T) {
 func TestBlockApplierRecordsStageMetrics(t *testing.T) {
 	ctx := context.Background()
 	mockBlockExec := mocks.NewExecutor(t)
+	mockBlockExec.On("VerifyVoteExtension", mock.Anything, mock.Anything).Maybe().Return(nil)
 	mockBlockStore := mocks.NewBlockStore(t)
 	valSet, privVals := factory.MockValidatorSet()
 	initialState := fakeInitialState(valSet)
@@ -382,6 +386,7 @@ func TestBlockApplierRecordsStageMetrics(t *testing.T) {
 func TestBlockApplierVerifyFailureTimesOnlyTheCheckThatRan(t *testing.T) {
 	ctx := context.Background()
 	mockBlockExec := mocks.NewExecutor(t)
+	mockBlockExec.On("VerifyVoteExtension", mock.Anything, mock.Anything).Maybe().Return(nil)
 	mockBlockStore := mocks.NewBlockStore(t)
 	valSet, privVals := factory.MockValidatorSet()
 	initialState := fakeInitialState(valSet)
@@ -433,6 +438,7 @@ func TestBlockApplierOffersTheVerifiedCommitForward(t *testing.T) {
 	// verification because there is no previous commit
 	applyH1 := func(t *testing.T) (*blockApplier, *mocks.Executor) {
 		blockExec := mocks.NewExecutor(t)
+		blockExec.On("VerifyVoteExtension", mock.Anything, mock.Anything).Maybe().Return(nil)
 		blockStore := mocks.NewBlockStore(t)
 		blockStore.On("SaveBlock", mock.Anything, mock.Anything, mock.Anything).Maybe()
 		blockExec.On("VerifyCommit", mock.Anything, blockH1ID, blockH1.Height, commitH1).Once().Return(verifiedH1, nil)

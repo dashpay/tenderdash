@@ -68,6 +68,7 @@ func (suite *SynchronizerTestSuite) SetupTest() {
 	suite.client = clientmocks.NewBlockClient(suite.T())
 	suite.store = mocks.NewBlockStore(suite.T())
 	suite.blockExec = mocks.NewExecutor(suite.T())
+	suite.blockExec.On("VerifyVoteExtension", mock.Anything, mock.Anything).Maybe().Return(nil)
 }
 
 func (suite *SynchronizerTestSuite) TestBasic() {

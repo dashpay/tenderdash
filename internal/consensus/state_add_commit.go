@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	"github.com/dashpay/tenderdash/libs/log"
-	tmtime "github.com/dashpay/tenderdash/libs/time"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -47,11 +45,6 @@ func (c *AddCommitAction) Execute(ctx context.Context, stateEvent StateEvent) er
 		)
 		return nil
 	}
-
-	stateData.updateRoundStep(stateData.Round, cstypes.RoundStepApplyCommit)
-	stateData.CommitRound = commit.Round
-	stateData.CommitTime = tmtime.Now()
-	c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
 
 	// The commit is all good, let's apply it to the state
 	if err := stateEvent.Ctrl.Dispatch(ctx, &ApplyCommitEvent{Commit: commit}, stateData); err != nil {

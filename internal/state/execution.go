@@ -102,6 +102,7 @@ type Executor interface {
 		lastCommit types.VerifiedCommit,
 	) (State, error)
 
+	// An empty ValidatorProTxHash verifies a complete commit vector after ProcessProposal.
 	VerifyVoteExtension(ctx context.Context, vote *types.Vote) error
 }
 
@@ -641,9 +642,25 @@ func (blockExec *BlockExecutor) ApplyBlock(
 	if err != nil {
 		return state, err
 	}
+	if err := VerifyCommitExtensions(ctx, blockExec, commit); err != nil {
+		return state, err
+	}
 	// Replay never proposes, so the response hints are not needed here.
 	state, _, err = blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, commit, lastCommit)
 	return state, err
+}
+
+// VerifyCommitExtensions checks the complete commit vector against the processed block's application context.
+// The empty validator identity distinguishes a quorum commit from an individual precommit.
+func VerifyCommitExtensions(ctx context.Context, executor Executor, commit *types.Commit) error {
+	vote, err := commit.GetCanonicalVote()
+	if err != nil {
+		return fmt.Errorf("invalid commit extensions: %w", err)
+	}
+	if err := executor.VerifyVoteExtension(ctx, vote); err != nil {
+		return fmt.Errorf("commit extensions rejected: %w", err)
+	}
+	return nil
 }
 
 // ExtendVote gets vote-extensions from ABCI and updates vote.VoteExtensions with this value

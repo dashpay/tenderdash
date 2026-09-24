@@ -104,6 +104,9 @@ func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *ty
 	if err != nil {
 		panic(fmt.Sprintf("failed to process committed block (%d:%X): %v", block.Height, block.Hash(), err))
 	}
+	if err := sm.VerifyCommitExtensions(ctx, e.blockExec, commit); err != nil {
+		return err
+	}
 	processTime := time.Since(start)
 
 	start = time.Now()

@@ -471,6 +471,16 @@ a [CanonicalVoteExtension](#canonicalvoteextension) field in the `precommit nil`
 
 ### VerifyVoteExtension
 
+An empty `validator_pro_tx_hash` identifies a **commit verification**, rather than
+an individual validator's vote. Tenderdash submits the complete threshold
+extension list, including an empty list, after `ProcessProposal` for the same
+block hash, height and commit round. Consensus and block sync require `ACCEPT`
+before saving the block and commit or calling `FinalizeBlock`; replay also
+checks before finalization. The application must check the complete list against
+the expected extensions for that block. `REJECT` discards the commit and permits
+a replacement for the same block without finalizing or discarding its prepared
+application state. Transport errors retain their fatal error semantics.
+
 #### Parameters and Types
 
 * **Request**:
@@ -478,7 +488,7 @@ a [CanonicalVoteExtension](#canonicalvoteextension) field in the `precommit nil`
     | Name                  | Type                                        | Description                                                                                   | Field Number |
     |-----------------------|---------------------------------------------|-----------------------------------------------------------------------------------------------|--------------|
     | hash                  | bytes                                       | The header hash of the propsed block that the vote extensions refers to.                      | 1            |
-    | validator_pro_tx_hash | bytes                                       | [ProTxHash](../core/data_structures.md#protxhash) of the validator that signed the extensions | 2            |
+    | validator_pro_tx_hash | bytes                                       | [ProTxHash](../core/data_structures.md#protxhash) of the signer; empty for commit verification | 2            |
     | height                | int64                                       | Height of the block  (for sanity check).                                                      | 3            |
     | vote_extensions       | [ExtendVoteExtension](#extendvoteextension) | Application-specific information signed by Tendermint. Can have 0 length                      | 4            |
 

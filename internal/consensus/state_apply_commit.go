@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -60,6 +63,25 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 
 	c.blockExec.mustEnsureProcess(ctx, &stateData.RoundState, round)
 	c.blockExec.mustValidate(ctx, stateData)
+
+	if commit != nil {
+		if err := sm.VerifyCommitExtensions(ctx, c.blockExec.blockExec, commit); err != nil {
+			// Retain the processed block, but allow a replacement for a rejected parked commit.
+			stateData.Commit = nil
+			stateData.CommitRound = -1
+			stateData.CommitTime = time.Time{}
+			stateData.updateRoundStep(stateData.Round, cstypes.RoundStepPrecommit)
+			c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
+			return errors.Join(err, stateData.Save())
+		}
+		stateData.Commit = commit
+		if stateData.Step != cstypes.RoundStepApplyCommit || stateData.CommitRound != commit.Round {
+			stateData.updateRoundStep(stateData.Round, cstypes.RoundStepApplyCommit)
+			stateData.CommitRound = commit.Round
+			stateData.CommitTime = tmtime.Now()
+			c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
+		}
+	}
 
 	// Save to blockStore
 	if commit != nil {
