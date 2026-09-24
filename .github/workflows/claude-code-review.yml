@@ -39,23 +39,39 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
-          deadline=$((SECONDS + 110 * 60))
+          start=$SECONDS
+          deadline=$((start + 110 * 60))
+          # tests.yml triggers on every pull_request, so a run must show up
+          # quickly; fail fast if it never does (renamed workflow, trigger drift).
+          appear_deadline=$((start + 15 * 60))
           while :; do
-            run=$(gh run list -R "$REPO" --workflow tests.yml --commit "$SHA" \
-              --event pull_request --limit 1 \
-              --json databaseId,status,conclusion --jq '.[0] // empty')
+            # Tolerate transient API errors; the poll loop retries.
+            if ! run=$(gh run list -R "$REPO" --workflow tests.yml \
+              --commit "$SHA" --branch "$HEAD_REF" --event pull_request \
+              --limit 1 --json databaseId,status,conclusion \
+              --jq '.[0] // empty'); then
+              echo "::warning::gh run list failed; retrying"
+              run=""
+            fi
             if [ -n "$run" ] && [ "$(jq -r .status <<<"$run")" = completed ]; then
               conclusion=$(jq -r .conclusion <<<"$run")
               echo "tests.yml run $(jq -r .databaseId <<<"$run"): $conclusion"
               if [ "$conclusion" = success ]; then
                 echo "green=true" >>"$GITHUB_OUTPUT"
               else
-                echo "::notice::tests.yml concluded '$conclusion' for $SHA; skipping review"
+                msg="tests.yml concluded '$conclusion' for $SHA; Claudius review skipped"
+                echo "::warning::$msg"
+                echo "⚠️ $msg" >>"$GITHUB_STEP_SUMMARY"
                 echo "green=false" >>"$GITHUB_OUTPUT"
               fi
               exit 0
+            fi
+            if [ -z "$run" ] && [ "$SECONDS" -ge "$appear_deadline" ]; then
+              echo "::error::No tests.yml run found for $SHA after 15 min"
+              exit 1
             fi
             if [ "$SECONDS" -ge "$deadline" ]; then
               echo "::error::Timed out waiting for tests.yml on $SHA"
