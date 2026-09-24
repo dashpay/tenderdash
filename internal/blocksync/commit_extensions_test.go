@@ -50,3 +50,20 @@ func TestBlockApplierRejectsCommitExtensionsAndRetries(t *testing.T) {
 	require.NoError(t, applier.Apply(ctx, block, commit))
 	require.Equal(t, []string{"process", "verify", "process", "verify", "save", "finalize"}, calls)
 }
+
+// acceptCommitExtensions plays an application that accepts every commit
+// extension vector. Each given SaveBlock expectation must wait for that check:
+// an unverified vector must never reach the store. Without saves the check is
+// optional, for tests that never get as far as applying a block.
+func acceptCommitExtensions(exec *mocks.Executor, saves ...*mock.Call) *mock.Call {
+	verify := exec.On("VerifyVoteExtension", mock.Anything, mock.MatchedBy(func(vote *types.Vote) bool {
+		return len(vote.ValidatorProTxHash) == 0
+	})).Return(nil)
+	if len(saves) == 0 {
+		return verify.Maybe()
+	}
+	for _, save := range saves {
+		save.NotBefore(verify)
+	}
+	return verify
+}
