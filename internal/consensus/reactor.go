@@ -261,7 +261,8 @@ type Reactor struct {
 	clock clockwork.Clock
 
 	// Context for controlling reactor goroutines
-	ctx context.Context
+	ctx         context.Context
+	peerUpdates *p2p.PeerUpdates
 }
 
 // NewReactor returns a reference to a new consensus reactor, which implements
@@ -305,11 +306,13 @@ type channelBundle struct {
 	voteSet p2p.Channel
 }
 
-// OnStart starts separate go routines for each p2p Channel and listens for
-// envelopes on each. In addition, it also listens for peer updates and handles
-// messages on that p2p channel accordingly. The caller must be sure to execute
-// OnStop to ensure the outbound p2p Channels are closed.
-func (r *Reactor) OnStart(ctx context.Context) error {
+// OnStart starts channel, peer-update and gossip workers owned by the reactor.
+func (r *Reactor) OnStart(ctx context.Context) (err error) {
+	defer func() {
+		if err != nil {
+			r.closeOwnedHelpers()
+		}
+	}()
 	r.logger.Trace("consensus wait sync", "wait_sync", r.WaitSync())
 
 	r.ctx = ctx
@@ -347,9 +350,9 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	r.maj23SurplusLimit = newMaj23SurplusLimiter()
 
 	peerUpdates := r.peerEvents(r.ctx, "consensus")
+	r.peerUpdates = peerUpdates
 
 	var chBundle channelBundle
-	var err error
 
 	chans := p2p.ConsensusChannelDescriptors()
 	chBundle.state, err = r.chCreator(r.ctx, chans[p2p.ConsensusStateChannel])
@@ -411,7 +414,22 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 func (r *Reactor) OnStop() { r.state.Stop() }
 
 // OnDrain joins consensus after channel and peer workers have finished.
-func (r *Reactor) OnDrain() { r.state.Stop(); r.state.Wait() }
+func (r *Reactor) OnDrain() {
+	r.state.Stop()
+	r.state.Wait()
+	r.closeOwnedHelpers()
+}
+
+func (r *Reactor) closeOwnedHelpers() {
+	if r.peerUpdates != nil {
+		r.peerUpdates.Close()
+	}
+	for _, limiter := range []*client.RateLimit{r.voteRateLimit, r.dataRateLimit, r.stateRateLimit, r.maj23PeerShare} {
+		if limiter != nil {
+			limiter.Close()
+		}
+	}
+}
 
 // WaitSync returns whether the consensus reactor is waiting for state/block sync.
 func (r *Reactor) WaitSync() bool {
@@ -598,10 +616,7 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 
 	switch peerUpdate.Status {
 	case p2p.PeerStatusUp:
-		// Do not allow starting new broadcasting goroutines after reactor shutdown
-		// has been initiated. This can happen after we've manually closed all
-		// peer goroutines, but the router still sends in-flight peer updates.
-		if !r.IsRunning() {
+		if ctx.Err() != nil {
 			return
 		}
 		r.peerUp(ctx, peerUpdate, chans)

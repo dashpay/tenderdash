@@ -236,3 +236,33 @@ func TestStartContextPreservesValuesAndDeadline(t *testing.T) {
 	s.Wait()
 	require.NoError(t, parent.Err())
 }
+
+func TestFailedStartupRacingStopSkipsShutdownHooks(t *testing.T) {
+	entered, cleaning, release := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	s := &finalizingService{lifecycleService: newLifecycleService(t)}
+	s.BaseService = NewBaseService(log.NewNopLogger(), t.Name(), s)
+	s.stop = func() { t.Error("OnStop called for failed startup") }
+	s.drain = func() { t.Error("OnDrain called for failed startup") }
+	s.start = func(ctx context.Context) error {
+		s.Go(ctx, func(ctx context.Context) { <-ctx.Done(); close(cleaning); <-release })
+		close(entered)
+		<-ctx.Done()
+		return context.DeadlineExceeded
+	}
+	started := make(chan error, 1)
+	go func() { started <- s.Start(context.Background()) }()
+	<-entered
+	s.Stop()
+	<-cleaning
+	waited := make(chan struct{})
+	go func() { s.Wait(); close(waited) }()
+	assertPending(t, waited)
+	if len(started) != 0 {
+		t.Error("failed Start returned before cleanup")
+	}
+	close(release)
+	require.ErrorIs(t, <-started, context.DeadlineExceeded)
+	<-waited
+	s.Wait()
+	require.False(t, s.IsRunning())
+}

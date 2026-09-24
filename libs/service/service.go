@@ -41,11 +41,12 @@ type Finalizer interface {
 type attemptKey struct{}
 
 type serviceAttempt struct {
-	cancel   context.CancelFunc
-	done     chan struct{}
-	workers  stdsync.WaitGroup
-	starting bool
-	stopping bool
+	cancel     context.CancelFunc
+	stoppingCh <-chan struct{}
+	done       chan struct{}
+	workers    stdsync.WaitGroup
+	starting   bool
+	stopping   bool
 }
 
 // BaseService owns a service context and work registered through Go. Stop cancels
@@ -83,7 +84,7 @@ func (bs *BaseService) Start(ctx context.Context) error {
 		return err
 	}
 	workCtx, cancel := context.WithCancel(ctx)
-	a := &serviceAttempt{cancel: cancel, done: make(chan struct{}), starting: true}
+	a := &serviceAttempt{cancel: cancel, stoppingCh: workCtx.Done(), done: make(chan struct{}), starting: true}
 	bs.attempt = a
 	workCtx = context.WithValue(workCtx, attemptKey{}, a)
 	bs.mtx.Unlock()
@@ -179,6 +180,17 @@ func (bs *BaseService) finishStop(a *serviceAttempt) {
 // IsRunning reports successful startup until shutdown is requested. False does
 // not imply cleanup has completed; use Wait before releasing owned resources.
 func (bs *BaseService) IsRunning() bool { return atomic.LoadUint32(&bs.running) == 1 }
+
+// Stopping signals context cancellation, not completed shutdown. It is nil
+// before Start and after a failed attempt has drained; use Wait for completion.
+func (bs *BaseService) Stopping() <-chan struct{} {
+	bs.mtx.Lock()
+	defer bs.mtx.Unlock()
+	if bs.attempt == nil {
+		return nil
+	}
+	return bs.attempt.stoppingCh
+}
 
 // Wait joins the current startup attempt, shutdown hooks and registered work.
 // It returns immediately before Start or after a failed Start has drained.

@@ -191,8 +191,6 @@ type State struct {
 	// proposer's latest available app protocol version that goes to block header
 	proposedAppVersion uint64
 
-	// wait the channel event happening for shutting down the state gracefully
-
 	msgInfoQueue   *msgInfoQueue
 	msgDispatcher  *msgInfoDispatcher
 	blockExecutor  *blockExecutor
@@ -584,12 +582,8 @@ func (cs *State) loadWalFile(ctx context.Context) error {
 // OnStop requests timeout worker shutdown. Wait also joins receiveRoutine.
 func (cs *State) OnStop() { cs.timeoutTicker.Stop() }
 
-// OnDrain joins child services before callers release consensus stores.
-func (cs *State) OnDrain() {
-	cs.timeoutTicker.Wait()
-	cs.wal.Stop()
-	cs.wal.Wait()
-}
+// OnDrain joins the timeout worker before callers release consensus stores.
+func (cs *State) OnDrain() { cs.timeoutTicker.Wait() }
 
 // OpenWAL opens a file to log all consensus messages and timeouts for
 // deterministic accountability.

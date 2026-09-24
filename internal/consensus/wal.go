@@ -182,14 +182,7 @@ func (wal *BaseWAL) OnStop() {
 }
 
 // OnDrain flushes and closes files after the flush worker has exited.
-func (wal *BaseWAL) OnDrain() {
-	if err := wal.FlushAndSync(); err != nil {
-		wal.logger.Error("error on flush data to disk", "error", err)
-	}
-	wal.group.Stop()
-	wal.group.Wait()
-	wal.group.Close()
-}
+func (wal *BaseWAL) OnDrain() { wal.group.Close() }
 
 // Write is called in newStep and for each receive on the
 // peerMsgQueue and the timeoutTicker.

@@ -97,7 +97,15 @@ func makeSeedNode(
 }
 
 // OnStart starts the Seed Node. It implements service.Service.
-func (n *seedNodeImpl) OnStart(ctx context.Context) error {
+func (n *seedNodeImpl) OnStart(ctx context.Context) (err error) {
+	ctx, cancelAttempt := context.WithCancel(ctx)
+	defer func() {
+		if err != nil {
+			cancelAttempt()
+			n.pexReactor.Wait()
+			n.router.Wait()
+		}
+	}()
 	if n.config.RPC.PprofListenAddress != "" {
 		startPProfServer(ctx, &n.BaseService, *n.config.RPC)
 	}

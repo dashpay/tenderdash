@@ -521,6 +521,9 @@ func (n *nodeImpl) OnStart(ctx context.Context) (err error) {
 			if routerStarted {
 				n.router.Wait()
 			}
+			if mp, ok := n.rpcEnv.Mempool.(*mempool.TxMempool); ok {
+				mp.StopRechecks()
+			}
 			n.rpcEnv.EventBus.Stop()
 			n.rpcEnv.EventBus.Wait()
 			dependencyCancel()
@@ -672,6 +675,9 @@ func (n *nodeImpl) OnStop() {
 			continue
 		}
 		reactor.Wait()
+	}
+	if mp, ok := n.rpcEnv.Mempool.(*mempool.TxMempool); ok {
+		mp.StopRechecks()
 	}
 	n.rpcEnv.EventBus.Stop()
 	n.rpcEnv.EventBus.Wait()
