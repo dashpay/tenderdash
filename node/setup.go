@@ -654,7 +654,7 @@ func createBlockReplayer(n *nodeImpl) *consensus.BlockReplayer {
 
 // startPrometheusServer starts a Prometheus HTTP server, listening for metrics
 // collectors on addr.
-func startPrometheusServer(ctx context.Context, cfg config.InstrumentationConfig) *http.Server {
+func startPrometheusServer(ctx context.Context, owner *service.BaseService, cfg config.InstrumentationConfig) *http.Server {
 	addr := cfg.PrometheusListenAddr
 	srv := &http.Server{
 		Addr:              addr,
@@ -667,48 +667,25 @@ func startPrometheusServer(ctx context.Context, cfg config.InstrumentationConfig
 		),
 	}
 
-	signal := make(chan struct{})
-	go func() {
-		select {
-		case <-ctx.Done():
-			sctx, scancel := context.WithTimeout(context.Background(), time.Second)
-			defer scancel()
-			_ = srv.Shutdown(sctx)
-		case <-signal:
-		}
-	}()
-
-	go func() {
-		if err := srv.ListenAndServe(); err != nil {
-			close(signal)
-		}
-	}()
+	startHTTPServer(ctx, owner, srv)
 
 	return srv
 }
 
 // startPProfServer creates a new pprof server
-// FIXME: implement as a Service
-func startPProfServer(ctx context.Context, cfg config.RPCConfig) {
-	signal := make(chan struct{})
+func startPProfServer(ctx context.Context, owner *service.BaseService, cfg config.RPCConfig) {
 	srv := &http.Server{
 		Addr:              cfg.PprofListenAddress,
 		ReadHeaderTimeout: httpReadHeaderTimeout,
 		Handler:           nil,
 	}
-	go func() {
-		select {
-		case <-ctx.Done():
-			sctx, scancel := context.WithTimeout(context.Background(), time.Second)
-			defer scancel()
-			_ = srv.Shutdown(sctx)
-		case <-signal:
-		}
-	}()
+	startHTTPServer(ctx, owner, srv)
+}
 
-	go func() {
-		if err := srv.ListenAndServe(); err != nil {
-			close(signal)
-		}
-	}()
+func startHTTPServer(ctx context.Context, owner *service.BaseService, srv *http.Server) {
+	owner.Go(ctx, func(ctx context.Context) {
+		<-ctx.Done()
+		_ = srv.Shutdown(context.Background())
+	})
+	owner.Go(ctx, func(context.Context) { _ = srv.ListenAndServe() })
 }

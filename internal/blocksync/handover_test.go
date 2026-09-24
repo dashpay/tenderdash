@@ -55,6 +55,11 @@ func TestSwitchToBlockSyncStartsAfterSnapshot(t *testing.T) {
 				executor: applier, synchronizer: synchronizer, blockSyncFlag: new(atomic.Bool),
 				eventBus: bus, statusUpdateInterval: time.Hour,
 			}
+			hooks := &handoverStartHook{start: func(ctx context.Context) { reactor.serviceCtx = ctx }}
+			reactor.BaseService = *service.NewBaseService(log.NewNopLogger(), "blocksync-test", hooks)
+			require.NoError(t, reactor.Start(ctx))
+			defer reactor.Wait()
+			defer cancel()
 			state := sm.State{InitialHeight: tc.initialHeight, LastBlockHeight: 100}
 			require.NoError(t, reactor.SwitchToBlockSync(ctx, state))
 			defer synchronizer.Wait()
@@ -155,6 +160,22 @@ func (c *handoverCapture) SwitchToConsensus(_ context.Context, state sm.State, s
 }
 
 type handoverStopHook struct{ fn func() }
+
+func TestSwitchToBlockSyncRejectsAfterStop(t *testing.T) {
+	reactor := &Reactor{blockSyncFlag: new(atomic.Bool)}
+	hooks := &handoverStartHook{start: func(ctx context.Context) { reactor.serviceCtx = ctx }}
+	reactor.BaseService = *service.NewBaseService(log.NewNopLogger(), "blocksync-test", hooks)
+	require.NoError(t, reactor.Start(context.Background()))
+	reactor.Stop()
+	reactor.Wait()
+	require.Error(t, reactor.SwitchToBlockSync(context.Background(), sm.State{}))
+	require.False(t, reactor.blockSyncFlag.Load())
+}
+
+type handoverStartHook struct{ start func(context.Context) }
+
+func (h *handoverStartHook) OnStart(ctx context.Context) error { h.start(ctx); return nil }
+func (*handoverStartHook) OnStop()                             {}
 
 func (*handoverStopHook) OnStart(context.Context) error { return nil }
 func (h *handoverStopHook) OnStop()                     { h.fn() }

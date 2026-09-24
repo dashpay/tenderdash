@@ -46,6 +46,7 @@ func NewSignerClient(ctx context.Context, endpoint *SignerListenerEndpoint, chai
 // Close closes the underlying connection
 func (sc *SignerClient) Close() error {
 	sc.endpoint.Stop()
+	sc.endpoint.Wait()
 	err := sc.endpoint.Close()
 	if err != nil {
 		return err

@@ -2,6 +2,7 @@ package privval
 
 import (
 	"context"
+	"io"
 	"net"
 	"testing"
 	"time"
@@ -27,6 +28,39 @@ var (
 type dialerTestCase struct {
 	addr   string
 	dialer SocketDialer
+}
+
+type observedListener struct {
+	net.Listener
+	accepted chan struct{}
+}
+
+func (l *observedListener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err == nil {
+		close(l.accepted)
+	}
+	return conn, err
+}
+
+func TestListenerStopClosesPendingConnection(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	observed := &observedListener{Listener: listener, accepted: make(chan struct{})}
+	endpoint := NewSignerListenerEndpoint(log.NewNopLogger(), observed, func(endpoint *SignerListenerEndpoint) {
+		endpoint.timeoutReadWrite = time.Hour
+	})
+	require.NoError(t, endpoint.Start(context.Background()))
+	t.Cleanup(func() { endpoint.Stop(); endpoint.Wait() })
+	conn, err := net.Dial("tcp", listener.Addr().String())
+	require.NoError(t, err)
+	defer conn.Close()
+	<-observed.accepted
+	endpoint.Stop()
+	endpoint.Wait()
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(time.Second)))
+	_, err = conn.Read(make([]byte, 1))
+	require.ErrorIs(t, err, io.EOF)
 }
 
 // TestSignerRemoteRetryTCPOnly will test connection retry attempts over TCP. We

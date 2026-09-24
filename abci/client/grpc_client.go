@@ -144,7 +144,13 @@ func (cli *grpcClient) streamClientInterceptor(ctx context.Context, desc *grpc.S
 	return streamer(ctx, desc, cc, method, opts...)
 }
 
-func (cli *grpcClient) OnStart(ctx context.Context) error {
+func (cli *grpcClient) OnStart(ctx context.Context) (startErr error) {
+	defer func() {
+		if startErr != nil && cli.conn != nil {
+			_ = cli.conn.Close()
+			cli.conn = nil
+		}
+	}()
 	timer := time.NewTimer(0)
 	defer timer.Stop()
 

@@ -73,19 +73,24 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	if !r.cfg.Broadcast {
 		r.logger.Info("tx broadcasting is disabled")
 	}
-	go func() {
+	r.Go(ctx, func(ctx context.Context) {
 		err := r.p2pClient.Consume(ctx, consumerHandler(ctx, r.logger, r.mempool.config, r.mempool, r.ids))
 		if err != nil {
 			r.logger.Error("failed to consume p2p checker messages", "error", err)
 		}
-	}()
-	go r.processPeerUpdates(ctx, r.peerEvents(ctx, "checker"))
+	})
+	updates := r.peerEvents(ctx, "checker")
+	if !r.Go(ctx, func(ctx context.Context) {
+		defer updates.Close()
+		r.processPeerUpdates(ctx, updates)
+	}) {
+		updates.Close()
+	}
 
 	return nil
 }
 
-// OnStop stops the reactor by signaling to all spawned goroutines to exit and
-// blocking until they all exit.
+// OnStop needs no additional cleanup after the service context is canceled.
 func (r *Reactor) OnStop() {}
 
 // processPeerUpdate processes a PeerUpdate. For added peers, PeerStatusUp, we
@@ -104,7 +109,7 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 		// Do not allow starting new tx broadcast loops after reactor shutdown
 		// has been initiated. This can happen after we've manually closed all
 		// peer broadcast, but the router still sends in-flight peer updates.
-		if !r.IsRunning() {
+		if ctx.Err() != nil {
 			return
 		}
 
@@ -121,7 +126,11 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 				r.ids.ReserveForPeer(peerUpdate.NodeID)
 
 				// start a broadcast routine ensuring all txs are forwarded to the peer
-				go r.broadcastTxRoutine(pctx, peerUpdate.NodeID)
+				if !r.Go(pctx, func(ctx context.Context) { r.broadcastTxRoutine(ctx, peerUpdate.NodeID) }) {
+					pcancel()
+					delete(r.peerRoutines, peerUpdate.NodeID)
+					r.ids.Reclaim(peerUpdate.NodeID)
+				}
 			}
 		}
 
@@ -185,7 +194,7 @@ func (r *Reactor) broadcastTxRoutine(ctx context.Context, peerID types.NodeID) {
 	}()
 
 	for {
-		if !r.IsRunning() || ctx.Err() != nil {
+		if ctx.Err() != nil {
 			return
 		}
 

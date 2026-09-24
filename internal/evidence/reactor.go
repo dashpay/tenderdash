@@ -177,15 +177,23 @@ func (r *Reactor) OnStart(ctx context.Context) (err error) {
 		ctx, peerEvidenceRate, peerEvidenceBurst, true, r.logger, client.WithRateLimitClock(r.clock))
 	r.nodeBudget = newNodeBudget()
 
-	go r.processEvidenceCh(ctx)
-	go r.processPeerUpdates(ctx, r.peerEvents(ctx, "evidence"))
+	r.Go(ctx, r.processEvidenceCh)
+	updates := r.peerEvents(ctx, "evidence")
+	if !r.Go(ctx, func(ctx context.Context) {
+		defer updates.Close()
+		r.processPeerUpdates(ctx, updates)
+	}) {
+		updates.Close()
+	}
 
 	return nil
 }
 
-// OnStop stops the reactor by signaling to all spawned goroutines to exit and
-// blocking until they all exit.
-func (r *Reactor) OnStop() { r.evpool.Close() }
+// OnStop leaves the shared pool open for its owner to close after consensus drains.
+func (r *Reactor) OnStop() {}
+
+// OnDrain joins the rate limiter's cleanup worker.
+func (r *Reactor) OnDrain() { r.peerLimit.Close() }
 
 // handleEvidenceMessage handles envelopes sent from peers on the EvidenceChannel.
 // It returns an error only if the Envelope.Message is unknown for this channel
@@ -341,7 +349,7 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 		// Do not allow starting new evidence broadcast loops after reactor shutdown
 		// has been initiated. This can happen after we've manually closed all
 		// peer broadcast loops, but the router still sends in-flight peer updates.
-		if !r.IsRunning() {
+		if ctx.Err() != nil {
 			return
 		}
 
@@ -356,7 +364,10 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 			r.nextSyncID++
 			entry := peerSyncState{cancel: pcancel, id: r.nextSyncID}
 			r.peerRoutines[peerUpdate.NodeID] = entry
-			go r.syncEvidence(pctx, peerUpdate.NodeID, entry.id)
+			if !r.Go(pctx, func(ctx context.Context) { r.syncEvidence(ctx, peerUpdate.NodeID, entry.id) }) {
+				pcancel()
+				delete(r.peerRoutines, peerUpdate.NodeID)
+			}
 		}
 
 	case p2p.PeerStatusDown:

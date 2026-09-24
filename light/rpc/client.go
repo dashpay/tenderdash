@@ -53,7 +53,7 @@ type Client struct {
 	prt       *merkle.ProofRuntime
 	keyPathFn KeyPathFunc
 
-	closers []func()
+	serviceCtx context.Context
 }
 
 var _ rpcclient.Client = (*Client)(nil)
@@ -106,19 +106,22 @@ func NewClient(logger log.Logger, next rpcclient.Client, lc LightClient, opts ..
 }
 
 func (c *Client) OnStart(ctx context.Context) error {
-	nctx, ncancel := context.WithCancel(ctx)
-	if err := c.next.Start(nctx); err != nil {
-		ncancel()
+	c.serviceCtx = ctx
+	if err := c.next.Start(ctx); err != nil {
 		return err
 	}
-	c.closers = append(c.closers, ncancel)
 
 	return nil
 }
 
-func (c *Client) OnStop() {
-	for _, closer := range c.closers {
-		closer()
+func (c *Client) OnStop() {}
+
+// OnDrain joins clients exposing transport shutdown in addition to the RPC API.
+func (c *Client) OnDrain() {
+	if waiter, ok := c.next.(interface{ Wait() }); ok {
+		waiter.Wait()
+	} else if stopper, ok := c.next.(interface{ Stop() error }); ok {
+		_ = stopper.Stop()
 	}
 }
 
@@ -648,8 +651,10 @@ func (c *Client) RegisterOpDecoder(typ string, dec merkle.OpDecoder) {
 // a subscriber, but does not verify responses (UNSAFE)!
 // TODO: verify data
 func (c *Client) SubscribeWS(ctx context.Context, query string) (*coretypes.ResultSubscribe, error) {
-	bctx, bcancel := context.WithCancel(context.Background())
-	c.closers = append(c.closers, bcancel)
+	if !c.IsRunning() {
+		return nil, fmt.Errorf("light RPC client is not running")
+	}
+	bctx := c.serviceCtx
 
 	callInfo := rpctypes.GetCallInfo(ctx)
 	out, err := c.next.Subscribe(bctx, callInfo.RemoteAddr(), query) //nolint:staticcheck
@@ -657,7 +662,7 @@ func (c *Client) SubscribeWS(ctx context.Context, query string) (*coretypes.Resu
 		return nil, err
 	}
 
-	go func() {
+	if !c.Go(bctx, func(bctx context.Context) {
 		for {
 			select {
 			case resultEvent := <-out:
@@ -668,7 +673,9 @@ func (c *Client) SubscribeWS(ctx context.Context, query string) (*coretypes.Resu
 				return
 			}
 		}
-	}()
+	}) {
+		return nil, fmt.Errorf("light RPC client is stopping")
+	}
 
 	return &coretypes.ResultSubscribe{}, nil
 }
