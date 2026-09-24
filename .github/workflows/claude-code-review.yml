@@ -12,7 +12,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  review:
+  # Gate: wait for the "Test" workflow (tests.yml) on the PR head commit and
+  # only let the review run when it concluded successfully. Red/cancelled
+  # tests skip the review (no extra failing check); a timeout fails the gate.
+  wait-for-tests:
     if: >
       github.event.pull_request.draft == false &&
       (
@@ -23,6 +26,47 @@ jobs:
           contains(github.event.pull_request.requested_reviewers.*.login, 'Claudius-Maginificent')
         ))
       )
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      actions: read
+    outputs:
+      green: ${{ steps.wait.outputs.green }}
+    steps:
+      - name: Wait for tests.yml to finish on PR head
+        id: wait
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 110 * 60))
+          while :; do
+            run=$(gh run list -R "$REPO" --workflow tests.yml --commit "$SHA" \
+              --event pull_request --limit 1 \
+              --json databaseId,status,conclusion --jq '.[0] // empty')
+            if [ -n "$run" ] && [ "$(jq -r .status <<<"$run")" = completed ]; then
+              conclusion=$(jq -r .conclusion <<<"$run")
+              echo "tests.yml run $(jq -r .databaseId <<<"$run"): $conclusion"
+              if [ "$conclusion" = success ]; then
+                echo "green=true" >>"$GITHUB_OUTPUT"
+              else
+                echo "::notice::tests.yml concluded '$conclusion' for $SHA; skipping review"
+                echo "green=false" >>"$GITHUB_OUTPUT"
+              fi
+              exit 0
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::Timed out waiting for tests.yml on $SHA"
+              exit 1
+            fi
+            sleep 30
+          done
+
+  review:
+    needs: wait-for-tests
+    if: needs.wait-for-tests.outputs.green == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
