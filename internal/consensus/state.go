@@ -192,7 +192,9 @@ type State struct {
 	proposedAppVersion uint64
 
 	// wait the channel event happening for shutting down the state gracefully
-	onStopCh chan *cstypes.RoundState
+	onStopCh      chan *cstypes.RoundState
+	receiveWG     sync.WaitGroup
+	receiveCancel context.CancelFunc
 
 	msgInfoQueue   *msgInfoQueue
 	msgDispatcher  *msgInfoDispatcher
@@ -545,7 +547,13 @@ func (cs *State) OnStart(ctx context.Context) error {
 	}
 
 	// now start the receiveRoutine
-	go cs.receiveRoutine(ctx, cs.stopFn)
+	receiveCtx, receiveCancel := context.WithCancel(ctx)
+	cs.receiveCancel = receiveCancel
+	cs.receiveWG.Add(1)
+	go func() {
+		defer cs.receiveWG.Done()
+		cs.receiveRoutine(receiveCtx, cs.stopFn)
+	}()
 
 	// schedule the first round!
 	// use GetRoundState so we don't race the receiveRoutine for access
@@ -586,10 +594,19 @@ func (cs *State) OnStop() {
 		}
 	}
 
+	if cs.receiveCancel != nil {
+		cs.receiveCancel()
+	}
 	if cs.timeoutTicker.IsRunning() {
 		cs.timeoutTicker.Stop()
 	}
 	// WAL is stopped in receiveRoutine.
+}
+
+// Wait waits for the service and its consensus receive routine to finish.
+func (cs *State) Wait() {
+	cs.BaseService.Wait()
+	cs.receiveWG.Wait()
 }
 
 // OpenWAL opens a file to log all consensus messages and timeouts for

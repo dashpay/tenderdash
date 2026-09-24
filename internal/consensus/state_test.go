@@ -3496,3 +3496,40 @@ func mockProposerApplicationCalls(t *testing.T, m *abcimocks.Application, round 
 			Once()
 	}
 }
+
+func TestStateWaitDrainsReceiveRoutine(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cs, _ := makeState(ctx, t, makeStateArgs{config: configSetup(t)})
+	entered, release := make(chan struct{}), make(chan struct{})
+	notified := false
+	cs.stopFn = func(*State) bool {
+		if !notified {
+			close(entered)
+			notified = true
+		}
+		<-release
+		return false
+	}
+	require.NoError(t, cs.Start(ctx))
+	<-entered
+	cs.Stop()
+	cs.BaseService.Wait()
+
+	waited := make(chan struct{})
+	go func() {
+		cs.Wait()
+		close(waited)
+	}()
+	select {
+	case <-waited:
+		t.Error("Wait returned before the consensus receive routine finished")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case <-waited:
+	case <-time.After(time.Second):
+		t.Fatal("Wait did not return after the receive routine finished")
+	}
+}
