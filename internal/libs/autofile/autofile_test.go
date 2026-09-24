@@ -144,3 +144,19 @@ func mustReadFile(t *testing.T, filePath string) []byte {
 
 	return fileBytes
 }
+
+func TestCloseJoinsAutoFileWorker(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	af, err := OpenAutoFile(ctx, filepath.Join(t.TempDir(), "wal"))
+	require.NoError(t, err)
+	require.NoError(t, af.Close())
+	select {
+	case <-af.done:
+	default:
+		t.Fatal("Close returned before worker exited")
+	}
+	require.NoError(t, af.Close())
+	_, err = af.Write([]byte("late write"))
+	require.ErrorIs(t, err, ErrAutoFileClosed)
+}
