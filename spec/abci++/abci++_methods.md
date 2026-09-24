@@ -505,9 +505,9 @@ Tenderdash calls `VerifyVoteExtension` for two kinds of request, told apart by
 * **Usage**:
     * `RequestVerifyVoteExtension.vote_extensions` can be empty. For a Precommit, the Application's
       interpretation of it should be that the Application running at the process that sent the vote
-      chose not to extend it. Tendermint will always call `RequestVerifyVoteExtension`, even for 0
+      chose not to extend it. Tenderdash will always call `RequestVerifyVoteExtension`, even for 0
       length vote extensions.
-    * For a Precommit, if `ResponseVerifyVoteExtension.status` is `REJECT`, Tendermint will reject
+    * For a Precommit, if `ResponseVerifyVoteExtension.status` is `REJECT`, Tenderdash will reject
       the whole received vote. See the [Requirements](abci++_app_requirements.md) section to
       understand the potential liveness implications of this.
     * For a commit, the Application MUST compare the vector with the threshold-recoverable subset of
@@ -532,20 +532,20 @@ Tenderdash calls `VerifyVoteExtension` for two kinds of request, told apart by
       `ResponseVerifyVoteExtension.status` to `ACCEPT`, unless they _really_ know what the potential
       liveness implications of returning `REJECT` are.
 
-#### When does Tendermint call it?
+#### When does Tenderdash call it?
 
-When a validator _p_ is in Tendermint consensus height _h_ and receives, from another validator _q_,
+When a validator _p_ is in Tenderdash consensus height _h_ and receives, from another validator _q_,
 a Precommit message for a block (not `nil`) at height _h_:
 
-1. If the Precommit message does not contain a vote extensions with a valid signature, Tendermint discards the message as invalid.
+1. If the Precommit message does not contain a vote extensions with a valid signature, Tenderdash discards the message as invalid.
    * a 0-length vote extensions is valid as long as its accompanying signature is also valid.
-2. Else, _p_'s Tendermint calls `RequestVerifyVoteExtension`.
+2. Else, _p_'s Tenderdash calls `RequestVerifyVoteExtension`.
 3. The Application returns _accept_ or _reject_ via `ResponseVerifyVoteExtension.status`.
 4. If the Application returns
-   * _accept_, _p_'s Tendermint will keep the received vote, together with its corresponding
+   * _accept_, _p_'s Tenderdash will keep the received vote, together with its corresponding
      vote extension in its internal data structures. It will be used to populate the [ExtendedCommitInfo](#extendedcommitinfo)
      structure in calls to `RequestPrepareProposal`, in rounds of height _h + 1_ where _p_ is the proposer.
-   * _reject_, _p_'s Tendermint will deem the Precommit message invalid and discard it.
+   * _reject_, _p_'s Tenderdash will deem the Precommit message invalid and discard it.
 
 Whenever a process is about to save a block and its commit, in consensus, block sync or replay, it
 first calls `RequestVerifyVoteExtension` for the commit, once `ProcessProposal` has processed the

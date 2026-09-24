@@ -2,6 +2,22 @@
 
 This guide provides instructions for upgrading to specific versions of Tenderdash.
 
+## v1.8
+
+### ABCI: commit vote-extension verification
+
+Tenderdash now calls `VerifyVoteExtension` after `ProcessProposal` and before it
+saves or finalizes a block. An empty `validator_pro_tx_hash` identifies this
+commit-level call. Applications must compare the supplied extensions, in order,
+with the threshold-recoverable extensions expected for the processed block and
+return `REJECT` on any difference.
+
+Consensus discards a rejected commit and tries another commit or advances the
+round. Block sync retries the height from another peer. During startup replay,
+the commit is already stored, so rejection stops startup and requires rollback
+or re-sync. Applications that keep the default unconditional `ACCEPT` remain
+compatible but do not gain protection against altered commit extension vectors.
+
 ## v1.7.0
 
 ### Consensus DoS hardening (peer verification limits)

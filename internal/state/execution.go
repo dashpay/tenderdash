@@ -665,7 +665,7 @@ func VerifyCommitExtensions(ctx context.Context, executor Executor, commit *type
 		return fmt.Errorf("invalid commit extensions: %w", err)
 	}
 	if err := executor.VerifyVoteExtension(ctx, vote); err != nil {
-		return fmt.Errorf("commit extensions rejected: %w", err)
+		return fmt.Errorf("commit extensions rejected: %w: %w", ErrCommitExtensionsRejected, err)
 	}
 	return nil
 }

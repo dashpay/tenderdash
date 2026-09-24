@@ -123,9 +123,10 @@ as a general rule, `VerifyVoteExtension` _should_ always accept the vote extensi
 
 Commit verification, a call with an empty `validator_pro_tx_hash`, is the exception: the Application
 must reject a commit whose extension vector differs from the threshold-recoverable subset of the
-extensions it expects for the block, or an altered vector reaches `FinalizeBlock`. By Requirement 7,
-a commit assembled from the extensions of correct processes always passes this check, so rejecting
-an altered one costs no liveness; a deterministic bug in the check, however, halts the chain, because no commit
+extensions it expects for the block, or an altered vector reaches `FinalizeBlock`. Threshold recovery
+requires the contributing validators to sign identical extension content, so a valid recovered extension
+from correct processes matches that expected vector. Rejecting an altered vector therefore costs no
+liveness; a deterministic bug in the check, however, halts the chain, because no commit
 for the block can pass it. See [VerifyVoteExtension](./abci++_methods.md#verifyvoteextension) for what
 Tenderdash does on each path when a commit is rejected.
 

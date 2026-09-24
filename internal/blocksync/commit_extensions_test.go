@@ -8,10 +8,12 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dashpay/tenderdash/internal/consensus"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/state/mocks"
 	statefactory "github.com/dashpay/tenderdash/internal/state/test/factory"
 	"github.com/dashpay/tenderdash/internal/test/factory"
+	"github.com/dashpay/tenderdash/internal/test/metricspy"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -43,11 +45,16 @@ func TestBlockApplierRejectsCommitExtensionsAndRetries(t *testing.T) {
 	store.On("SaveBlock", block, mock.Anything, commit).Once().Run(func(mock.Arguments) { calls = append(calls, "save") })
 	exec.On("FinalizeBlock", mock.Anything, initial, sm.CurrentRoundState{}, mock.Anything, block, commit, types.VerifiedCommit{}).Once().
 		Run(func(mock.Arguments) { calls = append(calls, "finalize") }).Return(state, nil, nil)
-	applier := newBlockApplier(exec, store, applierWithState(initial))
+	counter := metricspy.NewCounter()
+	metrics := consensus.NopMetrics()
+	metrics.CommitVerifyFailures = counter
+	applier := newBlockApplier(exec, store, applierWithState(initial), applierWithMetrics(metrics))
 	require.Error(t, applier.Apply(ctx, block, commit))
+	require.Equal(t, float64(1), counter.Value())
 	require.Equal(t, []string{"process", "verify"}, calls)
 	require.Equal(t, initial.LastBlockHeight, applier.State().LastBlockHeight)
 	require.NoError(t, applier.Apply(ctx, block, commit))
+	require.Equal(t, float64(1), counter.Value())
 	require.Equal(t, []string{"process", "verify", "process", "verify", "save", "finalize"}, calls)
 }
 

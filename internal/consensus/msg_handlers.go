@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -41,6 +42,7 @@ func isPeerFloodableError(err error) bool {
 		errors.Is(err, ErrInvalidProposalForCommit) ||
 		errors.Is(err, ErrInvalidProposalForPartSet) ||
 		errors.Is(err, ErrUnableToVerifyProposal) ||
+		errors.Is(err, sm.ErrCommitExtensionsRejected) ||
 		errors.Is(err, ErrPeerStateInvalidVoteIndex) ||
 		errors.Is(err, ErrInvalidNewRoundStepHeight) ||
 		// Every peer commit for the current height that clears ValidateBasic reaches

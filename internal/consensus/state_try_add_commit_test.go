@@ -11,6 +11,7 @@ import (
 
 	"github.com/dashpay/tenderdash/dash"
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -265,6 +266,7 @@ func TestCommitVerifyFailureReasonSeparatesTheClasses(t *testing.T) {
 	}{
 		{"stale validator set", types.ErrInvalidCommitQuorumHash{}, "quorum_hash"},
 		{"vote extension mismatch", types.ErrVoteExtensionCountMismatch{}, "extension_count"},
+		{"application rejected extensions", sm.ErrCommitExtensionsRejected, "extensions_rejected"},
 		{"forged threshold signature", types.ErrInvalidCommitSignature{}, "invalid_signature"},
 		{"local shed", types.ErrVerificationBudgetExhausted, "budget"},
 		{"unclassified", errors.New("something else"), "other"},

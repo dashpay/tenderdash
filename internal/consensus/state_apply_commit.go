@@ -16,6 +16,9 @@ type ApplyCommitEvent struct {
 	// FromOwnPrecommits marks a commit this node assembled from its own +2/3
 	// precommits, which there is no point assembling again if it is rejected.
 	FromOwnPrecommits bool
+	// Rejected reports that the application rejected the commit extensions and
+	// consensus recovered without treating the caller as a faulty peer.
+	Rejected bool
 }
 
 // GetType returns ApplyCommitType event-type
@@ -73,9 +76,17 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 		// while its block was missing; TryAddCommit's parked-commit guard keeps
 		// other commits out meanwhile.
 		if err := sm.VerifyCommitExtensions(ctx, c.blockExec.blockExec, commit); err != nil {
-			err = errors.Join(err, c.discardRejectedCommit(stateData))
-			c.recoverFromRejectedCommit(ctx, stateEvent.Ctrl, stateData, commit, event.FromOwnPrecommits)
-			return err
+			event.Rejected = true
+			c.metrics.CommitVerifyFailures.With("reason", commitVerifyFailureReason(err)).Add(1)
+			c.logger.Debug("application rejected commit vote extensions",
+				"height", commit.Height, "round", commit.Round, "error", err)
+			if recoveryErr := errors.Join(
+				c.discardRejectedCommit(stateData),
+				c.recoverFromRejectedCommit(ctx, stateEvent.Ctrl, stateData, event.FromOwnPrecommits),
+			); recoveryErr != nil {
+				return recoveryErr
+			}
+			return nil
 		}
 		stateData.Commit = commit
 		if stateData.enterApplyCommit(commit.Round) {
@@ -158,7 +169,6 @@ func (c *ApplyCommitAction) discardRejectedCommit(stateData *StateData) error {
 		// Only EnterCommit, on +2/3 precommits for the block, reaches this step
 		// before a commit is accepted, so the round had at least reached Precommit.
 		stateData.updateRoundStep(stateData.Round, cstypes.RoundStepPrecommit)
-		c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
 	}
 	return stateData.Save()
 }
@@ -184,11 +194,10 @@ func (c *ApplyCommitAction) recoverFromRejectedCommit(
 	ctx context.Context,
 	ctrl *Controller,
 	stateData *StateData,
-	rejected *types.Commit,
 	fromOwnPrecommits bool,
-) {
+) error {
 	if c.candidates.recovering {
-		return
+		return nil
 	}
 	c.candidates.recovering = true
 	defer func() { c.candidates.recovering = false }()
@@ -214,9 +223,9 @@ func (c *ApplyCommitAction) recoverFromRejectedCommit(
 	}
 
 	if pending() && !fromOwnPrecommits {
-		blockID, ok := stateData.Votes.Precommits(rejected.Round).TwoThirdsMajority()
-		if ok && blockID.Equals(rejected.BlockID) {
-			err := ctrl.Dispatch(ctx, &EnterCommitEvent{Height: height, CommitRound: rejected.Round}, stateData)
+		blockID, ok := stateData.Votes.Precommits(stateData.Round).TwoThirdsMajority()
+		if ok && stateData.holdsProposalBlock(blockID) {
+			err := ctrl.Dispatch(ctx, &EnterCommitEvent{Height: height, CommitRound: stateData.Round}, stateData)
 			if err != nil {
 				c.logger.Error("cannot commit from own precommits", "height", height, "error", err)
 			}
@@ -224,11 +233,11 @@ func (c *ApplyCommitAction) recoverFromRejectedCommit(
 	}
 
 	if pending() {
-		c.logger.Info("no replacement for the rejected commit; moving to the next round",
+		c.logger.Debug("no replacement for the rejected commit; moving to the next round",
 			"height", height, "round", stateData.Round)
-		c.scheduler.ScheduleTimeout(stateData.voteTimeout(stateData.Round),
-			height, stateData.Round, cstypes.RoundStepPrecommitWait)
+		return ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: stateData.Round + 1}, stateData)
 	}
+	return nil
 }
 
 func (c *ApplyCommitAction) RecordMetrics(stateData *StateData, height int64, block *types.Block, lastBlockMeta *types.BlockMeta) {

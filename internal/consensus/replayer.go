@@ -282,7 +282,10 @@ func (r *BlockReplayer) replayBlock(
 		return sm.CurrentRoundState{}, fmt.Errorf("blockReplayer process proposal: %w", err)
 	}
 	if err := sm.VerifyCommitExtensions(ctx, r.blockExec, commit); err != nil {
-		return sm.CurrentRoundState{}, fmt.Errorf("blockReplayer verify commit extensions: %w", err)
+		return sm.CurrentRoundState{}, fmt.Errorf(
+			"blockReplayer verify commit extensions at height %d round %d block %X; roll back or re-sync the node: %w",
+			height, commit.Round, block.Hash(), err,
+		)
 	}
 	// We emit events for the index services at the final block due to the sync issue when
 	// the node shutdown during the block committing status.

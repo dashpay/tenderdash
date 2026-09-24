@@ -2,6 +2,7 @@ package blocksync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -105,6 +106,9 @@ func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *ty
 		panic(fmt.Sprintf("failed to process committed block (%d:%X): %v", block.Height, block.Hash(), err))
 	}
 	if err := sm.VerifyCommitExtensions(ctx, e.blockExec, commit); err != nil {
+		if errors.Is(err, sm.ErrCommitExtensionsRejected) {
+			e.metrics.CommitVerifyFailures.With("reason", "extensions_rejected").Add(1)
+		}
 		return err
 	}
 	processTime := time.Since(start)

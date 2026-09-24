@@ -20,7 +20,7 @@ import (
 )
 
 func TestCommitExtensionsRejectedBeforeSaveAndRetried(t *testing.T) {
-	for _, path := range []string{"held", "parked", "future", "local", "replay"} {
+	for _, path := range []string{"held", "parked", "future", "replay"} {
 		for _, mutation := range []string{"strip", "duplicate", "cross-height replay"} {
 			t.Run(path+"/"+mutation, func(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
@@ -67,7 +67,7 @@ func TestCommitExtensionsRejectedBeforeSaveAndRetried(t *testing.T) {
 				ctx = msgInfoWithCtx(ctx, msgInfo{Msg: &CommitMessage{bad}, PeerID: n.peerID})
 				parked := path == "parked" || path == "future" || path == "replay"
 				checker.onVerify = func(*types.Vote) {
-					if !parked {
+					if !parked && len(checker.calls) == 2 {
 						require.Nil(t, sd.Commit, "an unverified commit must not be published in the round state")
 					}
 				}
@@ -77,21 +77,15 @@ func TestCommitExtensionsRejectedBeforeSaveAndRetried(t *testing.T) {
 				if !parked {
 					sd.ProposalBlock, sd.ProposalBlockParts = n.block, n.parts
 				}
-				if path == "local" {
-					sd.updateRoundStep(round, cstypes.RoundStepApplyCommit)
-					sd.CommitRound = round
-					err = n.node.ctrl.Dispatch(ctx, &ApplyCommitEvent{Commit: bad}, &sd)
-				} else {
-					err = n.node.ctrl.Dispatch(ctx, &TryAddCommitEvent{Commit: bad, PeerID: n.peerID, FromReplay: path == "replay"}, &sd)
-					if parked {
-						require.NoError(t, err)
-						require.Empty(t, checker.calls, "cannot check until the block is processed")
-						msg := &BlockPartMessage{Height: n.block.Height, Round: round, Part: n.parts.GetPart(0)}
-						partCtx := msgInfoWithCtx(ctx, msgInfo{Msg: msg, PeerID: n.peerID})
-						err = n.node.ctrl.Dispatch(partCtx, &AddProposalBlockPartEvent{Msg: msg, PeerID: n.peerID, FromReplay: path == "replay"}, &sd)
-					}
+				err = n.node.ctrl.Dispatch(ctx, &TryAddCommitEvent{Commit: bad, PeerID: n.peerID, FromReplay: path == "replay"}, &sd)
+				if parked {
+					require.NoError(t, err)
+					require.Empty(t, checker.calls, "cannot check until the block is processed")
+					msg := &BlockPartMessage{Height: n.block.Height, Round: round, Part: n.parts.GetPart(0)}
+					partCtx := msgInfoWithCtx(ctx, msgInfo{Msg: msg, PeerID: n.peerID})
+					err = n.node.ctrl.Dispatch(partCtx, &AddProposalBlockPartEvent{Msg: msg, PeerID: n.peerID, FromReplay: path == "replay"}, &sd)
 				}
-				require.Error(t, err, "a cryptographically valid but wrong extension list must be rejected")
+				require.NoError(t, err, "consensus must recover from an application rejection")
 				require.Equal(t, []string{"process", "verify"}, checker.calls)
 				require.Zero(t, n.node.blockStore.Height())
 				require.Equal(t, n.block.Height, sd.Height)
@@ -103,6 +97,12 @@ func TestCommitExtensionsRejectedBeforeSaveAndRetried(t *testing.T) {
 				require.Equal(t, int32(-1), sd.CommitRound)
 				require.True(t, sd.CommitTime.IsZero())
 				require.NoError(t, n.node.ctrl.Dispatch(ctx, &TryAddCommitEvent{Commit: good, PeerID: n.peerID}, &sd))
+				if sd.Height == n.block.Height {
+					msg := &BlockPartMessage{Height: n.block.Height, Round: round, Part: n.parts.GetPart(0)}
+					partCtx := msgInfoWithCtx(ctx, msgInfo{Msg: msg, PeerID: n.peerID})
+					require.NoError(t, n.node.ctrl.Dispatch(partCtx,
+						&AddProposalBlockPartEvent{Msg: msg, PeerID: n.peerID}, &sd))
+				}
 				require.Equal(t, n.block.Height+1, sd.Height)
 				require.Equal(t, n.block.Height, n.node.blockStore.Height())
 				require.Equal(t, []string{"process", "verify", "verify", "finalize"}, checker.calls)

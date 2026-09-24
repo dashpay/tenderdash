@@ -97,6 +97,23 @@ func TestPrepareFinalize(t *testing.T) {
 	assert.EqualValues(t, []byte(value), respQuery.Value)
 }
 
+func TestVerifyCommitVoteExtensions(t *testing.T) {
+	app := newApp(t)
+	expected := expectedVoteExtensions(1)
+
+	resp, err := app.VerifyVoteExtension(context.Background(), &abci.RequestVerifyVoteExtension{
+		Height: 1, VoteExtensions: expected,
+	})
+	require.NoError(t, err)
+	require.Equal(t, abci.ResponseVerifyVoteExtension_ACCEPT, resp.Status)
+
+	resp, err = app.VerifyVoteExtension(context.Background(), &abci.RequestVerifyVoteExtension{
+		Height: 1, VoteExtensions: expected[:1],
+	})
+	require.NoError(t, err)
+	require.Equal(t, abci.ResponseVerifyVoteExtension_REJECT, resp.Status)
+}
+
 func TestPrepareProposal(t *testing.T) {
 	testCases := []struct {
 		request       abci.RequestPrepareProposal

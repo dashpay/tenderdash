@@ -8,6 +8,7 @@ import (
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
 	"github.com/dashpay/tenderdash/dash"
+	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -158,6 +159,8 @@ func commitVerifyFailureReason(err error) string {
 		return "quorum_hash"
 	case errors.As(err, &types.ErrVoteExtensionCountMismatch{}):
 		return "extension_count"
+	case errors.Is(err, sm.ErrCommitExtensionsRejected):
+		return "extensions_rejected"
 	case errors.As(err, &types.ErrInvalidCommitSignature{}):
 		return "invalid_signature"
 	case errors.Is(err, types.ErrVerificationBudgetExhausted):

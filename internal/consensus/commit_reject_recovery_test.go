@@ -133,7 +133,7 @@ func TestCommitRejectRetriesCommitReceivedWhileParked(t *testing.T) {
 			require.Same(t, f.bad, f.stateData.Commit, "the first commit is parked until its block arrives")
 			require.Empty(t, f.checker.calls, "nothing can be verified before the block is processed")
 
-			require.Error(t, f.completeBlock(ctx), "the parked commit's extensions are rejected")
+			require.NoError(t, f.completeBlock(ctx), "the rejected commit must be handled without blaming the block-part peer")
 
 			f.requireCommitted(t, f.good)
 			want := make([]string, 0, tc.verifies+2)
@@ -164,7 +164,7 @@ func TestCommitRejectRetriesCommitsDuringReplay(t *testing.T) {
 	f.dispatchCommit(ctx, t, f.good, "honest", true)
 	msg := &BlockPartMessage{Height: f.block.Height, Round: 0, Part: f.parts.GetPart(0)}
 	partCtx := msgInfoWithCtx(ctx, msgInfo{Msg: msg, PeerID: f.peerID})
-	require.Error(t, f.node.ctrl.Dispatch(partCtx,
+	require.NoError(t, f.node.ctrl.Dispatch(partCtx,
 		&AddProposalBlockPartEvent{Msg: msg, PeerID: f.peerID, FromReplay: true}, &f.stateData))
 
 	f.requireCommitted(t, f.good)
@@ -195,7 +195,7 @@ func TestCommitRejectFallsBackToOwnPrecommitQuorum(t *testing.T) {
 	f.deliver(ctx, t, &f.stateData, f.precommit(ctx, t, f.commit.BlockID))
 	require.Equal(t, cstypes.RoundStepApplyCommit, f.stateData.Step, "the quorum waits for the block")
 
-	require.Error(t, f.completeBlock(ctx), "the parked commit's extensions are rejected")
+	require.NoError(t, f.completeBlock(ctx))
 
 	require.Equal(t, f.block.Height+1, f.stateData.Height, "the held quorum must complete the height")
 	require.Equal(t, f.block.Height, f.node.blockStore.Height())
@@ -211,7 +211,6 @@ func TestLocalCommitRejectedInTryFinalizeCommit(t *testing.T) {
 	defer cancel()
 	f := newRejectRecoveryFixture(ctx, t)
 	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
-	ticker := f.recordTimeouts()
 	f.checker.expected = []*abci.ExtendVoteExtension{}
 	f.checker.rejectAll = true
 
@@ -219,8 +218,7 @@ func TestLocalCommitRejectedInTryFinalizeCommit(t *testing.T) {
 	f.deliver(ctx, t, &f.stateData, f.precommit(ctx, t, f.commit.BlockID))
 	require.Equal(t, cstypes.RoundStepApplyCommit, f.stateData.Step, "the quorum waits for the block")
 	// The completing part finalizes the quorum's commit through tryFinalizeCommit.
-	require.ErrorContains(t, f.completeBlock(ctx), "commit extensions rejected",
-		"the rejection of the local commit must be reported, not discarded")
+	require.NoError(t, f.completeBlock(ctx))
 
 	require.Equal(t, []string{"process", "verify"}, f.checker.calls, "the rejected quorum is not assembled again")
 	require.Zero(t, f.node.blockStore.Height())
@@ -231,10 +229,11 @@ func TestLocalCommitRejectedInTryFinalizeCommit(t *testing.T) {
 	require.Nil(t, persisted.Commit)
 	require.Less(t, persisted.Step, cstypes.RoundStepApplyCommit)
 
-	f.requireRoundChangeScheduled(t, ticker)
+	require.Equal(t, int32(1), f.stateData.Round)
 
 	f.checker.rejectAll = false
 	f.sendCommit(ctx, t, f.commit, "honest")
+	require.NoError(t, f.completeBlock(ctx))
 	require.Equal(t, f.block.Height+1, f.stateData.Height)
 	require.Equal(t, f.block.Height, f.node.blockStore.Height())
 }
@@ -247,7 +246,6 @@ func TestCommitRejectWithoutReplacementMovesToNextRound(t *testing.T) {
 	defer cancel()
 	f := newRejectRecoveryFixture(ctx, t)
 	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
-	ticker := f.recordTimeouts()
 
 	// An honest peer's view of this node, which it updates from our round steps.
 	peer := NewPeerState(log.NewNopLogger(), "honest")
@@ -262,13 +260,9 @@ func TestCommitRejectWithoutReplacementMovesToNextRound(t *testing.T) {
 
 	f.sendCommit(ctx, t, f.bad, "attacker")
 	peer.SetHasCommit(f.good) // sent, but lost to a verification budget or a restart
-	require.ErrorContains(t, f.completeBlock(ctx), "commit extensions rejected")
+	require.NoError(t, f.completeBlock(ctx))
 	require.Equal(t, f.block.Height, f.stateData.Height)
-	require.Equal(t, cstypes.RoundStepPropose, f.stateData.Step,
-		"a peer's rejected commit must not cut short the round's own steps")
-	require.False(t, shouldCommitBeGossiped(peerRS, peer.GetRoundState()), "the peer sees no reason to resend")
-
-	f.moveToNextRound(ctx, t, ticker)
+	require.Equal(t, int32(1), f.stateData.Round)
 	require.True(t, shouldCommitBeGossiped(peerRS, peer.GetRoundState()), "the new round makes the peer resend")
 
 	f.sendCommit(ctx, t, f.good, "honest")
@@ -294,7 +288,7 @@ func TestRejectedCommitsAreNotRelayed(t *testing.T) {
 	f.sendCommit(ctx, t, f.bad, "attacker-1")
 	f.sendCommit(ctx, t, &duplicated, "attacker-2")
 	f.sendCommit(ctx, t, f.good, "honest")
-	require.Error(t, f.completeBlock(ctx))
+	require.NoError(t, f.completeBlock(ctx))
 
 	f.requireCommitted(t, f.good)
 	require.Equal(t, []*types.Commit{f.good}, relayed)
@@ -307,30 +301,6 @@ func (f *rejectRecoveryFixture) recordTimeouts() *recordingTicker {
 	return ticker
 }
 
-// moveToNextRound fires the timeout scheduled after an unresolved rejection.
-func (f *rejectRecoveryFixture) moveToNextRound(ctx context.Context, t *testing.T, ticker *recordingTicker) {
-	t.Helper()
-	f.node.handleTimeout(ctx, f.requireRoundChangeScheduled(t, ticker), &f.stateData)
-	require.Equal(t, f.block.Height, f.stateData.Height)
-	require.Equal(t, int32(1), f.stateData.Round)
-}
-
-// requireRoundChangeScheduled returns the timeout an unresolved rejection must
-// schedule to move the node out of round 0.
-func (f *rejectRecoveryFixture) requireRoundChangeScheduled(t *testing.T, ticker *recordingTicker) timeoutInfo {
-	t.Helper()
-	want := timeoutInfo{Height: f.block.Height, Round: 0, Step: cstypes.RoundStepPrecommitWait}
-	var scheduled *timeoutInfo
-	for i := range ticker.scheduled {
-		ti := ticker.scheduled[i]
-		if ti.Height == want.Height && ti.Round == want.Round && ti.Step == want.Step {
-			scheduled = &ti
-		}
-	}
-	require.NotNil(t, scheduled, "a rejection with no replacement must schedule a round change; got %v", ticker.scheduled)
-	return *scheduled
-}
-
 type recordingTicker struct {
 	TimeoutTicker
 	scheduled []timeoutInfo
@@ -338,4 +308,37 @@ type recordingTicker struct {
 
 func (r *recordingTicker) ScheduleTimeout(ti timeoutInfo) {
 	r.scheduled = append(r.scheduled, ti)
+}
+
+func TestCommitRejectAfterPrecommitTimeoutStillAdvancesRound(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := newRejectRecoveryFixture(ctx, t)
+	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+	ticker := f.recordTimeouts()
+	ticker.scheduled = append(ticker.scheduled, timeoutInfo{
+		Height: f.block.Height, Round: 0, Step: cstypes.RoundStepPrecommitWait,
+	})
+	f.sendCommit(ctx, t, f.bad, "attacker")
+	require.NoError(t, f.completeBlock(ctx))
+	require.Equal(t, int32(1), f.stateData.Round)
+	for _, ti := range ticker.scheduled[1:] {
+		require.False(t, ti.Round == 0 && ti.Step == cstypes.RoundStepPrecommitWait,
+			"recovery must not re-arm an already consumed timeout step")
+	}
+	f.sendCommit(ctx, t, f.good, "honest")
+	require.NoError(t, f.completeBlock(ctx))
+	f.requireCommitted(t, f.good)
+}
+
+func TestCommitExtensionRejectionRecordsMetric(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := newRejectRecoveryFixture(ctx, t)
+	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+	counter := &recordingCounter{}
+	f.node.metrics.CommitVerifyFailures = counter
+	f.sendCommit(ctx, t, f.bad, "attacker")
+	require.NoError(t, f.completeBlock(ctx))
+	require.Equal(t, float64(1), counter.value)
 }
