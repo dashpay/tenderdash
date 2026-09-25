@@ -3,6 +3,7 @@ package state_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/cosmos/gogoproto/proto"
@@ -68,7 +69,9 @@ func TestVerifyCommitExtensionsABCI(t *testing.T) {
 			} else if tc.status == abci.ResponseVerifyVoteExtension_ACCEPT {
 				require.NoError(t, sm.VerifyCommitExtensions(context.Background(), executor, commit))
 			} else {
-				require.Error(t, sm.VerifyCommitExtensions(context.Background(), executor, commit))
+				err := sm.VerifyCommitExtensions(context.Background(), executor, commit)
+				require.ErrorIs(t, err, sm.ErrCommitExtensionsRejected)
+				require.ErrorContains(t, err, fmt.Sprintf("height %d round %d block %X", commit.Height, commit.Round, commit.BlockID.Hash))
 			}
 			require.Equal(t, 1, calls)
 			require.True(t, proto.Equal(original, commit.ToProto()), "ABCI request mutation must not alter the verified commit")

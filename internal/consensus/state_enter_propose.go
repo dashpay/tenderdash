@@ -12,6 +12,8 @@ import (
 type EnterProposeEvent struct {
 	Height int64
 	Round  int32
+	// Enter the timed propose step without creating a competing recovery proposal.
+	SkipProposalCreation bool
 }
 
 // GetType returns EnterProposeType event-type
@@ -55,7 +57,7 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 
 	// If this validator is the proposer of this round, and the previous block time is later than
 	// our local clock time, wait to propose until our local clock time has passed the block time.
-	if isProposer {
+	if isProposer && !event.SkipProposalCreation {
 		pwt := proposerWaitTime(tmtime.Now(), stateData.state.LastBlockTime)
 		if pwt > 0 {
 			c.logger.Debug("enter propose: latest block is newer, sleeping",
@@ -83,6 +85,10 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 
 	// If we don't get the proposal and all block parts quick enough, enterPrevote
 	c.scheduler.ScheduleTimeout(stateData.proposeTimeout(round), height, round, cstypes.RoundStepPropose)
+
+	if event.SkipProposalCreation {
+		return nil
+	}
 
 	if !isProposer {
 		prop, err := stateData.ProposerSelector.GetProposer(stateData.Height, stateData.Round)

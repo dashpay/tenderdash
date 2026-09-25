@@ -299,6 +299,8 @@ func TestKeepProcessedBlockWithAutoPropose(t *testing.T) {
 			f.stateData.ProposalBlock, f.stateData.ProposalBlockParts = f.block, f.parts
 			require.NoError(t, f.node.blockExecutor.ensureProcess(ctx, &f.stateData.RoundState, 0))
 			processed := f.stateData.CurrentRoundState
+			creator := enterProposeWithCountingCreator(f.node)
+			ticker := f.recordTimeouts()
 			calls := []string{"process"}
 			if tc.reject {
 				f.stateData.updateRoundStep(round-1, cstypes.RoundStepPropose)
@@ -312,6 +314,11 @@ func TestKeepProcessedBlockWithAutoPropose(t *testing.T) {
 			require.Equal(t, round, f.stateData.Round)
 			require.True(t, f.stateData.holdsProposalBlock(f.good.BlockID))
 			require.Equal(t, processed, f.stateData.CurrentRoundState)
+			require.Zero(t, creator.calls.Load(), "recovery must not create another proposal")
+			require.Equal(t, cstypes.RoundStepPropose, f.stateData.Step)
+			require.NotEmpty(t, ticker.scheduled, "recovery must retain a timeout for progress")
+			require.Equal(t, round, ticker.scheduled[len(ticker.scheduled)-1].Round)
+			require.Equal(t, cstypes.RoundStepPropose, ticker.scheduled[len(ticker.scheduled)-1].Step)
 			f.sendCommit(ctx, t, f.good, "honest")
 			f.requireCommitted(t, f.good)
 			require.Equal(t, append(calls, "verify", "finalize"), f.checker.calls)
@@ -390,4 +397,26 @@ func TestCommitExtensionRejectionRecordsMetric(t *testing.T) {
 	f.sendCommit(ctx, t, f.bad, "attacker")
 	require.NoError(t, f.completeBlock(ctx))
 	require.Equal(t, float64(1), counter.value)
+}
+
+func TestCommitRejectRetriesQueuedFutureRound(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := newRejectRecoveryFixture(ctx, t)
+	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+	const round int32 = 2
+	ext := f.good.ThresholdVoteExtensions[0]
+	votes := types.NewVoteSet(f.stateData.state.ChainID, f.block.Height, round, tmproto.PrecommitType, f.stateData.Validators)
+	future, err := factory.MakeCommit(ctx, f.good.BlockID, f.block.Height, round, votes, f.stateData.Validators, f.privVals, *ext)
+	require.NoError(t, err)
+	f.checker.onVerify = func(vote *types.Vote) {
+		if vote.Round == 0 {
+			f.checker.round = round
+		}
+	}
+	f.sendCommit(ctx, t, f.bad, "attacker")
+	f.sendCommit(ctx, t, future, "honest")
+	require.NoError(t, f.completeBlock(ctx))
+	f.requireCommitted(t, future)
+	require.Equal(t, []string{"process", "verify", "process", "verify", "finalize"}, f.checker.calls)
 }

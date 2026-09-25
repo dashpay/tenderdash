@@ -662,10 +662,12 @@ func (blockExec *BlockExecutor) ApplyBlock(
 func VerifyCommitExtensions(ctx context.Context, executor Executor, commit *types.Commit) error {
 	vote, err := commit.GetCanonicalVote()
 	if err != nil {
-		return fmt.Errorf("invalid commit extensions: %w", err)
+		return fmt.Errorf("invalid commit extensions at height %d round %d block %X: %w",
+			commit.Height, commit.Round, commit.BlockID.Hash, err)
 	}
 	if err := executor.VerifyVoteExtension(ctx, vote); err != nil {
-		return fmt.Errorf("commit extensions rejected: %w: %w", ErrCommitExtensionsRejected, err)
+		return fmt.Errorf("commit extensions rejected at height %d round %d block %X: %w: %w",
+			commit.Height, commit.Round, commit.BlockID.Hash, ErrCommitExtensionsRejected, err)
 	}
 	return nil
 }

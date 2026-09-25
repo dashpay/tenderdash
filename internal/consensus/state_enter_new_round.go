@@ -123,7 +123,10 @@ func (c *EnterNewRoundAction) Execute(ctx context.Context, stateEvent StateEvent
 	} else if !c.config.DontAutoPropose {
 		// DontAutoPropose should always be false, except for
 		// specific tests where proposals are created manually
-		err = stateEvent.Ctrl.Dispatch(ctx, &EnterProposeEvent{Height: height, Round: round}, stateData)
+		err = stateEvent.Ctrl.Dispatch(ctx, &EnterProposeEvent{
+			Height: height, Round: round,
+			SkipProposalCreation: event.KeepProcessedBlock && stateData.holdsProposalBlock(retainedBlockID),
+		}, stateData)
 		if err != nil {
 			return err
 		}
