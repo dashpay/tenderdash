@@ -2,7 +2,7 @@
 
 This guide provides instructions for upgrading to specific versions of Tenderdash.
 
-## v1.8
+## Unreleased
 
 ### ABCI: commit vote-extension verification
 
