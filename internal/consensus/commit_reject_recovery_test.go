@@ -32,7 +32,6 @@ type rejectRecoveryFixture struct {
 func newRejectRecoveryFixture(ctx context.Context, t *testing.T) *rejectRecoveryFixture {
 	t.Helper()
 	cfg := configSetup(t)
-	cfg.Consensus.DontAutoPropose = true
 	n := newCommitFixture(ctx, t, cfg, types.BlockPartSizeBytes, 0)
 	sd := n.node.GetStateData()
 	ext := tmproto.VoteExtension{Type: tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
@@ -269,6 +268,55 @@ func TestCommitRejectWithoutReplacementMovesToNextRound(t *testing.T) {
 	f.sendCommit(ctx, t, f.good, "honest")
 	require.Equal(t, []string{"process", "verify", "verify", "finalize"}, f.checker.calls)
 	f.requireCommitted(t, f.good)
+}
+
+func TestKeepProcessedBlockWithAutoPropose(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		proposer bool
+		reject   bool
+	}{
+		{name: "round entry/non-proposer"},
+		{name: "round entry/proposer", proposer: true},
+		{name: "rejection/non-proposer", reject: true},
+		{name: "rejection/proposer", proposer: true, reject: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			f := newRejectRecoveryFixture(ctx, t)
+			require.False(t, f.node.config.DontAutoPropose)
+			ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+			round := int32(1)
+			next, err := f.stateData.ProposerSelector.GetProposer(f.stateData.Height, round)
+			require.NoError(t, err)
+			if bytes.Equal(next.ProTxHash, f.node.privValidator.ProTxHash) != tc.proposer {
+				round++
+			}
+			next, err = f.stateData.ProposerSelector.GetProposer(f.stateData.Height, round)
+			require.NoError(t, err)
+			require.Equal(t, tc.proposer, bytes.Equal(next.ProTxHash, f.node.privValidator.ProTxHash))
+			f.stateData.ProposalBlock, f.stateData.ProposalBlockParts = f.block, f.parts
+			require.NoError(t, f.node.blockExecutor.ensureProcess(ctx, &f.stateData.RoundState, 0))
+			processed := f.stateData.CurrentRoundState
+			calls := []string{"process"}
+			if tc.reject {
+				f.stateData.updateRoundStep(round-1, cstypes.RoundStepPropose)
+				f.sendCommit(ctx, t, f.bad, "attacker")
+				calls = append(calls, "verify")
+			} else {
+				require.NoError(t, f.node.ctrl.Dispatch(ctx, &EnterNewRoundEvent{
+					Height: f.block.Height, Round: round, KeepProcessedBlock: true,
+				}, &f.stateData))
+			}
+			require.Equal(t, round, f.stateData.Round)
+			require.True(t, f.stateData.holdsProposalBlock(f.good.BlockID))
+			require.Equal(t, processed, f.stateData.CurrentRoundState)
+			f.sendCommit(ctx, t, f.good, "honest")
+			f.requireCommitted(t, f.good)
+			require.Equal(t, append(calls, "verify", "finalize"), f.checker.calls)
+		})
+	}
 }
 
 // Only an accepted commit may be announced to peers. A rejected one, whether

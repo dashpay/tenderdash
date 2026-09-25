@@ -281,6 +281,8 @@ func (r *BlockReplayer) replayBlock(
 	if err != nil {
 		return sm.CurrentRoundState{}, fmt.Errorf("blockReplayer process proposal: %w", err)
 	}
+	// Pre-upgrade stores may contain unchecked extensions. Rejecting them must stop
+	// replay before FinalizeBlock, even though the commit is already persisted.
 	if err := sm.VerifyCommitExtensions(ctx, r.blockExec, commit); err != nil {
 		return sm.CurrentRoundState{}, fmt.Errorf(
 			"blockReplayer verify commit extensions at height %d round %d block %X; roll back or re-sync the node: %w",

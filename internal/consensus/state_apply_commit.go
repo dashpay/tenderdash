@@ -230,18 +230,9 @@ func (c *ApplyCommitAction) recoverFromRejectedCommit(
 	if pending() {
 		c.logger.Debug("no replacement for the rejected commit; moving to the next round",
 			"height", height, "round", stateData.Round)
-		processed := stateData.CurrentRoundState
-		blockID := stateData.ProposalBlock.BlockID(stateData.ProposalBlockParts)
-		if err := ctrl.Dispatch(ctx, &EnterNewRoundEvent{
-			Height: height, Round: stateData.Round + 1, KeepProposalBlock: true,
-		}, stateData); err != nil {
-			return err
-		}
-		if stateData.Height == height && stateData.holdsProposalBlock(blockID) {
-			// Preparing our next proposal must not discard the processed commit block.
-			stateData.CurrentRoundState = processed
-			return stateData.Save()
-		}
+		return ctrl.Dispatch(ctx, &EnterNewRoundEvent{
+			Height: height, Round: stateData.Round + 1, KeepProcessedBlock: true,
+		}, stateData)
 	}
 	return nil
 }

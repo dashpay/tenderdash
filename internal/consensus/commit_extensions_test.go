@@ -26,7 +26,6 @@ func TestCommitExtensionsRejectedBeforeSaveAndRetried(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 				cfg := configSetup(t)
-				cfg.Consensus.DontAutoPropose = true
 				round := int32(0)
 				if path == "future" {
 					round = 2
