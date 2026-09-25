@@ -6,10 +6,23 @@ name: "Claude review (label: claudius-review, or reviewer: Claudius-Maginificent
     types: [labeled, review_requested, ready_for_review, synchronize]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  # Queue instead of cancelling: a cancelled run leaves a non-green check and
-  # leaves partial inline comments behind; queued runs re-check existing threads.
-  cancel-in-progress: false
+  # A new push supersedes any in-flight review of an older commit. Cancelling
+  # also skips the action's label-removal step, so the label stays and the
+  # newest run reviews the current head. Events that do not trigger a review
+  # (other labels, other reviewers) get a unique group so they never cancel a
+  # running review — keep this condition in sync with wait-for-tests' `if`.
+  group: >-
+    ${{ github.workflow }}-${{ github.ref }}-${{
+      (
+        (github.event.action == 'labeled' && github.event.label.name == 'claudius-review') ||
+        (github.event.action == 'review_requested' && github.event.requested_reviewer.login == 'Claudius-Maginificent') ||
+        (contains(fromJSON('["synchronize", "ready_for_review"]'), github.event.action) && (
+          contains(github.event.pull_request.labels.*.name, 'claudius-review') ||
+          contains(github.event.pull_request.requested_reviewers.*.login, 'Claudius-Maginificent')
+        ))
+      ) && 'review' || github.run_id
+    }}
+  cancel-in-progress: true
 
 jobs:
   # Gate: wait for the "Test" workflow (tests.yml) on the PR head commit and
