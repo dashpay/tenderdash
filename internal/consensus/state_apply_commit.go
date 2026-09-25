@@ -80,13 +80,10 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 			c.metrics.CommitVerifyFailures.With("reason", commitVerifyFailureReason(err)).Add(1)
 			c.logger.Debug("application rejected commit vote extensions",
 				"height", commit.Height, "round", commit.Round, "error", err)
-			if recoveryErr := errors.Join(
-				c.discardRejectedCommit(stateData),
-				c.recoverFromRejectedCommit(ctx, stateEvent.Ctrl, stateData, event.FromOwnPrecommits),
-			); recoveryErr != nil {
-				return recoveryErr
+			if err := c.discardRejectedCommit(stateData); err != nil {
+				return err
 			}
-			return nil
+			return c.recoverFromRejectedCommit(ctx, stateEvent.Ctrl, stateData, event.FromOwnPrecommits)
 		}
 		stateData.Commit = commit
 		if stateData.enterApplyCommit(commit.Round) {
@@ -180,10 +177,8 @@ func (c *ApplyCommitAction) discardRejectedCommit(stateData *StateData) error {
 //     not send again (see commitCandidates);
 //  2. this node's own +2/3 precommits for the block, if the rejected commit did
 //     not come from them;
-//  3. the next round: a precommit-wait timeout, whose handler moves the round
-//     on even from a step whose own timeouts have already fired. The new round
-//     clears every peer's record of having sent us a commit, so peers that
-//     have one gossip it again.
+//  3. the next round, entered directly so expired timeouts cannot stall recovery.
+//     The new round clears peers' sent-commit records so they gossip again.
 //
 // Replacements go through the same verification as a commit received from the
 // network. Any of them that is rejected lands back here while the loop is
@@ -235,7 +230,18 @@ func (c *ApplyCommitAction) recoverFromRejectedCommit(
 	if pending() {
 		c.logger.Debug("no replacement for the rejected commit; moving to the next round",
 			"height", height, "round", stateData.Round)
-		return ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: stateData.Round + 1}, stateData)
+		processed := stateData.CurrentRoundState
+		blockID := stateData.ProposalBlock.BlockID(stateData.ProposalBlockParts)
+		if err := ctrl.Dispatch(ctx, &EnterNewRoundEvent{
+			Height: height, Round: stateData.Round + 1, KeepProposalBlock: true,
+		}, stateData); err != nil {
+			return err
+		}
+		if stateData.Height == height && stateData.holdsProposalBlock(blockID) {
+			// Preparing our next proposal must not discard the processed commit block.
+			stateData.CurrentRoundState = processed
+			return stateData.Save()
+		}
 	}
 	return nil
 }

@@ -29,7 +29,7 @@ func TestBlockApplierRejectsCommitExtensionsAndRetries(t *testing.T) {
 	calls := []string{}
 	exec.On("VerifyCommit", initial, mock.Anything, block.Height, commit).Twice().Return(types.VerifiedCommit{}, nil)
 	exec.On("ValidateBlock", mock.Anything, initial, block, types.VerifiedCommit{}).Twice().Return(nil)
-	exec.On("ProcessProposal", mock.Anything, block, commit.Round, initial, true, types.VerifiedCommit{}).Twice().
+	exec.On("ProcessProposal", mock.Anything, block, commit.Round, initial, true, types.VerifiedCommit{}).Once().
 		Run(func(mock.Arguments) { calls = append(calls, "process") }).Return(sm.CurrentRoundState{}, nil)
 	check := func(args mock.Arguments) {
 		vote := args.Get(1).(*types.Vote)
@@ -55,7 +55,41 @@ func TestBlockApplierRejectsCommitExtensionsAndRetries(t *testing.T) {
 	require.Equal(t, initial.LastBlockHeight, applier.State().LastBlockHeight)
 	require.NoError(t, applier.Apply(ctx, block, commit))
 	require.Equal(t, float64(1), counter.Value())
-	require.Equal(t, []string{"process", "verify", "process", "verify", "save", "finalize"}, calls)
+	require.Equal(t, []string{"process", "verify", "verify", "save", "finalize"}, calls)
+}
+
+func TestBlockApplierInvalidatesRejectedProposal(t *testing.T) {
+	for _, change := range []string{"block", "round", "state"} {
+		t.Run(change, func(t *testing.T) {
+			ctx := context.Background()
+			vals, keys := factory.MockValidatorSet()
+			initial := fakeInitialState(vals)
+			state := initial.Copy()
+			blocks := statefactory.MakeBlocks(ctx, t, 2, &state, keys, 1)
+			block, commit := blocks[0], blocks[1].LastCommit
+			exec := mocks.NewExecutor(t)
+			store := mocks.NewBlockStore(t)
+			exec.On("VerifyCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				Twice().Return(types.VerifiedCommit{}, nil)
+			exec.On("ValidateBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				Twice().Return(nil)
+			exec.On("ProcessProposal", mock.Anything, mock.Anything, mock.Anything, mock.Anything, true, mock.Anything).
+				Twice().Return(sm.CurrentRoundState{}, nil)
+			exec.On("VerifyVoteExtension", mock.Anything, mock.Anything).
+				Twice().Return(errors.New("invalid vote extension"))
+			applier := newBlockApplier(exec, store, applierWithState(initial))
+			require.ErrorIs(t, applier.Apply(ctx, block, commit), sm.ErrCommitExtensionsRejected)
+			switch change {
+			case "block":
+				block.ProposedAppVersion++
+			case "round":
+				commit.Round++
+			case "state":
+				applier.UpdateState(initial)
+			}
+			require.ErrorIs(t, applier.Apply(ctx, block, commit), sm.ErrCommitExtensionsRejected)
+		})
+	}
 }
 
 // acceptCommitExtensions plays an application that accepts every commit

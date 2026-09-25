@@ -265,8 +265,9 @@ func TestCommitRejectWithoutReplacementMovesToNextRound(t *testing.T) {
 	require.Equal(t, int32(1), f.stateData.Round)
 	require.True(t, shouldCommitBeGossiped(peerRS, peer.GetRoundState()), "the new round makes the peer resend")
 
+	require.True(t, f.stateData.holdsProposalBlock(f.good.BlockID), "keep the verified block across recovery")
 	f.sendCommit(ctx, t, f.good, "honest")
-	require.NoError(t, f.completeBlock(ctx))
+	require.Equal(t, []string{"process", "verify", "verify", "finalize"}, f.checker.calls)
 	f.requireCommitted(t, f.good)
 }
 

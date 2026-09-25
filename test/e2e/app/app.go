@@ -101,11 +101,11 @@ func (app *Application) ExtendVote(_ context.Context, req *abci.RequestExtendVot
 		)
 		return &abci.ResponseExtendVote{}, nil
 	}
-	extensions := expectedVoteExtensions(lastHeight + 1)
+	extensions := expectedVoteExtensions(req.Height)
 
 	app.logger.Info("generated vote extension",
 		"ext", fmt.Sprintf("%x", extensions[0].Extension),
-		"state.Height", lastHeight+1,
+		"height", req.Height,
 	)
 	return &abci.ResponseExtendVote{
 		VoteExtensions: extensions,

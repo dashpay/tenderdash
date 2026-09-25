@@ -14,6 +14,8 @@ import (
 type EnterNewRoundEvent struct {
 	Height int64
 	Round  int32
+	// Keep the authenticated block available while peers re-gossip its commit.
+	KeepProposalBlock bool
 }
 
 // GetType returns EnterNewRoundType event-type
@@ -79,7 +81,7 @@ func (c *EnterNewRoundAction) Execute(ctx context.Context, stateEvent StateEvent
 		if stateData.Commit != nil {
 			// The committed block remains the download target across rounds.
 			stateData.retargetTo(stateData.Commit.BlockID, retargetOnParkCommit)
-		} else {
+		} else if !event.KeepProposalBlock {
 			stateData.ProposalBlock = nil
 			stateData.ProposalBlockParts = nil
 		}
