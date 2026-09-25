@@ -28,10 +28,17 @@ For a catch-up failure, first ensure the application implements verification for
 the failing historical height; re-sync cannot fix incompatible application logic.
 Restore a consistent application and Tenderdash backup, or use the application's
 supported state-sync or genesis-sync procedure with fresh stores. Preserve the
-validator keys and signing state to avoid double-signing. `tenderdash rollback`
-only rolls consensus state back one height, requires the state store to be at the
-block-store height or one below, and does not roll back the application or remove
-the offending stored commit. It is not a general repair for this failure.
+validator keys and signing state to avoid double-signing.
+
+If the block store is exactly one height ahead of consensus state and the
+application has not applied the rejected block, `tenderdash rollback --store`
+can remove that last block and its stored commit without rolling consensus state
+back. Restarting then allows the node to fetch and verify a replacement.
+Without `--store`, rollback does not remove the stored block or commit. Rollback
+never rolls back application state; verify the application height before using it.
+For multi-block application catch-up, rollback is not a general repair: it
+requires consensus state to be at the block-store height or one below, and deleting
+the last block cannot remove an offending commit earlier in the store.
 
 This check protects the commit supplied for the block being finalized. It does
 not authenticate the extension vector embedded in a proposal's `LastCommit`;

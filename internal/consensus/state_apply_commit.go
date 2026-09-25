@@ -129,6 +129,7 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 
 	// NewHeightStep!
 	stateData.updateToState(stateCopy, commit, c.blockStore)
+	c.candidates.resetUnless(stateData.Height)
 
 	// The application may ask us not to wait for transactions before proposing
 	// the next height (ResponseFinalizeBlock.propose_next_block_immediately).

@@ -152,7 +152,10 @@ Let us now examine the grammar line by line, providing further details.
   Before `FinalizeBlock`, the commit's extensions are verified by a call to `VerifyVoteExtension`
   with an empty `validator_pro_tx_hash` (`verify-commit`). If the Application rejects them, it
   is called again for a replacement commit, possibly after further rounds; for simplicity, the
-  grammar does not show those rounds.
+  grammar does not show those rounds. This production describes a height that
+  completes successfully. During startup replay/catch-up, rejection of a stored
+  commit instead terminates the run before `FinalizeBlock` and `Commit`, without
+  retry; see the [VerifyVoteExtension REJECT paths](abci++_methods.md#verifyvoteextension).
 
 >```abnf
 >consensus-height    = *consensus-round 1*verify-commit decide commit

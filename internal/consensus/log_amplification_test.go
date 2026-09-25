@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/dash"
-	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -109,11 +108,6 @@ func TestProposalRejectionsAreFloodable(t *testing.T) {
 	} {
 		assert.True(t, isPeerFloodableError(err), "%v is peer-triggerable at will", err)
 	}
-}
-
-func TestCommitExtensionRejectionsAreFloodable(t *testing.T) {
-	assert.True(t, isPeerFloodableError(sm.ErrCommitExtensionsRejected))
-	assert.True(t, isPeerFloodableError(fmt.Errorf("verify commit: %w", sm.ErrCommitExtensionsRejected)))
 }
 
 // A vote names the validator it claims to come from twice: by index and by

@@ -405,6 +405,10 @@ func TestCommitRejectRetriesQueuedFutureRound(t *testing.T) {
 	f := newRejectRecoveryFixture(ctx, t)
 	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
 	const round int32 = 2
+	proposer, err := f.stateData.ProposerSelector.GetProposer(f.stateData.Height, round)
+	require.NoError(t, err)
+	ctx = dash.ContextWithProTxHash(ctx, proposer.ProTxHash)
+	creator := enterProposeWithCountingCreator(f.node)
 	ext := f.good.ThresholdVoteExtensions[0]
 	votes := types.NewVoteSet(f.stateData.state.ChainID, f.block.Height, round, tmproto.PrecommitType, f.stateData.Validators)
 	future, err := factory.MakeCommit(ctx, f.good.BlockID, f.block.Height, round, votes, f.stateData.Validators, f.privVals, *ext)
@@ -412,6 +416,8 @@ func TestCommitRejectRetriesQueuedFutureRound(t *testing.T) {
 	f.checker.onVerify = func(vote *types.Vote) {
 		if vote.Round == 0 {
 			f.checker.round = round
+		} else {
+			require.Zero(t, creator.calls.Load(), "a committed future round must not create a competing proposal")
 		}
 	}
 	f.sendCommit(ctx, t, f.bad, "attacker")
@@ -419,4 +425,18 @@ func TestCommitRejectRetriesQueuedFutureRound(t *testing.T) {
 	require.NoError(t, f.completeBlock(ctx))
 	f.requireCommitted(t, future)
 	require.Equal(t, []string{"process", "verify", "process", "verify", "finalize"}, f.checker.calls)
+}
+
+func TestAcceptedCommitDiscardsQueuedCandidates(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := newRejectRecoveryFixture(ctx, t)
+	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+	f.sendCommit(ctx, t, f.good, "honest")
+	f.sendCommit(ctx, t, f.bad, "attacker")
+	candidates := f.node.ctrl.Get(ApplyCommitType).(*ApplyCommitAction).candidates
+	require.Len(t, candidates.candidates, 1)
+	require.NoError(t, f.completeBlock(ctx))
+	f.requireCommitted(t, f.good)
+	require.Empty(t, candidates.candidates, "completed heights must release queued commits")
 }
