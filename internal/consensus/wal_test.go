@@ -43,7 +43,7 @@ func TestWALTruncate(t *testing.T) {
 	require.NoError(t, err)
 	err = wal.Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { wal.Stop(); wal.Group().Stop(); wal.Group().Wait(); wal.Wait() })
+	t.Cleanup(func() { wal.Stop(); wal.Wait() })
 
 	// 60 block's size nearly 70K, greater than group's headBuf size(4096 * 10),
 	// when headBuf is full, truncate content will Flush to the file. at this
@@ -111,7 +111,7 @@ func TestWALWrite(t *testing.T) {
 	require.NoError(t, err)
 	err = wal.Start(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { wal.Stop(); wal.Group().Stop(); wal.Group().Wait(); wal.Wait() })
+	t.Cleanup(func() { wal.Stop(); wal.Wait() })
 
 	// 1) Write returns an error if msg is too big
 	msg := &BlockPartMessage{
@@ -253,7 +253,7 @@ func TestWALPeriodicSync(t *testing.T) {
 	assert.NotZero(t, wal.Group().Buffered())
 
 	require.NoError(t, wal.Start(ctx))
-	t.Cleanup(func() { wal.Stop(); wal.Group().Stop(); wal.Group().Wait(); wal.Wait() })
+	t.Cleanup(func() { wal.Stop(); wal.Wait() })
 
 	time.Sleep(walTestFlushInterval + (20 * time.Millisecond))
 
@@ -270,4 +270,37 @@ func TestWALPeriodicSync(t *testing.T) {
 	}
 
 	t.Cleanup(leaktest.Check(t))
+}
+
+func TestWALShutdownFlushesBufferedWrites(t *testing.T) {
+	for _, parentStop := range []bool{false, true} {
+		t.Run(map[bool]string{false: "manual", true: "parent"}[parentStop], func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			path := filepath.Join(t.TempDir(), "wal")
+			wal, err := NewWAL(ctx, log.NewNopLogger(), path)
+			require.NoError(t, err)
+			wal.SetFlushInterval(time.Hour)
+			require.NoError(t, wal.Start(ctx))
+			require.NoError(t, wal.Write(EndHeightMessage{123}))
+			if parentStop {
+				cancel()
+			} else {
+				wal.Stop()
+			}
+			wal.Wait()
+			file, err := os.Open(path)
+			require.NoError(t, err)
+			defer file.Close()
+			decoder := NewWALDecoder(file)
+			first, err := decoder.Decode()
+			require.NoError(t, err)
+			require.Equal(t, EndHeightMessage{0}, first.Msg)
+			last, err := decoder.Decode()
+			require.NoError(t, err)
+			require.Equal(t, EndHeightMessage{123}, last.Msg)
+			require.ErrorIs(t, wal.Group().Head.Sync(), autofile.ErrAutoFileClosed)
+			require.NoError(t, os.Remove(path))
+		})
+	}
 }

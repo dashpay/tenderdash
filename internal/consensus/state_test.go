@@ -3496,7 +3496,6 @@ func mockProposerApplicationCalls(t *testing.T, m *abcimocks.Application, round 
 			Once()
 	}
 }
-
 func TestStateWaitDrainsReceiveRoutine(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -3514,7 +3513,6 @@ func TestStateWaitDrainsReceiveRoutine(t *testing.T) {
 	require.NoError(t, cs.Start(ctx))
 	<-entered
 	cs.Stop()
-	cs.BaseService.Wait()
 
 	waited := make(chan struct{})
 	go func() {
@@ -3532,4 +3530,18 @@ func TestStateWaitDrainsReceiveRoutine(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("Wait did not return after the receive routine finished")
 	}
+}
+
+func TestDirectReceiveRoutineDrainsQueue(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cs, _ := makeState(ctx, t, makeStateArgs{})
+	cs.receiveRoutine(ctx, func(*State) bool { return true })
+	select {
+	case _, ok := <-cs.msgInfoQueue.read():
+		require.False(t, ok)
+	default:
+		t.Fatal("receiveRoutine returned before queue was closed")
+	}
+	require.NoError(t, ctx.Err())
 }

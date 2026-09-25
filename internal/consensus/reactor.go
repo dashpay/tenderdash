@@ -413,9 +413,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	return nil
 }
 
-// OnStop stops the reactor by signaling to all spawned goroutines to exit and
-// blocking until they all exit, as well as unsubscribing from events and stopping
-// state.
+// OnStop requests reactor and consensus shutdown.
 func (r *Reactor) OnStop() {
 	// Cancel the reactor context to signal all goroutines to stop
 	if r.cancel != nil {
@@ -423,10 +421,12 @@ func (r *Reactor) OnStop() {
 	}
 
 	r.state.Stop()
+}
 
-	if !r.WaitSync() {
-		r.state.Wait()
-	}
+// OnDrain joins consensus after any admitted handoff has finished.
+func (r *Reactor) OnDrain() {
+	r.state.Stop()
+	r.state.Wait()
 }
 
 // WaitSync returns whether the consensus reactor is waiting for state/block sync.
@@ -447,6 +447,20 @@ func (r *Reactor) WaitSync() bool {
 // targetHeight is the highest committed block height reported during block sync.
 // skipWAL says the node needs no WAL catchup.
 func (r *Reactor) SwitchToConsensus(ctx context.Context, state sm.State, skipWAL bool, targetHeight int64) {
+	if r.ctx == nil || ctx.Err() != nil {
+		return
+	}
+	done := make(chan struct{})
+	if !r.Go(r.ctx, func(ctx context.Context) {
+		defer close(done)
+		r.switchToConsensus(ctx, state, skipWAL, targetHeight)
+	}) {
+		return
+	}
+	<-done
+}
+
+func (r *Reactor) switchToConsensus(ctx context.Context, state sm.State, skipWAL bool, targetHeight int64) {
 	r.logger.Info("switching to consensus", "target_height", targetHeight)
 
 	if targetHeight > state.LastBlockHeight {
@@ -473,6 +487,9 @@ func (r *Reactor) SwitchToConsensus(ctx context.Context, state sm.State, skipWAL
 	r.state.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
 
 	if err := r.state.Start(ctx); err != nil {
+		if ctx.Err() != nil {
+			return
+		}
 		panic(fmt.Sprintf(`failed to start consensus state: %v
 
 conS:
@@ -520,8 +537,6 @@ func (r *Reactor) GetPeerState(peerID types.NodeID) (*PeerState, bool) {
 // internal pubsub defined in the consensus state to broadcast them to peers
 // upon receiving.
 func (r *Reactor) subscribeToBroadcastEvents(ctx context.Context, stateCh p2p.Channel) {
-	onStopCh := r.state.getOnStopCh()
-
 	r.state.emitter.AddListener(
 		types.EventNewRoundStepValue,
 		func(data eventemitter.EventData) error {
@@ -531,14 +546,7 @@ func (r *Reactor) subscribeToBroadcastEvents(ctx context.Context, stateCh p2p.Ch
 				return err
 			}
 			r.logResult(err, r.logger, "broadcasting round step message", "height", rs.Height, "round", rs.Round)
-			select {
-			case onStopCh <- data.(*cstypes.RoundState):
-				return nil
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-				return nil
-			}
+			return nil
 		},
 	)
 
