@@ -1,14 +1,18 @@
 ---
-name: "Claude review (label: claudius-review, or reviewer: Claudius-Maginificent)"
+name: "Claude review (label: claudius-review)"
 
 "on":
   pull_request:
-    types: [labeled, review_requested, ready_for_review, synchronize]
+    types: [labeled, synchronize]
 
 concurrency:
-  # One review per PR: a new event supersedes the in-flight run. A cancelled
-  # run skips label removal, so the label stays for the newest run.
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  # One review per PR: a push or adding claudius-review cancels the in-flight
+  # run (which then skips label removal, so the label stays for the newest
+  # run). Other labels get a unique group so they never cancel anything.
+  group: >-
+    ${{ github.workflow }}-${{
+      (github.event.action == 'labeled' && github.event.label.name != 'claudius-review')
+      && github.run_id || github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
@@ -16,15 +20,11 @@ jobs:
   # only let the review run when it concluded successfully. Red/cancelled
   # tests skip the review (no extra failing check); a timeout fails the gate.
   wait-for-tests:
-    # Draft status is intentionally ignored: the label / reviewer request is
-    # the opt-in.
+    # Triggers: adding claudius-review, or a push while the label is on the
+    # PR. Draft status is intentionally ignored.
     if: >
       (github.event.action == 'labeled' && github.event.label.name == 'claudius-review') ||
-      (github.event.action == 'review_requested' && github.event.requested_reviewer.login == 'Claudius-Maginificent') ||
-      (contains(fromJSON('["synchronize", "ready_for_review"]'), github.event.action) && (
-        contains(github.event.pull_request.labels.*.name, 'claudius-review') ||
-        contains(github.event.pull_request.requested_reviewers.*.login, 'Claudius-Maginificent')
-      ))
+      (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'claudius-review'))
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
@@ -101,15 +101,9 @@ jobs:
           memcan_url: ${{ vars.MEMCAN_URL }}
           memcan_api_key: ${{ secrets.MEMCAN_API_KEY }}
           claude_extra_args: "--permission-mode auto"
-          # Clears Claudius-Maginificent's own pending review request on
-          # success — the review itself posts under a different identity, so
-          # GitHub never auto-clears it, and without this every push would
-          # re-trigger a full review forever. No-op for the label trigger.
-          reviewer_login: Claudius-Maginificent
           # Claudius-Maginificent only has triage access to this repo (no git
           # push), so the collaborator-permission API reports it as "read" —
           # below claude-code-action's admin/write bar. It's a trusted bot
-          # that only ever applies the trigger label or requests itself as
-          # reviewer, so allow-list it by name instead of granting real
-          # write access.
+          # that only ever applies the trigger label, so allow-list it by
+          # name instead of granting real write access.
           allowed_non_write_users: Claudius-Maginificent
