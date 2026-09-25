@@ -58,7 +58,7 @@ func (t *timeoutTicker) OnStart(ctx context.Context) error {
 	return nil
 }
 
-// OnStop implements service.Service. It stops the timeout routine.
+// OnStop needs no extra signal: the service context stops timeout work.
 func (t *timeoutTicker) OnStop() {}
 
 // OnDrain stops the timer after its sole scheduling worker exits.

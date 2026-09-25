@@ -465,6 +465,13 @@ func (cs *State) SetPrivValidator(ctx context.Context, priv types.PrivValidator)
 	}
 }
 
+type processingContextKey struct{}
+
+// Start preserves the parent's lifetime for in-flight processing during manual Stop.
+func (cs *State) Start(ctx context.Context) error {
+	return cs.BaseService.Start(context.WithValue(ctx, processingContextKey{}, ctx))
+}
+
 // OnStart loads the latest state via the WAL, and starts the timeout and
 // receive routines.
 func (cs *State) OnStart(ctx context.Context) (err error) {
@@ -679,6 +686,10 @@ func (cs *State) loadLastCommit(lastBlockHeight int64) (*types.Commit, error) {
 // Updates (state transitions) happen on timeouts, complete proposals, and 2/3 majorities.
 // State must be locked before any internal state is updated.
 func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
+	processCtx, ok := ctx.Value(processingContextKey{}).(context.Context)
+	if !ok {
+		processCtx = ctx
+	}
 	onExit := func(cs *State) {
 		// NOTE: the internalMsgQueue may have signed messages from our
 		// priv_val that haven't hit the WAL, but its ok because
@@ -735,6 +746,9 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 	defer func() { onExit(cs); <-queueDone }()
 
 	for {
+		if ctx.Err() != nil {
+			return
+		}
 		if stopFn != nil && stopFn(cs) {
 			return
 		}
@@ -742,14 +756,14 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 		select {
 		case <-cs.txNotifier.TxsAvailable():
 			stateData := cs.stateDataStore.Get()
-			cs.handleTxsAvailable(ctx, &stateData)
+			cs.handleTxsAvailable(processCtx, &stateData)
 			err := stateData.Save()
 			if err != nil {
 				cs.logger.Error("failed update state-data", "err", err)
 			}
 		case mi := <-cs.msgInfoQueue.read():
 			stateData := cs.stateDataStore.Get()
-			err := cs.msgDispatcher.dispatch(ctx, &stateData, mi)
+			err := cs.msgDispatcher.dispatch(processCtx, &stateData, mi)
 			if mi.PeerID != "" {
 				// The peer scheduler makes room in the verification budget for a
 				// message before handing it over, which is only sound if what it
@@ -776,7 +790,7 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 
 			// if the timeout is relevant to the rs
 			// go to the next step
-			cs.handleTimeout(ctx, ti, &stateData)
+			cs.handleTimeout(processCtx, ti, &stateData)
 			err := cs.stateDataStore.Update(stateData)
 			if err != nil {
 				cs.logger.Error("failed update state-data", "err", err)

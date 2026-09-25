@@ -252,14 +252,17 @@ func (s *Synchronizer) OnStart(ctx context.Context) error {
 	s.lastAdvance = s.clock.Now()
 	s.lastMonitorUpdate = s.lastAdvance
 	s.ctx, s.cancel = context.WithCancel(ctx)
-	applicationCtx := ctx.Value(applicationContextKey{}).(context.Context)
+	applicationCtx, ok := ctx.Value(applicationContextKey{}).(context.Context)
+	if !ok {
+		applicationCtx = ctx
+	}
 	s.consumerDone = make(chan struct{})
 	s.workerPool.Run(s.ctx)
 	go s.runHandler(s.ctx, s.produceJob)
 	go func() {
 		defer close(s.consumerDone)
 		s.runHandler(s.ctx, func(handlerCtx context.Context) error {
-			// Handover cancels consumer I/O; only node shutdown may cancel application.
+			// Handover cancels consumer I/O; parent cancellation also stops application.
 			return s.consumeJobResult(handlerCtx, applicationCtx)
 		})
 	}()

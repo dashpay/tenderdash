@@ -73,7 +73,8 @@ type Group struct {
 }
 
 // OpenGroup creates a new Group with head at headPath. It returns an error if
-// it fails to open head file.
+// it fails to open head file. The caller must Close the group, even if it was
+// never started; context cancellation alone does not close its head.
 func OpenGroup(ctx context.Context, logger log.Logger, headPath string, groupOptions ...func(*Group)) (*Group, error) {
 	dir, err := filepath.Abs(filepath.Dir(headPath))
 	if err != nil {
