@@ -12,17 +12,76 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  review:
+  # Gate: wait for the "Test" workflow (tests.yml) on the PR head commit and
+  # only let the review run when it concluded successfully. Red/cancelled
+  # tests skip the review (no extra failing check); a timeout fails the gate.
+  wait-for-tests:
+    # Draft status is intentionally ignored: the label / reviewer request is
+    # the opt-in.
     if: >
-      github.event.pull_request.draft == false &&
-      (
-        (github.event.action == 'labeled' && github.event.label.name == 'claudius-review') ||
-        (github.event.action == 'review_requested' && github.event.requested_reviewer.login == 'Claudius-Maginificent') ||
-        (contains(fromJSON('["synchronize", "ready_for_review"]'), github.event.action) && (
-          contains(github.event.pull_request.labels.*.name, 'claudius-review') ||
-          contains(github.event.pull_request.requested_reviewers.*.login, 'Claudius-Maginificent')
-        ))
-      )
+      (github.event.action == 'labeled' && github.event.label.name == 'claudius-review') ||
+      (github.event.action == 'review_requested' && github.event.requested_reviewer.login == 'Claudius-Maginificent') ||
+      (contains(fromJSON('["synchronize", "ready_for_review"]'), github.event.action) && (
+        contains(github.event.pull_request.labels.*.name, 'claudius-review') ||
+        contains(github.event.pull_request.requested_reviewers.*.login, 'Claudius-Maginificent')
+      ))
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      actions: read
+    outputs:
+      green: ${{ steps.wait.outputs.green }}
+    steps:
+      - name: Wait for tests.yml to finish on PR head
+        id: wait
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          start=$SECONDS
+          deadline=$((start + 110 * 60))
+          # tests.yml triggers on every pull_request, so a run must show up
+          # quickly; fail fast if it never does (renamed workflow, trigger drift).
+          appear_deadline=$((start + 15 * 60))
+          while :; do
+            # Tolerate transient API errors; the poll loop retries.
+            if ! run=$(gh run list -R "$REPO" --workflow tests.yml \
+              --commit "$SHA" --branch "$HEAD_REF" --event pull_request \
+              --limit 1 --json databaseId,status,conclusion \
+              --jq '.[0] // empty'); then
+              echo "::warning::gh run list failed; retrying"
+              run=""
+            fi
+            if [ -n "$run" ] && [ "$(jq -r .status <<<"$run")" = completed ]; then
+              conclusion=$(jq -r .conclusion <<<"$run")
+              echo "tests.yml run $(jq -r .databaseId <<<"$run"): $conclusion"
+              if [ "$conclusion" = success ]; then
+                echo "green=true" >>"$GITHUB_OUTPUT"
+              else
+                msg="tests.yml concluded '$conclusion' for $SHA; Claudius review skipped"
+                echo "::warning::$msg"
+                echo "⚠️ $msg" >>"$GITHUB_STEP_SUMMARY"
+                echo "green=false" >>"$GITHUB_OUTPUT"
+              fi
+              exit 0
+            fi
+            if [ -z "$run" ] && [ "$SECONDS" -ge "$appear_deadline" ]; then
+              echo "::error::No tests.yml run found for $SHA after 15 min"
+              exit 1
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::Timed out waiting for tests.yml on $SHA"
+              exit 1
+            fi
+            sleep 30
+          done
+
+  review:
+    needs: wait-for-tests
+    if: needs.wait-for-tests.outputs.green == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
