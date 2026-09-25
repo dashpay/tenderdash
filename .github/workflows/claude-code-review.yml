@@ -16,20 +16,15 @@ jobs:
   # only let the review run when it concluded successfully. Red/cancelled
   # tests skip the review (no extra failing check); a timeout fails the gate.
   wait-for-tests:
-    # Adding the claudius-review label is an explicit request, so it runs even
-    # on drafts; every other trigger requires a non-draft PR.
+    # Draft status is intentionally ignored: the label / reviewer request is
+    # the opt-in.
     if: >
       (github.event.action == 'labeled' && github.event.label.name == 'claudius-review') ||
-      (
-        github.event.pull_request.draft == false &&
-        (
-          (github.event.action == 'review_requested' && github.event.requested_reviewer.login == 'Claudius-Maginificent') ||
-          (contains(fromJSON('["synchronize", "ready_for_review"]'), github.event.action) && (
-            contains(github.event.pull_request.labels.*.name, 'claudius-review') ||
-            contains(github.event.pull_request.requested_reviewers.*.login, 'Claudius-Maginificent')
-          ))
-        )
-      )
+      (github.event.action == 'review_requested' && github.event.requested_reviewer.login == 'Claudius-Maginificent') ||
+      (contains(fromJSON('["synchronize", "ready_for_review"]'), github.event.action) && (
+        contains(github.event.pull_request.labels.*.name, 'claudius-review') ||
+        contains(github.event.pull_request.requested_reviewers.*.login, 'Claudius-Maginificent')
+      ))
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
