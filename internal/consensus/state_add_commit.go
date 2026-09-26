@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	"github.com/dashpay/tenderdash/libs/log"
-	tmtime "github.com/dashpay/tenderdash/libs/time"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -36,10 +34,13 @@ func (c *AddCommitAction) Execute(ctx context.Context, stateEvent StateEvent) er
 	}
 
 	// updateStateData clears ProposalBlock when the round state was holding some
-	// other block, having pointed the part set at the committed one instead. There
-	// is nothing to apply until that block arrives, and its completing part
-	// dispatches this event again.
+	// other block, having pointed the part set at the committed one instead.
+	// Both callers normally rule this out: TryAddCommit dispatches only for a
+	// held block, and a completing part dispatches the commit parked for it.
+	// Should it happen, the commit is parked here, because a completing part
+	// dispatches this event again only for stateData.Commit.
 	if stateData.ProposalBlock == nil {
+		stateData.Commit = commit
 		log.FromCtxOrNop(ctx).Debug("commit is for a block we do not have yet; waiting for it",
 			"height", commit.Height,
 			"round", commit.Round,
@@ -48,14 +49,13 @@ func (c *AddCommitAction) Execute(ctx context.Context, stateEvent StateEvent) er
 		return nil
 	}
 
-	stateData.updateRoundStep(stateData.Round, cstypes.RoundStepApplyCommit)
-	stateData.CommitRound = commit.Round
-	stateData.CommitTime = tmtime.Now()
-	c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
-
 	// The commit is all good, let's apply it to the state
-	if err := stateEvent.Ctrl.Dispatch(ctx, &ApplyCommitEvent{Commit: commit}, stateData); err != nil {
+	applyEvent := &ApplyCommitEvent{Commit: commit}
+	if err := stateEvent.Ctrl.Dispatch(ctx, applyEvent, stateData); err != nil {
 		return err
+	}
+	if applyEvent.Rejected {
+		return nil
 	}
 
 	// This will relay the commit to peers

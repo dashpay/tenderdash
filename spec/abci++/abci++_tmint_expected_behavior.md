@@ -20,7 +20,9 @@ what will happen during a block height _h_ in these frequent, benign conditions:
   will return _accept_ in its `Response*`;
 * `ExtendVote` will be called exactly once at all processes;
 * `VerifyVoteExtension` will be called exactly _n-1_ times at each validator process, where _n_ is
-  the number of validators, and will always return _accept_ in its `Response*`;
+  the number of validators, to verify the other validators' precommits, plus once at all processes
+  to verify the commit's extensions before `FinalizeBlock`, and will always return _accept_ in its
+  `Response*`;
 * `FinalizeBlock` will be called exactly once at all processes, conveying the same prepared
   block that all calls to `PrepareProposal` and `ProcessProposal` had previously reported for
   height _h_; and
@@ -53,7 +55,7 @@ success-sync        = offer-snapshot 1*apply-chunk
 recovery            = info consensus-exec
 
 consensus-exec      = (inf)consensus-height
-consensus-height    = *consensus-round decide commit
+consensus-height    = *consensus-round 1*verify-commit decide commit
 consensus-round     = proposer / non-proposer
 
 proposer            = *got-vote prepare-proposal *got-vote process-proposal [extend]
@@ -68,6 +70,7 @@ prepare-proposal    = %s"<PrepareProposal>"
 process-proposal    = %s"<ProcessProposal>"
 extend-vote         = %s"<ExtendVote>"
 got-vote            = %s"<VerifyVoteExtension>"
+verify-commit       = %s"<VerifyVoteExtension>"
 decide              = %s"<FinalizeBlock>"
 commit              = %s"<Commit>"
 ```
@@ -146,9 +149,16 @@ Let us now examine the grammar line by line, providing further details.
   `FinalizeBlock`, followed by a call to `Commit`. In each round, the sequence of method calls
   depends on whether the local process is the proposer or not. Note that, if a height contains zero
   rounds, this means the process is replaying an already decided value (catch-up mode).
+  Before `FinalizeBlock`, the commit's extensions are verified by a call to `VerifyVoteExtension`
+  with an empty `validator_pro_tx_hash` (`verify-commit`). If the Application rejects them, it
+  is called again for a replacement commit, possibly after further rounds; for simplicity, the
+  grammar does not show those rounds. This production describes a height that
+  completes successfully. During startup replay/catch-up, rejection of a stored
+  commit instead terminates the run before `FinalizeBlock` and `Commit`, without
+  retry; see the [VerifyVoteExtension REJECT paths](abci++_methods.md#verifyvoteextension).
 
 >```abnf
->consensus-height    = *consensus-round decide commit
+>consensus-height    = *consensus-round 1*verify-commit decide commit
 >consensus-round     = proposer / non-proposer
 >```
 
@@ -186,6 +196,7 @@ Let us now examine the grammar line by line, providing further details.
 >process-proposal    = %s"<ProcessProposal>"
 >extend-vote         = %s"<ExtendVote>"
 >got-vote            = %s"<VerifyVoteExtension>"
+>verify-commit       = %s"<VerifyVoteExtension>"
 >decide              = %s"<FinalizeBlock>"
 >commit              = %s"<Commit>"
 >```
@@ -211,8 +222,10 @@ As for the new methods:
   end of the list until the total byte size is at or below the limit.
 * `ProcessProposal` must set `ResponseProcessProposal.accept` to _true_ and return.
 * `ExtendVote` is to set `ResponseExtendVote.extension` to an empty byte array and return.
-* `VerifyVoteExtension` must set `ResponseVerifyVoteExtension.accept` to _true_ if the extension is
-  an empty byte array and _false_ otherwise, then return.
+* `VerifyVoteExtension` must set `ResponseVerifyVoteExtension.status` to `ACCEPT` if the extension
+  list is empty and to `REJECT` otherwise, then return. This holds for commit verification too
+  (empty `validator_pro_tx_hash`): an application whose `ExtendVote` returns no extensions expects
+  an empty commit vector.
 * `FinalizeBlock` is to coalesce the implementation of methods `BeginBlock`, `DeliverTx`, and
   `EndBlock`. Legacy applications looking to reuse old code that implemented `DeliverTx` should
   wrap the legacy `DeliverTx` logic in a loop that executes one transaction iteration per

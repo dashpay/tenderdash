@@ -2,6 +2,7 @@ package blocksync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -32,6 +33,10 @@ type (
 		// lastDone is when the previous Apply returned, so the time the applier
 		// sits idle waiting for the next block can be measured
 		lastDone time.Time
+		// Retain a successful ProcessProposal across commit-extension rejection.
+		processedBlock types.BlockID
+		processedRound int32
+		processedState *sm.CurrentRoundState
 	}
 )
 
@@ -100,9 +105,19 @@ func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *ty
 	// Validate the app response before persisting; save before FinalizeBlock so
 	// crash recovery never finds the block store behind the application.
 	start = time.Now()
-	uncommittedState, err := e.blockExec.ProcessProposal(ctx, block, commit.Round, e.state, true, e.lastCommit)
-	if err != nil {
-		panic(fmt.Sprintf("failed to process committed block (%d:%X): %v", block.Height, block.Hash(), err))
+	if e.processedState == nil || !e.processedBlock.Equals(blockID) || e.processedRound != commit.Round {
+		e.processedState = nil
+		processed, err := e.blockExec.ProcessProposal(ctx, block, commit.Round, e.state, true, e.lastCommit)
+		if err != nil {
+			panic(fmt.Sprintf("failed to process committed block (%d:%X): %v", block.Height, block.Hash(), err))
+		}
+		e.processedBlock, e.processedRound, e.processedState = blockID, commit.Round, &processed
+	}
+	if err := sm.VerifyCommitExtensions(ctx, e.blockExec, commit); err != nil {
+		if errors.Is(err, sm.ErrCommitExtensionsRejected) {
+			e.metrics.CommitVerifyFailures.With("reason", "extensions_rejected").Add(1)
+		}
+		return err
 	}
 	processTime := time.Since(start)
 
@@ -112,11 +127,12 @@ func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *ty
 
 	start = time.Now()
 	// Block sync never proposes, so the response hints are not needed here.
-	e.state, _, err = e.blockExec.FinalizeBlock(ctx, e.state, uncommittedState, blockID, block, commit, e.lastCommit)
+	e.state, _, err = e.blockExec.FinalizeBlock(ctx, e.state, *e.processedState, blockID, block, commit, e.lastCommit)
 	if err != nil {
 		panic(fmt.Sprintf("failed to finalize committed block (%d:%X): %v", block.Height, block.Hash(), err))
 	}
 	// commit comes back as the next block's LastCommit
+	e.processedState = nil
 	e.lastCommit = verified
 	execTime := processTime + time.Since(start)
 	e.metrics.ObserveBlockSyncStage("exec", execTime)
@@ -147,6 +163,7 @@ func (e *blockApplier) UpdateState(newState sm.State) {
 	e.mtx.Lock()
 	defer e.mtx.Unlock()
 	e.state = newState
+	e.processedState = nil
 	// the commit lastCommit verified was applied onto the replaced state, not onto
 	// newState
 	e.lastCommit = types.VerifiedCommit{}

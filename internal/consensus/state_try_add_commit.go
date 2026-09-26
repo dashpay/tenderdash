@@ -8,6 +8,7 @@ import (
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
 	"github.com/dashpay/tenderdash/dash"
+	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -34,6 +35,7 @@ type TryAddCommitAction struct {
 	metrics        *Metrics
 
 	verificationBudget types.VerificationBudget
+	candidates         *commitCandidates
 }
 
 // Execute ...
@@ -45,8 +47,14 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 	fromReplay := event.FromReplay
 	ctx = ctxWithPeerVerificationBudget(ctx, peerID, fromReplay, cs.verificationBudget)
 
-	// Let's only add one remote commit
+	// Only one remote commit at a time: the parked one is applied when its block
+	// arrives. Its sender cannot vouch for its extensions, which the application
+	// checks only then, so later commits for the height are kept unverified as
+	// replacements rather than dropped.
 	if stateData.Commit != nil {
+		if commit.Height == stateData.Height {
+			cs.candidates.add(stateData.Height, commit, peerID, fromReplay)
+		}
 		return nil
 	}
 
@@ -100,10 +108,8 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 		return nil
 	}
 
-	// Below the guard, so that the guard firing leaves nothing behind. Setting
-	// Commit is what stops a later commit being reconsidered, and a round holding
-	// one it never dispatched waits for an event that will not arrive.
-	stateData.Commit = commit
+	// stateData.Commit stays unset: ApplyCommit publishes the commit only once
+	// the application has accepted its extensions.
 	return stateEvent.Ctrl.Dispatch(ctx, &AddCommitEvent{Commit: commit}, stateData)
 }
 
@@ -153,6 +159,8 @@ func commitVerifyFailureReason(err error) string {
 		return "quorum_hash"
 	case errors.As(err, &types.ErrVoteExtensionCountMismatch{}):
 		return "extension_count"
+	case errors.Is(err, sm.ErrCommitExtensionsRejected):
+		return "extensions_rejected"
 	case errors.As(err, &types.ErrInvalidCommitSignature{}):
 		return "invalid_signature"
 	case errors.Is(err, types.ErrVerificationBudgetExhausted):

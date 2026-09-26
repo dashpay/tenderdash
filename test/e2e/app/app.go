@@ -101,24 +101,14 @@ func (app *Application) ExtendVote(_ context.Context, req *abci.RequestExtendVot
 		)
 		return &abci.ResponseExtendVote{}, nil
 	}
-	ext := make([]byte, crypto.DefaultHashSize)
-	copy(ext, big.NewInt(lastHeight+1).Bytes())
+	extensions := expectedVoteExtensions(req.Height)
 
 	app.logger.Info("generated vote extension",
-		"ext", fmt.Sprintf("%x", ext),
-		"state.Height", lastHeight+1,
+		"ext", fmt.Sprintf("%x", extensions[0].Extension),
+		"height", req.Height,
 	)
 	return &abci.ResponseExtendVote{
-		VoteExtensions: []*abci.ExtendVoteExtension{
-			{
-				Type:      types1.VoteExtensionType_THRESHOLD_RECOVER_RAW,
-				Extension: ext,
-			},
-			{
-				Type:      types1.VoteExtensionType_THRESHOLD_RECOVER,
-				Extension: []byte(fmt.Sprintf("threshold-%d", lastHeight+1)),
-			},
-		},
+		VoteExtensions: extensions,
 	}, nil
 }
 
@@ -128,13 +118,6 @@ func (app *Application) ExtendVote(_ context.Context, req *abci.RequestExtendVot
 func (app *Application) VerifyVoteExtension(_ context.Context, req *abci.RequestVerifyVoteExtension) (*abci.ResponseVerifyVoteExtension, error) {
 	app.mu.Lock()
 	defer app.mu.Unlock()
-
-	// We allow vote extensions to be optional
-	if len(req.VoteExtensions) == 0 {
-		return &abci.ResponseVerifyVoteExtension{
-			Status: abci.ResponseVerifyVoteExtension_ACCEPT,
-		}, nil
-	}
 	lastHeight := app.LastCommittedState.GetHeight()
 	if lastHeight != 0 && req.Height != lastHeight+1 {
 		app.logger.Error(
@@ -146,7 +129,27 @@ func (app *Application) VerifyVoteExtension(_ context.Context, req *abci.Request
 			Status: abci.ResponseVerifyVoteExtension_REJECT,
 		}, nil
 	}
+	if len(req.ValidatorProTxHash) == 0 {
+		expected := expectedVoteExtensions(req.Height)
+		if len(req.VoteExtensions) != len(expected) {
+			return &abci.ResponseVerifyVoteExtension{Status: abci.ResponseVerifyVoteExtension_REJECT}, nil
+		}
+		for i := range expected {
+			if req.VoteExtensions[i].Type != expected[i].Type ||
+				!bytes.Equal(req.VoteExtensions[i].Extension, expected[i].Extension) ||
+				!bytes.Equal(req.VoteExtensions[i].GetSignRequestId(), expected[i].GetSignRequestId()) {
+				return &abci.ResponseVerifyVoteExtension{Status: abci.ResponseVerifyVoteExtension_REJECT}, nil
+			}
+		}
+		return &abci.ResponseVerifyVoteExtension{Status: abci.ResponseVerifyVoteExtension_ACCEPT}, nil
+	}
 
+	// We allow vote extensions to be optional
+	if len(req.VoteExtensions) == 0 {
+		return &abci.ResponseVerifyVoteExtension{
+			Status: abci.ResponseVerifyVoteExtension_ACCEPT,
+		}, nil
+	}
 	nums := make([]int64, 0, len(req.VoteExtensions))
 	for _, ext := range req.VoteExtensions {
 		num, err := parseVoteExtension(ext.Extension)
@@ -167,6 +170,15 @@ func (app *Application) VerifyVoteExtension(_ context.Context, req *abci.Request
 	return &abci.ResponseVerifyVoteExtension{
 		Status: abci.ResponseVerifyVoteExtension_ACCEPT,
 	}, nil
+}
+
+func expectedVoteExtensions(height int64) []*abci.ExtendVoteExtension {
+	ext := make([]byte, crypto.DefaultHashSize)
+	copy(ext, big.NewInt(height).Bytes())
+	return []*abci.ExtendVoteExtension{
+		{Type: types1.VoteExtensionType_THRESHOLD_RECOVER_RAW, Extension: ext},
+		{Type: types1.VoteExtensionType_THRESHOLD_RECOVER, Extension: []byte(fmt.Sprintf("threshold-%d", height))},
+	}
 }
 
 func (app *Application) FinalizeBlock(ctx context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {

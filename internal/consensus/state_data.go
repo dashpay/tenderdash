@@ -191,6 +191,26 @@ func (s *StateData) updateRoundStep(round int32, step cstypes.RoundStepType) {
 	}
 }
 
+// enterApplyCommit moves the round to the ApplyCommit step for commitRound and
+// reports whether anything changed, i.e. whether the step must be announced.
+func (s *StateData) enterApplyCommit(commitRound int32) bool {
+	if s.Step == cstypes.RoundStepApplyCommit && s.CommitRound == commitRound {
+		return false
+	}
+	s.updateRoundStep(s.Round, cstypes.RoundStepApplyCommit)
+	s.CommitRound = commitRound
+	s.CommitTime = tmtime.Now()
+	return true
+}
+
+// discardCommit forgets the commit being applied or parked, so that another
+// commit for the height can be considered.
+func (s *StateData) discardCommit() {
+	s.Commit = nil
+	s.CommitRound = -1
+	s.CommitTime = time.Time{}
+}
+
 // Updates State and increments height to match that of state.
 // The round becomes 0 and cs.Step becomes cstypes.RoundStepNewHeight.
 func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockStore selectproposer.BlockStore) {

@@ -119,7 +119,16 @@ similarly to Requirements 5 and 6 and proposed blocks.
 Requirements 8 and 9 can be violated by a bug inducing non-determinism in
 `VerifyVoteExtension`. In this case liveness can be compromised.
 Extra care should be put in the implementation of `ExtendVote` and `VerifyVoteExtension` and,
-as a general rule, `VerifyVoteExtension` _should_ always accept the vote extensions.
+as a general rule, `VerifyVoteExtension` _should_ always accept the vote extensions of a precommit.
+
+Commit verification, a call with an empty `validator_pro_tx_hash`, is the exception: the Application
+must reject a commit whose extension vector differs from the threshold-recoverable subset of the
+extensions it expects for the block, or an altered vector reaches `FinalizeBlock`. Threshold recovery
+requires the contributing validators to sign identical extension content, so a valid recovered extension
+from correct processes matches that expected vector. Rejecting an altered vector therefore costs no
+liveness; a deterministic bug in the check, however, halts the chain, because no commit
+for the block can pass it. See [VerifyVoteExtension](./abci++_methods.md#verifyvoteextension) for what
+Tenderdash does on each path when a commit is rejected.
 
 * Requirement 10 [_all_, no-side-effects]: $p$'s calls to `RequestPrepareProposal`,
   `RequestProcessProposal`, `RequestExtendVote`, and `RequestVerifyVoteExtension` at height $h$ do

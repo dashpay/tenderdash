@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
@@ -12,6 +13,12 @@ import (
 
 type ApplyCommitEvent struct {
 	Commit *types.Commit
+	// FromOwnPrecommits marks a commit this node assembled from its own +2/3
+	// precommits, which there is no point assembling again if it is rejected.
+	FromOwnPrecommits bool
+	// Rejected reports that the application rejected the commit extensions and
+	// consensus recovered without treating the caller as a faulty peer.
+	Rejected bool
 }
 
 // GetType returns ApplyCommitType event-type
@@ -29,6 +36,7 @@ type ApplyCommitAction struct {
 	scheduler      *roundScheduler
 	metrics        *Metrics
 	eventPublisher *EventPublisher
+	candidates     *commitCandidates
 }
 
 func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) error {
@@ -61,8 +69,26 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 	c.blockExec.mustEnsureProcess(ctx, &stateData.RoundState, round)
 	c.blockExec.mustValidate(ctx, stateData)
 
-	// Save to blockStore
 	if commit != nil {
+		// The application must accept the commit's extension vector before the
+		// block and commit are persisted or finalized. Until it does, the commit
+		// is not published in stateData.Commit, unless adoptCommit parked it there
+		// while its block was missing; TryAddCommit's parked-commit guard keeps
+		// other commits out meanwhile.
+		if err := sm.VerifyCommitExtensions(ctx, c.blockExec.blockExec, commit); err != nil {
+			event.Rejected = true
+			c.metrics.CommitVerifyFailures.With("reason", commitVerifyFailureReason(err)).Add(1)
+			c.logger.Debug("application rejected commit vote extensions",
+				"height", commit.Height, "round", commit.Round, "error", err)
+			if err := c.discardRejectedCommit(stateData); err != nil {
+				return err
+			}
+			return c.recoverFromRejectedCommit(ctx, stateEvent.Ctrl, stateData, event.FromOwnPrecommits)
+		}
+		stateData.Commit = commit
+		if stateData.enterApplyCommit(commit.Round) {
+			c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
+		}
 		c.blockStore.SaveBlock(block, blockParts, commit)
 	}
 
@@ -103,6 +129,7 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 
 	// NewHeightStep!
 	stateData.updateToState(stateCopy, commit, c.blockStore)
+	c.candidates.resetUnless(stateData.Height)
 
 	// The application may ask us not to wait for transactions before proposing
 	// the next height (ResponseFinalizeBlock.propose_next_block_immediately).
@@ -129,6 +156,85 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 	// * c.Height has been increment to height+1
 	// * c.Step is now cstypes.RoundStepNewHeight
 	// * c.StartTime is set to when we will start round0.
+	return nil
+}
+
+// discardRejectedCommit keeps the processed block but forgets the commit, so a
+// replacement for the same block can be applied without processing it again.
+func (c *ApplyCommitAction) discardRejectedCommit(stateData *StateData) error {
+	stateData.discardCommit()
+	if stateData.Step == cstypes.RoundStepApplyCommit {
+		// Only EnterCommit, on +2/3 precommits for the block, reaches this step
+		// before a commit is accepted, so the round had at least reached Precommit.
+		stateData.updateRoundStep(stateData.Round, cstypes.RoundStepPrecommit)
+	}
+	return stateData.Save()
+}
+
+// recoverFromRejectedCommit finds another way to finish the height after a
+// commit's extensions were rejected. In order, it tries:
+//
+//  1. the commits peers sent while the rejected one was parked, which they will
+//     not send again (see commitCandidates);
+//  2. this node's own +2/3 precommits for the block, if the rejected commit did
+//     not come from them;
+//  3. the next round, entered directly so expired timeouts cannot stall recovery.
+//     The new round clears peers' sent-commit records so they gossip again.
+//
+// Replacements go through the same verification as a commit received from the
+// network. Any of them that is rejected lands back here while the loop is
+// running and returns at once, so recovery is iterative. Nothing is applied
+// twice: success moves stateData to the next height, which ends the loop and
+// makes the remaining candidates stale.
+func (c *ApplyCommitAction) recoverFromRejectedCommit(
+	ctx context.Context,
+	ctrl *Controller,
+	stateData *StateData,
+	fromOwnPrecommits bool,
+) error {
+	if c.candidates.recovering {
+		return nil
+	}
+	c.candidates.recovering = true
+	defer func() { c.candidates.recovering = false }()
+
+	height := stateData.Height
+	pending := func() bool { return stateData.Height == height && stateData.Commit == nil }
+
+	for pending() {
+		candidate, ok := c.candidates.pop(height)
+		if !ok {
+			break
+		}
+		candidateCtx := msgInfoWithCtx(ctx, msgInfo{Msg: &CommitMessage{candidate.commit}, PeerID: candidate.peerID})
+		err := ctrl.Dispatch(candidateCtx, &TryAddCommitEvent{
+			Commit:     candidate.commit,
+			PeerID:     candidate.peerID,
+			FromReplay: candidate.fromReplay,
+		}, stateData)
+		if err != nil {
+			c.logger.Debug("commit received while another was parked cannot replace it",
+				"height", height, "peer", candidate.peerID, "error", err)
+		}
+	}
+
+	if pending() && !fromOwnPrecommits {
+		blockID, ok := stateData.Votes.Precommits(stateData.Round).TwoThirdsMajority()
+		if ok && stateData.holdsProposalBlock(blockID) {
+			err := ctrl.Dispatch(ctx, &EnterCommitEvent{Height: height, CommitRound: stateData.Round}, stateData)
+			if err != nil {
+				c.logger.Error("cannot commit from own precommits", "height", height, "error", err)
+			}
+		}
+	}
+
+	if pending() {
+		c.logger.Debug("no replacement for the rejected commit; moving to the next round",
+			"height", height, "round", stateData.Round)
+		return ctrl.Dispatch(ctx, &EnterNewRoundEvent{
+			Height: height, Round: stateData.Round + 1, KeepProcessedBlock: true,
+		}, stateData)
+	}
 	return nil
 }
 

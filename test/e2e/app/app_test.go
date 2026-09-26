@@ -97,6 +97,40 @@ func TestPrepareFinalize(t *testing.T) {
 	assert.EqualValues(t, []byte(value), respQuery.Value)
 }
 
+func TestExtendVoteInitialHeight(t *testing.T) {
+	for _, height := range []int64{1, 1000} {
+		t.Run(strconv.FormatInt(height, 10), func(t *testing.T) {
+			app := newApp(t)
+			ctx := context.Background()
+			extended, err := app.ExtendVote(ctx, &abci.RequestExtendVote{Height: height})
+			require.NoError(t, err)
+			require.Equal(t, expectedVoteExtensions(height), extended.VoteExtensions)
+			verified, err := app.VerifyVoteExtension(ctx, &abci.RequestVerifyVoteExtension{
+				Height: height, VoteExtensions: extended.VoteExtensions,
+			})
+			require.NoError(t, err)
+			require.Equal(t, abci.ResponseVerifyVoteExtension_ACCEPT, verified.Status)
+		})
+	}
+}
+
+func TestVerifyCommitVoteExtensions(t *testing.T) {
+	app := newApp(t)
+	expected := expectedVoteExtensions(1)
+
+	resp, err := app.VerifyVoteExtension(context.Background(), &abci.RequestVerifyVoteExtension{
+		Height: 1, VoteExtensions: expected,
+	})
+	require.NoError(t, err)
+	require.Equal(t, abci.ResponseVerifyVoteExtension_ACCEPT, resp.Status)
+
+	resp, err = app.VerifyVoteExtension(context.Background(), &abci.RequestVerifyVoteExtension{
+		Height: 1, VoteExtensions: expected[:1],
+	})
+	require.NoError(t, err)
+	require.Equal(t, abci.ResponseVerifyVoteExtension_REJECT, resp.Status)
+}
+
 func TestPrepareProposal(t *testing.T) {
 	testCases := []struct {
 		request       abci.RequestPrepareProposal

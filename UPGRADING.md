@@ -2,6 +2,48 @@
 
 This guide provides instructions for upgrading to specific versions of Tenderdash.
 
+## Unreleased
+
+### ABCI: commit vote-extension verification
+
+Tenderdash now calls `VerifyVoteExtension` after `ProcessProposal` and before it
+saves or finalizes a block. An empty `validator_pro_tx_hash` identifies this
+commit-level call. Applications must compare the supplied extensions, in order,
+with the threshold-recoverable extensions expected for the processed block and
+return `REJECT` on any difference.
+
+Check for an empty `validator_pro_tx_hash` before applying individual-validator
+validation. For this request, return `ACCEPT` or `REJECT`; an ABCI-level error
+(including a transport failure) is fatal and causes Tenderdash to panic.
+Applications that keep the default unconditional `ACCEPT` remain compatible but
+do not gain protection against altered commit extension vectors.
+
+Consensus discards a rejected commit and tries another commit or advances the
+round. Ordinary consensus WAL replay uses the same recovery. Block sync retries
+the height from another peer. During handshake catch-up of application state to
+blocks already in the block store, rejection stops startup because the commit
+is already persisted. The error identifies the failing height, round and hash.
+
+For a catch-up failure, first ensure the application implements verification for
+the failing historical height; re-sync cannot fix incompatible application logic.
+Restore a consistent application and Tenderdash backup, or use the application's
+supported state-sync or genesis-sync procedure with fresh stores. Preserve the
+validator keys and signing state to avoid double-signing.
+
+If the block store is exactly one height ahead of consensus state and the
+application has not applied the rejected block, `tenderdash rollback --store`
+can remove that last block and its stored commit without rolling consensus state
+back. Restarting then allows the node to fetch and verify a replacement.
+Without `--store`, rollback does not remove the stored block or commit. Rollback
+never rolls back application state; verify the application height before using it.
+For multi-block application catch-up, rollback is not a general repair: it
+requires consensus state to be at the block-store height or one below, and deleting
+the last block cannot remove an offending commit earlier in the store.
+
+This check protects the commit supplied for the block being finalized. It does
+not authenticate the extension vector embedded in a proposal's `LastCommit`;
+applications must not trust that vector solely on its block threshold signature.
+
 ## v1.7.0
 
 ### Consensus DoS hardening (peer verification limits)
