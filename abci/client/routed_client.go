@@ -17,7 +17,7 @@ import (
 )
 
 type routedClient struct {
-	service.Service
+	*service.BaseService
 	logger        log.Logger
 	routing       Routing
 	defaultClient ClientInfo
@@ -125,7 +125,7 @@ func NewRoutedClient(logger log.Logger, defaultClient Client, routing Routing) (
 		defaultClient: ClientInfo{defaultClient, defaultClientID},
 	}
 
-	cli.Service = service.NewBaseService(logger, "RoutedClient", cli)
+	cli.BaseService = service.NewBaseService(logger, "RoutedClient", cli)
 	return cli, nil
 }
 
@@ -147,24 +147,36 @@ func (cli *routedClient) OnStart(ctx context.Context) error {
 		}
 	}
 
+	if !cli.Go(ctx, func(ctx context.Context) {
+		<-ctx.Done()
+		for _, client := range cli.clients() {
+			client.Wait()
+		}
+	}) {
+		cli.OnStop()
+		for _, client := range cli.clients() {
+			client.Wait()
+		}
+	}
 	return errs
 }
 
 func (cli *routedClient) OnStop() {
-	for _, clients := range cli.routing {
-		for _, client := range clients {
-			if client.IsRunning() {
-				switch c := client.Client.(type) {
-				case *socketClient:
-					c.Stop()
-				case *localClient:
-					c.Stop()
-				case *grpcClient:
-					c.Stop()
-				}
-			}
+	for _, client := range cli.clients() {
+		if stopper, ok := client.(interface{ Stop() }); ok {
+			stopper.Stop()
 		}
 	}
+}
+
+func (cli *routedClient) clients() []Client {
+	clients := []Client{cli.defaultClient.Client}
+	for _, routes := range cli.routing {
+		for _, route := range routes {
+			clients = append(clients, route.Client)
+		}
+	}
+	return clients
 }
 
 // delegate calls the given function on the appropriate client with the given

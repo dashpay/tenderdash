@@ -261,8 +261,8 @@ type Reactor struct {
 	clock clockwork.Clock
 
 	// Context for controlling reactor goroutines
-	ctx    context.Context
-	cancel context.CancelFunc
+	ctx         context.Context
+	peerUpdates *p2p.PeerUpdates
 }
 
 // NewReactor returns a reference to a new consensus reactor, which implements
@@ -306,15 +306,16 @@ type channelBundle struct {
 	voteSet p2p.Channel
 }
 
-// OnStart starts separate go routines for each p2p Channel and listens for
-// envelopes on each. In addition, it also listens for peer updates and handles
-// messages on that p2p channel accordingly. The caller must be sure to execute
-// OnStop to ensure the outbound p2p Channels are closed.
-func (r *Reactor) OnStart(ctx context.Context) error {
+// OnStart starts channel, peer-update and gossip workers owned by the reactor.
+func (r *Reactor) OnStart(ctx context.Context) (err error) {
+	defer func() {
+		if err != nil {
+			r.closeOwnedHelpers()
+		}
+	}()
 	r.logger.Trace("consensus wait sync", "wait_sync", r.WaitSync())
 
-	// Create reactor-specific context that will be canceled in OnStop
-	r.ctx, r.cancel = context.WithCancel(ctx)
+	r.ctx = ctx
 
 	// Per-peer rate limiter for the vote channel. drop=true: over-limit
 	// messages are dropped rather than delayed, so a flood from one peer cannot
@@ -349,9 +350,9 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	r.maj23SurplusLimit = newMaj23SurplusLimiter()
 
 	peerUpdates := r.peerEvents(r.ctx, "consensus")
+	r.peerUpdates = peerUpdates
 
 	var chBundle channelBundle
-	var err error
 
 	chans := p2p.ConsensusChannelDescriptors()
 	chBundle.state, err = r.chCreator(r.ctx, chans[p2p.ConsensusStateChannel])
@@ -374,14 +375,10 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 		return err
 	}
 
-	// start routine that computes peer statistics for evaluating peer quality
-	//
-	// TODO: Evaluate if we need this to be synchronized via WaitGroup as to not
-	// leak the goroutine when stopping the reactor.
-	go r.peerStatsRoutine(r.ctx, peerUpdates)
+	r.Go(ctx, func(ctx context.Context) { r.peerStatsRoutine(ctx, peerUpdates) })
 
 	// start routine that handles peer errors from the state machine
-	go r.peerErrorRoutine(r.ctx, chBundle.state)
+	r.Go(ctx, func(ctx context.Context) { r.peerErrorRoutine(ctx, chBundle.state) })
 
 	r.subscribeToBroadcastEvents(r.ctx, chBundle.state)
 
@@ -397,35 +394,40 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	// Data, vote and vote set must wait.
 	// We cannot skip waiting messages, as the peers might already have marked them as delivered.
 	// XXX: this can lead to a deadlock, if so - we need additional buffer for (at least) Commits.
-	go r.processMsgCh(r.ctx, chBundle.state, chBundle)
-	go func() {
+	r.Go(ctx, func(ctx context.Context) { r.processMsgCh(ctx, chBundle.state, chBundle) })
+	r.Go(ctx, func(ctx context.Context) {
 		select {
 		case <-r.readySignal:
-			go r.processMsgCh(r.ctx, chBundle.data, chBundle)
-			go r.processMsgCh(r.ctx, chBundle.vote, chBundle)
-			go r.processMsgCh(r.ctx, chBundle.voteSet, chBundle)
-		case <-r.ctx.Done():
+			r.Go(ctx, func(ctx context.Context) { r.processMsgCh(ctx, chBundle.data, chBundle) })
+			r.Go(ctx, func(ctx context.Context) { r.processMsgCh(ctx, chBundle.vote, chBundle) })
+			r.Go(ctx, func(ctx context.Context) { r.processMsgCh(ctx, chBundle.voteSet, chBundle) })
+		case <-ctx.Done():
 		}
-	}()
+	})
 
-	go r.processPeerUpdates(r.ctx, peerUpdates, chBundle)
+	r.Go(ctx, func(ctx context.Context) { r.processPeerUpdates(ctx, peerUpdates, chBundle) })
 
 	return nil
 }
 
-// OnStop stops the reactor by signaling to all spawned goroutines to exit and
-// blocking until they all exit, as well as unsubscribing from events and stopping
-// state.
-func (r *Reactor) OnStop() {
-	// Cancel the reactor context to signal all goroutines to stop
-	if r.cancel != nil {
-		r.cancel()
-	}
+// OnStop requests consensus shutdown.
+func (r *Reactor) OnStop() { r.state.Stop() }
 
+// OnDrain joins consensus after channel and peer workers have finished.
+func (r *Reactor) OnDrain() {
 	r.state.Stop()
+	r.state.Wait()
+	r.closeOwnedHelpers()
+}
 
-	if !r.WaitSync() {
-		r.state.Wait()
+func (r *Reactor) closeOwnedHelpers() {
+	if r.peerUpdates != nil {
+		r.peerUpdates.Close()
+	}
+	for _, limiter := range []*client.RateLimit{r.voteRateLimit, r.dataRateLimit, r.stateRateLimit, r.maj23PeerShare} {
+		if limiter != nil {
+			limiter.Close()
+		}
 	}
 }
 
@@ -447,6 +449,20 @@ func (r *Reactor) WaitSync() bool {
 // targetHeight is the highest committed block height reported during block sync.
 // skipWAL says the node needs no WAL catchup.
 func (r *Reactor) SwitchToConsensus(ctx context.Context, state sm.State, skipWAL bool, targetHeight int64) {
+	if r.ctx == nil || ctx.Err() != nil {
+		return
+	}
+	done := make(chan struct{})
+	if !r.Go(r.ctx, func(ctx context.Context) {
+		defer close(done)
+		r.switchToConsensus(ctx, state, skipWAL, targetHeight)
+	}) {
+		return
+	}
+	<-done
+}
+
+func (r *Reactor) switchToConsensus(ctx context.Context, state sm.State, skipWAL bool, targetHeight int64) {
 	r.logger.Info("switching to consensus", "target_height", targetHeight)
 
 	if targetHeight > state.LastBlockHeight {
@@ -473,6 +489,9 @@ func (r *Reactor) SwitchToConsensus(ctx context.Context, state sm.State, skipWAL
 	r.state.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
 
 	if err := r.state.Start(ctx); err != nil {
+		if ctx.Err() != nil {
+			return
+		}
 		panic(fmt.Sprintf(`failed to start consensus state: %v
 
 conS:
@@ -520,8 +539,6 @@ func (r *Reactor) GetPeerState(peerID types.NodeID) (*PeerState, bool) {
 // internal pubsub defined in the consensus state to broadcast them to peers
 // upon receiving.
 func (r *Reactor) subscribeToBroadcastEvents(ctx context.Context, stateCh p2p.Channel) {
-	onStopCh := r.state.getOnStopCh()
-
 	r.state.emitter.AddListener(
 		types.EventNewRoundStepValue,
 		func(data eventemitter.EventData) error {
@@ -531,14 +548,7 @@ func (r *Reactor) subscribeToBroadcastEvents(ctx context.Context, stateCh p2p.Ch
 				return err
 			}
 			r.logResult(err, r.logger, "broadcasting round step message", "height", rs.Height, "round", rs.Round)
-			select {
-			case onStopCh <- data.(*cstypes.RoundState):
-				return nil
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-				return nil
-			}
+			return nil
 		},
 	)
 
@@ -606,25 +616,17 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 
 	switch peerUpdate.Status {
 	case p2p.PeerStatusUp:
-		// Do not allow starting new broadcasting goroutines after reactor shutdown
-		// has been initiated. This can happen after we've manually closed all
-		// peer goroutines, but the router still sends in-flight peer updates.
-		if !r.IsRunning() {
+		if ctx.Err() != nil {
 			return
 		}
-		r.peerUp(ctx, peerUpdate, 3, chans)
+		r.peerUp(ctx, peerUpdate, chans)
 	case p2p.PeerStatusDown:
 		r.peerDown(ctx, peerUpdate, chans)
 	}
 }
 
-// peerUp starts the peer. It recursively retries up to `retries` times if the peer is already closing.
-func (r *Reactor) peerUp(ctx context.Context, peerUpdate p2p.PeerUpdate, retries int, chans channelBundle) {
-	if retries < 1 {
-		r.logger.Error("peer up failed: max retries exceeded", "peer", peerUpdate.NodeID)
-		return
-	}
-
+// peerUp starts gossip for a live peer connection.
+func (r *Reactor) peerUp(ctx context.Context, peerUpdate p2p.PeerUpdate, chans channelBundle) {
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
 
@@ -650,31 +652,19 @@ func (r *Reactor) peerUp(ctx context.Context, peerUpdate p2p.PeerUpdate, retries
 		"peer", ps.peerID,
 		"peer_proTxHash", ps.GetProTxHash().ShortString(),
 	)
-	// TODO needs to register this gossip worker, to be able to stop it once a peer will be down
 	msgSender := p2pMsgSender{logger: logger, ps: ps, chans: chans}
 	pgw := newPeerGossipWorker(logger, ps, r.state, &msgSender)
 
-	select {
-	case <-ctx.Done():
-		// Hmm, someone is closing this peer right now, let's wait and retry
-		// Note: we run this in a goroutine to not block main goroutine in ps.broadcastWG.Wait()
-		go func() {
-			time.Sleep(r.state.config.PeerGossipSleepDuration)
-			r.peerUp(ctx, peerUpdate, retries-1, chans)
-		}()
+	if ctx.Err() != nil {
 		return
-	default:
 	}
 
 	if !ps.IsRunning() {
-		// Set the peer state's closer to signal to all spawned goroutines to exit
-		// when the peer is removed. We also set the running state to ensure we
-		// do not spawn multiple instances of the same goroutines and finally we
-		// set the waitgroup counter so we know when all goroutines have exited.
+		// Peer removal cancels this session; reactor shutdown also joins it.
 		ps.SetRunning(true)
 		ctx, ps.cancel = context.WithCancel(ctx)
 
-		go func() {
+		if !r.Go(ctx, func(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 				return
@@ -686,18 +676,24 @@ func (r *Reactor) peerUp(ctx context.Context, peerUpdate p2p.PeerUpdate, retries
 				return
 			}
 			// start goroutines for this peer
-			_ = pgw.Start(ctx)
+			if err := pgw.Start(ctx); err != nil {
+				return
+			}
+			defer pgw.Wait()
 
 			// Send our state to the peer. If we're block-syncing, broadcast a
 			// RoundStepMessage later upon SwitchToConsensus().
 			if !r.WaitSync() {
-				go func() {
+				r.Go(ctx, func(ctx context.Context) {
 					rs := r.state.GetRoundState()
 					err := msgSender.send(ctx, rs.NewRoundStepMessage())
 					r.logResult(err, r.logger, "sending round step msg", "height", rs.Height, "round", rs.Round)
-				}()
+				})
 			}
-		}()
+		}) {
+			ps.SetRunning(false)
+			ps.cancel()
+		}
 	}
 }
 

@@ -93,10 +93,9 @@ type Server struct {
 	service.BaseService
 	logger log.Logger
 
-	queue  chan item
-	done   <-chan struct{} // closed when server should exit
-	pubs   sync.RWMutex    // excl: shutdown; shared: active publisher
-	exited chan struct{}   // server exited
+	queue chan item
+	done  <-chan struct{} // closed when server should exit
+	pubs  sync.RWMutex    // excl: shutdown; shared: active publisher
 
 	// All subscriptions currently known.
 	// Lock exclusive to add, remove, or cancel subscriptions.
@@ -189,6 +188,13 @@ func (s *Server) Observe(_ctx context.Context, observe func(Message) error, quer
 		return nil // nothing to do for this message
 	}
 	return nil
+}
+
+// RemoveObserver detaches the observer after any active invocation finishes.
+func (s *Server) RemoveObserver() {
+	s.subs.Lock()
+	defer s.subs.Unlock()
+	s.subs.observe = nil
 }
 
 // SubscribeWithArgs creates a subscription for the given arguments.  It is an
@@ -302,9 +308,22 @@ func (s *Server) PublishWithEvents(msg types.EventData, events []abci.Event) err
 // OnStop implements part of the Service interface. It is a no-op.
 func (s *Server) OnStop() {}
 
-// Wait implements Service.Wait by blocking until the server has exited, then
-// yielding to the base service wait.
-func (s *Server) Wait() { <-s.exited; s.BaseService.Wait() }
+// OnDrain releases subscriptions even when shutdown rejected sender startup.
+func (s *Server) OnDrain() {
+	s.pubs.Lock()
+	if s.queue != nil {
+		close(s.queue)
+		s.queue = nil
+	}
+	s.pubs.Unlock()
+	s.subs.Lock()
+	defer s.subs.Unlock()
+	for si := range s.subs.index.all {
+		si.sub.stop(ErrTerminated)
+	}
+	s.subs.index = nil
+	s.subs.observe = nil
+}
 
 // OnStart implements Service.OnStart by starting the server.
 func (s *Server) OnStart(ctx context.Context) error { s.run(ctx); return nil }
@@ -331,17 +350,15 @@ func (s *Server) run(ctx context.Context) {
 
 	// Shutdown monitor: When the context ends, wait for any active publish
 	// calls to exit, then close the queue to signal the sender to exit.
-	go func() {
+	s.Go(ctx, func(ctx context.Context) {
 		<-ctx.Done()
 		s.pubs.Lock()
 		defer s.pubs.Unlock()
 		close(s.queue)
 		s.queue = nil
-	}()
+	})
 
-	s.exited = make(chan struct{})
-	go func() {
-		defer close(s.exited)
+	s.Go(ctx, func(context.Context) {
 
 		// Sender: Service the queue and forward messages to subscribers.
 		for it := range queue {
@@ -349,14 +366,7 @@ func (s *Server) run(ctx context.Context) {
 				s.logger.Error("error sending event", "err", err)
 			}
 		}
-		// Terminate all subscribers before exit.
-		s.subs.Lock()
-		defer s.subs.Unlock()
-		for si := range s.subs.index.all {
-			si.sub.stop(ErrTerminated)
-		}
-		s.subs.index = nil
-	}()
+	})
 }
 
 // removeSubs cancels and removes all the subscriptions in evict with the given

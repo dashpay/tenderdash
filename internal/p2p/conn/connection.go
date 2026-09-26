@@ -92,17 +92,7 @@ type MConnection struct {
 	errored       uint32
 	config        MConnConfig
 
-	// Closing quitSendRoutine will cause the sendRoutine to eventually quit.
-	// doneSendRoutine is closed when the sendRoutine actually quits.
-	quitSendRoutine chan struct{}
-	doneSendRoutine chan struct{}
-
-	// Closing quitRecvRouting will cause the recvRouting to eventually quit.
-	quitRecvRoutine chan struct{}
-
 	stopSignal <-chan struct{}
-
-	cancel context.CancelFunc
 
 	flushTimer *timer.ThrottleTimer // flush writes as necessary but throttled.
 	pingTimer  *time.Ticker         // send pings periodically
@@ -176,7 +166,6 @@ func NewMConnection(
 		onError:       onError,
 		config:        config,
 		created:       time.Now(),
-		cancel:        func() {},
 	}
 
 	mconn.BaseService = *service.NewBaseService(logger, "MConnection", mconn)
@@ -199,18 +188,22 @@ func NewMConnection(
 	return mconn
 }
 
+type errorContextKey struct{}
+
+// Start preserves the caller's context for error notification after I/O stops.
+func (c *MConnection) Start(ctx context.Context) error {
+	return c.BaseService.Start(context.WithValue(ctx, errorContextKey{}, ctx))
+}
+
 // OnStart implements BaseService
 func (c *MConnection) OnStart(ctx context.Context) error {
 	c.flushTimer = timer.NewThrottleTimer("flush", c.config.FlushThrottle)
 	c.pingTimer = time.NewTicker(c.config.PingInterval)
 	c.chStatsTimer = time.NewTicker(updateStats)
-	c.quitSendRoutine = make(chan struct{})
-	c.doneSendRoutine = make(chan struct{})
-	c.quitRecvRoutine = make(chan struct{})
 	c.stopSignal = ctx.Done()
 	c.setRecvLastMsgAt(time.Now())
-	go c.sendRoutine(ctx)
-	go c.recvRoutine(ctx)
+	c.Go(ctx, c.sendRoutine)
+	c.Go(ctx, c.recvRoutine)
 	return nil
 }
 
@@ -226,46 +219,12 @@ func (c *MConnection) getLastMessageAt() time.Time {
 	return c.lastMsgRecv.at
 }
 
-// stopServices stops the BaseService and timers and closes the quitSendRoutine.
-// if the quitSendRoutine was already closed, it returns true, otherwise it returns false.
-// It doesn't lock, as we rely on the caller (eg. BaseService) locking
-func (c *MConnection) stopServices() (alreadyStopped bool) {
-	select {
-	case <-c.quitSendRoutine:
-		// already quit
-		return true
-	default:
-	}
-
-	select {
-	case <-c.quitRecvRoutine:
-		// already quit
-		return true
-	default:
-	}
-
+// OnStop closes the socket to interrupt pending reads and writes.
+func (c *MConnection) OnStop() {
 	c.flushTimer.Stop()
 	c.pingTimer.Stop()
 	c.chStatsTimer.Stop()
-
-	// inform the recvRouting that we are shutting down
-	close(c.quitRecvRoutine)
-	close(c.quitSendRoutine)
-	return false
-}
-
-// OnStop implements BaseService
-func (c *MConnection) OnStop() {
-	if c.stopServices() {
-		return
-	}
-
 	c.conn.Close()
-
-	// We can't close pong safely here because
-	// recvRoutine may write to it after we've stopped.
-	// Though it doesn't need to get closed at all,
-	// we close it @ recvRoutine.
 }
 
 func (c *MConnection) String() string {
@@ -293,6 +252,9 @@ func (c *MConnection) stopForError(ctx context.Context, r interface{}) {
 
 	if atomic.CompareAndSwapUint32(&c.errored, 0, 1) {
 		if c.onError != nil {
+			if parent, ok := ctx.Value(errorContextKey{}).(context.Context); ok {
+				ctx = parent
+			}
 			c.onError(ctx, r)
 		}
 	}
@@ -371,8 +333,6 @@ FOR_LOOP:
 			c.flush()
 		case <-ctx.Done():
 			break FOR_LOOP
-		case <-c.quitSendRoutine:
-			break FOR_LOOP
 		case <-pongTimeout.C:
 			// the point of the pong timer is to check to
 			// see if we've seen a message recently, so we
@@ -402,13 +362,10 @@ FOR_LOOP:
 			c.stopForError(ctx, err)
 			break FOR_LOOP
 		}
-		if !c.IsRunning() {
+		if ctx.Err() != nil {
 			break FOR_LOOP
 		}
 	}
-
-	// Cleanup
-	close(c.doneSendRoutine)
 }
 
 // Returns true if messages from channels were exhausted.
@@ -479,8 +436,6 @@ FOR_LOOP:
 		select {
 		case <-ctx.Done():
 			break FOR_LOOP
-		case <-c.doneSendRoutine:
-			break FOR_LOOP
 		default:
 		}
 
@@ -507,16 +462,11 @@ FOR_LOOP:
 		_n, err := protoReader.ReadMsg(&packet)
 		c.recvMonitor.Update(_n)
 		if err != nil {
-			// stopServices was invoked and we are shutting down
-			// receiving is excpected to fail since we will close the connection
-			select {
-			case <-ctx.Done():
-			case <-c.quitRecvRoutine:
+			if ctx.Err() != nil {
 				break FOR_LOOP
-			default:
 			}
 
-			if c.IsRunning() {
+			if ctx.Err() == nil {
 				if err == io.EOF {
 					c.logger.Info("Connection is closed @ recvRoutine (likely by the other side)", "conn", c)
 				} else {
@@ -556,7 +506,7 @@ FOR_LOOP:
 
 			msgBytes, err := channel.recvPacketMsg(*pkt.PacketMsg)
 			if err != nil {
-				if c.IsRunning() {
+				if ctx.Err() == nil {
 					c.logger.Debug("Connection failed @ recvRoutine", "conn", c, "err", err)
 					c.stopForError(ctx, err)
 				}
@@ -575,11 +525,6 @@ FOR_LOOP:
 		}
 	}
 
-	// Cleanup
-	close(c.pong)
-	for range c.pong {
-		// Drain
-	}
 }
 
 // maxPacketMsgSize returns a maximum size of PacketMsg

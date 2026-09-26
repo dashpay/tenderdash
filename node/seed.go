@@ -97,20 +97,34 @@ func makeSeedNode(
 }
 
 // OnStart starts the Seed Node. It implements service.Service.
-func (n *seedNodeImpl) OnStart(ctx context.Context) error {
+func (n *seedNodeImpl) OnStart(ctx context.Context) (err error) {
+	ctx, cancelAttempt := context.WithCancel(ctx)
+	defer func() {
+		if err != nil {
+			cancelAttempt()
+			n.pexReactor.Wait()
+			n.router.Wait()
+		}
+	}()
 	if n.config.RPC.PprofListenAddress != "" {
-		startPProfServer(ctx, *n.config.RPC)
+		startPProfServer(ctx, &n.BaseService, *n.config.RPC)
 	}
 
 	now := tmtime.Now()
 	genTime := n.genesisDoc.GenesisTime
 	if genTime.After(now) {
 		n.logger.Info("Genesis time is in the future. Sleeping until then...", "genTime", genTime)
-		time.Sleep(genTime.Sub(now))
+		timer := time.NewTimer(genTime.Sub(now))
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C:
+		}
 	}
 
 	if n.config.Instrumentation.Prometheus && n.config.Instrumentation.PrometheusListenAddr != "" {
-		n.prometheusSrv = startPrometheusServer(ctx, *n.config.Instrumentation)
+		n.prometheusSrv = startPrometheusServer(ctx, &n.BaseService, *n.config.Instrumentation)
 	}
 
 	// Start the transport.
@@ -127,7 +141,16 @@ func (n *seedNodeImpl) OnStop() {
 
 	n.pexReactor.Wait()
 	n.router.Wait()
+	if n.prometheusSrv != nil {
+		if err := n.prometheusSrv.Shutdown(context.Background()); err != nil {
+			n.logger.Error("failed to stop metrics server", "err", err)
+		}
+	}
 
+}
+
+// OnDrain releases resources after network and HTTP workers have finished.
+func (n *seedNodeImpl) OnDrain() {
 	if err := n.shutdownOps(); err != nil {
 		if strings.TrimSpace(err.Error()) != "" {
 			n.logger.Error("problem shutting down additional services", "err", err)
