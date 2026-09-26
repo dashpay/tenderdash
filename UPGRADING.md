@@ -2,6 +2,41 @@
 
 This guide provides instructions for upgrading to specific versions of Tenderdash.
 
+## Unreleased
+
+### Service lifecycle
+
+All implementations embedding `libs/service.BaseService` receive a context in
+`OnStart` that is canceled by either the caller or manual `Stop`. Cancellation
+now precedes `OnStop`, including for implementations that have not adopted
+managed workers. Audit shutdown callbacks that require a live context; preserve
+the appropriate owner context explicitly instead of using the canceled work context.
+
+Register owned workers with `BaseService.Go`. `OnStop` must unblock them, not
+wait for them; move shared-resource cleanup to optional `OnDrain`, which runs
+after those workers exit. Call `Stop` then `Wait` before releasing resources.
+Plain goroutines and their existing joins remain the implementation's responsibility.
+`TimeoutTicker` implementations must now provide `Wait`.
+
+A stop requested during startup cancels work immediately but defers `OnStop`
+until successful startup returns. Failed startup must roll back its resources;
+BaseService joins registered work without calling shutdown hooks. Retry requires
+recreating any child that already started successfully and then stopped.
+
+Direct consensus `State.Stop` drains a commit already in progress using the
+context originally passed to `State.Start`. Cancel that parent to abort it;
+reactor/node shutdown still cancels that parent and can require WAL recovery.
+This is not an unconditional durable-finalization guarantee for node shutdown.
+Once admitted, a consensus handoff belongs to its reactor. Canceling the caller
+releases its wait; reactor shutdown cancels and joins the admitted handoff.
+Router disconnect notifications during shutdown are best effort; subscribers
+must terminate on their own context, not wait for a final `PeerStatusDown`.
+
+Autofile groups require explicit `Close`, even if never started. Canceling the
+opening context or calling `Stop`/`Wait` alone does not close the head file.
+See [service lifecycle](docs/architecture/service-lifecycle.md) for ownership
+and migration boundaries.
+
 ## v1.7.0
 
 ### Consensus DoS hardening (peer verification limits)

@@ -1521,10 +1521,6 @@ func testWALRoundsSkipper(t *testing.T, slowProposer bool) {
 		<-replayStopped
 		cs.Stop()
 		cs.Wait()
-		// The stop predicate bypasses receiveRoutine's WAL and queue shutdown.
-		cs.wal.Stop()
-		cs.wal.Wait()
-		cs.msgInfoQueue.stop()
 	}()
 
 	newBlockSub, err := cs.eventBus.SubscribeWithArgs(ctx, pubsub.SubscribeArgs{

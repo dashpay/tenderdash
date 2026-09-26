@@ -236,6 +236,13 @@ func (s *Synchronizer) setStartHeight(height int64) {
 	s.jobGen.mtx.Unlock()
 }
 
+type applicationContextKey struct{}
+
+// Start preserves the caller's application lifetime across a block-sync handover.
+func (s *Synchronizer) Start(ctx context.Context) error {
+	return s.BaseService.Start(context.WithValue(ctx, applicationContextKey{}, ctx))
+}
+
 // OnStart implements service.Service by spawning requesters routine and recording
 // synchronizer's start time.
 func (s *Synchronizer) OnStart(ctx context.Context) error {
@@ -245,14 +252,18 @@ func (s *Synchronizer) OnStart(ctx context.Context) error {
 	s.lastAdvance = s.clock.Now()
 	s.lastMonitorUpdate = s.lastAdvance
 	s.ctx, s.cancel = context.WithCancel(ctx)
+	applicationCtx, ok := ctx.Value(applicationContextKey{}).(context.Context)
+	if !ok {
+		applicationCtx = ctx
+	}
 	s.consumerDone = make(chan struct{})
 	s.workerPool.Run(s.ctx)
 	go s.runHandler(s.ctx, s.produceJob)
 	go func() {
 		defer close(s.consumerDone)
 		s.runHandler(s.ctx, func(handlerCtx context.Context) error {
-			// Handover cancels consumer I/O; only node shutdown may cancel application.
-			return s.consumeJobResult(handlerCtx, ctx)
+			// Handover cancels consumer I/O; parent cancellation also stops application.
+			return s.consumeJobResult(handlerCtx, applicationCtx)
 		})
 	}()
 	return nil

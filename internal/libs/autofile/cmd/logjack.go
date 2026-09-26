@@ -64,6 +64,8 @@ func main() {
 		stdlog.Fatalf("logjack couldn't create output file %q", headPath)
 	}
 
+	defer group.Close()
+
 	if err = group.Start(ctx); err != nil {
 		stdlog.Fatalf("logjack couldn't start with file %q", headPath)
 	}
