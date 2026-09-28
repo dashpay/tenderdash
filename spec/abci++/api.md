@@ -773,8 +773,8 @@ Tenderdash calls it for two kinds of request, told apart by `validator_pro_tx_ha
   - consensus: the commit is discarded without changing the round or blaming its sender. A commit that
     arrived before its block is checked when the block arrives, then the commits other peers sent
     meanwhile. If the node&#39;s own commit is rejected, nothing is persisted and the node waits for a
-    peer&#39;s commit. The block is not processed again unless the node has meanwhile processed
-    another proposal;
+    peer&#39;s commit. The block is not processed again unless the node has meanwhile processed another
+    proposal;
   - block sync: the block is not applied; the peer that served it is dropped and the height is
     requested again;
   - replay at start-up: the commit is already in the block store, so the node fails to start; there is
