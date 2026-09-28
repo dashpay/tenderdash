@@ -1,6 +1,7 @@
 package consensus
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -15,33 +16,137 @@ import (
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/test/factory"
+	"github.com/dashpay/tenderdash/libs/eventemitter"
+	"github.com/dashpay/tenderdash/libs/log"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
 
-func TestCommitExtensionsRejectedBeforeSaveAndRetried(t *testing.T) {
-	for _, path := range []string{"held", "parked", "future", "replay"} {
-		for _, mutation := range []string{"strip", "duplicate", "cross-height replay"} {
+// commitExtFixture holds a node at height 1 that has not received the block
+// yet, a commit whose extension vector the application expects, and one it
+// rejects. Both carry a valid threshold block signature.
+type commitExtFixture struct {
+	commitFixture
+	stateData StateData
+	checker   *commitCheckingExecutor
+	good      *types.Commit
+	bad       *types.Commit
+}
+
+var withdrawalExtension = tmproto.VoteExtension{Type: tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
+	Extension:      crypto.Checksum([]byte("withdrawal")),
+	XSignRequestId: &tmproto.VoteExtension_SignRequestId{SignRequestId: []byte("withdrawal-request")}}
+
+func newCommitExtFixture(ctx context.Context, t *testing.T) *commitExtFixture {
+	t.Helper()
+	n := newCommitFixture(ctx, t, configSetup(t), types.BlockPartSizeBytes, 0)
+	f := &commitExtFixture{commitFixture: n, stateData: n.node.GetStateData()}
+	f.good = f.sign(ctx, t, 0, withdrawalExtension)
+	badValue := *f.good
+	f.bad = &badValue
+	f.bad.ThresholdVoteExtensions = nil
+	expected, err := f.good.GetCanonicalVote()
+	require.NoError(t, err)
+	f.checker = &commitCheckingExecutor{Executor: n.node.blockExecutor.blockExec, t: t, block: n.block,
+		round: 0, expected: expected.VoteExtensions.ToExtendProto(), store: n.node.blockStore}
+	n.node.blockExecutor.blockExec = f.checker
+	f.stateData.updateRoundStep(0, cstypes.RoundStepPropose)
+	return f
+}
+
+// sign returns a commit for the fixture's block at round, carrying extension.
+func (f *commitExtFixture) sign(ctx context.Context, t *testing.T, round int32, extension tmproto.VoteExtension) *types.Commit {
+	t.Helper()
+	return f.signAt(ctx, t, f.block.Height, round, extension)
+}
+
+func (f *commitExtFixture) signAt(ctx context.Context, t *testing.T, height int64, round int32,
+	extension tmproto.VoteExtension) *types.Commit {
+	t.Helper()
+	sd := f.stateData
+	votes := types.NewVoteSet(sd.state.ChainID, height, round, tmproto.PrecommitType, sd.Validators)
+	commit, err := factory.MakeCommit(ctx, f.commit.BlockID, height, round, votes, sd.Validators, f.privVals, extension)
+	require.NoError(t, err)
+	return commit
+}
+
+// sendCommit delivers commit from a connected peer and returns the dispatch error.
+func (f *commitExtFixture) sendCommit(ctx context.Context, commit *types.Commit, peer types.NodeID) error {
+	f.node.msgInfoQueue.admitPeer(peer)
+	return f.dispatchCommit(ctx, commit, peer, false)
+}
+
+func (f *commitExtFixture) dispatchCommit(ctx context.Context, commit *types.Commit, peer types.NodeID, fromReplay bool) error {
+	commitCtx := msgInfoWithCtx(ctx, msgInfo{Msg: &CommitMessage{commit}, PeerID: peer})
+	return f.node.ctrl.Dispatch(commitCtx,
+		&TryAddCommitEvent{Commit: commit, PeerID: peer, FromReplay: fromReplay}, &f.stateData)
+}
+
+// completeBlock delivers the block's only part and returns the dispatch error.
+func (f *commitExtFixture) completeBlock(ctx context.Context, fromReplay bool) error {
+	msg := &BlockPartMessage{Height: f.block.Height, Round: 0, Part: f.parts.GetPart(0)}
+	partCtx := msgInfoWithCtx(ctx, msgInfo{Msg: msg, PeerID: f.peerID})
+	return f.node.ctrl.Dispatch(partCtx,
+		&AddProposalBlockPartEvent{Msg: msg, PeerID: f.peerID, FromReplay: fromReplay}, &f.stateData)
+}
+
+// holdBlock gives the round the processed block, as if its parts had arrived.
+func (f *commitExtFixture) holdBlock(ctx context.Context, t *testing.T) {
+	t.Helper()
+	f.stateData.ProposalBlock, f.stateData.ProposalBlockParts = f.block, f.parts
+	require.NoError(t, f.node.blockExecutor.ensureProcess(ctx, &f.stateData.RoundState, 0))
+	f.checker.calls = nil
+}
+
+func (f *commitExtFixture) requireCommitted(t *testing.T, want *types.Commit) {
+	t.Helper()
+	require.Equal(t, f.block.Height+1, f.stateData.Height, "the height must complete without a restart")
+	require.Equal(t, f.block.Height, f.node.blockStore.Height())
+	seen := f.node.blockStore.LoadSeenCommitAt(f.block.Height)
+	require.NotNil(t, seen)
+	require.Equal(t, want.ThresholdVoteExtensions, seen.ThresholdVoteExtensions,
+		"only the accepted extension vector may be persisted")
+}
+
+// requireNothingPersisted checks that a rejected commit left no trace a restart
+// could resume from.
+func (f *commitExtFixture) requireNothingPersisted(t *testing.T) {
+	t.Helper()
+	require.Zero(t, f.node.blockStore.Height())
+	require.Equal(t, f.block.Height, f.stateData.Height)
+	require.Nil(t, f.stateData.Commit, "a rejected commit must not block a replacement")
+	persisted := f.node.GetStateData()
+	require.Nil(t, persisted.Commit)
+	require.Less(t, persisted.Step, cstypes.RoundStepApplyCommit)
+	require.Equal(t, int32(-1), persisted.CommitRound)
+	require.True(t, persisted.CommitTime.IsZero())
+}
+
+func calls(verifies int, tail ...string) []string {
+	out := []string{"process"}
+	for range verifies {
+		out = append(out, "verify")
+	}
+	return append(out, tail...)
+}
+
+// An authentic commit whose extension vector the application rejects is refused
+// before anything is saved, whichever way it reaches the node; the next
+// commit with the right vector then finishes the height.
+func TestCommitExtensionsRejectedBeforeSave(t *testing.T) {
+	for _, path := range []string{"held", "parked", "future", "future held", "replay"} {
+		for _, mutation := range []string{"strip", "duplicate", "cross-height replay", "empty"} {
 			t.Run(path+"/"+mutation, func(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				cfg := configSetup(t)
+				f := newCommitExtFixture(ctx, t)
+				ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
 				round := int32(0)
-				if path == "future" {
+				if path == "future" || path == "future held" {
 					round = 2
+					f.checker.round = round
 				}
-				n := newCommitFixture(ctx, t, cfg, types.BlockPartSizeBytes, round)
-				sd := n.node.GetStateData()
-				ext := tmproto.VoteExtension{Type: tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
-					Extension:      crypto.Checksum([]byte("withdrawal")),
-					XSignRequestId: &tmproto.VoteExtension_SignRequestId{SignRequestId: []byte("withdrawal-request")}}
-				sign := func(height int64, extension tmproto.VoteExtension) *types.Commit {
-					votes := types.NewVoteSet(sd.state.ChainID, height, round, tmproto.PrecommitType, sd.Validators)
-					commit, err := factory.MakeCommit(ctx, n.commit.BlockID, height, round, votes, sd.Validators, n.privVals, extension)
-					require.NoError(t, err)
-					return commit
-				}
-				good := sign(n.block.Height, ext)
+				good := f.sign(ctx, t, round, withdrawalExtension)
 				badValue := *good
 				bad := &badValue
 				switch mutation {
@@ -50,72 +155,425 @@ func TestCommitExtensionsRejectedBeforeSaveAndRetried(t *testing.T) {
 				case "duplicate":
 					bad.ThresholdVoteExtensions = append(bad.ThresholdVoteExtensions, bad.ThresholdVoteExtensions[0])
 				case "cross-height replay":
-					old := ext
+					old := withdrawalExtension
 					old.Extension = crypto.Checksum([]byte("previous withdrawal"))
 					old.XSignRequestId = &tmproto.VoteExtension_SignRequestId{SignRequestId: []byte("previous request")}
-					bad.ThresholdVoteExtensions = sign(n.block.Height+10, old).ThresholdVoteExtensions
+					bad.ThresholdVoteExtensions = f.signAt(ctx, t, f.block.Height+10, round, old).ThresholdVoteExtensions
+				case "empty":
+					bad.ThresholdVoteExtensions = tmproto.VoteExtensions{}
 				}
+				sd := &f.stateData
 				require.NoError(t, sd.Validators.VerifyCommit(sd.state.ChainID, bad.BlockID, bad.Height, bad))
-				expected, err := good.GetCanonicalVote()
-				require.NoError(t, err)
-				checker := &commitCheckingExecutor{Executor: n.node.blockExecutor.blockExec, t: t, block: n.block,
-					round: round, expected: expected.VoteExtensions.ToExtendProto(), store: n.node.blockStore}
-				n.node.blockExecutor.blockExec = checker
-				sd.updateRoundStep(0, cstypes.RoundStepPrevote)
-				ctx = dash.ContextWithProTxHash(ctx, n.node.privValidator.ProTxHash)
-				ctx = msgInfoWithCtx(ctx, msgInfo{Msg: &CommitMessage{bad}, PeerID: n.peerID})
-				parked := path == "parked" || path == "future" || path == "replay"
-				checker.onVerify = func(*types.Vote) {
-					if !parked && len(checker.calls) == 2 {
+				held := path == "held" || path == "future held"
+				f.checker.onVerify = func(*types.Vote) {
+					if path == "held" {
 						require.Nil(t, sd.Commit, "an unverified commit must not be published in the round state")
 					}
 				}
-				checker.onFinalize = func(commit *types.Commit) {
+				f.checker.onFinalize = func(commit *types.Commit) {
 					require.Same(t, commit, sd.Commit, "the accepted commit must be published in the round state")
 				}
-				if !parked {
-					sd.ProposalBlock, sd.ProposalBlockParts = n.block, n.parts
+				if held {
+					f.holdBlock(ctx, t)
 				}
-				err = n.node.ctrl.Dispatch(ctx, &TryAddCommitEvent{Commit: bad, PeerID: n.peerID, FromReplay: path == "replay"}, &sd)
-				if parked {
+				var relayed []*types.Commit
+				f.node.emitter.AddListener(types.EventCommitValue, func(data eventemitter.EventData) error {
+					relayed = append(relayed, data.(*types.Commit))
+					return nil
+				})
+				counter := &recordingCounter{}
+				f.node.metrics.CommitVerifyFailures = counter
+
+				const sender = types.NodeID("sender")
+				f.node.msgInfoQueue.admitPeer(sender)
+				err := f.dispatchCommit(ctx, bad, sender, path == "replay")
+				if held {
+					require.ErrorIs(t, err, sm.ErrCommitExtensionsRejected)
+					require.Equal(t, []string{"verify"}, f.checker.calls[len(f.checker.calls)-1:])
+				} else {
 					require.NoError(t, err)
-					require.Empty(t, checker.calls, "cannot check until the block is processed")
-					msg := &BlockPartMessage{Height: n.block.Height, Round: round, Part: n.parts.GetPart(0)}
-					partCtx := msgInfoWithCtx(ctx, msgInfo{Msg: msg, PeerID: n.peerID})
-					err = n.node.ctrl.Dispatch(partCtx, &AddProposalBlockPartEvent{Msg: msg, PeerID: n.peerID, FromReplay: path == "replay"}, &sd)
+					require.Empty(t, f.checker.calls, "cannot check until the block is processed")
+					require.NoError(t, f.completeBlock(ctx, path == "replay"))
+					require.Equal(t, calls(1), f.checker.calls)
 				}
-				require.NoError(t, err, "consensus must recover from an application rejection")
-				require.Equal(t, []string{"process", "verify"}, checker.calls)
-				require.Zero(t, n.node.blockStore.Height())
-				require.Equal(t, n.block.Height, sd.Height)
-				require.Nil(t, sd.Commit, "a rejected parked commit must not block a replacement")
-				// The persisted copy, not sd: a restart must not resume the rejected commit.
-				sd = n.node.GetStateData()
-				require.Nil(t, sd.Commit)
-				require.Less(t, sd.Step, cstypes.RoundStepApplyCommit)
-				require.Equal(t, int32(-1), sd.CommitRound)
-				require.True(t, sd.CommitTime.IsZero())
-				require.NoError(t, n.node.ctrl.Dispatch(ctx, &TryAddCommitEvent{Commit: good, PeerID: n.peerID}, &sd))
-				if sd.Height == n.block.Height {
-					msg := &BlockPartMessage{Height: n.block.Height, Round: round, Part: n.parts.GetPart(0)}
-					partCtx := msgInfoWithCtx(ctx, msgInfo{Msg: msg, PeerID: n.peerID})
-					require.NoError(t, n.node.ctrl.Dispatch(partCtx,
-						&AddProposalBlockPartEvent{Msg: msg, PeerID: n.peerID}, &sd))
+				f.requireNothingPersisted(t)
+				require.Empty(t, relayed, "a rejected commit must never be relayed")
+				require.Equal(t, float64(1), counter.value)
+				if path == "future held" {
+					require.Zero(t, sd.Round, "a rejected commit must not change the round")
 				}
-				require.Equal(t, n.block.Height+1, sd.Height)
-				require.Equal(t, n.block.Height, n.node.blockStore.Height())
-				require.Equal(t, []string{"process", "verify", "verify", "finalize"}, checker.calls)
+				select {
+				case report := <-f.node.peerErrorQueue.ch:
+					t.Fatalf("an application rejection must not evict the sender: %v", report)
+				default:
+				}
+
+				f.checker.calls = nil
+				require.NoError(t, f.dispatchCommit(ctx, good, sender, false))
+				f.requireCommitted(t, good)
+				require.Equal(t, []string{"verify", "finalize"}, f.checker.calls, "the processed block is kept")
+				require.Equal(t, []*types.Commit{good}, relayed)
 			})
 		}
 	}
+}
+
+// A peer resending an authentic commit with stripped extensions must not make
+// this node change rounds: every round retains vote sets and lengthens the
+// timeouts, so a rejection that advanced the round would let a single peer grow
+// both without bound.
+func TestRepeatedRejectedCommitKeepsRound(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := newCommitExtFixture(ctx, t)
+	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+	future := f.sign(ctx, t, 2, withdrawalExtension)
+	future.ThresholdVoteExtensions = nil
+	f.checker.round = -1
+	f.holdBlock(ctx, t)
+	round, voteRound := f.stateData.Round, f.stateData.Votes.Round()
+
+	const resends = 50
+	for range resends {
+		require.ErrorIs(t, f.sendCommit(ctx, f.bad, "attacker"), sm.ErrCommitExtensionsRejected)
+		require.ErrorIs(t, f.sendCommit(ctx, future, "attacker"), sm.ErrCommitExtensionsRejected)
+	}
+
+	require.Equal(t, f.block.Height, f.stateData.Height)
+	require.Equal(t, round, f.stateData.Round, "a rejected commit must not advance the round")
+	require.Equal(t, voteRound, f.stateData.Votes.Round(), "a rejected commit must not add vote sets")
+	require.Nil(t, f.stateData.Votes.Prevotes(round+1))
+	require.Equal(t, cstypes.RoundStepPropose, f.stateData.Step, "the round keeps its step and its timeout")
+
+	f.checker.calls = nil
+	require.NoError(t, f.sendCommit(ctx, f.good, "honest"))
+	f.requireCommitted(t, f.good)
+	// The later round's commits had the block processed for their round.
+	require.Equal(t, calls(1, "finalize"), f.checker.calls)
+}
+
+// A rejection keeps the processed block and its ProcessProposal result, and
+// creates no proposal and schedules no timeout, whether or not this node
+// proposes the round.
+func TestCommitRejectKeepsProcessedBlock(t *testing.T) {
+	for _, proposer := range []bool{false, true} {
+		t.Run(fmt.Sprintf("proposer=%v", proposer), func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			f := newCommitExtFixture(ctx, t)
+			require.False(t, f.node.config.DontAutoPropose)
+			ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+			round := int32(0)
+			for {
+				next, err := f.stateData.ProposerSelector.GetProposer(f.stateData.Height, round)
+				require.NoError(t, err)
+				if bytes.Equal(next.ProTxHash, f.node.privValidator.ProTxHash) == proposer {
+					break
+				}
+				round++
+			}
+			f.holdBlock(ctx, t)
+			processed := f.stateData.CurrentRoundState
+			creator := enterProposeWithCountingCreator(f.node)
+			ticker := &recordingTicker{}
+			f.node.roundScheduler.timeoutTicker = ticker
+			f.stateData.updateRoundStep(round, cstypes.RoundStepPropose)
+
+			require.ErrorIs(t, f.sendCommit(ctx, f.bad, "attacker"), sm.ErrCommitExtensionsRejected)
+
+			require.Equal(t, round, f.stateData.Round)
+			require.Equal(t, cstypes.RoundStepPropose, f.stateData.Step)
+			require.True(t, f.stateData.holdsProposalBlock(f.good.BlockID))
+			require.Equal(t, processed, f.stateData.CurrentRoundState)
+			require.Zero(t, creator.calls.Load(), "a rejection must not create another proposal")
+			require.Empty(t, ticker.scheduled, "a rejection schedules nothing; the round's own timeout stands")
+			require.NoError(t, f.sendCommit(ctx, f.good, "honest"))
+			f.requireCommitted(t, f.good)
+			require.Equal(t, []string{"verify", "verify", "finalize"}, f.checker.calls)
+		})
+	}
+}
+
+type recordingTicker struct {
+	TimeoutTicker
+	scheduled []timeoutInfo
+}
+
+func (r *recordingTicker) ScheduleTimeout(ti timeoutInfo) {
+	r.scheduled = append(r.scheduled, ti)
+}
+
+// An honest commit gossiped while an altered one is parked is not resent: the
+// sender has already marked this node as holding a commit. It has to be tried
+// once the parked commit is rejected, or the height stalls until a restart; no
+// number of other peers can push it out.
+func TestParkedCommitRejectTriesQueuedCommits(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		sends    func(f *commitExtFixture) []commitSend
+		verifies int
+	}{
+		{
+			name: "honest after attacker",
+			sends: func(f *commitExtFixture) []commitSend {
+				return []commitSend{{f.bad, "attacker"}, {f.good, "honest"}}
+			},
+			verifies: 2,
+		},
+		{
+			name: "attacker resends after honest",
+			sends: func(f *commitExtFixture) []commitSend {
+				return []commitSend{{f.bad, "attacker"}, {f.good, "honest"}, {f.bad, "attacker"}, {f.bad, "attacker"}}
+			},
+			// The attacker's resends fill its own slot and cannot displace the
+			// honest one, which is the first replacement tried.
+			verifies: 2,
+		},
+		{
+			name: "more attackers than any fixed cap",
+			sends: func(f *commitExtFixture) []commitSend {
+				sends := []commitSend{{f.bad, "attacker"}}
+				for i := range 40 {
+					sends = append(sends, commitSend{f.bad, types.NodeID(fmt.Sprintf("sybil-%d", i))})
+				}
+				return append(sends, commitSend{f.good, "honest"})
+			},
+			verifies: 42,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			f := newCommitExtFixture(ctx, t)
+			ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+			var relayed []*types.Commit
+			f.node.emitter.AddListener(types.EventCommitValue, func(data eventemitter.EventData) error {
+				relayed = append(relayed, data.(*types.Commit))
+				return nil
+			})
+
+			for _, send := range tc.sends(f) {
+				require.NoError(t, f.sendCommit(ctx, send.commit, send.peer))
+			}
+			require.Same(t, f.bad, f.stateData.Commit, "the first commit is parked until its block arrives")
+			require.Empty(t, f.checker.calls, "nothing can be verified before the block is processed")
+
+			require.NoError(t, f.completeBlock(ctx, false), "a rejection must not blame the block-part peer")
+
+			f.requireCommitted(t, f.good)
+			require.Equal(t, calls(tc.verifies, "finalize"), f.checker.calls)
+			require.Equal(t, []*types.Commit{f.good}, relayed, "only the accepted commit is relayed")
+		})
+	}
+}
+
+type commitSend struct {
+	commit *types.Commit
+	peer   types.NodeID
+}
+
+// Queued commits pay for their authentication when they arrive, in their own
+// scheduler turn, and a forged one is reported then. Trying them once the block
+// arrives costs the budget nothing: that charge would be out of turn.
+func TestQueuedCommitsAreAuthenticatedOnArrival(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := newCommitExtFixture(ctx, t)
+	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+	budget := &tokenBudget{tokens: 1_000}
+	f.node.ctrl.Get(TryAddCommitType).(*TryAddCommitAction).verificationBudget = budget
+	forged := *f.good
+	forged.ThresholdBlockSignature = bytes.Clone(f.good.ThresholdBlockSignature)
+	forged.ThresholdBlockSignature[0] ^= 0xff
+
+	require.NoError(t, f.sendCommit(ctx, f.bad, "attacker"))
+	require.ErrorAs(t, f.sendCommit(ctx, &forged, "forger"), &types.ErrInvalidCommitSignature{})
+	report := <-f.node.peerErrorQueue.ch
+	require.Equal(t, types.NodeID("forger"), report.PeerID)
+	charged := budget.charged
+	require.NoError(t, f.sendCommit(ctx, f.good, "honest"))
+	cost, err := commitCost(len(f.good.ThresholdVoteExtensions))
+	require.NoError(t, err)
+	require.Equal(t, cost, budget.charged-charged, "a queued commit pays in its own turn")
+
+	budget.tokens = 0
+	require.NoError(t, f.completeBlock(ctx, false))
+	f.requireCommitted(t, f.good)
+	require.Equal(t, calls(2, "finalize"), f.checker.calls, "the forged commit is never tried")
+}
+
+// tokenBudget is a verification budget holding a fixed number of tokens that
+// never refill, so a test decides exactly which verifications it can afford.
+type tokenBudget struct {
+	tokens  int
+	charged int
+}
+
+func (b *tokenBudget) Allow(cost int) bool {
+	if cost > b.tokens {
+		return false
+	}
+	b.tokens -= cost
+	b.charged += cost
+	return true
+}
+
+// WAL replay re-dispatches the same messages in the same order, so it must
+// reach the same outcome, without reporting any peer for what it replays.
+func TestParkedCommitRejectDuringReplay(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := newCommitExtFixture(ctx, t)
+	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+	forged := *f.good
+	forged.ThresholdBlockSignature = bytes.Clone(f.good.ThresholdBlockSignature)
+	forged.ThresholdBlockSignature[0] ^= 0xff
+
+	require.NoError(t, f.dispatchCommit(ctx, f.bad, "attacker", true))
+	require.Error(t, f.dispatchCommit(ctx, &forged, "forger", true))
+	require.NoError(t, f.dispatchCommit(ctx, f.good, "honest", true))
+	require.NoError(t, f.completeBlock(ctx, true))
+
+	f.requireCommitted(t, f.good)
+	require.Equal(t, calls(2, "finalize"), f.checker.calls)
+	select {
+	case report := <-f.node.peerErrorQueue.ch:
+		t.Fatalf("a replayed commit must not be reported: %v", report)
+	default:
+	}
+}
+
+// A commit for a later round queued behind a rejected parked one is applied
+// without entering its round.
+func TestParkedCommitRejectAppliesQueuedFutureRound(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := newCommitExtFixture(ctx, t)
+	const round int32 = 2
+	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+	future := f.sign(ctx, t, round, withdrawalExtension)
+	f.checker.onVerify = func(vote *types.Vote) {
+		if vote.Round == 0 {
+			f.checker.round = round
+		}
+	}
+	require.NoError(t, f.sendCommit(ctx, f.bad, "attacker"))
+	require.NoError(t, f.sendCommit(ctx, future, "honest"))
+	require.NoError(t, f.completeBlock(ctx, false))
+	f.requireCommitted(t, future)
+	require.Equal(t, []string{"process", "verify", "process", "verify", "finalize"}, f.checker.calls)
+}
+
+// When every parked and queued commit is rejected, nothing more is tried and
+// the completed block takes the ordinary path, which a later honest commit
+// finishes. An honest peer that has not sent its commit yet still sends it.
+func TestParkedCommitRejectWithoutReplacement(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := newCommitExtFixture(ctx, t)
+	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+
+	// An honest peer's view of this node, which it updates from our round steps.
+	peer := NewPeerState(log.NewNopLogger(), "honest")
+	peer.PRS.Height, peer.PRS.Round, peer.PRS.Step = f.stateData.Height, f.stateData.Round, f.stateData.Step
+	f.node.emitter.AddListener(types.EventNewRoundStepValue, func(data eventemitter.EventData) error {
+		msg, err := MsgFromProto(data.(*cstypes.RoundState).NewRoundStepMessage())
+		require.NoError(t, err)
+		peer.ApplyNewRoundStepMessage(msg.(*NewRoundStepMessage))
+		return nil
+	})
+	peerRS := cstypes.RoundState{Height: f.block.Height + 1}
+
+	require.NoError(t, f.sendCommit(ctx, f.bad, "attacker"))
+	require.NoError(t, f.sendCommit(ctx, f.bad, "attacker-2"))
+	require.NoError(t, f.completeBlock(ctx, false))
+	f.requireNothingPersisted(t)
+	require.Zero(t, f.stateData.Round)
+	require.Equal(t, cstypes.RoundStepPropose, f.stateData.Step, "a rejection leaves the round's step and timeout")
+	require.True(t, shouldCommitBeGossiped(peerRS, peer.GetRoundState()), "a peer that has not sent yet still sends")
+
+	require.True(t, f.stateData.holdsProposalBlock(f.good.BlockID), "the verified block is kept")
+	require.NoError(t, f.sendCommit(ctx, f.good, "honest"))
+	require.Equal(t, calls(3, "finalize"), f.checker.calls)
+	f.requireCommitted(t, f.good)
+}
+
+// A validator can hold its own +2/3 precommits for the block while a commit
+// from a peer is parked. The parked commit takes the block when it completes;
+// rejected, the quorum already held finishes the height.
+func TestParkedCommitRejectFallsBackToOwnPrecommits(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := newCommitExtFixture(ctx, t)
+	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+	// Local precommits carry no extensions, so the quorum's vector is empty; the
+	// peer's commit carries one the application did not produce.
+	f.checker.expected = []*abci.ExtendVoteExtension{}
+
+	require.NoError(t, f.sendCommit(ctx, f.good, "attacker"))
+	f.stateData.updateRoundStep(0, cstypes.RoundStepPrecommit)
+	f.deliver(ctx, t, &f.stateData, f.precommit(ctx, t, f.commit.BlockID))
+	require.Equal(t, cstypes.RoundStepApplyCommit, f.stateData.Step, "the quorum waits for the block")
+
+	require.NoError(t, f.completeBlock(ctx, false))
+
+	require.Equal(t, f.block.Height+1, f.stateData.Height, "the held quorum must complete the height")
+	require.Empty(t, f.node.blockStore.LoadSeenCommitAt(f.block.Height).ThresholdVoteExtensions)
+	require.Equal(t, calls(2, "finalize"), f.checker.calls)
+}
+
+// The commit built from this node's own quorum is checked in tryFinalizeCommit.
+// A rejection there persists nothing and leaves the node at its height, where
+// a commit from a peer can still finish it.
+func TestOwnPrecommitsCommitRejected(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := newCommitExtFixture(ctx, t)
+	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+	f.checker.expected = []*abci.ExtendVoteExtension{}
+	f.checker.rejectAll = true
+	counter := &recordingCounter{}
+	f.node.metrics.CommitVerifyFailures = counter
+
+	f.stateData.updateRoundStep(0, cstypes.RoundStepPrecommit)
+	f.deliver(ctx, t, &f.stateData, f.precommit(ctx, t, f.commit.BlockID))
+	require.Equal(t, cstypes.RoundStepApplyCommit, f.stateData.Step, "the quorum waits for the block")
+	require.NoError(t, f.completeBlock(ctx, false))
+
+	require.Equal(t, calls(1), f.checker.calls)
+	require.Equal(t, float64(1), counter.value)
+	require.Zero(t, f.node.blockStore.Height())
+	require.Equal(t, f.block.Height, f.stateData.Height)
+	require.Nil(t, f.stateData.Commit)
+
+	f.checker.rejectAll = false
+	require.NoError(t, f.sendCommit(ctx, f.commit, "honest"))
+	require.Equal(t, f.block.Height+1, f.stateData.Height)
+	require.Equal(t, f.block.Height, f.node.blockStore.Height())
+}
+
+func TestAcceptedCommitDiscardsQueuedCandidates(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := newCommitExtFixture(ctx, t)
+	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+	require.NoError(t, f.sendCommit(ctx, f.good, "honest"))
+	require.NoError(t, f.sendCommit(ctx, f.bad, "attacker"))
+	candidates := f.node.ctrl.Get(TryAddCommitType).(*TryAddCommitAction).candidates
+	require.Len(t, candidates.candidates, 1)
+	require.NoError(t, f.completeBlock(ctx, false))
+	f.requireCommitted(t, f.good)
+	require.Empty(t, candidates.candidates, "completed heights must release queued commits")
+	require.Equal(t, calls(1, "finalize"), f.checker.calls, "the queued commit is not checked")
 }
 
 // commitCheckingExecutor plays an application that accepts only the expected
 // commit extension vector. Individual precommits go to the wrapped executor.
 type commitCheckingExecutor struct {
 	sm.Executor
-	t        *testing.T
-	block    *types.Block
+	t     *testing.T
+	block *types.Block
+	// round is the round every commit must be for; -1 accepts any.
 	round    int32
 	expected []*abci.ExtendVoteExtension
 	store    sm.BlockStore
@@ -154,7 +612,9 @@ func (e *commitCheckingExecutor) VerifyVoteExtension(ctx context.Context, vote *
 	require.Zero(e.t, e.store.Height(), "verification must precede persistence")
 	require.Equal(e.t, e.block.Hash(), vote.BlockID.Hash)
 	require.Equal(e.t, e.block.Height, vote.Height)
-	require.Equal(e.t, e.round, vote.Round)
+	if e.round >= 0 {
+		require.Equal(e.t, e.round, vote.Round)
+	}
 	e.calls = append(e.calls, "verify")
 	if e.onVerify != nil {
 		e.onVerify(vote)
@@ -173,26 +633,4 @@ func (e *commitCheckingExecutor) FinalizeBlock(ctx context.Context, state sm.Sta
 		e.onFinalize(commit)
 	}
 	return e.Executor.FinalizeBlock(ctx, state, rs, id, block, commit, last)
-}
-
-func TestCommitEmptyExtensionsStillVerified(t *testing.T) {
-	for _, round := range []int32{0, 2} {
-		t.Run(fmt.Sprint(round), func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			cfg := configSetup(t)
-			cfg.Consensus.DontAutoPropose = true
-			n := newCommitFixture(ctx, t, cfg, types.BlockPartSizeBytes, round)
-			sd := n.node.GetStateData()
-			checker := &commitCheckingExecutor{Executor: n.node.blockExecutor.blockExec, t: t, block: n.block,
-				round: round, expected: []*abci.ExtendVoteExtension{}, store: n.node.blockStore}
-			n.node.blockExecutor.blockExec = checker
-			sd.ProposalBlock, sd.ProposalBlockParts = n.block, n.parts
-			sd.updateRoundStep(0, cstypes.RoundStepPrevote)
-			ctx = dash.ContextWithProTxHash(ctx, n.node.privValidator.ProTxHash)
-			ctx = msgInfoWithCtx(ctx, msgInfo{Msg: &CommitMessage{n.commit}, PeerID: n.peerID})
-			require.NoError(t, n.node.ctrl.Dispatch(ctx, &TryAddCommitEvent{Commit: n.commit, PeerID: n.peerID}, &sd))
-			require.Equal(t, []string{"process", "verify", "finalize"}, checker.calls)
-		})
-	}
 }

@@ -41,6 +41,8 @@ type AddProposalBlockPartAction struct {
 	// partProofBudget bounds the leaf hashing a peer can force with block parts
 	// whose proof does not check out.
 	partProofBudget *blockPartProofBudget
+	// candidates holds the commits to try should the parked one be rejected.
+	candidates *commitCandidates
 }
 
 // Execute ...
@@ -63,7 +65,10 @@ func (c *AddProposalBlockPartAction) Execute(ctx context.Context, stateEvent Sta
 		return err
 	}
 
-	if added && commitNotExist && stateData.ProposalBlockParts.IsComplete() {
+	// A parked commit that was rejected leaves a complete block that still needs
+	// the ordinary flow, as if no commit had been parked.
+	commitRejected := !commitNotExist && stateData.Commit == nil && stateData.Height == event.Msg.Height
+	if added && (commitNotExist || commitRejected) && stateData.ProposalBlockParts.IsComplete() {
 		return stateEvent.Ctrl.Dispatch(ctx, &ProposalCompletedEvent{
 			Height:     event.Msg.Height,
 			FromReplay: event.FromReplay,
@@ -222,8 +227,14 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 				"peer", peerID,
 			)
 			// We received a commit before the block
-			// Transit to AddCommit
-			return added, ctrl.Dispatch(ctx, &AddCommitEvent{Commit: stateData.Commit}, stateData)
+			commit, err := c.selectParkedCommit(ctx, stateData)
+			if err != nil {
+				return added, err
+			}
+			if commit != nil {
+				// Transit to AddCommit
+				return added, ctrl.Dispatch(ctx, &AddCommitEvent{Commit: commit}, stateData)
+			}
 		}
 
 		c.logger.Info(
@@ -241,6 +252,35 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 	}
 
 	return added, nil
+}
+
+// selectParkedCommit tries the commit parked for the completed block, then the
+// commits peers sent while it was parked, in arrival order. All are
+// authenticated already, so each costs only processing the block, done once,
+// and the application's check of its extensions. The first commit accepted is
+// kept in stateData.Commit and returned; if none is, stateData.Commit is cleared
+// and saved, and nil is returned. A rejection is only counted: it proves nothing
+// against a sender, which may have relayed the commit as it received it.
+func (c *AddProposalBlockPartAction) selectParkedCommit(ctx context.Context, stateData *StateData) (*types.Commit, error) {
+	parked := stateData.Commit
+	stateData.Commit = nil
+	queued := c.candidates.take(stateData.Height)
+	candidates := make([]*types.Commit, 0, 1+len(queued))
+	candidates = append(candidates, parked)
+	for _, candidate := range queued {
+		candidates = append(candidates, candidate.commit)
+	}
+	for _, commit := range candidates {
+		err := verifyHeldCommit(ctx, c.logger, c.blockExec, stateData, commit)
+		if err == nil {
+			stateData.Commit = commit
+			return commit, nil
+		}
+		c.metrics.CommitVerifyFailures.With("reason", commitVerifyFailureReason(err)).Add(1)
+		c.logger.Debug("parked commit cannot be applied",
+			"height", commit.Height, "round", commit.Round, "error", err)
+	}
+	return nil, stateData.Save()
 }
 
 type ProposalCompletedEvent struct {

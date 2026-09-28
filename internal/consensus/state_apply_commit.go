@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
@@ -13,12 +12,6 @@ import (
 
 type ApplyCommitEvent struct {
 	Commit *types.Commit
-	// FromOwnPrecommits marks a commit this node assembled from its own +2/3
-	// precommits, which there is no point assembling again if it is rejected.
-	FromOwnPrecommits bool
-	// Rejected reports that the application rejected the commit extensions and
-	// consensus recovered without treating the caller as a faulty peer.
-	Rejected bool
 }
 
 // GetType returns ApplyCommitType event-type
@@ -36,7 +29,6 @@ type ApplyCommitAction struct {
 	scheduler      *roundScheduler
 	metrics        *Metrics
 	eventPublisher *EventPublisher
-	candidates     *commitCandidates
 }
 
 func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) error {
@@ -69,26 +61,8 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 	c.blockExec.mustEnsureProcess(ctx, &stateData.RoundState, round)
 	c.blockExec.mustValidate(ctx, stateData)
 
+	// Save to blockStore
 	if commit != nil {
-		// The application must accept the commit's extension vector before the
-		// block and commit are persisted or finalized. Until it does, the commit
-		// is not published in stateData.Commit, unless adoptCommit parked it there
-		// while its block was missing; TryAddCommit's parked-commit guard keeps
-		// other commits out meanwhile.
-		if err := sm.VerifyCommitExtensions(ctx, c.blockExec.blockExec, commit); err != nil {
-			event.Rejected = true
-			c.metrics.CommitVerifyFailures.With("reason", commitVerifyFailureReason(err)).Add(1)
-			c.logger.Debug("application rejected commit vote extensions",
-				"height", commit.Height, "round", commit.Round, "error", err)
-			if err := c.discardRejectedCommit(stateData); err != nil {
-				return err
-			}
-			return c.recoverFromRejectedCommit(ctx, stateEvent.Ctrl, stateData, event.FromOwnPrecommits)
-		}
-		stateData.Commit = commit
-		if stateData.enterApplyCommit(commit.Round) {
-			c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
-		}
 		c.blockStore.SaveBlock(block, blockParts, commit)
 	}
 
@@ -129,7 +103,6 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 
 	// NewHeightStep!
 	stateData.updateToState(stateCopy, commit, c.blockStore)
-	c.candidates.resetUnless(stateData.Height)
 
 	// The application may ask us not to wait for transactions before proposing
 	// the next height (ResponseFinalizeBlock.propose_next_block_immediately).
@@ -156,94 +129,6 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 	// * c.Height has been increment to height+1
 	// * c.Step is now cstypes.RoundStepNewHeight
 	// * c.StartTime is set to when we will start round0.
-	return nil
-}
-
-// discardRejectedCommit keeps the processed block but forgets the commit, so a
-// replacement for the same block can be applied without processing it again.
-func (c *ApplyCommitAction) discardRejectedCommit(stateData *StateData) error {
-	stateData.discardCommit()
-	if stateData.Step == cstypes.RoundStepApplyCommit {
-		// Only EnterCommit reaches this step before a commit is accepted, and
-		// AddVote dispatches EnterPrecommit first, so the round had reached
-		// Precommit; a pending PrecommitWait timeout stays effective there.
-		stateData.updateRoundStep(stateData.Round, cstypes.RoundStepPrecommit)
-	}
-	return stateData.Save()
-}
-
-// recoverFromRejectedCommit finds another way to finish the height after a
-// commit's extensions were rejected. In order, it tries:
-//
-//  1. the commits peers sent that were queued instead of verified, which they
-//     will not send again (see commitCandidates);
-//  2. this node's own +2/3 precommits for the block, if the rejected commit did
-//     not come from them.
-//
-// It never changes the round: a peer could otherwise add a round, with its vote
-// sets and longer timeouts, per rejected commit it resends. Without a
-// replacement the node stays in its round and step, where its pending timeout
-// still applies, and is finished by the commit of an honest peer that has not
-// sent one yet, since a sender marks us only once it has sent; a peer that
-// reconnects sends again. Every commit an honest peer delivered is queued, so it
-// cannot be lost to an attacker here. What remains is a stall with no pending
-// timeout (Precommit without +2/3 precommits) when every connected honest peer's
-// commit was shed before reaching consensus under local overload: the node then
-// waits for a new or reconnecting peer.
-//
-// Replacements go through the same verification as a commit received from the
-// network, without charging the budget their arrival already paid. Any of them
-// that is rejected lands back here while the loop is running and returns at
-// once, so recovery is iterative. Nothing is applied twice: success moves
-// stateData to the next height, which ends the loop and makes the remaining
-// candidates stale.
-func (c *ApplyCommitAction) recoverFromRejectedCommit(
-	ctx context.Context,
-	ctrl *Controller,
-	stateData *StateData,
-	fromOwnPrecommits bool,
-) error {
-	if c.candidates.recovering {
-		return nil
-	}
-	c.candidates.recovering = true
-	defer func() { c.candidates.recovering = false }()
-
-	height := stateData.Height
-	pending := func() bool { return stateData.Height == height && stateData.Commit == nil }
-
-	for pending() {
-		candidate, ok := c.candidates.pop(height)
-		if !ok {
-			break
-		}
-		candidateCtx := msgInfoWithCtx(ctx, msgInfo{Msg: &CommitMessage{candidate.commit}, PeerID: candidate.peerID})
-		err := ctrl.Dispatch(candidateCtx, &TryAddCommitEvent{
-			Commit:     candidate.commit,
-			PeerID:     candidate.peerID,
-			FromReplay: candidate.fromReplay,
-			Prepaid:    true,
-		}, stateData)
-		if err != nil {
-			c.logger.Debug("queued commit cannot replace the rejected one",
-				"height", height, "peer", candidate.peerID, "error", err)
-		}
-	}
-
-	if pending() && !fromOwnPrecommits {
-		blockID, ok := stateData.Votes.Precommits(stateData.Round).TwoThirdsMajority()
-		if ok && stateData.holdsProposalBlock(blockID) {
-			err := ctrl.Dispatch(ctx, &EnterCommitEvent{Height: height, CommitRound: stateData.Round}, stateData)
-			if err != nil {
-				c.logger.Error("cannot commit from own precommits", "height", height, "error", err)
-			}
-		}
-	}
-
-	if pending() {
-		c.logger.Debug("no replacement for the rejected commit; waiting for another peer's commit",
-			"height", height, "round", stateData.Round, "step", stateData.Step)
-	}
 	return nil
 }
 

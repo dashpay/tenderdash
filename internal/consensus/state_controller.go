@@ -98,6 +98,7 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo], prop
 			eventPublisher:  cs.eventPublisher,
 			statsQueue:      statsQueue,
 			partProofBudget: newBlockPartProofBudget(),
+			candidates:      candidates,
 		},
 		ProposalCompletedType: &ProposalCompletedAction{logger: cs.logger},
 		AddVoteType:           newAddVoteAction(cs, ctrl, statsQueue),
@@ -140,12 +141,12 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo], prop
 			scheduler:      cs.roundScheduler,
 			metrics:        cs.metrics,
 			eventPublisher: cs.eventPublisher,
-			candidates:     candidates,
 		},
 		TryFinalizeCommitType: &TryFinalizeCommitAction{
 			logger:     cs.logger,
 			blockExec:  cs.blockExecutor,
 			blockStore: cs.blockStore,
+			metrics:    cs.metrics,
 		},
 		EnterPrevoteWaitType: &EnterPrevoteWaitAction{
 			logger:         cs.logger,

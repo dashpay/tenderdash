@@ -770,10 +770,11 @@ Tenderdash calls it for two kinds of request, told apart by `validator_pro_tx_ha
   block signature is valid can still carry a stripped, duplicated or replayed vector. Tenderdash
   requires `ACCEPT` before it saves the block and commit or calls `FinalizeBlock`. What `REJECT` does
   depends on the path:
-  - consensus: the commit is discarded, and a commit for the same block received from another peer,
-    or assembled from the node&#39;s own precommits, is accepted instead; failing both, the node stays
-    in its round and waits for a commit from a peer that has not sent one yet. The block is not
-    processed again unless the node has meanwhile processed another proposal;
+  - consensus: the commit is discarded without changing the round or blaming its sender. A commit that
+    arrived before its block is checked when the block arrives, then the commits other peers sent
+    meanwhile. If the node&#39;s own commit is rejected, nothing is persisted and the node waits for a
+    peer&#39;s commit. The block is not processed again unless the node has meanwhile processed
+    another proposal;
   - block sync: the block is not applied; the peer that served it is dropped and the height is
     requested again;
   - replay at start-up: the commit is already in the block store, so the node fails to start; there is

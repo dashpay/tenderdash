@@ -11,16 +11,7 @@ import (
 
 func TestCommitCandidates(t *testing.T) {
 	commit := func(round int32) *types.Commit { return &types.Commit{Height: 5, Round: round} }
-	popAll := func(c *commitCandidates, height int64) []commitCandidate {
-		var out []commitCandidate
-		for {
-			next, ok := c.pop(height)
-			if !ok {
-				return out
-			}
-			out = append(out, next)
-		}
-	}
+	popAll := func(c *commitCandidates, height int64) []commitCandidate { return c.take(height) }
 
 	t.Run("a peer overwrites only its own slot, which keeps its place", func(t *testing.T) {
 		var c commitCandidates
@@ -73,8 +64,7 @@ func TestCommitCandidates(t *testing.T) {
 	t.Run("another height discards the candidates", func(t *testing.T) {
 		var c commitCandidates
 		c.add(5, commit(0), "a", false)
-		_, ok := c.pop(6)
-		require.False(t, ok)
+		require.Empty(t, c.take(6))
 		c.add(5, commit(0), "a", false)
 		c.add(6, commit(0), "b", false)
 		require.Empty(t, popAll(&c, 5))

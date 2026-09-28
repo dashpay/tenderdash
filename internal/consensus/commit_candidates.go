@@ -6,19 +6,19 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
-// commitCandidate is a peer's commit kept, unverified, until a rejected commit
-// needs replacing.
+// commitCandidate is a peer's authenticated commit kept until the block it
+// commits arrives.
 type commitCandidate struct {
 	commit     *types.Commit
 	peerID     types.NodeID
 	fromReplay bool
 }
 
-// commitCandidates keeps the commits TryAddCommit would otherwise drop: those
-// received while another commit for the height is parked awaiting its block, and
-// those it could not afford to verify. A peer that sent us a commit marks us as
-// holding one and never sends it again at this height and round, so after a
-// rejection these are the only replacements the node will see from those peers.
+// commitCandidates keeps the commits TryAddCommit receives while another commit
+// for the height is parked awaiting its block. The application can check a
+// commit's extensions only once that block is processed, so the parked commit
+// may still be rejected; a peer that sent us a commit never sends it again at
+// this height and round, so these are the only replacements those peers offer.
 //
 // Each connected peer has one slot, which only that peer's later commits
 // overwrite, so a peer cannot displace another's commit by resending; slots keep
@@ -37,10 +37,6 @@ type commitCandidates struct {
 	connected  func(types.NodeID) bool
 	height     int64
 	candidates []commitCandidate
-	// recovering is set while a rejected commit is being replaced, so a
-	// replacement rejected in turn leaves the remaining options to the loop
-	// already running instead of starting a nested one.
-	recovering bool
 }
 
 // add keeps commit as peerID's candidate for height.
@@ -64,16 +60,12 @@ func (c *commitCandidates) retainable(candidate commitCandidate) bool {
 	return candidate.fromReplay || candidate.peerID == "" || c.connected == nil || c.connected(candidate.peerID)
 }
 
-// pop removes and returns the oldest candidate for height.
-func (c *commitCandidates) pop(height int64) (commitCandidate, bool) {
+// take removes and returns the candidates for height, oldest first.
+func (c *commitCandidates) take(height int64) []commitCandidate {
 	c.resetUnless(height)
-	if len(c.candidates) == 0 {
-		return commitCandidate{}, false
-	}
-	next := c.candidates[0]
-	c.candidates[0] = commitCandidate{}
-	c.candidates = c.candidates[1:]
-	return next, true
+	taken := c.candidates
+	c.candidates = nil
+	return taken
 }
 
 func (c *commitCandidates) resetUnless(height int64) {

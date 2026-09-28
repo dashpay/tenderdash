@@ -26,6 +26,7 @@ type TryFinalizeCommitAction struct {
 	// create and execute blocks
 	blockExec  *blockExecutor
 	blockStore sm.BlockStore
+	metrics    *Metrics
 }
 
 // Execute ...
@@ -56,11 +57,12 @@ func (cs *TryFinalizeCommitAction) Execute(ctx context.Context, stateEvent State
 		return nil
 	}
 
-	return cs.finalizeCommit(ctx, stateEvent.Ctrl, stateData, event.Height)
+	cs.finalizeCommit(ctx, stateEvent.Ctrl, stateData, event.Height)
+	return nil
 }
 
 // Increment height and goto cstypes.RoundStepNewHeight
-func (cs *TryFinalizeCommitAction) finalizeCommit(ctx context.Context, ctrl *Controller, stateData *StateData, height int64) error {
+func (cs *TryFinalizeCommitAction) finalizeCommit(ctx context.Context, ctrl *Controller, stateData *StateData, height int64) {
 	logger := cs.logger.With("height", height)
 
 	if stateData.Height != height || stateData.Step != cstypes.RoundStepApplyCommit {
@@ -68,7 +70,7 @@ func (cs *TryFinalizeCommitAction) finalizeCommit(ctx context.Context, ctrl *Con
 			"entering finalize commit step",
 			"current", fmt.Sprintf("%v/%v/%v", stateData.Height, stateData.Round, stateData.Step),
 		)
-		return nil
+		return
 	}
 
 	blockID, ok := stateData.Votes.Precommits(stateData.CommitRound).TwoThirdsMajority()
@@ -96,5 +98,17 @@ func (cs *TryFinalizeCommitAction) finalizeCommit(ctx context.Context, ctrl *Con
 
 	precommits := stateData.Votes.Precommits(stateData.CommitRound)
 	seenCommit := precommits.MakeCommit()
-	return ctrl.Dispatch(ctx, &ApplyCommitEvent{Commit: seenCommit, FromOwnPrecommits: true}, stateData)
+	// The application must accept the extensions before the block is saved.
+	// This commit is built from precommits this node verified itself, so a
+	// rejection means the application disagrees with its own votes. Nothing is
+	// persisted and the node stays at this height, where a peer's commit can
+	// still finish it; a panic would only restart into the same commit.
+	cs.blockExec.mustEnsureProcess(ctx, &stateData.RoundState, seenCommit.Round)
+	if err := sm.VerifyCommitExtensions(ctx, cs.blockExec.blockExec, seenCommit); err != nil {
+		cs.metrics.CommitVerifyFailures.With("reason", commitVerifyFailureReason(err)).Add(1)
+		logger.Error("application rejected the commit of this node's own precommits; waiting for a peer's commit",
+			"commit_round", seenCommit.Round, "error", err)
+		return
+	}
+	_ = ctrl.Dispatch(ctx, &ApplyCommitEvent{Commit: seenCommit}, stateData)
 }

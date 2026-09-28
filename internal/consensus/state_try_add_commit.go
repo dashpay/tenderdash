@@ -17,9 +17,6 @@ type TryAddCommitEvent struct {
 	Commit     *types.Commit
 	PeerID     types.NodeID
 	FromReplay bool
-	// Prepaid marks a queued commit whose verification was charged when it
-	// arrived, so it is verified without charging the budget again.
-	Prepaid bool
 }
 
 // GetType returns TryAddCommitType event-type
@@ -48,19 +45,17 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 	commit := event.Commit
 	peerID := event.PeerID
 	fromReplay := event.FromReplay
-	if event.Prepaid {
-		ctx = context.WithValue(ctx, verificationBudgetCtx, nil)
-	} else {
-		ctx = ctxWithPeerVerificationBudget(ctx, peerID, fromReplay, cs.verificationBudget)
-	}
+	ctx = ctxWithPeerVerificationBudget(ctx, peerID, fromReplay, cs.verificationBudget)
 
 	// Only one remote commit at a time: the parked one is applied when its block
-	// arrives. Its sender cannot vouch for its extensions, which the application
-	// checks only then, so later commits for the height are kept unverified as
-	// replacements rather than dropped.
+	// arrives. The application may then reject its extensions, so later commits
+	// for the height are authenticated now and kept as replacements.
 	if stateData.Commit != nil {
 		if commit.Height == stateData.Height {
-			cs.queueCandidate(ctx, stateData.Height, event)
+			if err := cs.queueCandidate(ctx, stateData, event); err != nil {
+				cs.handleCommitVerifyError(err, peerID, fromReplay)
+				return err
+			}
 		}
 		return nil
 	}
@@ -75,14 +70,23 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 		verified, err := cs.prepareCommitForApply(ctx, stateData, commit, peerID, true)
 		if err != nil {
 			cs.handleCommitVerifyError(err, peerID, fromReplay)
-			cs.retainUnaffordable(err, stateData.Height, event)
 			return err
 		}
 		if verified {
+			// A held block is checked before the round changes, so that a rejected
+			// commit leaves the round as it was.
+			held := stateData.holdsProposalBlock(commit.BlockID)
+			if held {
+				if err := verifyHeldCommit(ctx, cs.logger, cs.blockExec, stateData, commit); err != nil {
+					stateData.Commit = nil
+					cs.handleCommitVerifyError(err, peerID, fromReplay)
+					return err
+				}
+			}
 			if err := stateEvent.Ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height, Round: commit.Round}, stateData); err != nil {
 				return err
 			}
-			if stateData.holdsProposalBlock(commit.BlockID) {
+			if held && stateData.holdsProposalBlock(commit.BlockID) {
 				// The retained block needs no further part to trigger application.
 				return stateEvent.Ctrl.Dispatch(ctx, &AddCommitEvent{Commit: commit}, stateData)
 			}
@@ -94,7 +98,6 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 	verified, err := cs.prepareCommitForApply(ctx, stateData, commit, peerID, false)
 	if err != nil {
 		cs.handleCommitVerifyError(err, peerID, fromReplay)
-		cs.retainUnaffordable(err, stateData.Height, event)
 		return err
 	}
 	if !verified {
@@ -117,43 +120,27 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 		return nil
 	}
 
-	// stateData.Commit stays unset: ApplyCommit publishes the commit only once
-	// the application has accepted its extensions.
+	// Below the guard, so that the guard firing leaves nothing behind. Setting
+	// Commit is what stops a later commit being reconsidered, and a round holding
+	// one it never dispatched waits for an event that will not arrive.
+	stateData.Commit = commit
 	return stateEvent.Ctrl.Dispatch(ctx, &AddCommitEvent{Commit: commit}, stateData)
 }
 
-// queueCandidate keeps a commit received while another is parked, charging its
-// verification to the budget now, in the turn the scheduler reserved for it:
-// recovery verifies it later without charging, when nothing is reserved.
-func (cs *TryAddCommitAction) queueCandidate(ctx context.Context, height int64, event *TryAddCommitEvent) {
-	if budget := verificationBudgetFromCtx(ctx); budget != nil {
-		cost, err := commitCost(len(event.Commit.ThresholdVoteExtensions))
-		if err != nil {
-			cs.logger.Debug("dropping queued commit declaring too many vote extensions",
-				"height", height, "peer", event.PeerID, "error", err)
-			return
-		}
-		if !budget.Allow(cost) {
-			// The scheduler waited for this cost before dispatching, so this means
-			// something charged out of turn; the commit is kept regardless.
-			cs.logger.Debug("verification budget could not prepay a queued commit",
-				"height", height, "peer", event.PeerID, "cost", cost)
-		}
+// queueCandidate authenticates a commit received while another is parked and
+// keeps it as its sender's replacement. The threshold signature is checked now,
+// in the turn the scheduler reserved its cost for, so that trying it once the
+// block arrives costs only the application's extension check.
+func (cs *TryAddCommitAction) queueCandidate(ctx context.Context, stateData *StateData, event *TryAddCommitEvent) error {
+	commit := event.Commit
+	if err := commit.ValidateBasic(); err != nil {
+		return fmt.Errorf("error validating commit: %w", err)
 	}
-	cs.candidates.add(height, event.Commit, event.PeerID, event.FromReplay)
-}
-
-// retainUnaffordable keeps a commit that could not be verified for want of
-// budget in its sender's slot. Its sender will not send it again, so dropping
-// it could lose the only commit that finishes the height; the next recovery
-// retries it. A prepaid retry is never re-queued, so recovery cannot spin.
-func (cs *TryAddCommitAction) retainUnaffordable(err error, height int64, event *TryAddCommitEvent) {
-	if event.Prepaid || !errors.Is(err, types.ErrVerificationBudgetExhausted) || event.Commit.Height != height {
-		return
+	if err := stateData.verifyCommitSignatures(commit.BlockID, commit, verificationBudgetFromCtx(ctx)); err != nil {
+		return fmt.Errorf("error verifying commit: %w", err)
 	}
-	cs.logger.Error("peer commit could not be verified within the verification budget; keeping it for retry",
-		"height", height, "peer", event.PeerID)
-	cs.candidates.add(height, event.Commit, event.PeerID, event.FromReplay)
+	cs.candidates.add(stateData.Height, commit, event.PeerID, event.FromReplay)
+	return nil
 }
 
 // handleCommitVerifyError reports the sender for eviction when a commit failed
@@ -287,18 +274,47 @@ func (cs *TryAddCommitAction) prepareCommitForApply(
 	if verified, err := verifyCommitBlock(ctx, cs.logger, stateData, commit); !verified || err != nil {
 		return verified, err
 	}
+	if err := verifyProcessedCommit(ctx, cs.blockExec, stateData, commit); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// verifyHeldCommit checks an authenticated commit against the block the round
+// holds, then processes that block and lets the application check the commit's
+// extensions. It fails for a block that is missing or differs.
+func verifyHeldCommit(
+	ctx context.Context,
+	logger log.Logger,
+	blockExec *blockExecutor,
+	stateData *StateData,
+	commit *types.Commit,
+) error {
+	verified, err := verifyCommitBlock(ctx, logger, stateData, commit)
+	if err != nil {
+		return err
+	}
+	if !verified {
+		return errors.New("cannot verify commit; its block is not held")
+	}
+	return verifyProcessedCommit(ctx, blockExec, stateData, commit)
+}
+
+// verifyProcessedCommit runs the held block through the application, validates
+// it and asks the application to accept the commit's extension vector: all a
+// commit needs before it may be saved and finalized.
+func verifyProcessedCommit(ctx context.Context, blockExec *blockExecutor, stateData *StateData, commit *types.Commit) error {
 	// We have a correct block, let's process it before applying the commit
-	err = cs.blockExec.ensureProcess(ctx, &stateData.RoundState, commit.Round)
+	err := blockExec.ensureProcess(ctx, &stateData.RoundState, commit.Round)
 	if err != nil {
 		if errors.Is(err, abciclient.ErrClientStopped) {
 			// this is a non-recoverable error in current architecture
 			panic(fmt.Errorf("ABCI client stopped, Tenderdash needs to be restarted: %w", err))
 		}
-		return false, fmt.Errorf("unable to process proposal: %w", err)
+		return fmt.Errorf("unable to process proposal: %w", err)
 	}
-	err = cs.blockExec.validate(ctx, stateData)
-	if err != nil {
-		return false, fmt.Errorf("+2/3 committed an invalid block: %w", err)
+	if err := blockExec.validate(ctx, stateData); err != nil {
+		return fmt.Errorf("+2/3 committed an invalid block: %w", err)
 	}
-	return true, nil
+	return sm.VerifyCommitExtensions(ctx, blockExec.blockExec, commit)
 }
