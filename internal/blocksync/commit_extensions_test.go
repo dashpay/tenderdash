@@ -29,8 +29,9 @@ func TestBlockApplierRejectsCommitExtensionsAndRetries(t *testing.T) {
 	calls := []string{}
 	exec.On("VerifyCommit", initial, mock.Anything, block.Height, commit).Twice().Return(types.VerifiedCommit{}, nil)
 	exec.On("ValidateBlock", mock.Anything, initial, block, types.VerifiedCommit{}).Twice().Return(nil)
+	processed := processedState(initial, block, commit.Round)
 	exec.On("ProcessProposal", mock.Anything, block, commit.Round, initial, true, types.VerifiedCommit{}).Once().
-		Run(func(mock.Arguments) { calls = append(calls, "process") }).Return(sm.CurrentRoundState{}, nil)
+		Run(func(mock.Arguments) { calls = append(calls, "process") }).Return(processed, nil)
 	check := func(args mock.Arguments) {
 		vote := args.Get(1).(*types.Vote)
 		require.Empty(t, vote.ValidatorProTxHash)
@@ -43,7 +44,7 @@ func TestBlockApplierRejectsCommitExtensionsAndRetries(t *testing.T) {
 	exec.On("VerifyVoteExtension", mock.Anything, mock.Anything).Once().Run(check).Return(errors.New("invalid vote extension"))
 	exec.On("VerifyVoteExtension", mock.Anything, mock.Anything).Once().Run(check).Return(nil)
 	store.On("SaveBlock", block, mock.Anything, commit).Once().Run(func(mock.Arguments) { calls = append(calls, "save") })
-	exec.On("FinalizeBlock", mock.Anything, initial, sm.CurrentRoundState{}, mock.Anything, block, commit, types.VerifiedCommit{}).Once().
+	exec.On("FinalizeBlock", mock.Anything, initial, processed, mock.Anything, block, commit, types.VerifiedCommit{}).Once().
 		Run(func(mock.Arguments) { calls = append(calls, "finalize") }).Return(state, nil, nil)
 	counter := metricspy.NewCounter()
 	metrics := consensus.NopMetrics()
@@ -74,14 +75,14 @@ func TestBlockApplierInvalidatesRejectedProposal(t *testing.T) {
 			exec.On("ValidateBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Twice().Return(nil)
 			exec.On("ProcessProposal", mock.Anything, mock.Anything, mock.Anything, mock.Anything, true, mock.Anything).
-				Twice().Return(sm.CurrentRoundState{}, nil)
+				Twice().Return(processedState(initial, block, commit.Round), nil)
 			exec.On("VerifyVoteExtension", mock.Anything, mock.Anything).
 				Twice().Return(errors.New("invalid vote extension"))
 			applier := newBlockApplier(exec, store, applierWithState(initial))
 			require.ErrorIs(t, applier.Apply(ctx, block, commit), sm.ErrCommitExtensionsRejected)
 			switch change {
 			case "block":
-				block.ProposedAppVersion++
+				block.AppHash = append(block.AppHash.Copy(), 1)
 			case "round":
 				commit.Round++
 			case "state":
@@ -89,6 +90,18 @@ func TestBlockApplierInvalidatesRejectedProposal(t *testing.T) {
 			}
 			require.ErrorIs(t, applier.Apply(ctx, block, commit), sm.ErrCommitExtensionsRejected)
 		})
+	}
+}
+
+// processedState is what ProcessProposal returns for block at round on top of
+// base, as the applier needs it to recognize the block when it is retried.
+func processedState(base sm.State, block *types.Block, round int32) sm.CurrentRoundState {
+	return sm.CurrentRoundState{
+		Base:        base,
+		Params:      sm.RoundParams{Source: sm.ProcessProposalSource, Round: round},
+		Round:       round,
+		AppHash:     block.AppHash.Copy(),
+		ResultsHash: block.ResultsHash.Copy(),
 	}
 }
 

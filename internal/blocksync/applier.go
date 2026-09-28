@@ -33,9 +33,8 @@ type (
 		// lastDone is when the previous Apply returned, so the time the applier
 		// sits idle waiting for the next block can be measured
 		lastDone time.Time
-		// Retain a successful ProcessProposal across commit-extension rejection.
-		processedBlock types.BlockID
-		processedRound int32
+		// Retain a successful ProcessProposal across commit-extension rejection,
+		// so a retry of the same block and round does not process it again.
 		processedState *sm.CurrentRoundState
 	}
 )
@@ -105,13 +104,16 @@ func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *ty
 	// Validate the app response before persisting; save before FinalizeBlock so
 	// crash recovery never finds the block store behind the application.
 	start = time.Now()
-	if e.processedState == nil || !e.processedBlock.Equals(blockID) || e.processedRound != commit.Round {
+	// Same reuse rule as consensus' ensureProcess. The header alone identifies
+	// the block here: verify above has authenticated the commit for it.
+	if e.processedState == nil || e.processedState.Params.Source != sm.ProcessProposalSource ||
+		!e.processedState.MatchesBlock(block.Header, commit.Round) {
 		e.processedState = nil
 		processed, err := e.blockExec.ProcessProposal(ctx, block, commit.Round, e.state, true, e.lastCommit)
 		if err != nil {
 			panic(fmt.Sprintf("failed to process committed block (%d:%X): %v", block.Height, block.Hash(), err))
 		}
-		e.processedBlock, e.processedRound, e.processedState = blockID, commit.Round, &processed
+		e.processedState = &processed
 	}
 	if err := sm.VerifyCommitExtensions(ctx, e.blockExec, commit); err != nil {
 		if errors.Is(err, sm.ErrCommitExtensionsRejected) {
