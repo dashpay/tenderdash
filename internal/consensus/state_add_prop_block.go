@@ -2,16 +2,19 @@ package consensus
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"time"
 
 	"github.com/cosmos/gogoproto/proto"
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
+	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
@@ -255,9 +258,13 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 }
 
 // selectParkedCommit tries the commit parked for the completed block, then the
-// commits peers sent while it was parked, in arrival order. All are
-// authenticated already, so each costs only processing the block, done once,
-// and the application's check of its extensions. The first commit accepted is
+// commits peers sent while it was parked, in arrival order but a round at a
+// time: the round already processed first, then each other round in the order
+// it first appears. Commits for one block may differ in round alone, and the
+// block is processed for each round, which an application may refuse to repeat,
+// so no round is returned to once left. All are authenticated already, so each
+// costs only processing the block, done once per round, and the application's
+// check of its extensions. The first commit accepted is
 // kept in stateData.Commit and returned; if none is, stateData.Commit is cleared
 // and saved, and nil is returned. A rejection is only counted: it proves nothing
 // against a sender, which may have relayed the commit as it received it.
@@ -270,6 +277,20 @@ func (c *AddProposalBlockPartAction) selectParkedCommit(ctx context.Context, sta
 	for _, candidate := range queued {
 		candidates = append(candidates, candidate.commit)
 	}
+	// rank orders the rounds; the stable sort keeps arrival order within one.
+	rank := make(map[int32]int, len(candidates))
+	if crs := stateData.CurrentRoundState; crs.Params.Source == sm.ProcessProposalSource &&
+		crs.MatchesBlock(stateData.ProposalBlock.Header, crs.Round) {
+		rank[crs.Round] = -1
+	}
+	for i, commit := range candidates {
+		if _, ok := rank[commit.Round]; !ok {
+			rank[commit.Round] = i
+		}
+	}
+	slices.SortStableFunc(candidates, func(a, b *types.Commit) int {
+		return cmp.Compare(rank[a.Round], rank[b.Round])
+	})
 	for _, commit := range candidates {
 		err := verifyHeldCommit(ctx, c.logger, c.blockExec, stateData, commit)
 		if err == nil {

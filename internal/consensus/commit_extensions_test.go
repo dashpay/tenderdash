@@ -567,6 +567,54 @@ func TestAcceptedCommitDiscardsQueuedCandidates(t *testing.T) {
 	require.Equal(t, calls(1, "finalize"), f.checker.calls, "the queued commit is not checked")
 }
 
+// Honest commits for one block can differ in round alone, so the commits queued
+// behind a parked one may alternate between rounds. They are tried a round at a
+// time: an application such as kvstore refuses to process a round twice, which
+// would reject the honest commit had its round been left for another one.
+func TestParkedCommitsAreTriedRoundByRound(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		honestRound int32
+		// processedFirst has the block processed for round 1 before it
+		// completes, as a node that already holds its result would.
+		processedFirst bool
+		rounds         []int32
+	}{
+		{name: "honest in the parked round", honestRound: 0, rounds: []int32{0}},
+		{name: "honest in a later round", honestRound: 1, rounds: []int32{0, 1}},
+		{name: "honest in the processed round", honestRound: 1, processedFirst: true, rounds: []int32{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			f := newCommitExtFixture(ctx, t)
+			ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+			f.checker.round = -1
+			f.checker.rejectReprocess = true
+			bad1 := *f.sign(ctx, t, 1, withdrawalExtension)
+			bad1.ThresholdVoteExtensions = nil
+			honest := f.sign(ctx, t, tc.honestRound, withdrawalExtension)
+
+			sends := []commitSend{{f.bad, "attacker-0"}, {&bad1, "attacker-1"},
+				{f.bad, "attacker-2"}, {&bad1, "attacker-3"}, {honest, "honest"}}
+			for _, send := range sends {
+				require.NoError(t, f.sendCommit(ctx, send.commit, send.peer))
+			}
+			if tc.processedFirst {
+				crs, err := f.checker.ProcessProposal(ctx, f.block, 1, f.stateData.state, true, types.VerifiedCommit{})
+				require.NoError(t, err)
+				f.stateData.CurrentRoundState = crs
+				f.checker.calls, f.checker.processedRounds = nil, []int32{}
+			}
+			require.NoError(t, f.completeBlock(ctx, false))
+
+			f.requireCommitted(t, honest)
+			require.Equal(t, tc.rounds, f.checker.processedRounds,
+				"each round is processed once, and none is returned to")
+		})
+	}
+}
+
 // commitCheckingExecutor plays an application that accepts only the expected
 // commit extension vector. Individual precommits go to the wrapped executor.
 type commitCheckingExecutor struct {
@@ -587,12 +635,22 @@ type commitCheckingExecutor struct {
 	// kvstore app, the application processes a block again after proposing in a
 	// later round.
 	processed map[int32]sm.CurrentRoundState
+	// rejectReprocess fails a second ProcessProposal for a round, as the
+	// kvstore app does, instead of replaying the remembered result.
+	rejectReprocess bool
+	// processedRounds lists the round of every ProcessProposal call.
+	processedRounds []int32
 }
 
 func (e *commitCheckingExecutor) ProcessProposal(ctx context.Context, block *types.Block, round int32,
 	state sm.State, verify bool, last types.VerifiedCommit) (sm.CurrentRoundState, error) {
 	e.calls = append(e.calls, "process")
+	e.processedRounds = append(e.processedRounds, round)
 	if crs, ok := e.processed[round]; ok {
+		if e.rejectReprocess {
+			return sm.CurrentRoundState{}, fmt.Errorf("duplicate ProcessProposal call at height %d, round %d",
+				block.Height, round)
+		}
 		return crs, nil
 	}
 	crs, err := e.Executor.ProcessProposal(ctx, block, round, state, verify, last)
