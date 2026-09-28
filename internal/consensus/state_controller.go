@@ -74,7 +74,7 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo], prop
 		eventPublisher: cs.eventPublisher,
 	}
 	ctrl := &Controller{}
-	candidates := &commitCandidates{}
+	candidates := &commitCandidates{connected: cs.msgInfoQueue.peerConnected}
 	ctrl.actions = map[EventType]ActionHandler{
 		EnterNewRoundType: &EnterNewRoundAction{
 			logger:         cs.logger,

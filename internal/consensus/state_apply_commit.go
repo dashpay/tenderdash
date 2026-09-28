@@ -164,8 +164,9 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 func (c *ApplyCommitAction) discardRejectedCommit(stateData *StateData) error {
 	stateData.discardCommit()
 	if stateData.Step == cstypes.RoundStepApplyCommit {
-		// Only EnterCommit, on +2/3 precommits for the block, reaches this step
-		// before a commit is accepted, so the round had at least reached Precommit.
+		// Only EnterCommit reaches this step before a commit is accepted, and
+		// AddVote dispatches EnterPrecommit first, so the round had reached
+		// Precommit; a pending PrecommitWait timeout stays effective there.
 		stateData.updateRoundStep(stateData.Round, cstypes.RoundStepPrecommit)
 	}
 	return stateData.Save()
@@ -174,18 +175,28 @@ func (c *ApplyCommitAction) discardRejectedCommit(stateData *StateData) error {
 // recoverFromRejectedCommit finds another way to finish the height after a
 // commit's extensions were rejected. In order, it tries:
 //
-//  1. the commits peers sent while the rejected one was parked, which they will
-//     not send again (see commitCandidates);
+//  1. the commits peers sent that were queued instead of verified, which they
+//     will not send again (see commitCandidates);
 //  2. this node's own +2/3 precommits for the block, if the rejected commit did
-//     not come from them;
-//  3. the next round, entered directly so expired timeouts cannot stall recovery.
-//     The new round clears peers' sent-commit records so they gossip again.
+//     not come from them.
+//
+// It never changes the round: a peer could otherwise add a round, with its vote
+// sets and longer timeouts, per rejected commit it resends. Without a
+// replacement the node stays in its round and step, where its pending timeout
+// still applies, and is finished by the commit of an honest peer that has not
+// sent one yet, since a sender marks us only once it has sent; a peer that
+// reconnects sends again. Every commit an honest peer delivered is queued, so it
+// cannot be lost to an attacker here. What remains is a stall with no pending
+// timeout (Precommit without +2/3 precommits) when every connected honest peer's
+// commit was shed before reaching consensus under local overload: the node then
+// waits for a new or reconnecting peer.
 //
 // Replacements go through the same verification as a commit received from the
-// network. Any of them that is rejected lands back here while the loop is
-// running and returns at once, so recovery is iterative. Nothing is applied
-// twice: success moves stateData to the next height, which ends the loop and
-// makes the remaining candidates stale.
+// network, without charging the budget their arrival already paid. Any of them
+// that is rejected lands back here while the loop is running and returns at
+// once, so recovery is iterative. Nothing is applied twice: success moves
+// stateData to the next height, which ends the loop and makes the remaining
+// candidates stale.
 func (c *ApplyCommitAction) recoverFromRejectedCommit(
 	ctx context.Context,
 	ctrl *Controller,
@@ -211,9 +222,10 @@ func (c *ApplyCommitAction) recoverFromRejectedCommit(
 			Commit:     candidate.commit,
 			PeerID:     candidate.peerID,
 			FromReplay: candidate.fromReplay,
+			Prepaid:    true,
 		}, stateData)
 		if err != nil {
-			c.logger.Debug("commit received while another was parked cannot replace it",
+			c.logger.Debug("queued commit cannot replace the rejected one",
 				"height", height, "peer", candidate.peerID, "error", err)
 		}
 	}
@@ -229,11 +241,8 @@ func (c *ApplyCommitAction) recoverFromRejectedCommit(
 	}
 
 	if pending() {
-		c.logger.Debug("no replacement for the rejected commit; moving to the next round",
-			"height", height, "round", stateData.Round)
-		return ctrl.Dispatch(ctx, &EnterNewRoundEvent{
-			Height: height, Round: stateData.Round + 1, KeepProcessedBlock: true,
-		}, stateData)
+		c.logger.Debug("no replacement for the rejected commit; waiting for another peer's commit",
+			"height", height, "round", stateData.Round, "step", stateData.Step)
 	}
 	return nil
 }

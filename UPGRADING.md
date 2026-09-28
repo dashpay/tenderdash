@@ -18,8 +18,15 @@ validation. For this request, return `ACCEPT` or `REJECT`; an ABCI-level error
 Applications that keep the default unconditional `ACCEPT` remain compatible but
 do not gain protection against altered commit extension vectors.
 
-Consensus discards a rejected commit and tries another commit or advances the
-round. Ordinary consensus WAL replay uses the same recovery. Block sync retries
+Consensus discards a rejected commit and tries the commits other peers sent,
+then its own +2/3 precommits; a rejection never changes the round. Every peer
+has a queue slot for its commit, freed when the peer disconnects, so an attacker
+cannot push an honest peer's commit out. With no replacement the node stays in
+its round until a peer that has not yet sent its commit does so, or one
+reconnects. It can stall without a pending timeout only if every connected
+honest peer's commit was dropped before reaching consensus under local message
+overload; it resumes when a new or reconnecting peer sends its commit. Ordinary
+consensus WAL replay uses the same recovery. Block sync retries
 the height from another peer. During handshake catch-up of application state to
 blocks already in the block store, rejection stops startup because the commit
 is already persisted. The error identifies the failing height, round and hash.

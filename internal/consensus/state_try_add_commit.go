@@ -17,6 +17,9 @@ type TryAddCommitEvent struct {
 	Commit     *types.Commit
 	PeerID     types.NodeID
 	FromReplay bool
+	// Prepaid marks a queued commit whose verification was charged when it
+	// arrived, so it is verified without charging the budget again.
+	Prepaid bool
 }
 
 // GetType returns TryAddCommitType event-type
@@ -45,7 +48,11 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 	commit := event.Commit
 	peerID := event.PeerID
 	fromReplay := event.FromReplay
-	ctx = ctxWithPeerVerificationBudget(ctx, peerID, fromReplay, cs.verificationBudget)
+	if event.Prepaid {
+		ctx = context.WithValue(ctx, verificationBudgetCtx, nil)
+	} else {
+		ctx = ctxWithPeerVerificationBudget(ctx, peerID, fromReplay, cs.verificationBudget)
+	}
 
 	// Only one remote commit at a time: the parked one is applied when its block
 	// arrives. Its sender cannot vouch for its extensions, which the application
@@ -53,7 +60,7 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 	// replacements rather than dropped.
 	if stateData.Commit != nil {
 		if commit.Height == stateData.Height {
-			cs.candidates.add(stateData.Height, commit, peerID, fromReplay)
+			cs.queueCandidate(ctx, stateData.Height, event)
 		}
 		return nil
 	}
@@ -68,6 +75,7 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 		verified, err := cs.prepareCommitForApply(ctx, stateData, commit, peerID, true)
 		if err != nil {
 			cs.handleCommitVerifyError(err, peerID, fromReplay)
+			cs.retainUnaffordable(err, stateData.Height, event)
 			return err
 		}
 		if verified {
@@ -86,6 +94,7 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 	verified, err := cs.prepareCommitForApply(ctx, stateData, commit, peerID, false)
 	if err != nil {
 		cs.handleCommitVerifyError(err, peerID, fromReplay)
+		cs.retainUnaffordable(err, stateData.Height, event)
 		return err
 	}
 	if !verified {
@@ -111,6 +120,40 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 	// stateData.Commit stays unset: ApplyCommit publishes the commit only once
 	// the application has accepted its extensions.
 	return stateEvent.Ctrl.Dispatch(ctx, &AddCommitEvent{Commit: commit}, stateData)
+}
+
+// queueCandidate keeps a commit received while another is parked, charging its
+// verification to the budget now, in the turn the scheduler reserved for it:
+// recovery verifies it later without charging, when nothing is reserved.
+func (cs *TryAddCommitAction) queueCandidate(ctx context.Context, height int64, event *TryAddCommitEvent) {
+	if budget := verificationBudgetFromCtx(ctx); budget != nil {
+		cost, err := commitCost(len(event.Commit.ThresholdVoteExtensions))
+		if err != nil {
+			cs.logger.Debug("dropping queued commit declaring too many vote extensions",
+				"height", height, "peer", event.PeerID, "error", err)
+			return
+		}
+		if !budget.Allow(cost) {
+			// The scheduler waited for this cost before dispatching, so this means
+			// something charged out of turn; the commit is kept regardless.
+			cs.logger.Debug("verification budget could not prepay a queued commit",
+				"height", height, "peer", event.PeerID, "cost", cost)
+		}
+	}
+	cs.candidates.add(height, event.Commit, event.PeerID, event.FromReplay)
+}
+
+// retainUnaffordable keeps a commit that could not be verified for want of
+// budget in its sender's slot. Its sender will not send it again, so dropping
+// it could lose the only commit that finishes the height; the next recovery
+// retries it. A prepaid retry is never re-queued, so recovery cannot spin.
+func (cs *TryAddCommitAction) retainUnaffordable(err error, height int64, event *TryAddCommitEvent) {
+	if event.Prepaid || !errors.Is(err, types.ErrVerificationBudgetExhausted) || event.Commit.Height != height {
+		return
+	}
+	cs.logger.Error("peer commit could not be verified within the verification budget; keeping it for retry",
+		"height", height, "peer", event.PeerID)
+	cs.candidates.add(height, event.Commit, event.PeerID, event.FromReplay)
 }
 
 // handleCommitVerifyError reports the sender for eviction when a commit failed

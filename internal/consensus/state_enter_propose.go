@@ -12,8 +12,6 @@ import (
 type EnterProposeEvent struct {
 	Height int64
 	Round  int32
-	// Enter the timed propose step without creating a competing recovery proposal.
-	SkipProposalCreation bool
 }
 
 // GetType returns EnterProposeType event-type
@@ -54,9 +52,9 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 
 	proTxHash := dash.MustProTxHashFromContext(ctx)
 	isProposer := stateData.isProposer(proTxHash)
-	// A held committed block must be applied instead of creating a competing proposal.
-	skipProposalCreation := event.SkipProposalCreation ||
-		(stateData.Commit != nil && stateData.holdsProposalBlock(stateData.Commit.BlockID))
+	// A commit for a later round is adopted before its round is entered, and its
+	// held block must then be applied rather than compete with a new proposal.
+	skipProposalCreation := stateData.Commit != nil && stateData.holdsProposalBlock(stateData.Commit.BlockID)
 
 	// If this validator is the proposer of this round, and the previous block time is later than
 	// our local clock time, wait to propose until our local clock time has passed the block time.

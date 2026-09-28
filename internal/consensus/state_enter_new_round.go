@@ -8,15 +8,12 @@ import (
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
-	"github.com/dashpay/tenderdash/types"
 )
 
 // EnterNewRoundEvent ...
 type EnterNewRoundEvent struct {
 	Height int64
 	Round  int32
-	// Keep the authenticated block and its ProcessProposal result across the round change.
-	KeepProcessedBlock bool
 }
 
 // GetType returns EnterNewRoundType event-type
@@ -69,12 +66,6 @@ func (c *EnterNewRoundAction) Execute(ctx context.Context, stateEvent StateEvent
 		"round", stateData.Round,
 		"step", stateData.Step)
 
-	processed := stateData.CurrentRoundState
-	var retainedBlockID types.BlockID
-	if event.KeepProcessedBlock {
-		retainedBlockID = stateData.ProposalBlock.BlockID(stateData.ProposalBlockParts)
-	}
-
 	// Update the round before resetting its proposal state and publishing events.
 	stateData.updateRoundStep(round, cstypes.RoundStepNewRound)
 	if round == 0 {
@@ -88,7 +79,7 @@ func (c *EnterNewRoundAction) Execute(ctx context.Context, stateEvent StateEvent
 		if stateData.Commit != nil {
 			// The committed block remains the download target across rounds.
 			stateData.retargetTo(stateData.Commit.BlockID, retargetOnParkCommit)
-		} else if !event.KeepProcessedBlock {
+		} else {
 			stateData.ProposalBlock = nil
 			stateData.ProposalBlockParts = nil
 		}
@@ -123,18 +114,10 @@ func (c *EnterNewRoundAction) Execute(ctx context.Context, stateEvent StateEvent
 	} else if !c.config.DontAutoPropose {
 		// DontAutoPropose should always be false, except for
 		// specific tests where proposals are created manually
-		err = stateEvent.Ctrl.Dispatch(ctx, &EnterProposeEvent{
-			Height: height, Round: round,
-			SkipProposalCreation: event.KeepProcessedBlock && stateData.holdsProposalBlock(retainedBlockID),
-		}, stateData)
+		err = stateEvent.Ctrl.Dispatch(ctx, &EnterProposeEvent{Height: height, Round: round}, stateData)
 		if err != nil {
 			return err
 		}
-	}
-	if event.KeepProcessedBlock && stateData.Height == height && stateData.holdsProposalBlock(retainedBlockID) {
-		// Preparing a proposal can overwrite the processed result for the retained block.
-		stateData.CurrentRoundState = processed
-		return stateData.Save()
 	}
 	return nil
 }

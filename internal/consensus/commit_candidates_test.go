@@ -34,15 +34,40 @@ func TestCommitCandidates(t *testing.T) {
 		}, popAll(&c, 5))
 	})
 
-	t.Run("the number of slots is capped", func(t *testing.T) {
+	t.Run("every peer has a slot", func(t *testing.T) {
 		var c commitCandidates
-		for i := range maxCommitCandidates + 1 {
+		const peers = 100
+		for i := range peers {
 			c.add(5, commit(0), types.NodeID(fmt.Sprint(i)), false)
 		}
 		got := popAll(&c, 5)
-		require.Len(t, got, maxCommitCandidates)
-		require.Equal(t, types.NodeID(fmt.Sprint(maxCommitCandidates-1)), got[len(got)-1].peerID,
-			"commits past the cap are dropped, the earlier ones kept")
+		require.Len(t, got, peers)
+		require.Equal(t, types.NodeID(fmt.Sprint(peers-1)), got[len(got)-1].peerID)
+	})
+
+	t.Run("a disconnected peer's slot is freed", func(t *testing.T) {
+		queue := newMsgInfoQueue()
+		c := commitCandidates{connected: queue.peerConnected}
+		for _, peer := range []types.NodeID{"a", "b", "c"} {
+			queue.admitPeer(peer)
+		}
+		c.add(5, commit(0), "a", false)
+		c.add(5, commit(0), "b", false)
+		c.add(5, commit(0), "replayed", true)
+		c.add(5, commit(0), "", false)
+		queue.purgePeer("a")
+		c.add(5, commit(0), "c", false)
+		peers := make([]types.NodeID, 0, 4)
+		for _, got := range popAll(&c, 5) {
+			peers = append(peers, got.peerID)
+		}
+		require.Equal(t, []types.NodeID{"b", "replayed", "", "c"}, peers,
+			"replayed and local entries outlive any connection")
+
+		queue.admitPeer("a")
+		c.add(5, commit(1), "a", false)
+		got := popAll(&c, 5)
+		require.Len(t, got, 1, "a reconnected peer gets a slot again")
 	})
 
 	t.Run("another height discards the candidates", func(t *testing.T) {

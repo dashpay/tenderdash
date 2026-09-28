@@ -676,6 +676,15 @@ func (l *peerLanes) purgePeer(peerID types.NodeID) {
 	delete(l.lanes, peerID)
 }
 
+// connected reports whether peerID has a live connection session, i.e. has been
+// admitted and not purged since.
+func (l *peerLanes) connected(peerID types.NodeID) bool {
+	l.mtx.Lock()
+	defer l.mtx.Unlock()
+	_, ok := l.sessions[peerID]
+	return ok
+}
+
 // buffered reports how many messages all lanes hold together.
 func (l *peerLanes) buffered() int {
 	l.mtx.Lock()
