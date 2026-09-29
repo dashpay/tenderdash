@@ -113,7 +113,7 @@ func (cs *TryFinalizeCommitAction) finalizeCommit(ctx context.Context, ctrl *Con
 		err = cs.blockExec.verifyCommitExtensions(ctx, seenCommit)
 	}
 	if err != nil {
-		cs.metrics.CommitVerifyFailures.With("reason", commitVerifyFailureReason(err)).Add(1)
+		cs.metrics.CommitVerifyFailures.With("reason", CommitVerifyFailureReason(err)).Add(1)
 		logger.Error("application rejected the commit of this node's own precommits; waiting for a peer's commit",
 			"commit_round", seenCommit.Round, "error", err)
 		return

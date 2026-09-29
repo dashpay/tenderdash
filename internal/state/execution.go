@@ -539,7 +539,9 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 //
 // It takes a blockID to avoid recomputing the parts hash.
 //
-// CONTRACT: The block was already delivered to the ABCI app using either PrepareProposal or ProcessProposal.
+// CONTRACT: The block was already delivered to the ABCI app using either PrepareProposal or ProcessProposal,
+// and uncommittedState is the result of the latest such call, for commit.Round. The application must have
+// accepted commit's extension vector through VerifyCommitExtensions; FinalizeBlock does not check it.
 // See also ApplyBlock() to deliver proposal and finalize it in one step.
 
 func (blockExec *BlockExecutor) FinalizeBlock(
@@ -625,8 +627,10 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 }
 
 // ApplyBlock validates the block against the state, executes it against the app using ProcessProposal ABCI request,
-// fires the relevant events, finalizes with FinalizeBlock, and saves the new state and responses.
-// It returns the new state.
+// asks the app to accept the commit's extension vector (VerifyCommitExtensions), fires the relevant events,
+// finalizes with FinalizeBlock, and saves the new state and responses.
+// It returns the new state. A rejected vector returns an error wrapping ErrCommitExtensionsRejected before
+// FinalizeBlock, with nothing finalized or saved.
 // It's the only function that needs to be called
 // from outside this package to process and commit an entire block.
 // It takes a blockID to avoid recomputing the parts hash.

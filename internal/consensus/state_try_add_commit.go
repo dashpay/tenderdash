@@ -24,8 +24,10 @@ func (e *TryAddCommitEvent) GetType() EventType {
 	return TryAddCommitType
 }
 
-// TryAddCommitAction ...
-// If we received a commit message from an external source try to add it then finalize it.
+// TryAddCommitAction handles a commit from a peer or the WAL: it verifies the
+// commit, including the application's check of its extensions once the block is
+// held, then applies it, parks it until its block arrives, or queues it as a
+// replacement for a commit already parked.
 type TryAddCommitAction struct {
 	logger log.Logger
 	// create and execute blocks
@@ -62,8 +64,8 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 
 	rs := stateData.RoundState
 
-	// We need to first verify that the commit received wasn't for a future round,
-	// If it was then we must go to next round
+	// A commit for a later round makes the node enter the commit's round; a held
+	// block is verified first.
 	if commit.Height == rs.Height && commit.Round > rs.Round {
 		cs.logger.Trace("commit received for a later round", "height", commit.Height,
 			"our_round", rs.Round, "commit_round", commit.Round)
@@ -109,8 +111,7 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 
 	// prepareCommitForApply has already established that the block is held.
 	// Restated so that a later change there cannot silently let the round step
-	// stand in for it again: a commit parked on the step is parked for good,
-	// because a part set completes exactly once.
+	// stand in for it: Commit is set here only for a held, verified block.
 	if !stateData.holdsProposalBlock(commit.BlockID) {
 		cs.logger.Error("commit verified against a block the round state does not hold",
 			"height", commit.Height,
@@ -162,7 +163,7 @@ func (cs *TryAddCommitAction) queueCandidate(ctx context.Context, stateData *Sta
 // a message it sent long ago.
 func (cs *TryAddCommitAction) handleCommitVerifyError(err error, peerID types.NodeID, fromReplay bool) {
 	if peerID != "" && !fromReplay {
-		cs.metrics.CommitVerifyFailures.With("reason", commitVerifyFailureReason(err)).Add(1)
+		cs.metrics.CommitVerifyFailures.With("reason", CommitVerifyFailureReason(err)).Add(1)
 		if errors.Is(err, types.ErrVerificationBudgetExhausted) {
 			cs.metrics.VerificationBudgetDrops.Add(1)
 		}
@@ -184,12 +185,13 @@ func (cs *TryAddCommitAction) handleCommitVerifyError(err error, peerID types.No
 	}
 }
 
-// commitVerifyFailureReason classifies a commit rejection for the metric. The
+// CommitVerifyFailureReason classifies a commit rejection as the reason label of
+// Metrics.CommitVerifyFailures, for every path that counts one. The
 // classes separate what they say about this node from what they say about the
 // sender: a quorum-hash disagreement usually means our validator set is stale,
 // a forged signature means the sender is dishonest, and an exhausted budget
 // means neither.
-func commitVerifyFailureReason(err error) string {
+func CommitVerifyFailureReason(err error) string {
 	switch {
 	case errors.As(err, &types.ErrInvalidCommitQuorumHash{}):
 		return "quorum_hash"
@@ -256,8 +258,8 @@ func verifyCommitBlock(
 
 // prepareCommitForApply verifies the commit and, unless ignoreProposalBlock, the
 // block it names: it runs that block through the application, so a true return
-// means the block is processed and validated, not merely that a signature checked
-// out.
+// means the block is processed and validated and the commit's extension vector
+// accepted by the application, not merely that a signature checked out.
 func (cs *TryAddCommitAction) prepareCommitForApply(
 	ctx context.Context,
 	stateData *StateData,

@@ -2,7 +2,6 @@ package blocksync
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -116,9 +115,7 @@ func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *ty
 		e.processedState = &processed
 	}
 	if err := sm.VerifyCommitExtensions(ctx, e.blockExec, commit); err != nil {
-		if errors.Is(err, sm.ErrCommitExtensionsRejected) {
-			e.metrics.CommitVerifyFailures.With("reason", "extensions_rejected").Add(1)
-		}
+		e.metrics.CommitVerifyFailures.With("reason", consensus.CommitVerifyFailureReason(err)).Add(1)
 		return err
 	}
 	processTime := time.Since(start)

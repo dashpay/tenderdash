@@ -273,14 +273,14 @@ func TestCommitVerifyFailureReasonSeparatesTheClasses(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, commitVerifyFailureReason(tc.err))
+			assert.Equal(t, tc.want, CommitVerifyFailureReason(tc.err))
 		})
 		// Every one of these reaches handleCommitVerifyError wrapped by
 		// readyToApplyCommit. Matching on the bare error would put all of them in
 		// "other", and the counter would read zero while the condition fires.
 		t.Run(tc.name+" wrapped", func(t *testing.T) {
 			wrapped := fmt.Errorf("error verifying commit: %w", tc.err)
-			assert.Equal(t, tc.want, commitVerifyFailureReason(wrapped))
+			assert.Equal(t, tc.want, CommitVerifyFailureReason(wrapped))
 		})
 	}
 }

@@ -30,15 +30,17 @@ func TestReplayRejectsCommitExtensionsBeforeFinalize(t *testing.T) {
 			app := &replayCommitExtensionApp{t: t, block: n.block}
 			client := abciclient.NewLocalClient(log.NewNopLogger(), app)
 			exec := sm.NewBlockExecutor(nil, client, nil, nil, nil, nil)
+			n.node.blockStore.SaveBlock(n.block, n.parts, n.commit)
+			replayer := NewBlockReplayer(client, nil, n.node.blockStore, nil, nil, exec)
+			var err error
 			if applyState {
-				_, err := exec.ApplyBlock(ctx, sd.state, n.commit.BlockID, n.block, n.commit, types.VerifiedCommit{})
-				require.ErrorContains(t, err, "commit extensions rejected")
+				_, err = replayer.syncStateAt(ctx, sd.state, n.block.Height, exec)
 			} else {
-				replayer := NewBlockReplayer(client, nil, nil, nil, nil, exec)
-				_, err := replayer.replayBlock(ctx, n.block, n.commit, sd.state, n.block.Height)
-				require.ErrorContains(t, err, "commit extensions rejected")
-				require.Zero(t, replayer.nBlocks)
+				_, err = replayer.replayBlock(ctx, n.block, n.commit, sd.state, n.block.Height)
 			}
+			require.ErrorIs(t, err, sm.ErrCommitExtensionsRejected)
+			require.ErrorContains(t, err, "roll back or re-sync the node", "both paths give the operator's remedy")
+			require.Zero(t, replayer.nBlocks)
 			require.Equal(t, []string{"process", "verify"}, app.calls)
 		})
 	}

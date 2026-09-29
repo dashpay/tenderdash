@@ -137,12 +137,15 @@ type Metrics struct {
 	//metrics:Number of State and VoteSetBits channel messages dropped over the per-peer or node-wide ceiling.
 	StateChannelDrops metrics.Counter
 
-	// CommitVerifyFailures is the number of peer commits refused by verification,
-	// labeled by the class of refusal. Every class is logged at debug so that a
-	// flood cannot amplify, which leaves a node whose validator set has gone stale
-	// refusing every commit and finalizing nothing without saying so; a sustained
-	// rate here is what makes that alertable.
-	//metrics:Number of peer commits refused by verification labeled by the class of refusal.
+	// CommitVerifyFailures is the number of commits refused by verification,
+	// labeled by the class of refusal: commits from peers in consensus and block
+	// sync, and the commit built from this node's own precommits. Refused peer
+	// commits are logged at debug so that a flood cannot amplify, which leaves a
+	// node whose validator set has gone stale refusing every commit and
+	// finalizing nothing without saying so; a sustained rate here is what makes
+	// that alertable. A refused own commit is logged at error: the application
+	// disagrees with this node's own votes.
+	//metrics:Number of commits (from peers, block sync or this node's own precommits) refused by verification labeled by the class of refusal.
 	CommitVerifyFailures metrics.Counter `metrics_labels:"reason"`
 
 	// ProposalVerifyFailures is the number of peer proposals whose signature did

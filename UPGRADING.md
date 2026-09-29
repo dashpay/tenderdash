@@ -13,22 +13,48 @@ with the threshold-recoverable extensions expected for the processed block and
 return `REJECT` on any difference.
 
 Check for an empty `validator_pro_tx_hash` before applying individual-validator
-validation. For this request, return `ACCEPT` or `REJECT`; an ABCI-level error
-(including a transport failure) is fatal and causes Tenderdash to panic.
+validation. For this request, return `ACCEPT` or `REJECT`: any status other than
+`ACCEPT`, including `UNKNOWN`, is treated as `REJECT`, and only an ABCI-level
+error (including a transport failure) is fatal and causes Tenderdash to panic.
 Applications that keep the default unconditional `ACCEPT` remain compatible but
 do not gain protection against altered commit extension vectors.
 
+**Before you upgrade:** an application that returns anything but `ACCEPT` for an
+empty or unknown `validator_pro_tx_hash`, or validates extensions against a
+per-validator key, will reject every commit once Tenderdash is upgraded, and the
+network stops producing blocks. Ship the application's commit-level handling
+first: older Tenderdash never sends this call, so that order is safe.
+
 Consensus discards a rejected commit before saving anything, like a commit with
-an invalid signature but without blaming its sender, and never changes the round
-for it. A commit that arrived before its block is checked when the block
-arrives, followed by the commits other peers sent meanwhile, one queue slot per
-connected peer, so an attacker cannot push an honest peer's commit out. If the
-commit assembled from the node's own +2/3 precommits is rejected, the node logs
-an error, persists nothing and waits at the height for a peer's commit instead of
-panicking into a restart loop. Ordinary consensus WAL replay behaves the same.
-Block sync retries the height from another peer. During handshake catch-up of
-application state to blocks already in the block store, rejection stops startup
-because the commit is already persisted. The error identifies the failing height, round and hash.
+an invalid signature but without blaming its sender. A commit whose block the
+node already holds is checked before anything else and never changes the round.
+A commit for a later round whose block has not arrived moves the node to that
+round on its authentic threshold signature alone, as before; the application's
+check runs when the block completes. A commit that arrived before its block is
+checked when the block arrives, followed by the commits other peers sent
+meanwhile, one queue slot per connected peer, so an attacker cannot push an
+honest peer's commit out; copies of a commit already parked or queued are
+dropped, and a vector the application already rejected at the height is refused
+without asking it again. If the commit assembled from the node's own +2/3
+precommits is rejected, the node logs the error `application rejected the commit
+of this node's own precommits; waiting for a peer's commit`, persists nothing and
+waits at the height, with no timeout, for a peer's commit instead of panicking
+into a restart loop. Ordinary consensus WAL replay behaves like consensus. Block
+sync removes the peer that served the rejected commit and retries the height
+from another peer. During handshake catch-up of application state to blocks
+already in the block store, rejection stops startup because the commit is
+already persisted. The error identifies the failing height, round and hash.
+
+Every rejection is counted by the `consensus_commit_verify_failures` counter
+with `reason="extensions_rejected"` (see [metrics](docs/nodes/metrics.md)); a
+sustained rate means the application and the network disagree on extension
+vectors.
+
+Tenderdash processes a block again with `ProcessProposal` when it returns to a
+round after processing another round at the same height, and finalizes only the
+round processed last. An application may keep a single execution context per
+height, but must accept `ProcessProposal` for a round it processed before
+another one.
 
 For a catch-up failure, first ensure the application implements verification for
 the failing historical height; re-sync cannot fix incompatible application logic.

@@ -396,6 +396,9 @@ Note that, if _p_ has a non-`nil` _validValue_, Tendermint will use it as propos
       `ResponseProcessProposal.status` MUST **exclusively** depend on the parameters passed in
       the call to `RequestProcessProposal`, and the last committed Application state
       (see [Requirements](abci++_app_requirements.md) section).
+    * Tenderdash may call `ProcessProposal` again for a round of the current height after processing
+      another round, for example to verify a commit of that round. The Application MUST process the
+      block again; `FinalizeBlock` refers to the round processed last.
     * Moreover, application implementors SHOULD always set `ResponseProcessProposal.status` to `ACCEPT`,
       unless they _really_ know what the potential liveness implications of returning `REJECT` are.
 
@@ -515,16 +518,21 @@ Tenderdash calls `VerifyVoteExtension` for two kinds of request, told apart by
       commit whose block signature is valid can still carry a stripped, duplicated or replayed
       vector. Tenderdash requires `ACCEPT` before it saves the block and commit or calls
       `FinalizeBlock`. What `REJECT` does depends on the path:
-        * consensus: the commit is discarded without changing the round or blaming its sender. A commit
-          that arrived before its block is checked when the block arrives, then the commits other peers
-          sent meanwhile. If the node's own commit is rejected, nothing is persisted and the node waits
-          for a peer's commit. The block is not processed again unless the node has meanwhile processed
-          another proposal;
+        * consensus: the commit is discarded without blaming its sender. A commit whose block the node
+          already holds is checked first and never changes the round. A commit for a later round whose
+          block has not arrived moves the node to that round on its threshold signature alone; it is
+          checked when the block arrives, then the commits other peers sent meanwhile. Copies of a
+          commit already waiting are dropped, and a vector the Application already rejected at the
+          height is refused without calling it again. If the node's own commit is rejected, nothing is
+          persisted and the node waits for a peer's commit. The block is processed again only for a
+          commit of a round other than the one processed last. Consensus WAL replay follows these rules;
         * block sync: the block is not applied; the peer that served it is dropped and the height is
           requested again;
-        * replay at start-up: the commit is already in the block store, so the node fails to start.
-          There is no automatic recovery; the operator has to roll back or re-sync the node.
-    * An error from the ABCI call itself, as opposed to `REJECT`, is fatal on every path.
+        * handshake catch-up (application behind the block store): the commit is already in the block
+          store, so the node fails to start. There is no automatic recovery; the operator has to roll
+          back or re-sync the node.
+    * Any status other than `ACCEPT`, including `UNKNOWN`, counts as `REJECT`. An error from the ABCI
+      call itself, as opposed to a status, is fatal on every path.
     * The implementation of `VerifyVoteExtension` MUST be deterministic. Moreover, the value of
       `ResponseVerifyVoteExtension.status` MUST **exclusively** depend on the parameters passed in
       the call to `RequestVerifyVoteExtension`, the block processed by `ProcessProposal`, and the
@@ -603,13 +611,15 @@ When a validator _p_ is in Tendermint consensus height _h_, and _p_ receives
 
 then _p_'s Tendermint decides block _v_ and finalizes consensus for height _h_ in the following way
 
-1. _p_'s Tendermint persists _v_ as decision for height _h_.
-2. _p_'s Tendermint locks the mempool -- no calls to checkTx on new transactions.
-3. _p_'s Tendermint calls `RequestFinalizeBlock` with _id(v)_. The call is synchronous.
-4. _p_'s Application processes block _v_, received in a previous call to `RequestProcessProposal`.
-5. _p_'s Application commits and persists the state resulting from processing the block.
-6. _p_'s Tendermint unlocks the mempool -- newly received transactions can now be checked.
-7. _p_'s starts consensus for a new height _h+1_, round 0
+1. _p_'s Tendermint calls `RequestVerifyVoteExtension` for the commit (empty `validator_pro_tx_hash`)
+   and requires _accept_; see [VerifyVoteExtension](#verifyvoteextension).
+2. _p_'s Tendermint persists _v_ as decision for height _h_.
+3. _p_'s Tendermint locks the mempool -- no calls to checkTx on new transactions.
+4. _p_'s Tendermint calls `RequestFinalizeBlock` with _id(v)_. The call is synchronous.
+5. _p_'s Application processes block _v_, received in the latest call to `RequestProcessProposal`.
+6. _p_'s Application commits and persists the state resulting from processing the block.
+7. _p_'s Tendermint unlocks the mempool -- newly received transactions can now be checked.
+8. _p_'s starts consensus for a new height _h+1_, round 0
 
 ## Data Types existing in ABCI
 
@@ -750,22 +760,23 @@ Most of the data structures used in ABCI are shared [common data structures](../
 
     | Name           | Type                                    | Description                                                                                                                   | Field Number |
     |----------------|-----------------------------------------|-------------------------------------------------------------------------------------------------------------------------------|--------------|
-    | type           | [VoteExtensionType](#voteextensiontype) | Vote extension type can be either DEFAULT or THRESHOLD_RECOVER, the Tenderdash supports only THRESHOLD_RECOVER at this moment | 1            |
+    | type           | [VoteExtensionType](#voteextensiontype) | Vote extension type: DEFAULT, THRESHOLD_RECOVER or THRESHOLD_RECOVER_RAW; DEFAULT is not supported at this moment             | 1            |
     | extension      | bytes                                   | Deterministic or (Non-Deterministic) extension provided by the sending validator's Application.                               | 2            |
 
 * **Usage**:
     * Provides a vote extension for signing
     * Each field is mandatory for filling
-    * Type can be `THRESHOLD_RECOVER` or `DEFAULT`
+    * Type can be `THRESHOLD_RECOVER`, `THRESHOLD_RECOVER_RAW` or `DEFAULT`
     * `DEFAULT` is not supported so far
-    * `THRESHOLD_RECOVER` is a deterministic, that means, each validator in a quorum must provide the same vote extension data
+    * `THRESHOLD_RECOVER` and `THRESHOLD_RECOVER_RAW` are deterministic, that means, each validator in a quorum must provide the same vote extension data
 
 ### VoteExtensionType
 
 ```proto
 enum VoteExtensionType {
-  VOTE_EXTENSION_DEFAULT           = 0;
-  VOTE_EXTENSION_THRESHOLD_RECOVER = 1;
+  DEFAULT               = 0;
+  THRESHOLD_RECOVER     = 1;
+  THRESHOLD_RECOVER_RAW = 2;  // signs the raw extension; allows overriding the sign request ID
 }
 ```
 
@@ -862,10 +873,10 @@ enum VerifyStatus {
 ```
 
 * **Usage**:
-    * Used within the [VerifyVoteExtension](#verifyvoteextension) response.
-        * If `Status` is `UNKNOWN`, a problem happened in the Application. Tendermint will assume the application is faulty and crash.
-        * If `Status` is `ACCEPT`, Tendermint will accept the vote as valid.
-        * If `Status` is `REJECT`, Tendermint will reject the vote as invalid.
+    * Used within the [VerifyVoteExtension](#verifyvoteextension) response, for a Precommit or a commit.
+        * If `Status` is `ACCEPT`, Tendermint will accept the vote, or the commit, as valid.
+        * If `Status` is `REJECT` or `UNKNOWN`, Tendermint will reject the vote, or the commit, as invalid.
+          Only an error from the ABCI call itself is fatal.
 
 
 ### CanonicalVoteExtension

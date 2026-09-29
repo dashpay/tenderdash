@@ -261,10 +261,10 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 // commits peers sent while it was parked, in arrival order but a round at a
 // time: the round already processed first, then each other round in the order
 // it first appears. Commits for one block may differ in round alone, and the
-// block is processed for each round, which an application may refuse to repeat,
-// so no round is returned to once left. All are authenticated already, so each
-// costs only processing the block, done once per round, and the application's
-// check of its extensions. The first commit accepted is
+// block is processed for each round, so grouping them processes it once per
+// round. All are authenticated already, so each costs only processing the
+// block, done once per round, and the application's check of its extensions,
+// skipped for a vector it already judged. The first commit accepted is
 // kept in stateData.Commit and returned; if none is, stateData.Commit is cleared
 // and saved, and nil is returned. A rejection is only counted: it proves nothing
 // against a sender, which may have relayed the commit as it received it.
@@ -297,7 +297,7 @@ func (c *AddProposalBlockPartAction) selectParkedCommit(ctx context.Context, sta
 			stateData.Commit = commit
 			return commit, nil
 		}
-		c.metrics.CommitVerifyFailures.With("reason", commitVerifyFailureReason(err)).Add(1)
+		c.metrics.CommitVerifyFailures.With("reason", CommitVerifyFailureReason(err)).Add(1)
 		c.logger.Debug("parked commit cannot be applied",
 			"height", commit.Height, "round", commit.Round, "error", err)
 	}

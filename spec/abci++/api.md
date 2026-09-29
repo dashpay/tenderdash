@@ -390,7 +390,9 @@ Finalize newly decided block.
   to determine rewards and punishments for the validators.
 - The application must execute the transactions in full, in the order they appear in `RequestFinalizeBlock.txs`,
   before returning control to Tenderdash. Alternatively, it can commit the candidate state corresponding to the same block
-  previously executed via `PrepareProposal` or `ProcessProposal`.
+  previously executed via `PrepareProposal` or `ProcessProposal`, for the round processed last.
+- Tenderdash calls `FinalizeBlock` only after the Application has accepted the commit&#39;s extension
+  vector through `VerifyVoteExtension` with an empty `validator_pro_tx_hash`.
 - If ProcessProposal for the same arguments have succeeded, FinalizeBlock MUST always succeed.
 - Application is expected to persist its state at the end of this call, before returning `ResponseFinalizeBlock`.
 - Later calls to `Query` can return proofs about the application state anchored
@@ -674,6 +676,9 @@ Process prepared proposal.
   `ResponseProcessProposal.status` MUST **exclusively** depend on the parameters passed in
   the call to `RequestProcessProposal`, and the last committed Application state
   (see [Requirements](abci&#43;&#43;_app_requirements.md) section).
+- Tenderdash may call `ProcessProposal` again for a round of the current height after processing
+  another round, for example to verify a commit of that round. The Application MUST process the
+  block again; `FinalizeBlock` refers to the round processed last.
 - Moreover, application implementors SHOULD always set `ResponseProcessProposal.status` to `ACCEPT`,
   unless they _really_ know what the potential liveness implications of returning `REJECT` are.
 
@@ -770,16 +775,21 @@ Tenderdash calls it for two kinds of request, told apart by `validator_pro_tx_ha
   block signature is valid can still carry a stripped, duplicated or replayed vector. Tenderdash
   requires `ACCEPT` before it saves the block and commit or calls `FinalizeBlock`. What `REJECT` does
   depends on the path:
-  - consensus: the commit is discarded without changing the round or blaming its sender. A commit that
-    arrived before its block is checked when the block arrives, then the commits other peers sent
-    meanwhile. If the node&#39;s own commit is rejected, nothing is persisted and the node waits for a
-    peer&#39;s commit. The block is not processed again unless the node has meanwhile processed another
-    proposal;
+  - consensus: the commit is discarded without blaming its sender. A commit whose block the node
+    already holds is checked first and never changes the round. A commit for a later round whose
+    block has not arrived moves the node to that round on its threshold signature alone; it is
+    checked when the block arrives, then the commits other peers sent meanwhile. Copies of a commit
+    already waiting are dropped, and a vector the Application already rejected at the height is
+    refused without calling it again. If the node&#39;s own commit is rejected, nothing is persisted and
+    the node waits for a peer&#39;s commit. The block is processed again only for a commit of a round
+    other than the one processed last. Consensus WAL replay follows these rules;
   - block sync: the block is not applied; the peer that served it is dropped and the height is
     requested again;
-  - replay at start-up: the commit is already in the block store, so the node fails to start; there is
-    no automatic recovery, and the operator has to roll back or re-sync the node.
-- An error from the ABCI call itself, as opposed to `REJECT`, is fatal on every path.
+  - handshake catch-up (application behind the block store): the commit is already in the block
+    store, so the node fails to start; there is no automatic recovery, and the operator has to roll
+    back or re-sync the node.
+- Any status other than `ACCEPT`, including `UNKNOWN`, counts as `REJECT`. An error from the ABCI
+  call itself, as opposed to a status, is fatal on every path.
 - The implementation of `VerifyVoteExtension` MUST be deterministic. Moreover, the value of
   `ResponseVerifyVoteExtension.status` MUST **exclusively** depend on the parameters passed in
   the call to `RequestVerifyVoteExtension`, the block processed by `ProcessProposal`, and the last
