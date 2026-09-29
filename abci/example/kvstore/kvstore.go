@@ -54,9 +54,9 @@ type Application struct {
 	// If `nil`, duplicate call detection is disabled.
 	preparedProposals map[int32]bool
 
-	// processedProposals stores info about all rounds that got ProcessProposal executed, used to detect
-	// duplicate ProcessProposal calls.
-	// If `nil`, duplicate call detection is disabled.
+	// processedProposals holds the round of the latest ProcessProposal at this height, used to detect
+	// a repeated call for that round. Like Drive, a round may be processed again once another round
+	// was processed after it. If `nil`, duplicate call detection is disabled.
 	processedProposals map[int32]bool
 
 	logger log.Logger
@@ -380,6 +380,7 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProc
 		if app.processedProposals[req.Round] {
 			return &abci.ResponseProcessProposal{}, fmt.Errorf("duplicate ProcessProposal call at height %d, round %d", req.Height, req.Round)
 		}
+		clear(app.processedProposals)
 		app.processedProposals[req.Round] = true
 	}
 
@@ -822,7 +823,13 @@ func (app *Application) executeProposal(height int64, round int32, txs types.Txs
 			return nil, nil, fmt.Errorf("update apphash: %w", err)
 		}
 	}
-	app.roundStates[roundKey(roundState.GetAppHash(), roundState.GetHeight(), roundState.GetRound())] = roundState
+	key := roundKey(roundState.GetAppHash(), roundState.GetHeight(), roundState.GetRound())
+	if replaced, ok := app.roundStates[key]; ok {
+		if err := replaced.Close(); err != nil {
+			app.logger.Error("cannot close replaced round state", "key", key, "err", err)
+		}
+	}
+	app.roundStates[key] = roundState
 
 	return roundState, txResults, nil
 }

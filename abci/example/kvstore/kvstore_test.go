@@ -597,3 +597,42 @@ func bytes2Txs(items [][]byte) []tmtypes.Tx {
 	}
 	return txs
 }
+
+// TestProcessProposalRoundReprocessing checks that duplicate detection matches
+// Drive: a round may be processed again once another round was processed after
+// it, only a repeat with no other round in between is an error, and the round
+// processed again can still be finalized.
+func TestProcessProposalRoundReprocessing(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	app := newKvApp(ctx, t, 1)
+	const height = 1
+	tx := []byte(testKey)
+	process := func(round int32) (*types.ResponseProcessProposal, error) {
+		return app.ProcessProposal(ctx, &types.RequestProcessProposal{
+			Txs:     [][]byte{tx},
+			Height:  height,
+			Round:   round,
+			Version: &pbversion.Consensus{App: uint64(height)},
+		})
+	}
+
+	first, err := process(0)
+	require.NoError(t, err)
+	_, err = process(0)
+	require.ErrorContains(t, err, "duplicate ProcessProposal call", "same round twice in a row")
+
+	_, err = process(1)
+	require.NoError(t, err)
+	again, err := process(0)
+	require.NoError(t, err, "round 0 again after round 1 was processed")
+	require.Equal(t, first.AppHash, again.AppHash)
+	_, err = process(0)
+	require.ErrorContains(t, err, "duplicate ProcessProposal call", "same round twice in a row after reprocessing")
+
+	reqFin := &types.RequestFinalizeBlock{Height: height, Round: 0}
+	reqFin.Block, reqFin.BlockID = makeBlock(t, height, [][]byte{tx}, again.AppHash)
+	_, err = app.FinalizeBlock(ctx, reqFin)
+	require.NoError(t, err)
+}
