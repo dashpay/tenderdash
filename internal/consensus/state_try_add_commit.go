@@ -76,7 +76,14 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 		}
 		if verified {
 			// A held block is checked before the round changes, so that a rejected
-			// commit leaves the round as it was.
+			// commit does not move the round. Undoing stateData.Commit is the whole
+			// rollback: prepareCommitForApply has already retargeted the round state
+			// to commit.BlockID, but when the block is still held afterwards that
+			// retarget kept the block and its parts. It can only have dropped a
+			// Proposal whose BlockID differs from the commit's in the state ID; such
+			// a commit fails verifyHeldCommit's block check anyway (it needs a quorum
+			// signature over a wrong state ID), and losing that Proposal costs at
+			// most a nil prevote in this round.
 			held := stateData.holdsProposalBlock(commit.BlockID)
 			if held {
 				if err := verifyHeldCommit(ctx, cs.logger, cs.blockExec, stateData, commit); err != nil {
