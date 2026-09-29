@@ -697,6 +697,41 @@ func TestRejectedCommitVerdictIsReused(t *testing.T) {
 	require.Equal(t, []string{"verify", "finalize"}, f.checker.calls)
 }
 
+// A held block's commit for a later round is checked before the node enters that
+// round. If the node proposes that round, it must apply the checked commit
+// rather than build a competing proposal: PrepareProposal would replace the
+// processed result, and an application that refuses an immediate repeat, like
+// kvstore, would then fail the ProcessProposal that applying needs.
+func TestHeldFutureCommitSkipsOwnProposal(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := newCommitExtFixture(ctx, t)
+	require.False(t, f.node.config.DontAutoPropose)
+	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+	round := int32(1)
+	for {
+		proposer, err := f.stateData.ProposerSelector.GetProposer(f.stateData.Height, round)
+		require.NoError(t, err)
+		if bytes.Equal(proposer.ProTxHash, f.node.privValidator.ProTxHash) {
+			break
+		}
+		round++
+	}
+	f.checker.round = round
+	f.checker.rejectReprocess = true
+	f.holdBlock(ctx, t)
+	f.checker.processedRounds = nil
+	future := f.sign(ctx, t, round, withdrawalExtension)
+
+	require.NotPanics(t, func() { require.NoError(t, f.sendCommit(ctx, future, "honest")) })
+
+	f.requireCommitted(t, future)
+	require.Equal(t, []int32{round}, f.checker.processedRounds, "the round is processed once")
+	// The next height may be proposed once this one is finalized.
+	require.Equal(t, []string{"process", "verify", "finalize"}, f.checker.calls[:3],
+		"no proposal is prepared for the committed height")
+}
+
 // commitCheckingExecutor plays an application that accepts only the expected
 // commit extension vector. Individual precommits go to the wrapped executor.
 type commitCheckingExecutor struct {
@@ -744,6 +779,12 @@ func (e *commitCheckingExecutor) ProcessProposal(ctx context.Context, block *typ
 		e.processed[round] = crs
 	}
 	return crs, err
+}
+
+func (e *commitCheckingExecutor) CreateProposalBlock(ctx context.Context, height int64, round int32, state sm.State,
+	commit *types.Commit, proposer []byte, appVersion uint64) (*types.Block, sm.CurrentRoundState, error) {
+	e.calls = append(e.calls, "prepare")
+	return e.Executor.CreateProposalBlock(ctx, height, round, state, commit, proposer, appVersion)
 }
 
 func (e *commitCheckingExecutor) VerifyVoteExtension(ctx context.Context, vote *types.Vote) error {
