@@ -19,8 +19,9 @@ func (e *TryFinalizeCommitEvent) GetType() EventType {
 	return TryFinalizeCommitType
 }
 
-// TryFinalizeCommitAction ...
-// If we have the block AND +2/3 commits for it, finalize.
+// TryFinalizeCommitAction finalizes the height when this node holds the block
+// and +2/3 precommits for it, unless the application rejects the commit built
+// from those precommits.
 type TryFinalizeCommitAction struct {
 	logger log.Logger
 	// create and execute blocks
@@ -61,7 +62,10 @@ func (cs *TryFinalizeCommitAction) Execute(ctx context.Context, stateEvent State
 	return nil
 }
 
-// Increment height and goto cstypes.RoundStepNewHeight
+// finalizeCommit applies the commit built from this node's own precommits, which
+// moves to the next height. If the application rejects that commit, nothing is
+// persisted and the node stays in RoundStepApplyCommit until a peer's commit
+// arrives.
 func (cs *TryFinalizeCommitAction) finalizeCommit(ctx context.Context, ctrl *Controller, stateData *StateData, height int64) {
 	logger := cs.logger.With("height", height)
 
@@ -103,8 +107,12 @@ func (cs *TryFinalizeCommitAction) finalizeCommit(ctx context.Context, ctrl *Con
 	// rejection means the application disagrees with its own votes. Nothing is
 	// persisted and the node stays at this height, where a peer's commit can
 	// still finish it; a panic would only restart into the same commit.
-	cs.blockExec.mustEnsureProcess(ctx, &stateData.RoundState, seenCommit.Round)
-	if err := sm.VerifyCommitExtensions(ctx, cs.blockExec.blockExec, seenCommit); err != nil {
+	err := cs.blockExec.knownRejectedCommit(seenCommit)
+	if err == nil {
+		cs.blockExec.mustEnsureProcess(ctx, &stateData.RoundState, seenCommit.Round)
+		err = cs.blockExec.verifyCommitExtensions(ctx, seenCommit)
+	}
+	if err != nil {
 		cs.metrics.CommitVerifyFailures.With("reason", commitVerifyFailureReason(err)).Add(1)
 		logger.Error("application rejected the commit of this node's own precommits; waiting for a peer's commit",
 			"commit_round", seenCommit.Round, "error", err)

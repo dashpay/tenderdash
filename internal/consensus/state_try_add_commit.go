@@ -129,12 +129,18 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 
 // queueCandidate authenticates a commit received while another is parked and
 // keeps it as its sender's replacement. The threshold signature is checked now,
-// in the turn the scheduler reserved its cost for, so that trying it once the
-// block arrives costs only the application's extension check.
+// in the turn the scheduler reserved its cost for; trying the commit once the
+// block arrives costs processing the block for its round, if not yet done, and
+// the application's extension check (see selectParkedCommit). A commit equal to
+// the parked one or a queued one adds nothing to try and is dropped unverified.
 func (cs *TryAddCommitAction) queueCandidate(ctx context.Context, stateData *StateData, event *TryAddCommitEvent) error {
 	commit := event.Commit
 	if err := commit.ValidateBasic(); err != nil {
 		return fmt.Errorf("error validating commit: %w", err)
+	}
+	key := newCommitKey(commit)
+	if key == newCommitKey(stateData.Commit) || cs.candidates.holds(stateData.Height, key) {
+		return nil
 	}
 	if err := stateData.verifyCommitSignatures(commit.BlockID, commit, verificationBudgetFromCtx(ctx)); err != nil {
 		return fmt.Errorf("error verifying commit: %w", err)
@@ -302,9 +308,12 @@ func verifyHeldCommit(
 
 // verifyProcessedCommit runs the held block through the application, validates
 // it and asks the application to accept the commit's extension vector: all a
-// commit needs before it may be saved and finalized.
+// commit needs before it may be saved and finalized. A vector the application
+// already rejected at this height is refused before the block is processed.
 func verifyProcessedCommit(ctx context.Context, blockExec *blockExecutor, stateData *StateData, commit *types.Commit) error {
-	// We have a correct block, let's process it before applying the commit
+	if err := blockExec.knownRejectedCommit(commit); err != nil {
+		return err
+	}
 	err := blockExec.ensureProcess(ctx, &stateData.RoundState, commit.Round)
 	if err != nil {
 		if errors.Is(err, abciclient.ErrClientStopped) {
@@ -316,5 +325,5 @@ func verifyProcessedCommit(ctx context.Context, blockExec *blockExecutor, stateD
 	if err := blockExec.validate(ctx, stateData); err != nil {
 		return fmt.Errorf("+2/3 committed an invalid block: %w", err)
 	}
-	return sm.VerifyCommitExtensions(ctx, blockExec.blockExec, commit)
+	return blockExec.verifyCommitExtensions(ctx, commit)
 }

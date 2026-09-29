@@ -3,6 +3,7 @@ package blocksync
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
@@ -91,6 +92,50 @@ func TestBlockApplierInvalidatesRejectedProposal(t *testing.T) {
 			require.ErrorIs(t, applier.Apply(ctx, block, commit), sm.ErrCommitExtensionsRejected)
 		})
 	}
+}
+
+// Tampered commits for one block at different rounds, each rejected, leave
+// block sync to process the block again for a round it processed before another
+// one. An application that refuses only an immediate repeat, like kvstore,
+// allows that, so the genuine commit is applied instead of panicking.
+func TestBlockApplierReprocessesRoundAfterAnother(t *testing.T) {
+	ctx := context.Background()
+	vals, keys := factory.MockValidatorSet()
+	initial := fakeInitialState(vals)
+	state := initial.Copy()
+	blocks := statefactory.MakeBlocks(ctx, t, 2, &state, keys, 1)
+	block := blocks[0]
+	commitAt := func(round int32) *types.Commit {
+		commit := *blocks[1].LastCommit
+		commit.Round = round
+		return &commit
+	}
+	exec := mocks.NewExecutor(t)
+	store := mocks.NewBlockStore(t)
+	exec.On("VerifyCommit", initial, mock.Anything, block.Height, mock.Anything).Times(4).Return(types.VerifiedCommit{}, nil)
+	exec.On("ValidateBlock", mock.Anything, initial, block, types.VerifiedCommit{}).Times(4).Return(nil)
+	var rounds []int32
+	exec.On("ProcessProposal", mock.Anything, block, mock.Anything, initial, true, types.VerifiedCommit{}).Times(3).
+		Return(func(_ context.Context, b *types.Block, round int32, _ sm.State, _ bool,
+			_ types.VerifiedCommit) (sm.CurrentRoundState, error) {
+			if n := len(rounds); n > 0 && rounds[n-1] == round {
+				return sm.CurrentRoundState{}, fmt.Errorf("duplicate ProcessProposal call at height %d, round %d", b.Height, round)
+			}
+			rounds = append(rounds, round)
+			return processedState(initial, b, round), nil
+		})
+	exec.On("VerifyVoteExtension", mock.Anything, mock.Anything).Times(3).Return(errors.New("invalid vote extension"))
+	exec.On("VerifyVoteExtension", mock.Anything, mock.Anything).Once().Return(nil)
+	store.On("SaveBlock", block, mock.Anything, mock.Anything).Once()
+	exec.On("FinalizeBlock", mock.Anything, initial, mock.Anything, mock.Anything, block, mock.Anything,
+		types.VerifiedCommit{}).Once().Return(state, nil, nil)
+	applier := newBlockApplier(exec, store, applierWithState(initial))
+
+	for _, round := range []int32{1, 1, 2} {
+		require.ErrorIs(t, applier.Apply(ctx, block, commitAt(round)), sm.ErrCommitExtensionsRejected)
+	}
+	require.NotPanics(t, func() { require.NoError(t, applier.Apply(ctx, block, commitAt(1))) })
+	require.Equal(t, []int32{1, 2, 1}, rounds, "a round is processed again only after another one")
 }
 
 // processedState is what ProcessProposal returns for block at round on top of

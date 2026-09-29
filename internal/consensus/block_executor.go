@@ -22,6 +22,8 @@ type blockExecutor struct {
 	blockExec          sm.Executor
 	proposedAppVersion uint64
 	committedState     sm.State
+	// verdicts is touched only by the consensus goroutine; mtx does not guard it.
+	verdicts commitVerdicts
 }
 
 // Create the next block to propose and return it. Returns nil block upon error.
@@ -61,6 +63,14 @@ func (c *blockExecutor) create(ctx context.Context, rs *cstypes.RoundState, roun
 	return ret, nil
 }
 
+// ensureProcess makes rs.CurrentRoundState the application's result of
+// ProcessProposal for rs.ProposalBlock at round, calling it unless that is
+// already the result held.
+//
+// Invariant: CurrentRoundState must match the application's latest
+// ProcessProposal. An application may keep one execution context per height
+// (Drive does) and finalize only the round it processed last, so a result for
+// another round must never be reused without a new ProcessProposal.
 func (c *blockExecutor) ensureProcess(ctx context.Context, rs *cstypes.RoundState, round int32) error {
 	block := rs.ProposalBlock
 	// Above the condition, not inside it: either operand can reach the block,
@@ -81,6 +91,42 @@ func (c *blockExecutor) ensureProcess(ctx context.Context, rs *cstypes.RoundStat
 		rs.CurrentRoundState = uncommittedState
 	}
 	return nil
+}
+
+// knownRejectedCommit returns an error wrapping sm.ErrCommitExtensionsRejected
+// if the application already rejected commit's extension vector at this height,
+// so that the commit is dropped without processing the block again.
+func (c *blockExecutor) knownRejectedCommit(commit *types.Commit) error {
+	if accepted, known := c.verdicts.lookup(newCommitKey(commit)); known && !accepted {
+		return errRejectedBefore(commit)
+	}
+	return nil
+}
+
+// verifyCommitExtensions asks the application to accept commit's extension
+// vector, unless it has already judged that vector at this height, and records
+// the verdict. The block must already be processed for commit.Round.
+func (c *blockExecutor) verifyCommitExtensions(ctx context.Context, commit *types.Commit) error {
+	key := newCommitKey(commit)
+	if accepted, known := c.verdicts.lookup(key); known {
+		if accepted {
+			return nil
+		}
+		return errRejectedBefore(commit)
+	}
+	err := sm.VerifyCommitExtensions(ctx, c.blockExec, commit)
+	switch {
+	case err == nil:
+		c.verdicts.record(key, true)
+	case errors.Is(err, sm.ErrCommitExtensionsRejected):
+		c.verdicts.record(key, false)
+	}
+	return err
+}
+
+func errRejectedBefore(commit *types.Commit) error {
+	return fmt.Errorf("commit extensions at height %d round %d block %X already rejected: %w",
+		commit.Height, commit.Round, commit.BlockID.Hash, sm.ErrCommitExtensionsRejected)
 }
 
 func (c *blockExecutor) mustEnsureProcess(ctx context.Context, rs *cstypes.RoundState, round int32) {

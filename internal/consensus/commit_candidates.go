@@ -10,6 +10,7 @@ import (
 // commits arrives.
 type commitCandidate struct {
 	commit     *types.Commit
+	key        commitKey
 	peerID     types.NodeID
 	fromReplay bool
 }
@@ -42,7 +43,7 @@ type commitCandidates struct {
 // add keeps commit as peerID's candidate for height.
 func (c *commitCandidates) add(height int64, commit *types.Commit, peerID types.NodeID, fromReplay bool) {
 	c.resetUnless(height)
-	candidate := commitCandidate{commit: commit, peerID: peerID, fromReplay: fromReplay}
+	candidate := commitCandidate{commit: commit, key: newCommitKey(commit), peerID: peerID, fromReplay: fromReplay}
 	c.candidates = slices.DeleteFunc(c.candidates, func(other commitCandidate) bool {
 		return other.peerID != peerID && !c.retainable(other)
 	})
@@ -53,6 +54,13 @@ func (c *commitCandidates) add(height int64, commit *types.Commit, peerID types.
 		}
 	}
 	c.candidates = append(c.candidates, candidate)
+}
+
+// holds reports whether a commit identified by key is queued for height.
+func (c *commitCandidates) holds(height int64, key commitKey) bool {
+	return c.height == height && slices.ContainsFunc(c.candidates, func(candidate commitCandidate) bool {
+		return candidate.key == key
+	})
 }
 
 // retainable reports whether candidate may keep its slot.

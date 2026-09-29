@@ -20,8 +20,8 @@ func TestCommitCandidates(t *testing.T) {
 		c.add(5, second, "b", true)
 		c.add(5, replacement, "a", false)
 		require.Equal(t, []commitCandidate{
-			{commit: replacement, peerID: "a"},
-			{commit: second, peerID: "b", fromReplay: true},
+			{commit: replacement, key: newCommitKey(replacement), peerID: "a"},
+			{commit: second, key: newCommitKey(second), peerID: "b", fromReplay: true},
 		}, popAll(&c, 5))
 	})
 
@@ -59,6 +59,14 @@ func TestCommitCandidates(t *testing.T) {
 		c.add(5, commit(1), "a", false)
 		got := popAll(&c, 5)
 		require.Len(t, got, 1, "a reconnected peer gets a slot again")
+	})
+
+	t.Run("holds finds a queued commit of the height by content", func(t *testing.T) {
+		var c commitCandidates
+		c.add(5, commit(0), "a", false)
+		require.True(t, c.holds(5, newCommitKey(commit(0))), "an equal commit from anyone is held")
+		require.False(t, c.holds(5, newCommitKey(commit(1))), "another round is another commit")
+		require.False(t, c.holds(6, newCommitKey(commit(0))), "another height holds nothing")
 	})
 
 	t.Run("another height discards the candidates", func(t *testing.T) {

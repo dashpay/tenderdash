@@ -325,8 +325,8 @@ func TestParkedCommitRejectTriesQueuedCommits(t *testing.T) {
 			sends: func(f *commitExtFixture) []commitSend {
 				return []commitSend{{f.bad, "attacker"}, {f.good, "honest"}, {f.bad, "attacker"}, {f.bad, "attacker"}}
 			},
-			// The attacker's resends fill its own slot and cannot displace the
-			// honest one, which is the first replacement tried.
+			// The attacker's resends equal the parked commit and cannot displace
+			// the honest one, which is the first replacement tried.
 			verifies: 2,
 		},
 		{
@@ -338,7 +338,8 @@ func TestParkedCommitRejectTriesQueuedCommits(t *testing.T) {
 				}
 				return append(sends, commitSend{f.good, "honest"})
 			},
-			verifies: 42,
+			// Copies of the parked commit add nothing to try and take no slot.
+			verifies: 2,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -494,7 +495,7 @@ func TestParkedCommitRejectWithoutReplacement(t *testing.T) {
 
 	require.True(t, f.stateData.holdsProposalBlock(f.good.BlockID), "the verified block is kept")
 	require.NoError(t, f.sendCommit(ctx, f.good, "honest"))
-	require.Equal(t, calls(3, "finalize"), f.checker.calls)
+	require.Equal(t, calls(2, "finalize"), f.checker.calls, "the copy of the parked commit is not tried")
 	f.requireCommitted(t, f.good)
 }
 
@@ -524,17 +525,18 @@ func TestParkedCommitRejectFallsBackToOwnPrecommits(t *testing.T) {
 
 // The commit built from this node's own quorum is checked in tryFinalizeCommit.
 // A rejection there persists nothing and leaves the node at its height, where
-// a commit from a peer can still finish it.
+// a peer's commit carrying a vector the application accepts can still finish it.
+// The same commit from a peer is refused without asking the application again.
 func TestOwnPrecommitsCommitRejected(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	f := newCommitExtFixture(ctx, t)
 	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
-	f.checker.expected = []*abci.ExtendVoteExtension{}
-	f.checker.rejectAll = true
 	counter := &recordingCounter{}
 	f.node.metrics.CommitVerifyFailures = counter
 
+	// Local precommits carry no extensions; the application expects the
+	// withdrawal vector.
 	f.stateData.updateRoundStep(0, cstypes.RoundStepPrecommit)
 	f.deliver(ctx, t, &f.stateData, f.precommit(ctx, t, f.commit.BlockID))
 	require.Equal(t, cstypes.RoundStepApplyCommit, f.stateData.Step, "the quorum waits for the block")
@@ -546,10 +548,12 @@ func TestOwnPrecommitsCommitRejected(t *testing.T) {
 	require.Equal(t, f.block.Height, f.stateData.Height)
 	require.Nil(t, f.stateData.Commit)
 
-	f.checker.rejectAll = false
-	require.NoError(t, f.sendCommit(ctx, f.commit, "honest"))
-	require.Equal(t, f.block.Height+1, f.stateData.Height)
-	require.Equal(t, f.block.Height, f.node.blockStore.Height())
+	require.ErrorIs(t, f.sendCommit(ctx, f.commit, "relayer"), sm.ErrCommitExtensionsRejected)
+	require.Equal(t, calls(1), f.checker.calls, "a vector already rejected is not checked again")
+
+	require.NoError(t, f.sendCommit(ctx, f.good, "honest"))
+	f.requireCommitted(t, f.good)
+	require.Equal(t, calls(2, "finalize"), f.checker.calls)
 }
 
 func TestAcceptedCommitDiscardsQueuedCandidates(t *testing.T) {
@@ -569,8 +573,7 @@ func TestAcceptedCommitDiscardsQueuedCandidates(t *testing.T) {
 
 // Honest commits for one block can differ in round alone, so the commits queued
 // behind a parked one may alternate between rounds. They are tried a round at a
-// time: an application such as kvstore refuses to process a round twice, which
-// would reject the honest commit had its round been left for another one.
+// time, so the block is processed once per round rather than once per switch.
 func TestParkedCommitsAreTriedRoundByRound(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
@@ -615,6 +618,85 @@ func TestParkedCommitsAreTriedRoundByRound(t *testing.T) {
 	}
 }
 
+// Commits rejected at two rounds leave the block processed for the later one.
+// The node's own round-0 quorum then has it processed for round 0 again, which
+// an application that refuses only an immediate repeat, like kvstore, allows,
+// and the height completes instead of panicking.
+func TestOwnQuorumAfterCommitsRejectedInTwoRounds(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := newCommitExtFixture(ctx, t)
+	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+	f.checker.round = -1
+	f.checker.rejectReprocess = true
+	// Local precommits carry no extensions; both peers' commits carry one.
+	f.checker.expected = []*abci.ExtendVoteExtension{}
+
+	require.NoError(t, f.sendCommit(ctx, f.good, "attacker-0"))
+	require.NoError(t, f.sendCommit(ctx, f.sign(ctx, t, 1, withdrawalExtension), "attacker-1"))
+	f.stateData.updateRoundStep(0, cstypes.RoundStepPrecommit)
+	f.deliver(ctx, t, &f.stateData, f.precommit(ctx, t, f.commit.BlockID))
+	require.Equal(t, cstypes.RoundStepApplyCommit, f.stateData.Step, "the quorum waits for the block")
+
+	require.NotPanics(t, func() { require.NoError(t, f.completeBlock(ctx, false)) })
+
+	require.Equal(t, []int32{0, 1, 0}, f.checker.processedRounds)
+	require.Equal(t, f.block.Height+1, f.stateData.Height, "the own quorum must complete the height")
+	require.Empty(t, f.node.blockStore.LoadSeenCommitAt(f.block.Height).ThresholdVoteExtensions)
+}
+
+// A commit equal to the parked one or a queued one is dropped before its
+// signature is verified: it would only repeat a check already made or queued.
+func TestQueuedCommitCopiesAreDropped(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := newCommitExtFixture(ctx, t)
+	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+	budget := &tokenBudget{tokens: 1_000}
+	f.node.ctrl.Get(TryAddCommitType).(*TryAddCommitAction).verificationBudget = budget
+	candidates := f.node.ctrl.Get(TryAddCommitType).(*TryAddCommitAction).candidates
+	parkedCopy, queuedCopy := *f.bad, *f.good
+
+	require.NoError(t, f.sendCommit(ctx, f.bad, "attacker"))
+	require.NoError(t, f.sendCommit(ctx, f.good, "honest"))
+	charged := budget.charged
+	require.NoError(t, f.sendCommit(ctx, &parkedCopy, "sybil-0"))
+	require.NoError(t, f.sendCommit(ctx, &queuedCopy, "sybil-1"))
+	require.Equal(t, charged, budget.charged, "a copy costs no signature verification")
+	require.Len(t, candidates.candidates, 1, "a copy takes no slot")
+
+	require.NoError(t, f.completeBlock(ctx, false))
+	f.requireCommitted(t, f.good)
+	require.Equal(t, calls(2, "finalize"), f.checker.calls)
+}
+
+// A commit whose vector the application rejected is refused again without
+// processing the block or asking the application, so a peer alternating
+// rejected commits of two rounds cannot make the block execute per message.
+func TestRejectedCommitVerdictIsReused(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := newCommitExtFixture(ctx, t)
+	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+	f.checker.round = -1
+	future := *f.sign(ctx, t, 2, withdrawalExtension)
+	future.ThresholdVoteExtensions = nil
+	f.holdBlock(ctx, t)
+	f.checker.processedRounds = nil
+
+	for range 3 {
+		require.ErrorIs(t, f.sendCommit(ctx, &future, "attacker"), sm.ErrCommitExtensionsRejected)
+		require.ErrorIs(t, f.sendCommit(ctx, f.bad, "attacker"), sm.ErrCommitExtensionsRejected)
+	}
+	require.Equal(t, []int32{2, 0}, f.checker.processedRounds, "each round is processed only for its first rejection")
+	require.Equal(t, []string{"process", "verify", "process", "verify"}, f.checker.calls)
+
+	f.checker.calls = nil
+	require.NoError(t, f.sendCommit(ctx, f.good, "honest"))
+	f.requireCommitted(t, f.good)
+	require.Equal(t, []string{"verify", "finalize"}, f.checker.calls)
+}
+
 // commitCheckingExecutor plays an application that accepts only the expected
 // commit extension vector. Individual precommits go to the wrapped executor.
 type commitCheckingExecutor struct {
@@ -629,15 +711,15 @@ type commitCheckingExecutor struct {
 	// onVerify and onFinalize observe the node while it applies a commit.
 	onVerify   func(vote *types.Vote)
 	onFinalize func(commit *types.Commit)
-	// rejectAll rejects every commit vector, however correct.
-	rejectAll bool
-	// processed remembers each round's result: like Drive, and unlike the
-	// kvstore app, the application processes a block again after proposing in a
-	// later round.
+	// processed remembers each round's result, which a later ProcessProposal
+	// for that round returns again.
 	processed map[int32]sm.CurrentRoundState
-	// rejectReprocess fails a second ProcessProposal for a round, as the
-	// kvstore app does, instead of replaying the remembered result.
+	// rejectReprocess fails a ProcessProposal for the round processed last, as
+	// the kvstore app does; a round processed before another one may be
+	// processed again, as in Drive.
 	rejectReprocess bool
+	// lastRound is the round of the latest ProcessProposal, nil before any.
+	lastRound *int32
 	// processedRounds lists the round of every ProcessProposal call.
 	processedRounds []int32
 }
@@ -646,11 +728,12 @@ func (e *commitCheckingExecutor) ProcessProposal(ctx context.Context, block *typ
 	state sm.State, verify bool, last types.VerifiedCommit) (sm.CurrentRoundState, error) {
 	e.calls = append(e.calls, "process")
 	e.processedRounds = append(e.processedRounds, round)
+	if e.rejectReprocess && e.lastRound != nil && *e.lastRound == round {
+		return sm.CurrentRoundState{}, fmt.Errorf("duplicate ProcessProposal call at height %d, round %d",
+			block.Height, round)
+	}
+	e.lastRound = &round
 	if crs, ok := e.processed[round]; ok {
-		if e.rejectReprocess {
-			return sm.CurrentRoundState{}, fmt.Errorf("duplicate ProcessProposal call at height %d, round %d",
-				block.Height, round)
-		}
 		return crs, nil
 	}
 	crs, err := e.Executor.ProcessProposal(ctx, block, round, state, verify, last)
@@ -677,7 +760,7 @@ func (e *commitCheckingExecutor) VerifyVoteExtension(ctx context.Context, vote *
 	if e.onVerify != nil {
 		e.onVerify(vote)
 	}
-	if e.rejectAll || !reflect.DeepEqual(e.expected, vote.VoteExtensions.ToExtendProto()) {
+	if !reflect.DeepEqual(e.expected, vote.VoteExtensions.ToExtendProto()) {
 		return errors.New("invalid vote extension")
 	}
 	return nil
