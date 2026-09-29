@@ -150,6 +150,7 @@ func (cs *TryAddCommitAction) queueCandidate(ctx context.Context, stateData *Sta
 		return fmt.Errorf("error validating commit: %w", err)
 	}
 	key := newCommitKey(commit)
+	// Any sender's copy of the parked commit is redundant: it is tried first, its sender cannot drop it, and an equal vector gets the same verdict.
 	if key == newCommitKey(stateData.Commit) || cs.candidates.holds(stateData.Height, event.PeerID, key) {
 		return nil
 	}
