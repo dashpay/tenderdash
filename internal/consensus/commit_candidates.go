@@ -56,10 +56,12 @@ func (c *commitCandidates) add(height int64, commit *types.Commit, peerID types.
 	c.candidates = append(c.candidates, candidate)
 }
 
-// holds reports whether a commit identified by key is queued for height.
-func (c *commitCandidates) holds(height int64, key commitKey) bool {
+// holds reports whether peerID's slot keeps the commit identified by key for
+// height. Another peer's equal commit does not count: its sender may still
+// replace it or disconnect, which would take it out of the queue.
+func (c *commitCandidates) holds(height int64, peerID types.NodeID, key commitKey) bool {
 	return c.height == height && slices.ContainsFunc(c.candidates, func(candidate commitCandidate) bool {
-		return candidate.key == key
+		return candidate.peerID == peerID && candidate.key == key
 	})
 }
 

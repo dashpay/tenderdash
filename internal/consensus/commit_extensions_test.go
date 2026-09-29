@@ -37,6 +37,11 @@ var withdrawalExtension = tmproto.VoteExtension{Type: tmproto.VoteExtensionType_
 	Extension:      crypto.Checksum([]byte("withdrawal")),
 	XSignRequestId: &tmproto.VoteExtension_SignRequestId{SignRequestId: []byte("withdrawal-request")}}
 
+// otherExtension is a vector the application does not expect.
+var otherExtension = tmproto.VoteExtension{Type: tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
+	Extension:      crypto.Checksum([]byte("other")),
+	XSignRequestId: &tmproto.VoteExtension_SignRequestId{SignRequestId: []byte("other-request")}}
+
 func newCommitExtFixture(ctx context.Context, t *testing.T) *commitExtFixture {
 	t.Helper()
 	n := newCommitFixture(ctx, t, configSetup(t), types.BlockPartSizeBytes, 0)
@@ -645,29 +650,68 @@ func TestOwnQuorumAfterCommitsRejectedInTwoRounds(t *testing.T) {
 	require.Empty(t, f.node.blockStore.LoadSeenCommitAt(f.block.Height).ThresholdVoteExtensions)
 }
 
-// A commit equal to the parked one or a queued one is dropped before its
-// signature is verified: it would only repeat a check already made or queued.
-func TestQueuedCommitCopiesAreDropped(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	f := newCommitExtFixture(ctx, t)
-	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
-	budget := &tokenBudget{tokens: 1_000}
-	f.node.ctrl.Get(TryAddCommitType).(*TryAddCommitAction).verificationBudget = budget
-	candidates := f.node.ctrl.Get(TryAddCommitType).(*TryAddCommitAction).candidates
-	parkedCopy, queuedCopy := *f.bad, *f.good
+// A copy of the parked commit, or of a commit its sender already queued, is
+// dropped before its signature is verified. A copy of another peer's queued
+// commit is kept in the sender's own slot, so the first sender cannot take it
+// away by replacing its commit or disconnecting.
+func TestQueuedCommitCopies(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		// evict removes the attacker's queued authentic commit.
+		evict func(ctx context.Context, t *testing.T, f *commitExtFixture, other *types.Commit)
+	}{
+		{name: "sender replaces its commit", evict: func(ctx context.Context, t *testing.T, f *commitExtFixture, other *types.Commit) {
+			require.NoError(t, f.sendCommit(ctx, other, "attacker"))
+		}},
+		{name: "sender disconnects", evict: func(ctx context.Context, t *testing.T, f *commitExtFixture, other *types.Commit) {
+			f.node.msgInfoQueue.purgePeer("attacker")
+			require.NoError(t, f.sendCommit(ctx, other, "attacker-2"))
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			f := newCommitExtFixture(ctx, t)
+			ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+			budget := &tokenBudget{tokens: 1_000}
+			f.node.ctrl.Get(TryAddCommitType).(*TryAddCommitAction).verificationBudget = budget
+			other := f.sign(ctx, t, 0, otherExtension)
 
-	require.NoError(t, f.sendCommit(ctx, f.bad, "attacker"))
-	require.NoError(t, f.sendCommit(ctx, f.good, "honest"))
-	charged := budget.charged
-	require.NoError(t, f.sendCommit(ctx, &parkedCopy, "sybil-0"))
-	require.NoError(t, f.sendCommit(ctx, &queuedCopy, "sybil-1"))
-	require.Equal(t, charged, budget.charged, "a copy costs no signature verification")
-	require.Len(t, candidates.candidates, 1, "a copy takes no slot")
+			require.NoError(t, f.sendCommit(ctx, f.bad, "attacker"))
+			require.NoError(t, f.sendCommit(ctx, f.good, "attacker"))
+			charged := budget.charged
+			honestCopy := *f.good
+			require.NoError(t, f.sendCommit(ctx, &honestCopy, "honest"))
+			require.Greater(t, budget.charged, charged, "another sender's copy is verified")
+			tc.evict(ctx, t, f, other)
 
-	require.NoError(t, f.completeBlock(ctx, false))
-	f.requireCommitted(t, f.good)
-	require.Equal(t, calls(2, "finalize"), f.checker.calls)
+			require.NoError(t, f.completeBlock(ctx, false))
+			f.requireCommitted(t, f.good)
+		})
+	}
+
+	t.Run("sender repeats a commit", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		f := newCommitExtFixture(ctx, t)
+		ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+		budget := &tokenBudget{tokens: 1_000}
+		f.node.ctrl.Get(TryAddCommitType).(*TryAddCommitAction).verificationBudget = budget
+		candidates := f.node.ctrl.Get(TryAddCommitType).(*TryAddCommitAction).candidates
+		parkedCopy, queuedCopy := *f.bad, *f.good
+
+		require.NoError(t, f.sendCommit(ctx, f.bad, "attacker"))
+		require.NoError(t, f.sendCommit(ctx, f.good, "honest"))
+		charged := budget.charged
+		require.NoError(t, f.sendCommit(ctx, &parkedCopy, "sybil"))
+		require.NoError(t, f.sendCommit(ctx, &queuedCopy, "honest"))
+		require.Equal(t, charged, budget.charged, "a copy costs no signature verification")
+		require.Len(t, candidates.candidates, 1, "a copy takes no slot")
+
+		require.NoError(t, f.completeBlock(ctx, false))
+		f.requireCommitted(t, f.good)
+		require.Equal(t, calls(2, "finalize"), f.checker.calls)
+	})
 }
 
 // A commit whose vector the application rejected is refused again without

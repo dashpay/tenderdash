@@ -140,14 +140,17 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 // in the turn the scheduler reserved its cost for; trying the commit once the
 // block arrives costs processing the block for its round, if not yet done, and
 // the application's extension check (see selectParkedCommit). A commit equal to
-// the parked one or a queued one adds nothing to try and is dropped unverified.
+// the parked one, which is always tried, or to the one its sender already
+// queued adds nothing to try and is dropped unverified. An equal commit queued
+// by another peer is not enough: that sender could still replace it or
+// disconnect; the verdict cache keeps the application from judging it twice.
 func (cs *TryAddCommitAction) queueCandidate(ctx context.Context, stateData *StateData, event *TryAddCommitEvent) error {
 	commit := event.Commit
 	if err := commit.ValidateBasic(); err != nil {
 		return fmt.Errorf("error validating commit: %w", err)
 	}
 	key := newCommitKey(commit)
-	if key == newCommitKey(stateData.Commit) || cs.candidates.holds(stateData.Height, key) {
+	if key == newCommitKey(stateData.Commit) || cs.candidates.holds(stateData.Height, event.PeerID, key) {
 		return nil
 	}
 	if err := stateData.verifyCommitSignatures(commit.BlockID, commit, verificationBudgetFromCtx(ctx)); err != nil {

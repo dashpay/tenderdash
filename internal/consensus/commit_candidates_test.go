@@ -61,12 +61,13 @@ func TestCommitCandidates(t *testing.T) {
 		require.Len(t, got, 1, "a reconnected peer gets a slot again")
 	})
 
-	t.Run("holds finds a queued commit of the height by content", func(t *testing.T) {
+	t.Run("holds finds a commit of the height in the peer's own slot", func(t *testing.T) {
 		var c commitCandidates
 		c.add(5, commit(0), "a", false)
-		require.True(t, c.holds(5, newCommitKey(commit(0))), "an equal commit from anyone is held")
-		require.False(t, c.holds(5, newCommitKey(commit(1))), "another round is another commit")
-		require.False(t, c.holds(6, newCommitKey(commit(0))), "another height holds nothing")
+		require.True(t, c.holds(5, "a", newCommitKey(commit(0))), "an equal commit from its sender is held")
+		require.False(t, c.holds(5, "b", newCommitKey(commit(0))), "another peer's slot does not count")
+		require.False(t, c.holds(5, "a", newCommitKey(commit(1))), "another round is another commit")
+		require.False(t, c.holds(6, "a", newCommitKey(commit(0))), "another height holds nothing")
 	})
 
 	t.Run("another height discards the candidates", func(t *testing.T) {
