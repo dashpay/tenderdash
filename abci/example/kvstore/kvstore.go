@@ -54,10 +54,11 @@ type Application struct {
 	// If `nil`, duplicate call detection is disabled.
 	preparedProposals map[int32]bool
 
-	// processedProposals holds the round of the latest ProcessProposal at this height, used to detect
-	// a repeated call for that round. Like Drive, a round may be processed again once another round
-	// was processed after it. If `nil`, duplicate call detection is disabled.
-	processedProposals map[int32]bool
+	// processedProposals holds the round and block hash of the latest ProcessProposal at this height.
+	// Like Drive, a repeat of that round with the same block hash re-executes it, and any other round
+	// may be processed again; that round with another or no block hash is an error.
+	// If `nil`, duplicate call detection is disabled.
+	processedProposals map[int32][]byte
 
 	logger log.Logger
 
@@ -217,7 +218,7 @@ func newApplication(stateStore StoreFactory, opts ...OptFunc) (*Application, err
 		LastCommittedState:     NewKvState(dbm.NewMemDB(), initialHeight), // initial state to avoid InitChain() in unit tests
 		roundStates:            map[string]State{},
 		preparedProposals:      map[int32]bool{},
-		processedProposals:     map[int32]bool{},
+		processedProposals:     map[int32][]byte{},
 		validatorSetUpdates:    map[int64]abci.ValidatorSetUpdate{},
 		consensusParamsUpdates: map[int64]types1.ConsensusParams{},
 		initialHeight:          initialHeight,
@@ -377,11 +378,11 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProc
 	defer app.mu.Unlock()
 
 	if app.processedProposals != nil {
-		if app.processedProposals[req.Round] {
+		if last, ok := app.processedProposals[req.Round]; ok && (len(req.Hash) == 0 || !bytes.Equal(last, req.Hash)) {
 			return &abci.ResponseProcessProposal{}, fmt.Errorf("duplicate ProcessProposal call at height %d, round %d", req.Height, req.Round)
 		}
 		clear(app.processedProposals)
-		app.processedProposals[req.Round] = true
+		app.processedProposals[req.Round] = bytes.Clone(req.Hash)
 	}
 
 	roundState, txResults, err := app.executeProposal(req.Height, req.Round, types.NewTxs(req.Txs))
@@ -777,7 +778,7 @@ func (app *Application) newHeight(committedAppHash tmbytes.HexBytes, height int6
 func (app *Application) resetDuplicateDetection(enabled bool) {
 	if enabled {
 		app.preparedProposals = map[int32]bool{}
-		app.processedProposals = map[int32]bool{}
+		app.processedProposals = map[int32][]byte{}
 	} else {
 		app.preparedProposals = nil
 		app.processedProposals = nil

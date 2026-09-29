@@ -70,7 +70,8 @@ func (c *blockExecutor) create(ctx context.Context, rs *cstypes.RoundState, roun
 // Invariant: CurrentRoundState must match the application's latest
 // ProcessProposal. An application may keep one execution context per height
 // (Drive does) and finalize only the round it processed last, so a result for
-// another round must never be reused without a new ProcessProposal.
+// another round must never be reused without a new ProcessProposal. A repeat
+// for the same block and round, as after a block sync handover, re-executes it.
 func (c *blockExecutor) ensureProcess(ctx context.Context, rs *cstypes.RoundState, round int32) error {
 	block := rs.ProposalBlock
 	// Above the condition, not inside it: either operand can reach the block,

@@ -1,6 +1,7 @@
 package blocksync
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -96,8 +97,9 @@ func TestBlockApplierInvalidatesRejectedProposal(t *testing.T) {
 
 // Tampered commits for one block at different rounds, each rejected, leave
 // block sync to process the block again for a round it processed before another
-// one. An application that refuses only an immediate repeat, like kvstore,
-// allows that, so the genuine commit is applied instead of panicking.
+// one. An application that refuses only the last round with another block,
+// like kvstore, allows that, so the genuine commit is applied instead of
+// panicking.
 func TestBlockApplierReprocessesRoundAfterAnother(t *testing.T) {
 	ctx := context.Background()
 	vals, keys := factory.MockValidatorSet()
@@ -115,13 +117,14 @@ func TestBlockApplierReprocessesRoundAfterAnother(t *testing.T) {
 	exec.On("VerifyCommit", initial, mock.Anything, block.Height, mock.Anything).Times(4).Return(types.VerifiedCommit{}, nil)
 	exec.On("ValidateBlock", mock.Anything, initial, block, types.VerifiedCommit{}).Times(4).Return(nil)
 	var rounds []int32
+	var hashes [][]byte
 	exec.On("ProcessProposal", mock.Anything, block, mock.Anything, initial, true, types.VerifiedCommit{}).Times(3).
 		Return(func(_ context.Context, b *types.Block, round int32, _ sm.State, _ bool,
 			_ types.VerifiedCommit) (sm.CurrentRoundState, error) {
-			if n := len(rounds); n > 0 && rounds[n-1] == round {
+			if n := len(rounds); n > 0 && rounds[n-1] == round && !bytes.Equal(hashes[n-1], b.Hash()) {
 				return sm.CurrentRoundState{}, fmt.Errorf("duplicate ProcessProposal call at height %d, round %d", b.Height, round)
 			}
-			rounds = append(rounds, round)
+			rounds, hashes = append(rounds, round), append(hashes, b.Hash())
 			return processedState(initial, b, round), nil
 		})
 	exec.On("VerifyVoteExtension", mock.Anything, mock.Anything).Times(3).Return(errors.New("invalid vote extension"))

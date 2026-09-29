@@ -16,6 +16,7 @@ import (
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/test/factory"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/libs/eventemitter"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -625,8 +626,8 @@ func TestParkedCommitsAreTriedRoundByRound(t *testing.T) {
 
 // Commits rejected at two rounds leave the block processed for the later one.
 // The node's own round-0 quorum then has it processed for round 0 again, which
-// an application that refuses only an immediate repeat, like kvstore, allows,
-// and the height completes instead of panicking.
+// an application that refuses only the last round with another block, like
+// kvstore, allows, and the height completes instead of panicking.
 func TestOwnQuorumAfterCommitsRejectedInTwoRounds(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -714,6 +715,30 @@ func TestQueuedCommitCopies(t *testing.T) {
 	})
 }
 
+// Block sync can process a block for its commit's round, have the commit's
+// extensions rejected and hand over to consensus, which starts without that
+// result. The authentic commit of the same round then has the application
+// process the same block for that round again; an application that re-executes
+// such a repeat, like Drive and kvstore, lets it apply.
+func TestSameRoundReprocessedAfterHandover(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := newCommitExtFixture(ctx, t)
+	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+	f.checker.rejectReprocess = true
+	_, err := f.checker.ProcessProposal(ctx, f.block, 0, f.stateData.state, true, types.VerifiedCommit{})
+	require.NoError(t, err)
+	require.Error(t, f.checker.VerifyVoteExtension(ctx, &types.Vote{Height: f.block.Height, Round: 0,
+		BlockID: f.commit.BlockID}), "block sync's commit is rejected")
+	f.checker.calls, f.checker.processedRounds = nil, nil
+
+	require.NoError(t, f.sendCommit(ctx, f.good, "honest"))
+	require.NoError(t, f.completeBlock(ctx, false))
+
+	f.requireCommitted(t, f.good)
+	require.Equal(t, []int32{0}, f.checker.processedRounds)
+}
+
 // A commit whose vector the application rejected is refused again without
 // processing the block or asking the application, so a peer alternating
 // rejected commits of two rounds cannot make the block execute per message.
@@ -744,8 +769,9 @@ func TestRejectedCommitVerdictIsReused(t *testing.T) {
 // A held block's commit for a later round is checked before the node enters that
 // round. If the node proposes that round, it must apply the checked commit
 // rather than build a competing proposal: PrepareProposal would replace the
-// processed result, and an application that refuses an immediate repeat, like
-// kvstore, would then fail the ProcessProposal that applying needs.
+// processed result, and an application that refuses the same round with
+// another block, like Drive, would then fail the ProcessProposal that applying
+// needs.
 func TestHeldFutureCommitSkipsOwnProposal(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -793,12 +819,14 @@ type commitCheckingExecutor struct {
 	// processed remembers each round's result, which a later ProcessProposal
 	// for that round returns again.
 	processed map[int32]sm.CurrentRoundState
-	// rejectReprocess fails a ProcessProposal for the round processed last, as
-	// the kvstore app does; a round processed before another one may be
-	// processed again, as in Drive.
+	// rejectReprocess fails a ProcessProposal for the round processed last with
+	// a different block, as Drive and kvstore do; the same block again, or any
+	// other round, is processed again.
 	rejectReprocess bool
-	// lastRound is the round of the latest ProcessProposal, nil before any.
+	// lastRound and lastHash identify the latest ProcessProposal; lastRound is
+	// nil before any.
 	lastRound *int32
+	lastHash  tmbytes.HexBytes
 	// processedRounds lists the round of every ProcessProposal call.
 	processedRounds []int32
 }
@@ -807,11 +835,11 @@ func (e *commitCheckingExecutor) ProcessProposal(ctx context.Context, block *typ
 	state sm.State, verify bool, last types.VerifiedCommit) (sm.CurrentRoundState, error) {
 	e.calls = append(e.calls, "process")
 	e.processedRounds = append(e.processedRounds, round)
-	if e.rejectReprocess && e.lastRound != nil && *e.lastRound == round {
+	if e.rejectReprocess && e.lastRound != nil && *e.lastRound == round && !bytes.Equal(e.lastHash, block.Hash()) {
 		return sm.CurrentRoundState{}, fmt.Errorf("duplicate ProcessProposal call at height %d, round %d",
 			block.Height, round)
 	}
-	e.lastRound = &round
+	e.lastRound, e.lastHash = &round, block.Hash()
 	if crs, ok := e.processed[round]; ok {
 		return crs, nil
 	}

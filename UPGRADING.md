@@ -33,8 +33,9 @@ round on its authentic threshold signature alone, as before; the application's
 check runs when the block completes. A commit that arrived before its block is
 checked when the block arrives, followed by the commits other peers sent
 meanwhile, one queue slot per connected peer, so an attacker cannot push an
-honest peer's commit out; copies of a commit already parked or queued are
-dropped, and a vector the application already rejected at the height is refused
+honest peer's commit out; a copy of the parked commit, or of the commit its
+sender already queued, is dropped, while a copy of another peer's queued commit
+takes the sender's own slot, and a vector the application already rejected at the height is refused
 without asking it again. If the commit assembled from the node's own +2/3
 precommits is rejected, the node logs the error `application rejected the commit
 of this node's own precommits; waiting for a peer's commit`, persists nothing and
@@ -51,10 +52,14 @@ sustained rate means the application and the network disagree on extension
 vectors.
 
 Tenderdash processes a block again with `ProcessProposal` when it returns to a
-round after processing another round at the same height, and finalizes only the
-round processed last. An application may keep a single execution context per
-height, but must accept `ProcessProposal` for a round it processed before
-another one.
+round after processing another round at the same height, and may repeat
+`ProcessProposal` for the same height, round and block, for example after the
+application rejected a commit's vote extensions or when block sync hands over
+to consensus. It finalizes only the round processed last. An application may
+keep a single execution context per height, but must treat either call as
+re-execution that replaces that context, not as an error. Drive does; the
+reference kvstore application errors only on a repeat of the round processed
+last with a different block hash.
 
 For a catch-up failure, first ensure the application implements verification for
 the failing historical height; re-sync cannot fix incompatible application logic.

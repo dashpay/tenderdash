@@ -600,7 +600,8 @@ func bytes2Txs(items [][]byte) []tmtypes.Tx {
 
 // TestProcessProposalRoundReprocessing checks that duplicate detection matches
 // Drive: a round may be processed again once another round was processed after
-// it, only a repeat with no other round in between is an error, and the round
+// it, and a repeat of the round processed last re-executes the same block; only
+// that round with another block, or with no block hash, is an error. The round
 // processed again can still be finalized.
 func TestProcessProposalRoundReprocessing(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -609,27 +610,34 @@ func TestProcessProposalRoundReprocessing(t *testing.T) {
 	app := newKvApp(ctx, t, 1)
 	const height = 1
 	tx := []byte(testKey)
-	process := func(round int32) (*types.ResponseProcessProposal, error) {
+	blockHash := []byte("block-hash")
+	process := func(round int32, hash []byte) (*types.ResponseProcessProposal, error) {
 		return app.ProcessProposal(ctx, &types.RequestProcessProposal{
 			Txs:     [][]byte{tx},
+			Hash:    hash,
 			Height:  height,
 			Round:   round,
 			Version: &pbversion.Consensus{App: uint64(height)},
 		})
 	}
 
-	first, err := process(0)
+	first, err := process(0, blockHash)
 	require.NoError(t, err)
-	_, err = process(0)
-	require.ErrorContains(t, err, "duplicate ProcessProposal call", "same round twice in a row")
+	repeat, err := process(0, blockHash)
+	require.NoError(t, err, "same round and block again")
+	require.Equal(t, first.AppHash, repeat.AppHash)
+	_, err = process(0, []byte("other-block"))
+	require.ErrorContains(t, err, "duplicate ProcessProposal call", "same round with another block")
+	_, err = process(0, nil)
+	require.ErrorContains(t, err, "duplicate ProcessProposal call", "same round without a block hash")
 
-	_, err = process(1)
+	_, err = process(1, blockHash)
 	require.NoError(t, err)
-	again, err := process(0)
+	again, err := process(0, blockHash)
 	require.NoError(t, err, "round 0 again after round 1 was processed")
 	require.Equal(t, first.AppHash, again.AppHash)
-	_, err = process(0)
-	require.ErrorContains(t, err, "duplicate ProcessProposal call", "same round twice in a row after reprocessing")
+	_, err = process(0, blockHash)
+	require.NoError(t, err, "same round and block again after reprocessing")
 
 	reqFin := &types.RequestFinalizeBlock{Height: height, Round: 0}
 	reqFin.Block, reqFin.BlockID = makeBlock(t, height, [][]byte{tx}, again.AppHash)

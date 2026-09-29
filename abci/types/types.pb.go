@@ -1422,9 +1422,11 @@ func (m *RequestPrepareProposal) GetQuorumHash() []byte {
 //     `ResponseProcessProposal.status` MUST **exclusively** depend on the parameters passed in
 //     the call to `RequestProcessProposal`, and the last committed Application state
 //     (see [Requirements](abci++_app_requirements.md) section).
-//   - Tenderdash may call `ProcessProposal` again for a round of the current height after processing
-//     another round, for example to verify a commit of that round. The Application MUST process the
-//     block again; `FinalizeBlock` refers to the round processed last.
+//   - Tenderdash may call `ProcessProposal` more than once for the same height and round with the
+//     same block, for example after the application rejected a commit's vote extensions or when block
+//     sync hands over to consensus, and again for a round after processing another round, for example
+//     to verify a commit of that round. The Application MUST treat such a call as re-execution that
+//     replaces its execution context for the height; `FinalizeBlock` refers to the round processed last.
 //   - Moreover, application implementors SHOULD always set `ResponseProcessProposal.status` to `ACCEPT`,
 //     unless they _really_ know what the potential liveness implications of returning `REJECT` are.
 //
