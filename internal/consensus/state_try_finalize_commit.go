@@ -110,7 +110,7 @@ func (cs *TryFinalizeCommitAction) finalizeCommit(ctx context.Context, ctrl *Con
 	err := cs.blockExec.refuseUnprocessedCommit(&stateData.RoundState, seenCommit)
 	if err == nil {
 		cs.blockExec.mustEnsureProcess(ctx, &stateData.RoundState, seenCommit.Round)
-		err = cs.blockExec.verifyCommitExtensions(ctx, seenCommit)
+		err = cs.blockExec.verifyCommitExtensions(ctx, &stateData.RoundState, seenCommit)
 	}
 	if err != nil {
 		cs.metrics.CommitVerifyFailures.With("reason", CommitVerifyFailureReason(err)).Add(1)

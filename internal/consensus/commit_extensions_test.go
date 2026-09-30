@@ -105,6 +105,31 @@ func (f *commitExtFixture) holdBlock(ctx context.Context, t *testing.T) {
 	f.checker.calls = nil
 }
 
+// proposeBlock makes the fixture's block the round's proposal.
+func (f *commitExtFixture) proposeBlock() {
+	f.stateData.Proposal = &types.Proposal{Height: f.block.Height, Round: 0, POLRound: -1,
+		BlockID: f.commit.BlockID, Timestamp: f.block.Time}
+}
+
+// peerPrecommit returns another validator's precommit for the fixture's block
+// at round 0.
+func (f *commitExtFixture) peerPrecommit(ctx context.Context, t *testing.T) *types.Vote {
+	t.Helper()
+	for _, vote := range f.precommit(ctx, t, f.commit.BlockID) {
+		if !bytes.Equal(vote.ValidatorProTxHash, f.node.privValidator.ProTxHash) {
+			return vote
+		}
+	}
+	require.FailNow(t, "no precommit of another validator")
+	return nil
+}
+
+// sendVote delivers vote from the fixture's peer and returns the dispatch error.
+func (f *commitExtFixture) sendVote(ctx context.Context, vote *types.Vote) error {
+	voteCtx := msgInfoWithCtx(ctx, msgInfo{Msg: &VoteMessage{vote}, PeerID: f.peerID})
+	return f.node.ctrl.Dispatch(voteCtx, &AddVoteEvent{Vote: vote, PeerID: f.peerID}, &f.stateData)
+}
+
 func (f *commitExtFixture) requireCommitted(t *testing.T, want *types.Commit) {
 	t.Helper()
 	require.Equal(t, f.block.Height+1, f.stateData.Height, "the height must complete without a restart")
@@ -817,6 +842,12 @@ func TestForeignRoundCommitsCannotForceReprocessing(t *testing.T) {
 	// The attack is bounded here by the expectations, not by the rate-limited
 	// verification budget, which this many commits would outrun on a slow run.
 	f.node.ctrl.Get(TryAddCommitType).(*TryAddCommitAction).verificationBudget = &tokenBudget{tokens: 1_000_000}
+	// A peer precommit after every commit has the node restore its own round
+	// before the application checks it. The application rejects it, so it is
+	// never stored and each resend is checked again.
+	f.proposeBlock()
+	f.checker.rejectPrecommits = true
+	peerVote := f.peerPrecommit(ctx, t)
 	f.holdBlock(ctx, t)
 	f.checker.processedRounds = nil
 	counter := &recordingCounter{}
@@ -829,13 +860,17 @@ func TestForeignRoundCommitsCannotForceReprocessing(t *testing.T) {
 				verifies++ // the round processed last is the application's to judge
 			}
 			require.ErrorIs(t, f.sendCommit(ctx, variants[round][i], "attacker"), sm.ErrCommitExtensionsRejected)
+			require.Error(t, f.sendVote(ctx, peerVote))
+			require.True(t, f.checker.processedLast(0, f.block.Hash()), "the round's own processing is restored")
 		}
 	}
 
 	const foreignRounds = 2
-	require.Equal(t, []int32{1, 2}, f.checker.processedRounds,
-		"each round is processed once, to learn what the application expects")
-	require.LessOrEqual(t, len(f.checker.processedRounds), 2*foreignRounds)
+	// Bounded by 2·G: each foreign round is processed once, to learn what the
+	// application expects, and the own round once after each of those.
+	require.Equal(t, []int32{1, 0, 2, 0}, f.checker.processedRounds,
+		"the foreign rounds and the returns to the own round are each processed once")
+	require.Len(t, f.checker.processedRounds, 2*foreignRounds)
 	require.Equal(t, []int32{1, 2}, f.checker.extendedRounds, "the expectation is learned once per round")
 	require.Len(t, slices.DeleteFunc(slices.Clone(f.checker.calls), func(c string) bool { return c != "verify" }),
 		foreignRounds+verifies, "a commit refused before processing never reaches the application")
@@ -850,7 +885,8 @@ func TestForeignRoundCommitsCannotForceReprocessing(t *testing.T) {
 	f.checker.calls = nil
 	require.NoError(t, f.sendCommit(ctx, genuine[1], "honest"))
 	f.requireCommitted(t, genuine[1])
-	require.Equal(t, []int32{1, 2, 1}, f.checker.processedRounds, "the genuine commit has its round processed again")
+	require.Equal(t, []int32{1, 0, 2, 0, 1}, f.checker.processedRounds,
+		"the genuine commit has its round processed again")
 	require.Equal(t, []string{"process", "verify", "finalize"}, f.checker.calls[:3])
 }
 
@@ -897,8 +933,7 @@ func TestOwnRoundRestoredAfterForeignCommitRejected(t *testing.T) {
 			f.checker.checkPrecommitContext = true
 			f.node.voteSigner.voteExtender = f.checker
 			sd := &f.stateData
-			sd.Proposal = &types.Proposal{Height: f.block.Height, Round: 0, POLRound: -1,
-				BlockID: f.commit.BlockID, Timestamp: f.block.Time}
+			f.proposeBlock()
 			f.holdBlock(ctx, t)
 			future := *f.sign(ctx, t, 2, withdrawalExtension)
 			future.ThresholdVoteExtensions = nil
@@ -909,13 +944,7 @@ func TestOwnRoundRestoredAfterForeignCommitRejected(t *testing.T) {
 
 			switch tc {
 			case "peer precommit":
-				var peerVote *types.Vote
-				for _, vote := range f.precommit(ctx, t, f.commit.BlockID) {
-					if !bytes.Equal(vote.ValidatorProTxHash, f.node.privValidator.ProTxHash) {
-						peerVote = vote
-					}
-				}
-				require.NotNil(t, peerVote)
+				peerVote := f.peerPrecommit(ctx, t)
 				f.deliver(ctx, t, sd, []*types.Vote{peerVote})
 				require.NotNil(t, sd.Votes.Precommits(0).GetByIndex(peerVote.ValidatorIndex),
 					"the precommit is verified against its own round")
@@ -929,6 +958,103 @@ func TestOwnRoundRestoredAfterForeignCommitRejected(t *testing.T) {
 			require.Equal(t, []int32{0}, f.checker.processedRounds, "the round's block is processed for it again")
 		})
 	}
+}
+
+// A failed ProcessProposal can leave the application without the block it
+// processed before: Drive drops its execution context first. The node must not
+// trust the round processed before either. A commit for that round, whatever
+// its vector, is judged only after its block is processed again, or refused by
+// the expectation without it, and ExtendVote is asked only in that context.
+func TestFailedProcessProposalForgetsProcessedRound(t *testing.T) {
+	for _, failed := range []string{"foreign commit", "own round restore"} {
+		t.Run(failed, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			f := newCommitExtFixture(ctx, t)
+			ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+			f.checker.round = -1
+			f.proposeBlock()
+			f.holdBlock(ctx, t)
+			foreign := *f.sign(ctx, t, 2, withdrawalExtension)
+			foreign.ThresholdVoteExtensions = nil
+			failure := errors.New("transient failure")
+			// attack is a commit, with a vector the application rejects, for the
+			// round processed before the failure.
+			var attack *types.Commit
+			var processed, extended []int32
+			applied := []string{"verify", "finalize"}
+			switch failed {
+			case "foreign commit":
+				f.checker.processErr = map[int32]error{2: failure}
+				require.ErrorIs(t, f.sendCommit(ctx, &foreign, "peer"), failure)
+				attack, processed, extended = f.bad, []int32{0}, []int32{0}
+			case "own round restore":
+				require.ErrorIs(t, f.sendCommit(ctx, &foreign, "peer"), sm.ErrCommitExtensionsRejected)
+				f.checker.processErr = map[int32]error{0: failure}
+				require.ErrorIs(t, f.sendVote(ctx, f.peerPrecommit(ctx, t)), failure)
+				// The expectation learned for round 2 refuses the vector unprocessed.
+				attack, processed, extended = &foreign, nil, nil
+				applied = calls(1, "finalize")
+			}
+			require.Zero(t, f.stateData.Round)
+			f.checker.processErr = nil
+			f.checker.processedRounds, f.checker.extendedRounds = nil, nil
+
+			require.NotPanics(t, func() {
+				require.ErrorIs(t, f.sendCommit(ctx, attack, "attacker"), sm.ErrCommitExtensionsRejected)
+			})
+			require.Equal(t, processed, f.checker.processedRounds)
+			require.Equal(t, extended, f.checker.extendedRounds)
+
+			f.checker.calls = nil
+			require.NoError(t, f.sendCommit(ctx, f.good, "honest"))
+			f.requireCommitted(t, f.good)
+			require.Equal(t, applied, f.checker.calls[:len(applied)])
+		})
+	}
+}
+
+// ExtendVote answers from the round processed last, so a rejected commit's
+// expectation is not learned unless its block is known to be processed for the
+// commit's round.
+func TestExpectationLearnedOnlyForProcessedRound(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := newCommitExtFixture(ctx, t)
+	f.holdBlock(ctx, t)
+	rs := f.stateData.RoundState
+	rs.CurrentRoundState = sm.CurrentRoundState{}
+
+	require.ErrorIs(t, f.node.blockExecutor.verifyCommitExtensions(ctx, &rs, f.bad), sm.ErrCommitExtensionsRejected)
+	require.Empty(t, f.checker.extendedRounds)
+	require.Nil(t, f.node.blockExecutor.expectations.lookup(f.bad))
+}
+
+// A failed return to the node's own round is not retried for every resent
+// precommit: the node no longer holds another round's processing to undo.
+func TestFailedOwnRoundRestoreIsNotRetried(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := newCommitExtFixture(ctx, t)
+	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+	f.checker.round = -1
+	f.checker.checkPrecommitContext = true
+	f.proposeBlock()
+	f.holdBlock(ctx, t)
+	foreign := *f.sign(ctx, t, 2, withdrawalExtension)
+	foreign.ThresholdVoteExtensions = nil
+	require.ErrorIs(t, f.sendCommit(ctx, &foreign, "attacker"), sm.ErrCommitExtensionsRejected)
+	failure := errors.New("transient failure")
+	f.checker.processErr = map[int32]error{0: failure}
+	f.checker.processedRounds = nil
+	peerVote := f.peerPrecommit(ctx, t)
+
+	require.ErrorIs(t, f.sendVote(ctx, peerVote), failure)
+	for range 10 {
+		require.Error(t, f.sendVote(ctx, peerVote))
+	}
+	require.Equal(t, []int32{0}, f.checker.processedRounds, "the failed restore is tried once")
+	require.Nil(t, f.stateData.Votes.Precommits(0).GetByIndex(peerVote.ValidatorIndex))
 }
 
 // A held block's commit for a later round is checked before the node enters that
@@ -1002,6 +1128,12 @@ type commitCheckingExecutor struct {
 	// checkPrecommitContext rejects a validator's precommit unless its block and
 	// round are the ones processed last.
 	checkPrecommitContext bool
+	// rejectPrecommits rejects every validator's precommit, so that none is
+	// stored and a resent one is checked again.
+	rejectPrecommits bool
+	// processErr fails a ProcessProposal for a round it holds, and the
+	// application then holds no processed block, as Drive after a failure.
+	processErr map[int32]error
 }
 
 // processedLast reports whether the latest ProcessProposal was for round and
@@ -1028,6 +1160,10 @@ func (e *commitCheckingExecutor) ProcessProposal(ctx context.Context, block *typ
 	state sm.State, verify bool, last types.VerifiedCommit) (sm.CurrentRoundState, error) {
 	e.calls = append(e.calls, "process")
 	e.processedRounds = append(e.processedRounds, round)
+	if err := e.processErr[round]; err != nil {
+		e.lastRound, e.lastHash = nil, nil
+		return sm.CurrentRoundState{}, err
+	}
 	if e.rejectReprocess && e.lastRound != nil && *e.lastRound == round && !bytes.Equal(e.lastHash, block.Hash()) {
 		return sm.CurrentRoundState{}, fmt.Errorf("duplicate ProcessProposal call at height %d, round %d",
 			block.Height, round)
@@ -1054,6 +1190,9 @@ func (e *commitCheckingExecutor) CreateProposalBlock(ctx context.Context, height
 
 func (e *commitCheckingExecutor) VerifyVoteExtension(ctx context.Context, vote *types.Vote) error {
 	if len(vote.ValidatorProTxHash) != 0 {
+		if e.rejectPrecommits {
+			return errors.New("precommit rejected")
+		}
 		if e.checkPrecommitContext && !e.processedLast(vote.Round, vote.BlockID.Hash) {
 			return fmt.Errorf("precommit for round %d does not match the block and round processed last", vote.Round)
 		}

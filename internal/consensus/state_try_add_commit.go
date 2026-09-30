@@ -339,5 +339,5 @@ func verifyProcessedCommit(ctx context.Context, blockExec *blockExecutor, stateD
 	if err := blockExec.validate(ctx, stateData); err != nil {
 		return fmt.Errorf("+2/3 committed an invalid block: %w", err)
 	}
-	return blockExec.verifyCommitExtensions(ctx, commit)
+	return blockExec.verifyCommitExtensions(ctx, &stateData.RoundState, commit)
 }

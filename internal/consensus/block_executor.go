@@ -74,6 +74,9 @@ func (c *blockExecutor) create(ctx context.Context, rs *cstypes.RoundState, roun
 // (Drive does) and finalize only the round it processed last, so a result for
 // another round must never be reused without a new ProcessProposal. A repeat
 // for the same block and round, as after a block sync handover, re-executes it.
+// A failed ProcessProposal clears CurrentRoundState: the application may have
+// dropped the block it processed before (Drive does), so no round counts as
+// processed until one succeeds.
 func (c *blockExecutor) ensureProcess(ctx context.Context, rs *cstypes.RoundState, round int32) error {
 	block := rs.ProposalBlock
 	// Above the condition, not inside it: either operand can reach the block,
@@ -88,6 +91,7 @@ func (c *blockExecutor) ensureProcess(ctx context.Context, rs *cstypes.RoundStat
 		uncommittedState, err := c.blockExec.ProcessProposal(ctx, block, round, c.getCommittedState(), true,
 			types.VerifiedCommit{})
 		if err != nil {
+			rs.CurrentRoundState = sm.CurrentRoundState{}
 			return fmt.Errorf("ProcessProposal abci method: %w", err)
 		}
 		rs.CurrentRoundState = uncommittedState
@@ -155,8 +159,10 @@ func (c *blockExecutor) refuseUnprocessedCommit(rs *cstypes.RoundState, commit *
 //
 // On a rejection it learns the application's expectation for the block and
 // round, if not yet known, from ExtendVote; see commitExpectations. ExtendVote
-// panics on an ABCI error, as every other ABCI call on this path does.
-func (c *blockExecutor) verifyCommitExtensions(ctx context.Context, commit *types.Commit) error {
+// is asked only while rs holds the block processed for commit.Round, the
+// context it answers from, and panics on an ABCI error or an invalid response,
+// as every other ABCI call on this path does.
+func (c *blockExecutor) verifyCommitExtensions(ctx context.Context, rs *cstypes.RoundState, commit *types.Commit) error {
 	exp := c.expectations.lookup(commit)
 	if exp != nil && exp.rejected && exp.matches(commit) {
 		return errRejectedBefore(commit)
@@ -166,6 +172,9 @@ func (c *blockExecutor) verifyCommitExtensions(ctx context.Context, commit *type
 		return err
 	}
 	if exp == nil {
+		if !processedFor(rs, commit.Round) {
+			return err
+		}
 		exp = c.expectations.learn(commit, c.expectedExtensions(ctx, commit))
 	}
 	if exp.matches(commit) {
