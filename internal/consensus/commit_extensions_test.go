@@ -814,6 +814,9 @@ func TestForeignRoundCommitsCannotForceReprocessing(t *testing.T) {
 	require.NoError(t, err)
 	f.checker.expected = expected.VoteExtensions.ToExtendProto()
 	require.Greater(t, len(variants[1])+len(variants[2]), 66, "more vectors than a 64-entry verdict cache holds")
+	// The attack is bounded here by the expectations, not by the rate-limited
+	// verification budget, which this many commits would outrun on a slow run.
+	f.node.ctrl.Get(TryAddCommitType).(*TryAddCommitAction).verificationBudget = &tokenBudget{tokens: 1_000_000}
 	f.holdBlock(ctx, t)
 	f.checker.processedRounds = nil
 	counter := &recordingCounter{}
@@ -1057,6 +1060,8 @@ func (e *commitCheckingExecutor) VerifyVoteExtension(ctx context.Context, vote *
 		return e.Executor.VerifyVoteExtension(ctx, vote)
 	}
 	require.Zero(e.t, e.store.Height(), "verification must precede persistence")
+	require.True(e.t, e.processedLast(vote.Round, vote.BlockID.Hash),
+		"a commit is verified only in the context of its own round's ProcessProposal")
 	require.Equal(e.t, e.block.Hash(), vote.BlockID.Hash)
 	require.Equal(e.t, e.block.Height, vote.Height)
 	if e.round >= 0 {
@@ -1075,6 +1080,9 @@ func (e *commitCheckingExecutor) VerifyVoteExtension(ctx context.Context, vote *
 func (e *commitCheckingExecutor) FinalizeBlock(ctx context.Context, state sm.State, rs sm.CurrentRoundState,
 	id types.BlockID, block *types.Block, commit *types.Commit, last types.VerifiedCommit) (sm.State, *abci.ResponseFinalizeBlock, error) {
 	require.Equal(e.t, block.Height, e.store.Height(), "save must still precede finalization")
+	require.Equal(e.t, commit.Round, rs.Round, "FinalizeBlock must get the result processed for the commit's round")
+	require.True(e.t, e.processedLast(commit.Round, block.Hash()),
+		"the application must finalize the round it processed last")
 	e.calls = append(e.calls, "finalize")
 	if e.onFinalize != nil {
 		e.onFinalize(commit)
