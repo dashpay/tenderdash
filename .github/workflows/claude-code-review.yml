@@ -86,18 +86,31 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
-      issues: write
-      pull-requests: write
-      id-token: write
     env:
       ANTHROPIC_MODEL: ${{ vars.CLAUDE_MODEL || 'opus' }}
       CLAUDE_CODE_OAUTH_TOKEN_LKLIMEK: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_LKLIMEK }}
     steps:
+      # Mint after the test gate: the token expires after one hour.
+      # Keep the App private key in this step's inputs only.
+      - name: Create claudbot token
+        id: app-token
+        if: ${{ env.CLAUDE_CODE_OAUTH_TOKEN_LKLIMEK != '' }}
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.CLAUDBOT_CLIENT_ID }}
+          private-key: ${{ secrets.CLAUDBOT_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: read
+          permission-issues: write
+          permission-pull-requests: write
+
       - name: Claudius Review
         if: ${{ env.CLAUDE_CODE_OAUTH_TOKEN_LKLIMEK != '' }}
-        uses: lklimek/claudius-review-action@main
+        # Includes trusted review detection (#19) and required App tokens (#20).
+        uses: lklimek/claudius-review-action@e90393f516b2af8db5b7b0b93f4ff3d87fd6add1
         with:
           claude_code_oauth_token: ${{ env.CLAUDE_CODE_OAUTH_TOKEN_LKLIMEK }}
+          github_token: ${{ steps.app-token.outputs.token }}
           memcan_url: ${{ vars.MEMCAN_URL }}
           memcan_api_key: ${{ secrets.MEMCAN_API_KEY }}
           claude_extra_args: "--permission-mode auto"
