@@ -115,8 +115,10 @@ func processedFor(rs *cstypes.RoundState, round int32) bool {
 // would not.
 func (c *blockExecutor) ensureOwnRound(ctx context.Context, rs *cstypes.RoundState) error {
 	processed := rs.CurrentRoundState.Round
-	if rs.Proposal == nil || !rs.ProposalBlock.HashesTo(rs.Proposal.BlockID.Hash) ||
-		processed == rs.Round || !processedFor(rs, processed) {
+	// Cheapest first: this runs for every peer precommit, and hashing the block
+	// is needed only once another round was processed last.
+	if processed == rs.Round || rs.Proposal == nil || !processedFor(rs, processed) ||
+		!rs.ProposalBlock.HashesTo(rs.Proposal.BlockID.Hash) {
 		return nil
 	}
 	return c.ensureProcess(ctx, rs, rs.Round)
