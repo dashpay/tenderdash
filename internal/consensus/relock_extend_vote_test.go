@@ -238,6 +238,10 @@ func TestStateLock_RelockLateProposalProcessesBeforeExtending(t *testing.T) {
 	ensurePrecommit(t, voteCh, height, round)
 	require.Empty(t, app.Violations())
 	validatePrecommit(ctx, t, cs1, round, round, vss[0], blockID.Hash, blockID.Hash)
+	// The polka handling made B valid for this round; relock relies on it.
+	rs := cs1.GetRoundState()
+	require.Equal(t, round, rs.ValidRound)
+	require.True(t, rs.ValidBlock.HashesTo(blockID.Hash))
 
 	extended := app.Extended()
 	require.NotEmpty(t, extended)

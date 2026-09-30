@@ -150,16 +150,23 @@ func (c *EnterPrecommitAction) Execute(ctx context.Context, stateEvent StateEven
 		// Validate the block.
 		c.blockExec.mustValidate(ctx, stateData)
 
+		// Already locked on it: update the locked round. ValidBlock needs no update
+		// here: the polka and the proposal block are both for this round, and
+		// whichever arrived last already made the block valid for this round
+		// (addVoteUpdateValidBlockMw or ProposalCompletedAction).
 		if stateData.LockedBlock.HashesTo(blockID.Hash) {
 			logger.Debug("precommit step: +2/3 prevoted locked block; relocking", "hash", blockID.Hash)
 			stateData.LockedRound = round
+
 			c.eventPublisher.PublishRelockEvent(stateData.RoundState)
-		} else {
-			logger.Debug("precommit step: +2/3 prevoted proposal block; locking", "hash", blockID.Hash)
-			stateData.updateLockedBlock()
-			c.eventPublisher.PublishLockEvent(stateData.RoundState)
+			c.voteSigner.signAddVote(ctx, stateData, tmproto.PrecommitType, blockID)
+			return nil
 		}
 
+		logger.Debug("precommit step: +2/3 prevoted proposal block; locking", "hash", blockID.Hash)
+		stateData.updateLockedBlock()
+
+		c.eventPublisher.PublishLockEvent(stateData.RoundState)
 		c.voteSigner.signAddVote(ctx, stateData, tmproto.PrecommitType, blockID)
 
 		if stateData.updateValidBlock() {
