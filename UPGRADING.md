@@ -56,10 +56,11 @@ and round, on any node including non-validators, right after `ProcessProposal`
 of that round. A commit's extension list is not covered by any signature beyond
 each entry's own, so one genuine commit yields any number of signature-valid
 vectors; Tenderdash refuses, without processing the block again or calling the
-application, a later commit of that block and round whose threshold-recoverable
-vector (type, extension and sign request ID, in order; an empty sign request ID
-equals an unset one) differs from what `ExtendVote` returned, or equals it and
-was rejected. This bounds the `ProcessProposal` executions commits can force
+application, a later commit of that block and round that would need the block
+processed again, when its threshold-recoverable vector (type, extension and sign
+request ID, in order; an empty sign request ID equals an unset one) differs from
+what `ExtendVote` returned, or equals it and was rejected. A commit of the round
+processed last still goes to the application. This bounds the `ProcessProposal` executions commits can force
 per height to 2·G, plus the one that finalizes, where G is the number of rounds
 other than the node's own holding a commit with a valid threshold block
 signature for the held block, independent of peers and vectors. Applications

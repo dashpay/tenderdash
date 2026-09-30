@@ -534,8 +534,9 @@ Tenderdash calls `VerifyVoteExtension` for two kinds of request, told apart by
           persisted and the node waits for a peer's commit. The block is processed again only for a
           commit of a round other than the one processed last. After a rejection, Tenderdash calls
           `ExtendVote` for the block and round, and refuses, without processing the block again or
-          calling the Application, a commit of that round whose vector differs from the one returned,
-          or equals it and was rejected. Consensus WAL replay follows these rules;
+          calling the Application, a later commit of that round that would need the block processed
+          again, when its vector differs from the one returned or equals it and was rejected.
+          Consensus WAL replay follows these rules;
         * block sync: the block is not applied; the peer that served it is dropped and the height is
           requested again;
         * handshake catch-up (application behind the block store): the commit is already in the block
