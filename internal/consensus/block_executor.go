@@ -76,7 +76,9 @@ func (c *blockExecutor) create(ctx context.Context, rs *cstypes.RoundState, roun
 // for the same block and round, as after a block sync handover, re-executes it.
 // A failed ProcessProposal clears CurrentRoundState: the application may have
 // dropped the block it processed before (Drive does), so no round counts as
-// processed until one succeeds.
+// processed until one succeeds. The cleared value is never used: validate and
+// finalize, the only readers of its fields, run right after a successful
+// ensureProcess, and everything else asks processedFor.
 func (c *blockExecutor) ensureProcess(ctx context.Context, rs *cstypes.RoundState, round int32) error {
 	block := rs.ProposalBlock
 	// Above the condition, not inside it: either operand can reach the block,
@@ -117,6 +119,15 @@ func processedFor(rs *cstypes.RoundState, round int32) bool {
 // It does nothing unless the proposal block is this round's proposal and was
 // last processed for another round, so it never processes a block the round
 // would not.
+//
+// After a failed ProcessProposal, here or elsewhere, no round counts as
+// processed, so it does nothing and is not retried for every resent precommit:
+// the precommit goes to VerifyVoteExtension with no known context until a
+// ProcessProposal succeeds on the round's own path (prevote, precommit or
+// commit). That is safe. VerifyVoteExtension is not fatal and, unlike
+// ExtendVote, needs no round's context: Drive checks only the height and
+// rejects without an execution context. A rejected precommit is not stored,
+// so gossip delivers it again.
 func (c *blockExecutor) ensureOwnRound(ctx context.Context, rs *cstypes.RoundState) error {
 	processed := rs.CurrentRoundState.Round
 	// Cheapest first: this runs for every peer precommit, and hashing the block
