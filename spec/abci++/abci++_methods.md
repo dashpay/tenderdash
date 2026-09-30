@@ -448,7 +448,13 @@ When a validator _p_ enters Tendermint consensus round _r_, height _h_, in which
       in a previous call to `ProcessProposal` or `PrepareProposal` for the current height.
     * `ResponseExtendVote.vote_extensions` will only be attached to a non-`nil` Precommit message. If Tendermint is to
       precommit `nil`, it will not call `RequestExtendVote`.
-    * The Application logic that creates the extensions can be non-deterministic.
+    * `ExtendVote` MUST be free of side effects, and the threshold-recoverable subset of its response
+      MUST be exactly the vector the Application accepts in a commit-level `VerifyVoteExtension` for
+      the same block, height and round.
+    * Tenderdash may also call `ExtendVote` on any node, a non-validator included, right after
+      `ProcessProposal` of a block for a round, to learn the vector a commit of that block and round
+      must carry; see [VerifyVoteExtension](#verifyvoteextension). An ABCI error from this call is
+      fatal, as on the Precommit path.
 
 #### When does Tendermint call it?
 
@@ -524,10 +530,12 @@ Tenderdash calls `VerifyVoteExtension` for two kinds of request, told apart by
           already holds is checked first and never changes the round. A commit for a later round whose
           block has not arrived moves the node to that round on its threshold signature alone; it is
           checked when the block arrives, then the commits other peers sent meanwhile. Copies of a
-          commit already waiting are dropped, and a vector the Application already rejected at the
-          height is refused without calling it again. If the node's own commit is rejected, nothing is
+          commit already waiting are dropped. If the node's own commit is rejected, nothing is
           persisted and the node waits for a peer's commit. The block is processed again only for a
-          commit of a round other than the one processed last. Consensus WAL replay follows these rules;
+          commit of a round other than the one processed last. After a rejection, Tenderdash calls
+          `ExtendVote` for the block and round, and refuses, without processing the block again or
+          calling the Application, a commit of that round whose vector differs from the one returned,
+          or equals it and was rejected. Consensus WAL replay follows these rules;
         * block sync: the block is not applied; the peer that served it is dropped and the height is
           requested again;
         * handshake catch-up (application behind the block store): the commit is already in the block

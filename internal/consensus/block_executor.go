@@ -12,6 +12,7 @@ import (
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/eventemitter"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -22,8 +23,9 @@ type blockExecutor struct {
 	blockExec          sm.Executor
 	proposedAppVersion uint64
 	committedState     sm.State
-	// verdicts is touched only by the consensus goroutine; mtx does not guard it.
-	verdicts commitVerdicts
+	// expectations is touched only by the consensus goroutine; mtx does not
+	// guard it.
+	expectations commitExpectations
 }
 
 // Create the next block to propose and return it. Returns nil block upon error.
@@ -79,9 +81,8 @@ func (c *blockExecutor) ensureProcess(ctx context.Context, rs *cstypes.RoundStat
 	if block == nil {
 		return fmt.Errorf("%w: height %d, round %d", ErrProposalBlockNotSet, rs.Height, round)
 	}
-	crs := rs.CurrentRoundState
-	if crs.Params.Source != sm.ProcessProposalSource || !crs.MatchesBlock(block.Header, round) {
-		c.logger.Trace("CurrentRoundState is outdated, executing ProcessProposal", "crs", crs)
+	if !processedFor(rs, round) {
+		c.logger.Trace("CurrentRoundState is outdated, executing ProcessProposal", "crs", rs.CurrentRoundState)
 		// consensus holds no proof for the block's LastCommit, so it is verified
 		// in full
 		uncommittedState, err := c.blockExec.ProcessProposal(ctx, block, round, c.getCommittedState(), true,
@@ -94,35 +95,97 @@ func (c *blockExecutor) ensureProcess(ctx context.Context, rs *cstypes.RoundStat
 	return nil
 }
 
-// knownRejectedCommit returns an error wrapping sm.ErrCommitExtensionsRejected
-// if the application already rejected commit's extension vector at this height,
-// so that the commit is dropped without processing the block again.
-func (c *blockExecutor) knownRejectedCommit(commit *types.Commit) error {
-	if accepted, known := c.verdicts.lookup(newCommitKey(commit)); known && !accepted {
+// processedFor reports whether rs.CurrentRoundState is the application's result of
+// ProcessProposal for rs.ProposalBlock at round, so that ensureProcess would
+// not call it.
+func processedFor(rs *cstypes.RoundState, round int32) bool {
+	crs := &rs.CurrentRoundState
+	return rs.ProposalBlock != nil && crs.Params.Source == sm.ProcessProposalSource &&
+		crs.MatchesBlock(rs.ProposalBlock.Header, round)
+}
+
+// ensureOwnRound undoes a commit check that left the application processing
+// the round's proposal block for another round: it has the block processed for
+// rs.Round again. Applications keeping one execution context per height, like
+// Drive, answer ExtendVote and VerifyVoteExtension from the round processed
+// last, and Drive's ExtendVote fails for any other.
+//
+// It does nothing unless the proposal block is this round's proposal and was
+// last processed for another round, so it never processes a block the round
+// would not.
+func (c *blockExecutor) ensureOwnRound(ctx context.Context, rs *cstypes.RoundState) error {
+	crs := &rs.CurrentRoundState
+	if rs.Proposal == nil || rs.ProposalBlock == nil || !rs.ProposalBlock.HashesTo(rs.Proposal.BlockID.Hash) ||
+		crs.Params.Source != sm.ProcessProposalSource || crs.Round == rs.Round ||
+		!crs.MatchesBlock(rs.ProposalBlock.Header, crs.Round) {
+		return nil
+	}
+	return c.ensureProcess(ctx, rs, rs.Round)
+}
+
+// refuseUnprocessedCommit returns an error wrapping
+// sm.ErrCommitExtensionsRejected when checking commit would need its block
+// processed again for commit.Round, and the application's expectation for that
+// block and round already refuses the commit's vector: it differs from the one
+// expected, or is the one expected and was rejected. See commitExpectations.
+//
+// A commit for the round processed last is not refused here: checking it costs
+// no ProcessProposal, and the application decides.
+func (c *blockExecutor) refuseUnprocessedCommit(rs *cstypes.RoundState, commit *types.Commit) error {
+	if processedFor(rs, commit.Round) {
+		return nil
+	}
+	exp := c.expectations.lookup(commit)
+	switch {
+	case exp == nil:
+		return nil
+	case !exp.matches(commit):
+		return fmt.Errorf("commit extensions at height %d round %d block %X differ from those the application expects: %w",
+			commit.Height, commit.Round, commit.BlockID.Hash, sm.ErrCommitExtensionsRejected)
+	case exp.rejected:
 		return errRejectedBefore(commit)
 	}
 	return nil
 }
 
 // verifyCommitExtensions asks the application to accept commit's extension
-// vector, unless it has already judged that vector at this height, and records
-// the verdict. The block must already be processed for commit.Round.
+// vector, unless that is the vector expected for commit's block and round and it
+// was already rejected. The block must already be processed for commit.Round.
+//
+// On a rejection it learns the application's expectation for the block and
+// round, if not yet known, from ExtendVote; see commitExpectations. ExtendVote
+// panics on an ABCI error, as every other ABCI call on this path does.
 func (c *blockExecutor) verifyCommitExtensions(ctx context.Context, commit *types.Commit) error {
-	key := newCommitKey(commit)
-	if accepted, known := c.verdicts.lookup(key); known {
-		if accepted {
-			return nil
-		}
+	exp := c.expectations.lookup(commit)
+	if exp != nil && exp.rejected && exp.matches(commit) {
 		return errRejectedBefore(commit)
 	}
 	err := sm.VerifyCommitExtensions(ctx, c.blockExec, commit)
-	switch {
-	case err == nil:
-		c.verdicts.record(key, true)
-	case errors.Is(err, sm.ErrCommitExtensionsRejected):
-		c.verdicts.record(key, false)
+	if !errors.Is(err, sm.ErrCommitExtensionsRejected) {
+		return err
+	}
+	if exp == nil {
+		exp = c.expectations.learn(commit, c.expectedExtensions(ctx, commit))
+	}
+	if exp.matches(commit) {
+		exp.rejected = true
 	}
 	return err
+}
+
+// expectedExtensions returns the threshold-recoverable extensions the
+// application's ExtendVote returns for commit's block and round, as a commit
+// carries them, without signatures. The block must be processed for
+// commit.Round: that is the context the application answers from.
+func (c *blockExecutor) expectedExtensions(ctx context.Context, commit *types.Commit) []*tmproto.VoteExtension {
+	vote := &types.Vote{
+		Type:    tmproto.PrecommitType,
+		Height:  commit.Height,
+		Round:   commit.Round,
+		BlockID: commit.BlockID,
+	}
+	c.blockExec.ExtendVote(ctx, vote)
+	return types.NewCommit(commit.Height, commit.Round, commit.BlockID, vote.VoteExtensions, nil).ThresholdVoteExtensions
 }
 
 func errRejectedBefore(commit *types.Commit) error {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -78,4 +79,29 @@ func TestCommitCandidates(t *testing.T) {
 		c.add(6, commit(0), "b", false)
 		require.Empty(t, popAll(&c, 5))
 	})
+}
+
+func TestCommitKey(t *testing.T) {
+	base := &types.Commit{Height: 5, Round: 1, BlockID: types.BlockID{Hash: []byte{1}},
+		ThresholdVoteExtensions: tmproto.VoteExtensions{{Extension: []byte("a")}}}
+	require.Equal(t, newCommitKey(base), newCommitKey(base))
+
+	sigOnly := *base
+	sigOnly.ThresholdBlockSignature = []byte("other signature")
+	require.Equal(t, newCommitKey(base), newCommitKey(&sigOnly), "the block signature is not part of the key")
+
+	for name, change := range map[string]func(c *types.Commit){
+		"height":    func(c *types.Commit) { c.Height++ },
+		"round":     func(c *types.Commit) { c.Round++ },
+		"block":     func(c *types.Commit) { c.BlockID = types.BlockID{Hash: []byte{2}} },
+		"extension": func(c *types.Commit) { c.ThresholdVoteExtensions = tmproto.VoteExtensions{{Extension: []byte("b")}} },
+		"split": func(c *types.Commit) {
+			c.ThresholdVoteExtensions = tmproto.VoteExtensions{{Extension: []byte("a")}, {}}
+		},
+		"stripped": func(c *types.Commit) { c.ThresholdVoteExtensions = nil },
+	} {
+		changed := *base
+		change(&changed)
+		require.NotEqual(t, newCommitKey(base), newCommitKey(&changed), name)
+	}
 }

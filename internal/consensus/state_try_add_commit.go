@@ -143,7 +143,7 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 // the parked one, which is always tried, or to the one its sender already
 // queued adds nothing to try and is dropped unverified. An equal commit queued
 // by another peer is not enough: that sender could still replace it or
-// disconnect; the verdict cache keeps the application from judging it twice.
+// disconnect.
 func (cs *TryAddCommitAction) queueCandidate(ctx context.Context, stateData *StateData, event *TryAddCommitEvent) error {
 	commit := event.Commit
 	if err := commit.ValidateBasic(); err != nil {
@@ -321,10 +321,11 @@ func verifyHeldCommit(
 
 // verifyProcessedCommit runs the held block through the application, validates
 // it and asks the application to accept the commit's extension vector: all a
-// commit needs before it may be saved and finalized. A vector the application
-// already rejected at this height is refused before the block is processed.
+// commit needs before it may be saved and finalized. A commit whose vector the
+// application's expectation for its block and round already refuses is refused
+// before the block is processed again (see commitExpectations).
 func verifyProcessedCommit(ctx context.Context, blockExec *blockExecutor, stateData *StateData, commit *types.Commit) error {
-	if err := blockExec.knownRejectedCommit(commit); err != nil {
+	if err := blockExec.refuseUnprocessedCommit(&stateData.RoundState, commit); err != nil {
 		return err
 	}
 	err := blockExec.ensureProcess(ctx, &stateData.RoundState, commit.Round)

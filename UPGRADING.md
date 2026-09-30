@@ -35,8 +35,7 @@ checked when the block arrives, followed by the commits other peers sent
 meanwhile, one queue slot per connected peer, so an attacker cannot push an
 honest peer's commit out; a copy of the parked commit, or of the commit its
 sender already queued, is dropped, while a copy of another peer's queued commit
-takes the sender's own slot, and a vector the application already rejected at the height is refused
-without asking it again. If the commit assembled from the node's own +2/3
+takes the sender's own slot. If the commit assembled from the node's own +2/3
 precommits is rejected, the node logs the error `application rejected the commit
 of this node's own precommits; waiting for a peer's commit`, persists nothing and
 waits at the height, with no timeout, for a peer's commit instead of panicking
@@ -50,6 +49,31 @@ Every rejection is counted by the `consensus_commit_verify_failures` counter
 with `reason="extensions_rejected"` (see [metrics](docs/nodes/metrics.md)); a
 sustained rate means the application and the network disagree on extension
 vectors.
+
+**`ExtendVote` is now also a commit oracle.** After the application rejects a
+commit's vote extensions, Tenderdash calls `ExtendVote` for that block, height
+and round, on any node including non-validators, right after `ProcessProposal`
+of that round. A commit's extension list is not covered by any signature beyond
+each entry's own, so one genuine commit yields any number of signature-valid
+vectors; Tenderdash refuses, without processing the block again or calling the
+application, a later commit of that block and round whose threshold-recoverable
+vector (type, extension and sign request ID, in order; an empty sign request ID
+equals an unset one) differs from what `ExtendVote` returned, or equals it and
+was rejected. This bounds the `ProcessProposal` executions commits can force
+per height to 2·G, plus the one that finalizes, where G is the number of rounds
+other than the node's own holding a commit with a valid threshold block
+signature for the held block, independent of peers and vectors. Applications
+must therefore keep `ExtendVote` free of side effects and return exactly the
+vector their commit-level `VerifyVoteExtension` accepts; an ABCI error from this
+call is fatal. Drive and the e2e application do; kvstore extends with no
+vector and accepts any. With an application whose `ExtendVote` returns another
+vector than it accepts, a node may be unable to finalize from a peer's commit
+of a round at which it already rejected one.
+
+Before verifying a peer's precommit, and before extending its own precommit
+when relocking, Tenderdash has the round's proposal block processed for the
+current round again if a rejected commit of another round left the application
+on that round.
 
 Tenderdash processes a block again with `ProcessProposal` when it returns to a
 round after processing another round at the same height, and may repeat

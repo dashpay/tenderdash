@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -61,17 +62,17 @@ func newCommitExtFixture(ctx context.Context, t *testing.T) *commitExtFixture {
 }
 
 // sign returns a commit for the fixture's block at round, carrying extension.
-func (f *commitExtFixture) sign(ctx context.Context, t *testing.T, round int32, extension tmproto.VoteExtension) *types.Commit {
+func (f *commitExtFixture) sign(ctx context.Context, t *testing.T, round int32, extensions ...tmproto.VoteExtension) *types.Commit {
 	t.Helper()
-	return f.signAt(ctx, t, f.block.Height, round, extension)
+	return f.signAt(ctx, t, f.block.Height, round, extensions...)
 }
 
 func (f *commitExtFixture) signAt(ctx context.Context, t *testing.T, height int64, round int32,
-	extension tmproto.VoteExtension) *types.Commit {
+	extensions ...tmproto.VoteExtension) *types.Commit {
 	t.Helper()
 	sd := f.stateData
 	votes := types.NewVoteSet(sd.state.ChainID, height, round, tmproto.PrecommitType, sd.Validators)
-	commit, err := factory.MakeCommit(ctx, f.commit.BlockID, height, round, votes, sd.Validators, f.privVals, extension)
+	commit, err := factory.MakeCommit(ctx, f.commit.BlockID, height, round, votes, sd.Validators, f.privVals, extensions...)
 	require.NoError(t, err)
 	return commit
 }
@@ -532,7 +533,8 @@ func TestParkedCommitRejectFallsBackToOwnPrecommits(t *testing.T) {
 // The commit built from this node's own quorum is checked in tryFinalizeCommit.
 // A rejection there persists nothing and leaves the node at its height, where
 // a peer's commit carrying a vector the application accepts can still finish it.
-// The same commit from a peer is refused without asking the application again.
+// The same commit from a peer needs no ProcessProposal, so the application
+// judges it again.
 func TestOwnPrecommitsCommitRejected(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -540,6 +542,10 @@ func TestOwnPrecommitsCommitRejected(t *testing.T) {
 	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
 	counter := &recordingCounter{}
 	f.node.metrics.CommitVerifyFailures = counter
+	var logged bytes.Buffer
+	logger, err := log.NewLogger("debug", &logged)
+	require.NoError(t, err)
+	f.node.ctrl.Get(TryFinalizeCommitType).(*TryFinalizeCommitAction).logger = logger
 
 	// Local precommits carry no extensions; the application expects the
 	// withdrawal vector.
@@ -550,16 +556,18 @@ func TestOwnPrecommitsCommitRejected(t *testing.T) {
 
 	require.Equal(t, calls(1), f.checker.calls)
 	require.Equal(t, float64(1), counter.value)
+	require.Contains(t, logged.String(), `"level":"error"`,
+		"the rejection of this node's own commit is a local fault and logs at Error")
 	require.Zero(t, f.node.blockStore.Height())
 	require.Equal(t, f.block.Height, f.stateData.Height)
 	require.Nil(t, f.stateData.Commit)
 
 	require.ErrorIs(t, f.sendCommit(ctx, f.commit, "relayer"), sm.ErrCommitExtensionsRejected)
-	require.Equal(t, calls(1), f.checker.calls, "a vector already rejected is not checked again")
+	require.Equal(t, calls(2), f.checker.calls, "the block is not processed again")
 
 	require.NoError(t, f.sendCommit(ctx, f.good, "honest"))
 	f.requireCommitted(t, f.good)
-	require.Equal(t, calls(2, "finalize"), f.checker.calls)
+	require.Equal(t, calls(3, "finalize"), f.checker.calls)
 }
 
 func TestAcceptedCommitDiscardsQueuedCandidates(t *testing.T) {
@@ -739,31 +747,185 @@ func TestSameRoundReprocessedAfterHandover(t *testing.T) {
 	require.Equal(t, []int32{0}, f.checker.processedRounds)
 }
 
-// A commit whose vector the application rejected is refused again without
-// processing the block or asking the application, so a peer alternating
-// rejected commits of two rounds cannot make the block execute per message.
-func TestRejectedCommitVerdictIsReused(t *testing.T) {
+// thresholdExtension is a THRESHOLD_RECOVER extension, whose sign request ID
+// no signature covers.
+var thresholdExtension = tmproto.VoteExtension{Type: tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+	Extension: []byte("threshold")}
+
+// signatureValidVariants returns vectors that each verify under genuine's
+// threshold signatures while differing from genuine's: the list's shape, a
+// THRESHOLD_RECOVER entry's sign request ID and a raw entry signed at another
+// height are covered by no signature of genuine's round.
+func (f *commitExtFixture) signatureValidVariants(ctx context.Context, t *testing.T, genuine *types.Commit,
+	junkIDs int) []*types.Commit {
+	t.Helper()
+	raw, threshold := genuine.ThresholdVoteExtensions[0], genuine.ThresholdVoteExtensions[1]
+	replayed := withdrawalExtension
+	replayed.Extension = crypto.Checksum([]byte("earlier withdrawal"))
+	replayed.XSignRequestId = &tmproto.VoteExtension_SignRequestId{SignRequestId: []byte("earlier request")}
+	foreignRaw := f.signAt(ctx, t, genuine.Height+10, genuine.Round, replayed).ThresholdVoteExtensions[0]
+
+	vectors := []tmproto.VoteExtensions{nil, {raw}, {threshold}, {threshold, raw}, {raw, threshold, raw},
+		{foreignRaw, threshold}, {raw, threshold, foreignRaw}}
+	for n := 2; n <= types.MaxVoteExtensions; n++ {
+		dup := make(tmproto.VoteExtensions, n)
+		for i := range dup {
+			dup[i] = raw
+		}
+		vectors = append(vectors, dup)
+	}
+	for i := range junkIDs {
+		junk := threshold.Clone()
+		junk.XSignRequestId = &tmproto.VoteExtension_SignRequestId{SignRequestId: []byte(fmt.Sprintf("junk-%d", i))}
+		vectors = append(vectors, tmproto.VoteExtensions{raw, &junk})
+	}
+
+	sd := &f.stateData
+	variants := make([]*types.Commit, 0, len(vectors))
+	for _, vector := range vectors {
+		variant := *genuine
+		variant.ThresholdVoteExtensions = vector
+		require.NoError(t, sd.Validators.VerifyCommit(sd.state.ChainID, variant.BlockID, variant.Height, &variant))
+		variants = append(variants, &variant)
+	}
+	return variants
+}
+
+// Only the block and round of a commit are authenticated; its extension list
+// is not, so a peer holding genuine commits of two rounds has any number of
+// signature-valid vectors to alternate between. Once the application's
+// expectation for a round is learned, a commit that would have the block
+// processed again for that round is refused without it unless it carries the
+// expected vector, so the block is processed a bounded number of times however
+// many vectors arrive, and the genuine commit still finishes the height.
+func TestForeignRoundCommitsCannotForceReprocessing(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	f := newCommitExtFixture(ctx, t)
 	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
 	f.checker.round = -1
-	future := *f.sign(ctx, t, 2, withdrawalExtension)
-	future.ThresholdVoteExtensions = nil
+	genuine := map[int32]*types.Commit{}
+	variants := map[int32][]*types.Commit{}
+	for _, round := range []int32{1, 2} {
+		genuine[round] = f.sign(ctx, t, round, withdrawalExtension, thresholdExtension)
+		variants[round] = f.signatureValidVariants(ctx, t, genuine[round], 20)
+	}
+	expected, err := genuine[1].GetCanonicalVote()
+	require.NoError(t, err)
+	f.checker.expected = expected.VoteExtensions.ToExtendProto()
+	require.Greater(t, len(variants[1])+len(variants[2]), 66, "more vectors than a 64-entry verdict cache holds")
+	f.holdBlock(ctx, t)
+	f.checker.processedRounds = nil
+	counter := &recordingCounter{}
+	f.node.metrics.CommitVerifyFailures = counter
+
+	verifies := 0
+	for i := range variants[1] {
+		for _, round := range []int32{1, 2} {
+			if f.checker.processedLast(round, f.block.Hash()) {
+				verifies++ // the round processed last is the application's to judge
+			}
+			require.ErrorIs(t, f.sendCommit(ctx, variants[round][i], "attacker"), sm.ErrCommitExtensionsRejected)
+		}
+	}
+
+	const foreignRounds = 2
+	require.Equal(t, []int32{1, 2}, f.checker.processedRounds,
+		"each round is processed once, to learn what the application expects")
+	require.LessOrEqual(t, len(f.checker.processedRounds), 2*foreignRounds)
+	require.Equal(t, []int32{1, 2}, f.checker.extendedRounds, "the expectation is learned once per round")
+	require.Len(t, slices.DeleteFunc(slices.Clone(f.checker.calls), func(c string) bool { return c != "verify" }),
+		foreignRounds+verifies, "a commit refused before processing never reaches the application")
+	require.Equal(t, float64(2*len(variants[1])), counter.value, "every refusal is counted")
+	require.Zero(t, f.stateData.Round, "a rejected commit must not change the round")
+	select {
+	case report := <-f.node.peerErrorQueue.ch:
+		t.Fatalf("a refused commit must not evict its sender: %v", report)
+	default:
+	}
+
+	f.checker.calls = nil
+	require.NoError(t, f.sendCommit(ctx, genuine[1], "honest"))
+	f.requireCommitted(t, genuine[1])
+	require.Equal(t, []int32{1, 2, 1}, f.checker.processedRounds, "the genuine commit has its round processed again")
+	require.Equal(t, []string{"process", "verify", "finalize"}, f.checker.calls[:3])
+}
+
+// An application that rejects the very vector its ExtendVote returned breaks
+// the contract, and its rejection is remembered: the vector is refused
+// without processing the block for that round again.
+func TestRejectedExpectedVectorIsRemembered(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := newCommitExtFixture(ctx, t)
+	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+	f.checker.round = -1
+	f.checker.expected = []*abci.ExtendVoteExtension{}
+	extended, err := f.good.GetCanonicalVote()
+	require.NoError(t, err)
+	f.checker.extended = extended.VoteExtensions.ToExtendProto()
+	one, two := f.sign(ctx, t, 1, withdrawalExtension), f.sign(ctx, t, 2, withdrawalExtension)
 	f.holdBlock(ctx, t)
 	f.checker.processedRounds = nil
 
 	for range 3 {
-		require.ErrorIs(t, f.sendCommit(ctx, &future, "attacker"), sm.ErrCommitExtensionsRejected)
-		require.ErrorIs(t, f.sendCommit(ctx, f.bad, "attacker"), sm.ErrCommitExtensionsRejected)
+		require.ErrorIs(t, f.sendCommit(ctx, one, "attacker"), sm.ErrCommitExtensionsRejected)
+		require.ErrorIs(t, f.sendCommit(ctx, two, "attacker"), sm.ErrCommitExtensionsRejected)
 	}
-	require.Equal(t, []int32{2, 0}, f.checker.processedRounds, "each round is processed only for its first rejection")
-	require.Equal(t, []string{"process", "verify", "process", "verify"}, f.checker.calls)
+	require.Equal(t, []int32{1, 2}, f.checker.processedRounds)
+	require.Equal(t, []int32{1, 2}, f.checker.extendedRounds)
+	require.Equal(t, []string{"process", "verify", "process", "verify"}, f.checker.calls,
+		"neither round's expected vector is judged twice")
+}
 
-	f.checker.calls = nil
-	require.NoError(t, f.sendCommit(ctx, f.good, "honest"))
-	f.requireCommitted(t, f.good)
-	require.Equal(t, []string{"verify", "finalize"}, f.checker.calls)
+// A rejected commit of another round leaves the application processing that
+// round. Before the node asks it about its own round again, verifying a peer's
+// precommit or extending its own on a relock, it has the round's block
+// processed for that round again: Drive answers from the round processed last
+// and fails ExtendVote for any other.
+func TestOwnRoundRestoredAfterForeignCommitRejected(t *testing.T) {
+	for _, tc := range []string{"peer precommit", "relock"} {
+		t.Run(tc, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			f := newCommitExtFixture(ctx, t)
+			ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+			f.checker.round = -1
+			f.checker.checkPrecommitContext = true
+			f.node.voteSigner.voteExtender = f.checker
+			sd := &f.stateData
+			sd.Proposal = &types.Proposal{Height: f.block.Height, Round: 0, POLRound: -1,
+				BlockID: f.commit.BlockID, Timestamp: f.block.Time}
+			f.holdBlock(ctx, t)
+			future := *f.sign(ctx, t, 2, withdrawalExtension)
+			future.ThresholdVoteExtensions = nil
+			require.ErrorIs(t, f.sendCommit(ctx, &future, "attacker"), sm.ErrCommitExtensionsRejected)
+			require.Zero(t, sd.Round)
+			require.True(t, f.checker.processedLast(2, f.block.Hash()), "the rejected commit's round is processed last")
+			f.checker.processedRounds, f.checker.extendedRounds = nil, nil
+
+			switch tc {
+			case "peer precommit":
+				var peerVote *types.Vote
+				for _, vote := range f.precommit(ctx, t, f.commit.BlockID) {
+					if !bytes.Equal(vote.ValidatorProTxHash, f.node.privValidator.ProTxHash) {
+						peerVote = vote
+					}
+				}
+				require.NotNil(t, peerVote)
+				f.deliver(ctx, t, sd, []*types.Vote{peerVote})
+				require.NotNil(t, sd.Votes.Precommits(0).GetByIndex(peerVote.ValidatorIndex),
+					"the precommit is verified against its own round")
+			case "relock":
+				sd.LockedRound, sd.LockedBlock, sd.LockedBlockParts = 0, f.block, f.parts
+				sd.updateRoundStep(0, cstypes.RoundStepPrevote)
+				require.NotPanics(t, func() { f.deliver(ctx, t, sd, f.prevote(ctx, t, f.commit.BlockID)) })
+				require.Equal(t, cstypes.RoundStepPrecommit, sd.Step)
+				require.Equal(t, []int32{0}, f.checker.extendedRounds, "the relock precommit is extended")
+			}
+			require.Equal(t, []int32{0}, f.checker.processedRounds, "the round's block is processed for it again")
+		})
+	}
 }
 
 // A held block's commit for a later round is checked before the node enters that
@@ -829,6 +991,34 @@ type commitCheckingExecutor struct {
 	lastHash  tmbytes.HexBytes
 	// processedRounds lists the round of every ProcessProposal call.
 	processedRounds []int32
+	// extendedRounds lists the round of every ExtendVote call. ExtendVote
+	// returns extended if set, or else expected; like Drive's, it fails for a
+	// block and round other than those processed last.
+	extendedRounds []int32
+	extended       []*abci.ExtendVoteExtension
+	// checkPrecommitContext rejects a validator's precommit unless its block and
+	// round are the ones processed last.
+	checkPrecommitContext bool
+}
+
+// processedLast reports whether the latest ProcessProposal was for round and
+// the block hash.
+func (e *commitCheckingExecutor) processedLast(round int32, hash []byte) bool {
+	return e.lastRound != nil && *e.lastRound == round && bytes.Equal(e.lastHash, hash)
+}
+
+func (e *commitCheckingExecutor) ExtendVote(_ context.Context, vote *types.Vote) {
+	if !e.processedLast(vote.Round, vote.BlockID.Hash) {
+		panic(fmt.Sprintf("ExtendVote for round %d does not match the block and round processed last", vote.Round))
+	}
+	e.extendedRounds = append(e.extendedRounds, vote.Round)
+	response := e.expected
+	if e.extended != nil {
+		response = e.extended
+	}
+	extensions, err := types.NewVoteExtensionsFromABCIExtended(response)
+	require.NoError(e.t, err)
+	vote.VoteExtensions = extensions
 }
 
 func (e *commitCheckingExecutor) ProcessProposal(ctx context.Context, block *types.Block, round int32,
@@ -861,6 +1051,9 @@ func (e *commitCheckingExecutor) CreateProposalBlock(ctx context.Context, height
 
 func (e *commitCheckingExecutor) VerifyVoteExtension(ctx context.Context, vote *types.Vote) error {
 	if len(vote.ValidatorProTxHash) != 0 {
+		if e.checkPrecommitContext && !e.processedLast(vote.Round, vote.BlockID.Hash) {
+			return fmt.Errorf("precommit for round %d does not match the block and round processed last", vote.Round)
+		}
 		return e.Executor.VerifyVoteExtension(ctx, vote)
 	}
 	require.Zero(e.t, e.store.Height(), "verification must precede persistence")

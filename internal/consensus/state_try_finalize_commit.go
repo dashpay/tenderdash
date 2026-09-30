@@ -107,7 +107,7 @@ func (cs *TryFinalizeCommitAction) finalizeCommit(ctx context.Context, ctrl *Con
 	// rejection means the application disagrees with its own votes. Nothing is
 	// persisted and the node stays at this height, where a peer's commit can
 	// still finish it; a panic would only restart into the same commit.
-	err := cs.blockExec.knownRejectedCommit(seenCommit)
+	err := cs.blockExec.refuseUnprocessedCommit(&stateData.RoundState, seenCommit)
 	if err == nil {
 		cs.blockExec.mustEnsureProcess(ctx, &stateData.RoundState, seenCommit.Round)
 		err = cs.blockExec.verifyCommitExtensions(ctx, seenCommit)

@@ -264,7 +264,8 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 // block is processed for each round, so grouping them processes it once per
 // round. All are authenticated already, so each costs only processing the
 // block, done once per round, and the application's check of its extensions,
-// skipped for a vector it already judged. The first commit accepted is
+// skipped when the application's expectation already refuses the vector (see
+// commitExpectations). The first commit accepted is
 // kept in stateData.Commit and returned; if none is, stateData.Commit is cleared
 // and saved, and nil is returned. A rejection is only counted: it proves nothing
 // against a sender, which may have relayed the commit as it received it.

@@ -163,3 +163,10 @@ Likewise, `ExtendVote` can also be non-deterministic:
 
 * $e^r_p$ may depend on $w^r_p$ and $s_{p,h-1}$, but may also depend on other values or operations.
 * $w^r_p = w^r_q \nRightarrow e^r_p = e^r_q$
+
+In Tenderdash this freedom does not extend to threshold-recoverable extensions: they are recovered
+into the commit, so every validator must produce the same ones. `ExtendVote` must also be free of
+side effects, and the threshold-recoverable subset of its response must be exactly the vector the
+Application accepts in a commit-level `VerifyVoteExtension` for the same block, height and round:
+Tenderdash calls it on any node to learn that vector (see
+[VerifyVoteExtension](abci++_methods.md#verifyvoteextension)).

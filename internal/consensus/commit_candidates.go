@@ -1,10 +1,41 @@
 package consensus
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
+	"fmt"
 	"slices"
 
 	"github.com/dashpay/tenderdash/types"
 )
+
+// commitKey identifies a commit by what the application's extension check
+// depends on: height, round, block and extension vector. Commits with equal keys
+// differ at most in their threshold block signature.
+type commitKey struct {
+	height     int64
+	round      int32
+	blockID    string
+	extensions [sha256.Size]byte
+}
+
+func newCommitKey(commit *types.Commit) commitKey {
+	var buf []byte
+	for _, ext := range commit.ThresholdVoteExtensions {
+		bz, err := ext.Marshal()
+		if err != nil {
+			panic(fmt.Errorf("marshal commit vote extension: %w", err))
+		}
+		buf = binary.AppendUvarint(buf, uint64(len(bz)))
+		buf = append(buf, bz...)
+	}
+	return commitKey{
+		height:     commit.Height,
+		round:      commit.Round,
+		blockID:    commit.BlockID.Key(),
+		extensions: sha256.Sum256(buf),
+	}
+}
 
 // commitCandidate is a peer's authenticated commit kept until the block it
 // commits arrives.
