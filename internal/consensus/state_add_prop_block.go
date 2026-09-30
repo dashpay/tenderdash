@@ -14,7 +14,6 @@ import (
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
-	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
@@ -280,9 +279,8 @@ func (c *AddProposalBlockPartAction) selectParkedCommit(ctx context.Context, sta
 	}
 	// rank orders the rounds; the stable sort keeps arrival order within one.
 	rank := make(map[int32]int, len(candidates))
-	if crs := stateData.CurrentRoundState; crs.Params.Source == sm.ProcessProposalSource &&
-		crs.MatchesBlock(stateData.ProposalBlock.Header, crs.Round) {
-		rank[crs.Round] = -1
+	if processed := stateData.CurrentRoundState.Round; processedFor(&stateData.RoundState, processed) {
+		rank[processed] = -1
 	}
 	for i, commit := range candidates {
 		if _, ok := rank[commit.Round]; !ok {

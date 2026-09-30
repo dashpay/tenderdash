@@ -11,7 +11,8 @@ import (
 
 // commitKey identifies a commit by what the application's extension check
 // depends on: height, round, block and extension vector. Commits with equal keys
-// differ at most in their threshold block signature.
+// differ at most in their quorum hash and threshold block signature, which that
+// check does not read.
 type commitKey struct {
 	height     int64
 	round      int32

@@ -114,10 +114,9 @@ func processedFor(rs *cstypes.RoundState, round int32) bool {
 // last processed for another round, so it never processes a block the round
 // would not.
 func (c *blockExecutor) ensureOwnRound(ctx context.Context, rs *cstypes.RoundState) error {
-	crs := &rs.CurrentRoundState
-	if rs.Proposal == nil || rs.ProposalBlock == nil || !rs.ProposalBlock.HashesTo(rs.Proposal.BlockID.Hash) ||
-		crs.Params.Source != sm.ProcessProposalSource || crs.Round == rs.Round ||
-		!crs.MatchesBlock(rs.ProposalBlock.Header, crs.Round) {
+	processed := rs.CurrentRoundState.Round
+	if rs.Proposal == nil || !rs.ProposalBlock.HashesTo(rs.Proposal.BlockID.Hash) ||
+		processed == rs.Round || !processedFor(rs, processed) {
 		return nil
 	}
 	return c.ensureProcess(ctx, rs, rs.Round)
