@@ -51,9 +51,9 @@ sustained rate means the application and the network disagree on extension
 vectors.
 
 **`ExtendVote` is now also a commit oracle.** After the application rejects a
-commit's vote extensions, Tenderdash calls `ExtendVote` for that block, height
-and round, on any node including non-validators, right after `ProcessProposal`
-of that round. A commit's extension list is not covered by any signature beyond
+commit's vote extensions in a commit-level `VerifyVoteExtension`, which follows
+`ProcessProposal` of that block and round, Tenderdash calls `ExtendVote` for that
+block, height and round, on any node including non-validators. A commit's extension list is not covered by any signature beyond
 each entry's own, so one genuine commit yields any number of signature-valid
 vectors; Tenderdash refuses, without processing the block again or calling the
 application, a later commit of that block and round that would need the block
@@ -65,8 +65,9 @@ per height to 2·G, plus the one that finalizes, where G is the number of rounds
 other than the node's own holding a commit with a valid threshold block
 signature for the held block, independent of peers and vectors. Applications
 must therefore keep `ExtendVote` free of side effects and return exactly the
-vector their commit-level `VerifyVoteExtension` accepts; an ABCI error from this
-call is fatal. Drive and the e2e application do; kvstore extends with no
+vector their commit-level `VerifyVoteExtension` accepts; an ABCI error or an
+invalid response from this call is fatal. Extensions that are not
+threshold-recoverable can still be non-deterministic. Drive and the e2e application do; kvstore extends with no
 vector and accepts any. With an application whose `ExtendVote` returns another
 vector than it accepts, a node may be unable to finalize from a peer's commit
 of a round at which it already rejected one.

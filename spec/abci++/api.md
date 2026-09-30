@@ -339,12 +339,16 @@ Extends a vote with application-side injection
   in a previous call to `ProcessProposal` or `PrepareProposal` for the current height.
 - `ResponseExtendVote.vote_extensions` will only be attached to a non-`nil` Precommit message. If Tenderdash is to
   precommit `nil`, it will not call `RequestExtendVote`.
+- The Application logic that creates extensions that are not threshold-recoverable can be
+  non-deterministic. Threshold-recoverable extensions (`THRESHOLD_RECOVER` and `THRESHOLD_RECOVER_RAW`)
+  are recovered into the commit, so they MUST be deterministic.
 - `ExtendVote` MUST be free of side effects, and the threshold-recoverable subset of its response MUST be
   exactly the vector the Application accepts in a commit-level `VerifyVoteExtension` for the same block,
   height and round.
-- Tenderdash may also call `ExtendVote` on any node, a non-validator included, right after
-  `ProcessProposal` of a block for a round, to learn the vector a commit of that block and round must
-  carry; see `VerifyVoteExtension`. An ABCI error from this call is fatal, as on the Precommit path.
+- Tenderdash may also call `ExtendVote` on any node, a non-validator included, after a commit-level
+  `VerifyVoteExtension` rejection that follows `ProcessProposal` of that block and round, to learn the
+  vector a commit of that block and round must carry; see `VerifyVoteExtension`. An ABCI error or an
+  invalid response from this call is fatal, as on the Precommit path.
 
 #### When does Tenderdash call it?
 
@@ -357,7 +361,8 @@ then _p_&#39;s Tenderdash locks _v_  and sends a Precommit message in the follow
 
 1. _p_&#39;s Tenderdash sets _lockedValue_ and _validValue_ to _v_, and sets _lockedRound_ and _validRound_ to _r_
 2. _p_&#39;s Tenderdash calls `RequestExtendVote` with _id(v)_ (`RequestExtendVote.hash`). The call is synchronous.
-3. The Application optionally returns an array of bytes, `ResponseExtendVote.extension`, which is not interpreted by Tenderdash.
+3. The Application optionally returns an array of bytes, `ResponseExtendVote.extension`. Tenderdash does not interpret
+   it, except that it compares the threshold-recoverable subset with the extension vectors of commits (see below).
 4. _p_&#39;s Tenderdash includes `ResponseExtendVote.extension` in a field of type [CanonicalVoteExtension](#canonicalvoteextension),
    it then populates the other fields in [CanonicalVoteExtension](#canonicalvoteextension), and signs the populated
    data structure.
@@ -369,6 +374,11 @@ then _p_&#39;s Tenderdash locks _v_  and sends a Precommit message in the follow
 In the cases when _p_&#39;s Tenderdash is to broadcast `precommit nil` messages (either _2f&#43;1_ `prevote nil` messages received,
 or _timeoutPrevote_ triggered), _p_&#39;s Tenderdash does **not** call `RequestExtendVote` and will not include
 a [CanonicalVoteExtension](#canonicalvoteextension) field in the `precommit nil` message.
+
+Tenderdash also calls `RequestExtendVote` on any process, a non-validator included, when the Application rejects a
+commit in a commit-level `RequestVerifyVoteExtension` that follows `ProcessProposal` of the committed block for the
+commit round, unless it already knows the vector for that block and round. Tenderdash neither signs nor broadcasts
+that response: it compares the threshold-recoverable subset with later commits of the block and round.
 
 
 | Field | Type | Label | Description |
