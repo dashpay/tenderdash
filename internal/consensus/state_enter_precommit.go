@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
@@ -112,31 +113,53 @@ func (c *EnterPrecommitAction) Execute(ctx context.Context, stateEvent StateEven
 		return nil
 	}
 
-	// If we're already locked on that block, precommit it, and update the LockedRound
-	if stateData.LockedBlock.HashesTo(blockID.Hash) {
-		logger.Debug("precommit step: +2/3 prevoted locked block; relocking")
-		stateData.LockedRound = round
-
-		c.eventPublisher.PublishRelockEvent(stateData.RoundState)
-		c.voteSigner.signAddVote(ctx, stateData, tmproto.PrecommitType, blockID)
+	// +2/3 prevoted a block other than the one proposed in this round.
+	//
+	// We precommit a block only once it is this round's proposal (Tendermint
+	// paper, line 36: a PROPOSAL for v in round r and 2f+1 PREVOTEs for id(v) in
+	// round r), including a block we are already locked on. A precommit for a
+	// block carries our vote extensions, and the application extends a vote only
+	// for the block it last ran ProcessProposal for, at this height and round:
+	// Dash Drive refuses anything else and ExtendVote panics on the refusal. A
+	// block locked in an earlier round was processed for that round, not this one,
+	// and a proposal for another block in this round means its proposer
+	// equivocated, since honest validators prevote only the proposal they
+	// received.
+	//
+	// Precommitting nil is always safe and the lock is kept as it is. Honest
+	// validators that received the proposal for the block precommit it, and a
+	// later proposer re-proposes its valid block with this round as its POL round.
+	if !stateData.ProposalBlock.HashesTo(blockID.Hash) && stateData.LockedBlock.HashesTo(blockID.Hash) {
+		logger.Error("precommit step: +2/3 prevoted locked block, but this round's proposal is for another block; precommitting nil",
+			"locked_block", blockID.Hash,
+			"proposal_block", tmstrings.LazyBlockHash(stateData.ProposalBlock))
+		c.voteSigner.signAddVote(ctx, stateData, tmproto.PrecommitType, types.BlockID{})
 		return nil
 	}
 
-	// If greater than 2/3 of the voting power on the network prevoted for
-	// the proposed block, update our locked block to this block and issue a
-	// precommit vote for it.
+	// If greater than 2/3 of the voting power on the network prevoted for the
+	// proposed block, lock on it -- or, if already locked on it, update the
+	// locked round -- and precommit it.
 	if stateData.ProposalBlock.HashesTo(blockID.Hash) {
-		logger.Debug("precommit step: +2/3 prevoted proposal block; locking", "hash", blockID.Hash)
-
-		// we got precommit but we didn't process proposal yet
+		// Process the proposal for this round before precommitting it, since the
+		// precommit's vote extensions are for this round. It has not run yet if the
+		// block arrived after we prevoted, and a block we are locked on was
+		// processed for the round it was locked in, not necessarily this one.
 		c.blockExec.mustEnsureProcess(ctx, &stateData.RoundState, round)
 
 		// Validate the block.
 		c.blockExec.mustValidate(ctx, stateData)
 
-		stateData.updateLockedBlock()
+		if stateData.LockedBlock.HashesTo(blockID.Hash) {
+			logger.Debug("precommit step: +2/3 prevoted locked block; relocking", "hash", blockID.Hash)
+			stateData.LockedRound = round
+			c.eventPublisher.PublishRelockEvent(stateData.RoundState)
+		} else {
+			logger.Debug("precommit step: +2/3 prevoted proposal block; locking", "hash", blockID.Hash)
+			stateData.updateLockedBlock()
+			c.eventPublisher.PublishLockEvent(stateData.RoundState)
+		}
 
-		c.eventPublisher.PublishLockEvent(stateData.RoundState)
 		c.voteSigner.signAddVote(ctx, stateData, tmproto.PrecommitType, blockID)
 
 		if stateData.updateValidBlock() {
