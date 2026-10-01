@@ -58,10 +58,10 @@ jobs:
       - uses: golangci/golangci-lint-action@v9.3.0
         if: env.GIT_DIFF
         with:
-          # Required: the version of golangci-lint is required and
-          # must be specified without patch version: we always use the
-          # latest patch version.
-          version: v2.13
+          # Pin the exact version. It must match GOLANGCI_LINT_VERSION in the
+          # Makefile and the golangci-lint requirement in go.mod, otherwise CI
+          # and `make lint` can disagree on formatting.
+          version: v2.14.0
           # only-new-issues filters against a patch the action assembles itself,
           # which it fails to do for a branch with a large diff — it then falls
           # back to reporting every pre-existing issue in the repository. Ask

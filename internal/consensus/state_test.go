@@ -2277,7 +2277,7 @@ func TestExtendVote(t *testing.T) {
 			assert.Equal(t, height, req.Height) &&
 			assert.Equal(t, round, req.Round) &&
 			assert.Equal(t, voteExtensions.ToExtendProto(), req.VoteExtensions) &&
-			assert.True(t, ok)
+			assert.True(t, ok || len(req.ValidatorProTxHash) == 0)
 	})
 	m.On("VerifyVoteExtension", mock.Anything, reqVerifyVoteExtFunc).
 		Return(&abci.ResponseVerifyVoteExtension{
@@ -2427,7 +2427,7 @@ func TestVerifyVoteExtensionNotCalledOnAbsentPrecommit(t *testing.T) {
 			assert.Equal(t, height, req.Height) &&
 			assert.Equal(t, round, req.Round) &&
 			assert.Equal(t, voteExtensions.ToExtendProto(), req.VoteExtensions) &&
-			assert.True(t, ok)
+			assert.True(t, ok || len(req.ValidatorProTxHash) == 0)
 	})
 	m.On("VerifyVoteExtension", mock.Anything, reqVerifyVoteExtFunc).
 		Return(&abci.ResponseVerifyVoteExtension{
@@ -3489,7 +3489,7 @@ func mockProposerApplicationCalls(t *testing.T, m *abcimocks.Application, round 
 		m.On("VerifyVoteExtension", mock.Anything, roundMatcher).
 			Return(&abci.ResponseVerifyVoteExtension{
 				Status: abci.ResponseVerifyVoteExtension_ACCEPT,
-			}, nil).Times(2) // we need 2/3 votes
+			}, nil).Times(3) // two peer precommits and the complete quorum commit
 
 		m.On("FinalizeBlock", mock.Anything, roundMatcher).
 			Return(&abci.ResponseFinalizeBlock{}, nil).

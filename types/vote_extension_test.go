@@ -243,3 +243,45 @@ func TestVoteExtensionFromProto_DispatchCoversDefinedTypes(t *testing.T) {
 			"type %d is not dispatchable and must be rejected", undefined)
 	}
 }
+
+func TestSameVoteExtensionShape(t *testing.T) {
+	reqID := func(id []byte) *tmproto.VoteExtension_SignRequestId {
+		return &tmproto.VoteExtension_SignRequestId{SignRequestId: id}
+	}
+	raw := &tmproto.VoteExtension{Type: tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
+		Extension: []byte("raw"), XSignRequestId: reqID([]byte("id"))}
+	plain := &tmproto.VoteExtension{Type: tmproto.VoteExtensionType_THRESHOLD_RECOVER, Extension: []byte("plain")}
+	base := []*tmproto.VoteExtension{raw, plain}
+	with := func(i int, change func(ext *tmproto.VoteExtension)) []*tmproto.VoteExtension {
+		out := make([]*tmproto.VoteExtension, len(base))
+		for j, ext := range base {
+			c := ext.Clone()
+			out[j] = &c
+		}
+		change(out[i])
+		return out
+	}
+
+	assert.True(t, SameVoteExtensionShape(base, with(0, func(e *tmproto.VoteExtension) { e.Signature = []byte("sig") })),
+		"signatures are ignored")
+	assert.True(t, SameVoteExtensionShape(base, with(1, func(e *tmproto.VoteExtension) { e.XSignRequestId = reqID(nil) })),
+		"an empty sign request ID is an unset one")
+	assert.True(t, SameVoteExtensionShape(nil, []*tmproto.VoteExtension{}))
+	assert.True(t, SameVoteExtensionShape([]*tmproto.VoteExtension{nil}, []*tmproto.VoteExtension{nil}))
+
+	for name, other := range map[string][]*tmproto.VoteExtension{
+		"type":      with(1, func(e *tmproto.VoteExtension) { e.Type = tmproto.VoteExtensionType_DEFAULT }),
+		"extension": with(0, func(e *tmproto.VoteExtension) { e.Extension = []byte("other") }),
+		"sign request ID of a threshold extension": with(1, func(e *tmproto.VoteExtension) {
+			e.XSignRequestId = reqID([]byte("unsigned"))
+		}),
+		"sign request ID of a raw extension": with(0, func(e *tmproto.VoteExtension) { e.XSignRequestId = nil }),
+		"order":                              {plain, raw},
+		"subset":                             {raw},
+		"duplicate":                          {raw, plain, plain},
+		"nil entry":                          {raw, nil},
+	} {
+		assert.False(t, SameVoteExtensionShape(base, other), name)
+		assert.False(t, SameVoteExtensionShape(other, base), name)
+	}
+}
