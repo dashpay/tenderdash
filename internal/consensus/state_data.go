@@ -686,5 +686,16 @@ func (s *StateData) isValidForPrevote() error {
 	if err := sm.ValidateBlockChainLock(s.state, s.ProposalBlock); err != nil {
 		return errPrevoteInvalidChainLock
 	}
+	// Reproposals retain the original header; their POL is checked before voting.
+	if s.Proposal.POLRound == -1 {
+		proposer, err := s.ProposerSelector.GetProposer(s.Height, s.Round)
+		if err != nil {
+			return fmt.Errorf("get proposal proposer: %w", err)
+		}
+		if !bytes.Equal(s.ProposalBlock.ProposerProTxHash, proposer.ProTxHash) {
+			return fmt.Errorf("proposal-block proposer %X does not match round proposer %X",
+				s.ProposalBlock.ProposerProTxHash, proposer.ProTxHash)
+		}
+	}
 	return nil
 }
