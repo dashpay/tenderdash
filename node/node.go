@@ -630,14 +630,14 @@ func (n *nodeImpl) OnStop() {
 		}
 	}
 
+	for _, reactor := range n.services {
+		reactor.Wait()
+	}
+
 	for _, es := range n.eventSinks {
 		if err := es.Stop(); err != nil {
 			n.logger.Error("failed to stop event sink", "err", err)
 		}
-	}
-
-	for _, reactor := range n.services {
-		reactor.Wait()
 	}
 
 	n.router.Wait()

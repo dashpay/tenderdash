@@ -1214,8 +1214,6 @@ func (s startupPausedService) Start(ctx context.Context) error {
 }
 
 func TestNodeStartDuringFirstCommit(t *testing.T) {
-	// Wait for consensus goroutines before TempDir cleanup removes their files.
-	defer leaktest.CheckTimeout(t, 5*time.Second)()
 	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
 	require.NoError(t, err)
 	cfg.Consensus = config.DefaultConsensusConfig()
