@@ -107,7 +107,7 @@ jobs:
       - name: Claudius Review
         if: ${{ env.CLAUDE_CODE_OAUTH_TOKEN_LKLIMEK != '' }}
         # Includes trusted review detection (#19) and required App tokens (#20).
-        uses: lklimek/claudius-review-action@e90393f516b2af8db5b7b0b93f4ff3d87fd6add1
+        uses: lklimek/claudius-review-action@main
         with:
           claude_code_oauth_token: ${{ env.CLAUDE_CODE_OAUTH_TOKEN_LKLIMEK }}
           github_token: ${{ steps.app-token.outputs.token }}
