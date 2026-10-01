@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -48,7 +49,12 @@ func isPeerFloodableError(err error) bool {
 		// vote-extension configuration reaches them too. Both cost the sender a
 		// copied commit and nothing else.
 		errors.As(err, &types.ErrInvalidCommitQuorumHash{}) ||
-		errors.As(err, &types.ErrVoteExtensionCountMismatch{})
+		errors.As(err, &types.ErrVoteExtensionCountMismatch{}) ||
+		// A genuine commit with an altered extension vector still carries a valid
+		// block signature, and the vector is covered by no signature a peer must
+		// forge. The rejection of the commit this node assembled from its own
+		// precommits is not a message error: tryFinalizeCommit logs it at Error.
+		errors.Is(err, sm.ErrCommitExtensionsRejected)
 }
 
 type msgInfoDispatcher struct {

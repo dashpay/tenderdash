@@ -68,6 +68,7 @@ func (suite *SynchronizerTestSuite) SetupTest() {
 	suite.client = clientmocks.NewBlockClient(suite.T())
 	suite.store = mocks.NewBlockStore(suite.T())
 	suite.blockExec = mocks.NewExecutor(suite.T())
+	acceptCommitExtensions(suite.blockExec)
 }
 
 func (suite *SynchronizerTestSuite) TestBasic() {

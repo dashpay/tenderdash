@@ -94,7 +94,7 @@ func TestBlockApplierApply(t *testing.T) {
 			block:  blockH1,
 			commit: commitH1,
 			mockFn: func() {
-				mockBlockStore.On("SaveBlock", blockH1, blockH1Parts, commitH1).Once()
+				acceptCommitExtensions(mockBlockExec, mockBlockStore.On("SaveBlock", blockH1, blockH1Parts, commitH1).Once())
 				mockBlockExec.
 					On("VerifyCommit", initialState, blockH1ID, blockH1.Height, commitH1).
 					Once().
@@ -145,7 +145,7 @@ func TestBlockApplierApply(t *testing.T) {
 			block:  blockH1,
 			commit: commitH1,
 			mockFn: func() {
-				mockBlockStore.On("SaveBlock", blockH1, blockH1Parts, commitH1).Once()
+				acceptCommitExtensions(mockBlockExec, mockBlockStore.On("SaveBlock", blockH1, blockH1Parts, commitH1).Once())
 				mockBlockExec.
 					On("VerifyCommit", initialState, blockH1ID, blockH1.Height, commitH1).
 					Once().
@@ -300,10 +300,11 @@ func TestBlockApplierSavesBlockBeforeFinalize(t *testing.T) {
 		Once().
 		Run(func(mock.Arguments) { calls = append(calls, "process") }).
 		Return(sm.CurrentRoundState{}, nil)
-	mockBlockStore.
+	save := mockBlockStore.
 		On("SaveBlock", block, blockParts, commit).
 		Once().
 		Run(func(mock.Arguments) { calls = append(calls, "save") })
+	acceptCommitExtensions(mockBlockExec, save).Run(func(mock.Arguments) { calls = append(calls, "verify") })
 	mockBlockExec.
 		On("FinalizeBlock", mock.Anything, initialState, sm.CurrentRoundState{}, block.BlockID(blockParts), block, commit, types.VerifiedCommit{}).
 		Once().
@@ -312,7 +313,7 @@ func TestBlockApplierSavesBlockBeforeFinalize(t *testing.T) {
 
 	applier := newBlockApplier(mockBlockExec, mockBlockStore, applierWithState(initialState))
 	require.NoError(t, applier.Apply(ctx, block, commit))
-	require.Equal(t, []string{"process", "save", "finalize"}, calls)
+	require.Equal(t, []string{"process", "verify", "save", "finalize"}, calls)
 }
 
 // TestBlockApplierRecordsStageMetrics checks that a successful apply records
@@ -334,7 +335,7 @@ func TestBlockApplierRecordsStageMetrics(t *testing.T) {
 	mockBlockExec.On("VerifyCommit", initialState, blockH1.BlockID(nil), blockH1.Height, commitH1).Twice().Return(types.VerifiedCommit{}, nil)
 	mockBlockExec.On("VerifyCommit", initialState, blockH1.BlockID(nil), blockH1.Height, new(types.Commit)).
 		Once().Return(types.VerifiedCommit{}, errors.New("bad signature"))
-	mockBlockStore.On("SaveBlock", blockH1, mock.Anything, commitH1).Twice()
+	acceptCommitExtensions(mockBlockExec, mockBlockStore.On("SaveBlock", blockH1, mock.Anything, commitH1).Twice())
 	mockBlockExec.On("ValidateBlock", mock.Anything, mock.Anything, blockH1, types.VerifiedCommit{}).Twice().Return(nil)
 	mockBlockExec.On("ProcessProposal", mock.Anything, blockH1, commitH1.Round, initialState, true, types.VerifiedCommit{}).
 		Twice().Return(sm.CurrentRoundState{}, nil)
@@ -434,7 +435,7 @@ func TestBlockApplierOffersTheVerifiedCommitForward(t *testing.T) {
 	applyH1 := func(t *testing.T) (*blockApplier, *mocks.Executor) {
 		blockExec := mocks.NewExecutor(t)
 		blockStore := mocks.NewBlockStore(t)
-		blockStore.On("SaveBlock", mock.Anything, mock.Anything, mock.Anything).Maybe()
+		acceptCommitExtensions(blockExec, blockStore.On("SaveBlock", mock.Anything, mock.Anything, mock.Anything).Maybe())
 		blockExec.On("VerifyCommit", mock.Anything, blockH1ID, blockH1.Height, commitH1).Once().Return(verifiedH1, nil)
 		blockExec.On("ValidateBlock", mock.Anything, mock.Anything, blockH1, none).Once().Return(nil)
 		blockExec.On("ProcessProposal", mock.Anything, blockH1, commitH1.Round, mock.Anything, true, none).
