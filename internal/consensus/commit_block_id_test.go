@@ -136,15 +136,13 @@ func TestParkedCommitChecksStateIDBeforeSavingBlock(t *testing.T) {
 				msg := &BlockPartMessage{Height: block.Height, Round: 0, Part: parts.GetPart(i)}
 				partCtx := msgInfoWithCtx(ctx, msgInfo{Msg: msg, PeerID: peerID})
 				err = node.ctrl.Dispatch(partCtx, &AddProposalBlockPartEvent{Msg: msg, PeerID: peerID}, &stateData)
-				if mismatch && i == int(parts.Total())-1 {
-					require.ErrorContains(t, err, "state ID does not match")
-				} else {
-					require.NoError(t, err)
-				}
+				// A mismatching commit is dropped without blaming the block part.
+				require.NoError(t, err)
 			}
 			if mismatch {
 				assert.Equal(t, block.Height, stateData.Height)
 				assert.Zero(t, node.blockStore.Height(), "a mismatching commit must never be persisted")
+				assert.Nil(t, stateData.Commit, "a mismatching commit is not kept")
 			} else {
 				assert.Equal(t, block.Height+1, stateData.Height)
 				assert.True(t, stateData.state.LastBlockID.Equals(blockID))

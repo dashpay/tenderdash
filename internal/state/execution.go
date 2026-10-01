@@ -102,6 +102,11 @@ type Executor interface {
 		lastCommit types.VerifiedCommit,
 	) (State, error)
 
+	// VerifyVoteExtension asks the application to verify vote extensions: those
+	// of one validator's precommit when vote.ValidatorProTxHash is set, or a
+	// commit's threshold-recovered vector, after ProcessProposal of its block,
+	// when it is empty. It returns an error on REJECT and panics if the ABCI
+	// call itself fails.
 	VerifyVoteExtension(ctx context.Context, vote *types.Vote) error
 }
 
@@ -534,7 +539,9 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 //
 // It takes a blockID to avoid recomputing the parts hash.
 //
-// CONTRACT: The block was already delivered to the ABCI app using either PrepareProposal or ProcessProposal.
+// CONTRACT: The block was already delivered to the ABCI app using either PrepareProposal or ProcessProposal,
+// and uncommittedState is the result of the latest such call, for commit.Round. The application must have
+// accepted commit's extension vector through VerifyCommitExtensions; FinalizeBlock does not check it.
 // See also ApplyBlock() to deliver proposal and finalize it in one step.
 
 func (blockExec *BlockExecutor) FinalizeBlock(
@@ -620,8 +627,10 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 }
 
 // ApplyBlock validates the block against the state, executes it against the app using ProcessProposal ABCI request,
-// fires the relevant events, finalizes with FinalizeBlock, and saves the new state and responses.
-// It returns the new state.
+// asks the app to accept the commit's extension vector (VerifyCommitExtensions), fires the relevant events,
+// finalizes with FinalizeBlock, and saves the new state and responses.
+// It returns the new state. A rejected vector returns an error wrapping ErrCommitExtensionsRejected before
+// FinalizeBlock, with nothing finalized or saved.
 // It's the only function that needs to be called
 // from outside this package to process and commit an entire block.
 // It takes a blockID to avoid recomputing the parts hash.
@@ -641,9 +650,30 @@ func (blockExec *BlockExecutor) ApplyBlock(
 	if err != nil {
 		return state, err
 	}
+	if err := VerifyCommitExtensions(ctx, blockExec, commit); err != nil {
+		return state, err
+	}
 	// Replay never proposes, so the response hints are not needed here.
 	state, _, err = blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, commit, lastCommit)
 	return state, err
+}
+
+// VerifyCommitExtensions asks the application to accept commit's
+// threshold-recovered extension vector. Callers run it after ProcessProposal of
+// the committed block and before saving or finalizing it. The canonical vote it
+// sends has an empty ValidatorProTxHash, which tells the application that this
+// is a commit rather than one validator's precommit.
+func VerifyCommitExtensions(ctx context.Context, executor Executor, commit *types.Commit) error {
+	vote, err := commit.GetCanonicalVote()
+	if err != nil {
+		return fmt.Errorf("invalid commit extensions at height %d round %d block %X: %w",
+			commit.Height, commit.Round, commit.BlockID.Hash, err)
+	}
+	if err := executor.VerifyVoteExtension(ctx, vote); err != nil {
+		return fmt.Errorf("commit extensions rejected at height %d round %d block %X: %w: %w",
+			commit.Height, commit.Round, commit.BlockID.Hash, ErrCommitExtensionsRejected, err)
+	}
+	return nil
 }
 
 // ExtendVote gets vote-extensions from ABCI and updates vote.VoteExtensions with this value

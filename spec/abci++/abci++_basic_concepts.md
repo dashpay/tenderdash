@@ -79,6 +79,9 @@ by Tendermint. This has a negative impact on Tendermint's liveness, i.e., if vot
 As a general rule, an Application that detects an invalid vote extension SHOULD
 accept it in `ResponseVerifyVoteExtension` and ignore it in its own logic. Tendermint calls it when
 a process receives a precommit message with a (possibly empty) vote extensions.
+Tenderdash also calls it, with an empty `validator_pro_tx_hash`, to verify a commit's
+threshold-recovered extensions before `FinalizeBlock`; that check must reject a vector the
+Application did not expect.
 
 * [**FinalizeBlock:**](./abci++_methods.md#finalizeblock) It delivers a decided block to the Application. The Application must execute the transactions in the block in order and update its state accordingly. Cryptographic commitments to the block and transaction results, via the corresponding
 parameters in `ResponseFinalizeBlock`, are included in the header of the next block. Tendermint calls it when a new block is decided.

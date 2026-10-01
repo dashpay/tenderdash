@@ -2,6 +2,7 @@ package consensus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
@@ -281,6 +282,11 @@ func (r *BlockReplayer) replayBlock(
 	if err != nil {
 		return sm.CurrentRoundState{}, fmt.Errorf("blockReplayer process proposal: %w", err)
 	}
+	// Pre-upgrade stores may contain unchecked extensions. Rejecting them must stop
+	// replay before FinalizeBlock, even though the commit is already persisted.
+	if err := sm.VerifyCommitExtensions(ctx, r.blockExec, commit); err != nil {
+		return sm.CurrentRoundState{}, commitExtensionsReplayError(block, commit, err)
+	}
 	// We emit events for the index services at the final block due to the sync issue when
 	// the node shutdown during the block committing status.
 	// For all other cases, we disable emitting events by providing blockExec=nil in ExecReplayedCommitBlock
@@ -312,11 +318,23 @@ func (r *BlockReplayer) syncStateAt(
 	// proof for block.LastCommit, so it verifies every block in full.
 	state, err := blockExec.ApplyBlock(ctx, state, meta.BlockID, block, seenCommit,
 		types.VerifiedCommit{})
+	if errors.Is(err, sm.ErrCommitExtensionsRejected) {
+		return sm.State{}, commitExtensionsReplayError(block, seenCommit, err)
+	}
 	if err != nil {
 		return sm.State{}, err
 	}
 	r.nBlocks++
 	return state, nil
+}
+
+// commitExtensionsReplayError gives a refusal of commit's extensions during
+// handshake catch-up the operator's remedy, the same on every replay path.
+func commitExtensionsReplayError(block *types.Block, commit *types.Commit, err error) error {
+	return fmt.Errorf(
+		"blockReplayer verify commit extensions at height %d round %d block %X; roll back or re-sync the node: %w",
+		block.Height, commit.Round, block.Hash(), err,
+	)
 }
 
 func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, state *sm.State) error {

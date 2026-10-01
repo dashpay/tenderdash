@@ -273,9 +273,10 @@ format:
 	find . -name '*.go' -type f -not -path "*.git*"  -not -name '*.pb.go' -not -name '*pb_test.go' | xargs goimports -w -local ${REPO_NAME}
 .PHONY: format
 
-# Kept in step with .github/workflows/lint.yml, which pins the same floating
-# minor so both always resolve to the latest patch of it.
-GOLANGCI_LINT_VERSION ?= v2.13
+# Exact version, kept identical to the `version:` in .github/workflows/lint.yml
+# and to the golangci-lint requirement in go.mod, so local and CI lint agree
+# (a floating minor lets the two drift onto different formatter builds).
+GOLANGCI_LINT_VERSION ?= v2.14.0
 GOLANGCI_LINT := $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
 # Use the newest fetched development branch by default. For another PR target,

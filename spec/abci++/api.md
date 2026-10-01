@@ -339,7 +339,16 @@ Extends a vote with application-side injection
   in a previous call to `ProcessProposal` or `PrepareProposal` for the current height.
 - `ResponseExtendVote.vote_extensions` will only be attached to a non-`nil` Precommit message. If Tenderdash is to
   precommit `nil`, it will not call `RequestExtendVote`.
-- The Application logic that creates the extensions can be non-deterministic.
+- The Application logic that creates extensions that are not threshold-recoverable can be
+  non-deterministic. Threshold-recoverable extensions (`THRESHOLD_RECOVER` and `THRESHOLD_RECOVER_RAW`)
+  are recovered into the commit, so they MUST be deterministic.
+- `ExtendVote` MUST be free of side effects, and the threshold-recoverable subset of its response MUST be
+  exactly the vector the Application accepts in a commit-level `VerifyVoteExtension` for the same block,
+  height and round.
+- Tenderdash may also call `ExtendVote` on any node, a non-validator included, after a commit-level
+  `VerifyVoteExtension` rejection that follows `ProcessProposal` of that block and round, to learn the
+  vector a commit of that block and round must carry; see `VerifyVoteExtension`. An ABCI error or an
+  invalid response from this call is fatal, as on the Precommit path.
 
 #### When does Tenderdash call it?
 
@@ -352,7 +361,8 @@ then _p_&#39;s Tenderdash locks _v_  and sends a Precommit message in the follow
 
 1. _p_&#39;s Tenderdash sets _lockedValue_ and _validValue_ to _v_, and sets _lockedRound_ and _validRound_ to _r_
 2. _p_&#39;s Tenderdash calls `RequestExtendVote` with _id(v)_ (`RequestExtendVote.hash`). The call is synchronous.
-3. The Application optionally returns an array of bytes, `ResponseExtendVote.extension`, which is not interpreted by Tenderdash.
+3. The Application optionally returns an array of bytes, `ResponseExtendVote.extension`. Tenderdash does not interpret
+   it, except that it compares the threshold-recoverable subset with the extension vectors of commits (see below).
 4. _p_&#39;s Tenderdash includes `ResponseExtendVote.extension` in a field of type [CanonicalVoteExtension](#canonicalvoteextension),
    it then populates the other fields in [CanonicalVoteExtension](#canonicalvoteextension), and signs the populated
    data structure.
@@ -364,6 +374,11 @@ then _p_&#39;s Tenderdash locks _v_  and sends a Precommit message in the follow
 In the cases when _p_&#39;s Tenderdash is to broadcast `precommit nil` messages (either _2f&#43;1_ `prevote nil` messages received,
 or _timeoutPrevote_ triggered), _p_&#39;s Tenderdash does **not** call `RequestExtendVote` and will not include
 a [CanonicalVoteExtension](#canonicalvoteextension) field in the `precommit nil` message.
+
+Tenderdash also calls `RequestExtendVote` on any process, a non-validator included, when the Application rejects a
+commit in a commit-level `RequestVerifyVoteExtension` that follows `ProcessProposal` of the committed block for the
+commit round, unless it already knows the vector for that block and round. Tenderdash neither signs nor broadcasts
+that response: it compares the threshold-recoverable subset with later commits of the block and round.
 
 
 | Field | Type | Label | Description |
@@ -390,7 +405,9 @@ Finalize newly decided block.
   to determine rewards and punishments for the validators.
 - The application must execute the transactions in full, in the order they appear in `RequestFinalizeBlock.txs`,
   before returning control to Tenderdash. Alternatively, it can commit the candidate state corresponding to the same block
-  previously executed via `PrepareProposal` or `ProcessProposal`.
+  previously executed via `PrepareProposal` or `ProcessProposal`, for the round processed last.
+- Tenderdash calls `FinalizeBlock` only after the Application has accepted the commit&#39;s extension
+  vector through `VerifyVoteExtension` with an empty `validator_pro_tx_hash`.
 - If ProcessProposal for the same arguments have succeeded, FinalizeBlock MUST always succeed.
 - Application is expected to persist its state at the end of this call, before returning `ResponseFinalizeBlock`.
 - Later calls to `Query` can return proofs about the application state anchored
@@ -674,6 +691,11 @@ Process prepared proposal.
   `ResponseProcessProposal.status` MUST **exclusively** depend on the parameters passed in
   the call to `RequestProcessProposal`, and the last committed Application state
   (see [Requirements](abci&#43;&#43;_app_requirements.md) section).
+- Tenderdash may call `ProcessProposal` more than once for the same height and round with the
+  same block, for example after the application rejected a commit&#39;s vote extensions or when block
+  sync hands over to consensus, and again for a round after processing another round, for example
+  to verify a commit of that round. The Application MUST treat such a call as re-execution that
+  replaces its execution context for the height; `FinalizeBlock` refers to the round processed last.
 - Moreover, application implementors SHOULD always set `ResponseProcessProposal.status` to `ACCEPT`,
   unless they _really_ know what the potential liveness implications of returning `REJECT` are.
 
@@ -746,25 +768,59 @@ Query for data from the application at current or past height.
 ### RequestVerifyVoteExtension
 Verify the vote extension
 
+Tenderdash calls it for two kinds of request, told apart by `validator_pro_tx_hash`:
+
+- **Precommit verification** (`validator_pro_tx_hash` set): the vote extensions of one validator&#39;s
+  Precommit, exactly as its Application returned them from `ExtendVote`.
+- **Commit verification** (`validator_pro_tx_hash` empty): the extension vector of a commit, after
+  `ProcessProposal` of the committed block with the same `hash`, `height` and `round` (the commit round).
+  The vector holds only the threshold-recoverable extensions (`THRESHOLD_RECOVER` and
+  `THRESHOLD_RECOVER_RAW`), in the order `ExtendVote` returned them; extensions of any other type
+  never appear in a commit. It can be empty.
+
 #### Usage
 
-- `RequestVerifyVoteExtension.vote_extension` can be an empty byte array. The Application&#39;s interpretation of it should be
-  that the Application running at the process that sent the vote chose not to extend it.
-  Tenderdash will always call `RequestVerifyVoteExtension`, even for 0 length vote extensions.
-- If `ResponseVerifyVoteExtension.status` is `REJECT`, Tenderdash will reject the whole received vote.
-  See the [Requirements](abci&#43;&#43;_app_requirements.md) section to understand the potential
-  liveness implications of this.
+- `RequestVerifyVoteExtension.vote_extensions` can be empty. For a Precommit, the Application&#39;s
+  interpretation of it should be that the Application running at the process that sent the vote chose
+  not to extend it. Tenderdash will always call `RequestVerifyVoteExtension`, even for 0 length vote
+  extensions.
+- For a Precommit, if `ResponseVerifyVoteExtension.status` is `REJECT`, Tenderdash will reject the
+  whole received vote. See the [Requirements](abci&#43;&#43;_app_requirements.md) section to understand the
+  potential liveness implications of this.
+- For a commit, the Application MUST compare the vector with the threshold-recoverable subset of the
+  extensions it expects for that block, in order, and return `REJECT` if they differ: a commit whose
+  block signature is valid can still carry a stripped, duplicated or replayed vector. Tenderdash
+  requires `ACCEPT` before it saves the block and commit or calls `FinalizeBlock`. What `REJECT` does
+  depends on the path:
+  - consensus: the commit is discarded without blaming its sender. A commit whose block the node
+    already holds is checked first and never changes the round. A commit for a later round whose
+    block has not arrived moves the node to that round on its threshold signature alone; it is
+    checked when the block arrives, then the commits other peers sent meanwhile. Copies of a commit
+    already waiting are dropped. If the node&#39;s own commit is rejected, nothing is persisted and the
+    node waits for a peer&#39;s commit. The block is processed again only for a commit of a round other
+    than the one processed last. After a rejection, Tenderdash calls `ExtendVote` for the block and
+    round, and refuses, without processing the block again or calling the Application, a later
+    commit of that round that would need the block processed again, when its vector differs from
+    the one returned or equals it and was rejected. Consensus WAL replay follows these rules;
+  - block sync: the block is not applied; the peer that served it is dropped and the height is
+    requested again;
+  - handshake catch-up (application behind the block store): the commit is already in the block
+    store, so the node fails to start; there is no automatic recovery, and the operator has to roll
+    back or re-sync the node.
+- Any status other than `ACCEPT`, including `UNKNOWN`, counts as `REJECT`. An error from the ABCI
+  call itself, as opposed to a status, is fatal on every path.
 - The implementation of `VerifyVoteExtension` MUST be deterministic. Moreover, the value of
   `ResponseVerifyVoteExtension.status` MUST **exclusively** depend on the parameters passed in
-  the call to `RequestVerifyVoteExtension`, and the last committed Application state
-  (see [Requirements](abci&#43;&#43;_app_requirements.md) section).
-- Moreover, application implementers SHOULD always set `ResponseVerifyVoteExtension.status` to `ACCEPT`,
-  unless they _really_ know what the potential liveness implications of returning `REJECT` are.
+  the call to `RequestVerifyVoteExtension`, the block processed by `ProcessProposal`, and the last
+  committed Application state (see [Requirements](abci&#43;&#43;_app_requirements.md) section).
+- For a Precommit, application implementers SHOULD always set `ResponseVerifyVoteExtension.status`
+  to `ACCEPT`, unless they _really_ know what the potential liveness implications of returning
+  `REJECT` are.
 
 #### When does Tenderdash call it?
 
-When a validator _p_ is in Tenderdash consensus round _r_, height _h_, state _prevote_ (**TODO** discuss: I think I must remove the state
-from this condition, but not sure), and _p_ receives a Precommit message for round _r_, height _h_ from _q_:
+When a validator _p_ is in Tenderdash consensus height _h_ and receives, from another validator _q_,
+a Precommit message for a block (not `nil`) at height _h_:
 
 1. If the Precommit message does not contain a vote extensions with a valid signature, Tenderdash discards the message as invalid.
   - a 0-length vote extensions is valid as long as its accompanying signature is also valid.
@@ -776,13 +832,17 @@ from this condition, but not sure), and _p_ receives a Precommit message for rou
     structure in calls to `RequestPrepareProposal`, in rounds of height _h &#43; 1_ where _p_ is the proposer.
   - _reject_, _p_&#39;s Tenderdash will deem the Precommit message invalid and discard it.
 
+Whenever a process is about to save a block and its commit, in consensus, block sync or replay, it
+first calls `RequestVerifyVoteExtension` for the commit, once `ProcessProposal` has processed the
+block. This includes commits the process assembled from its own &#43;2/3 precommits.
+
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | hash | [bytes](#bytes) |  | The header hash of the propsed block that the vote extensions refers to. |
-| validator_pro_tx_hash | [bytes](#bytes) |  | ProTxHash of the validator that signed the extensions. |
+| validator_pro_tx_hash | [bytes](#bytes) |  | ProTxHash of the validator that signed the extensions; empty for commit verification. |
 | height | [int64](#int64) |  | Height of the block (for sanity check). |
-| round | [int32](#int32) |  | Round number for the block. |
+| round | [int32](#int32) |  | Round of the vote; for commit verification, the commit round. |
 | vote_extensions | [ExtendVoteExtension](#tendermint-abci-ExtendVoteExtension) | repeated | Application-specific information signed by Tenderdash. Can have 0 length. |
 
 

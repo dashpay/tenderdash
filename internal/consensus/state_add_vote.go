@@ -9,7 +9,6 @@ import (
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
-	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/eventemitter"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -50,7 +49,7 @@ func newAddVoteAction(cs *State, ctrl *Controller, statsQueue *chanQueue[msgInfo
 	errorMw := addVoteErrorMw(cs.evpool, cs.logger, cs.privValidator, cs.emitter)
 	statsMw := addVoteStatsMw(statsQueue)
 	dispatchPrecommitMw := addVoteDispatchPrecommitMw(ctrl)
-	verifyVoteExtensionMw := addVoteVerifyVoteExtensionMw(cs.privValidator, cs.blockExec, cs.metrics, cs.emitter)
+	verifyVoteExtensionMw := addVoteVerifyVoteExtensionMw(cs.privValidator, cs.blockExecutor, cs.metrics, cs.emitter)
 	return &AddVoteAction{
 		metrics:            cs.metrics,
 		verificationBudget: cs.verificationBudget,
@@ -256,7 +255,7 @@ func addVoteDispatchPrecommitMw(ctrl *Controller) AddVoteMiddlewareFunc {
 
 func addVoteVerifyVoteExtensionMw(
 	privVal privValidator,
-	blockExec *sm.BlockExecutor,
+	blockExec *blockExecutor,
 	metrics *Metrics,
 	evsw *eventemitter.EventEmitter,
 ) AddVoteMiddlewareFunc {
@@ -314,7 +313,12 @@ func addVoteVerifyVoteExtensionMw(
 			if err != nil {
 				return false, err
 			}
-			err = blockExec.VerifyVoteExtension(ctx, vote)
+			// A rejected commit of another round can leave the application
+			// processing that round; it answers from the round processed last.
+			if err := blockExec.ensureOwnRound(ctx, &stateData.RoundState); err != nil {
+				return false, fmt.Errorf("cannot restore the round's processed block: %w", err)
+			}
+			err = blockExec.blockExec.VerifyVoteExtension(ctx, vote)
 			metrics.MarkVoteExtensionReceived(err == nil)
 			if err != nil {
 				return false, err
