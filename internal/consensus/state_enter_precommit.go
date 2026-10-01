@@ -129,7 +129,8 @@ func (c *EnterPrecommitAction) Execute(ctx context.Context, stateEvent StateEven
 	// Precommitting nil is always safe and the lock is kept as it is. Honest
 	// validators that received the proposal for the block precommit it, and a
 	// later proposer re-proposes its valid block with this round as its POL round.
-	if !stateData.ProposalBlock.HashesTo(blockID.Hash) && stateData.LockedBlock.HashesTo(blockID.Hash) {
+	proposalMatches := stateData.ProposalBlock.BlockID(stateData.ProposalBlockParts).Equals(blockID)
+	if !proposalMatches && stateData.LockedBlock.HashesTo(blockID.Hash) {
 		logger.Error("precommit step: +2/3 prevoted locked block, but this round's proposal is for another block; precommitting nil",
 			"locked_block", blockID.Hash,
 			"proposal_block", tmstrings.LazyBlockHash(stateData.ProposalBlock))
@@ -140,7 +141,7 @@ func (c *EnterPrecommitAction) Execute(ctx context.Context, stateEvent StateEven
 	// If greater than 2/3 of the voting power on the network prevoted for the
 	// proposed block, lock on it -- or, if already locked on it, update the
 	// locked round -- and precommit it.
-	if stateData.ProposalBlock.HashesTo(blockID.Hash) {
+	if proposalMatches {
 		// Process the proposal for this round before precommitting it, since the
 		// precommit's vote extensions are for this round. It has not run yet if the
 		// block arrived after we prevoted, and a block we are locked on was
