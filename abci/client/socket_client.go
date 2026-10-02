@@ -90,20 +90,22 @@ func (cli *socketClient) OnStart(ctx context.Context) error {
 		}
 		cli.conn = conn
 
-		go cli.sendRequestsRoutine(ctx, conn)
-		go cli.recvResponseRoutine(ctx, conn)
+		cli.Go(ctx, func(ctx context.Context) { cli.sendRequestsRoutine(ctx, conn) })
+		cli.Go(ctx, func(ctx context.Context) { cli.recvResponseRoutine(ctx, conn) })
 
 		return nil
 	}
 }
 
-// OnStop implements Service by closing connection and flushing all queues.
+// OnStop closes the connection to unblock transport workers.
 func (cli *socketClient) OnStop() {
 	if cli.conn != nil {
 		cli.conn.Close()
 	}
-	cli.drainQueue()
 }
+
+// OnDrain releases pending requests after the transport workers have exited.
+func (cli *socketClient) OnDrain() { cli.drainQueue() }
 
 func (cli *socketClient) String() string {
 	if err := cli.Error(); err != nil {
@@ -162,12 +164,12 @@ func (cli *socketClient) sendRequestsRoutine(ctx context.Context, conn io.Writer
 		cli.trackRequest(reqres)
 
 		if err := types.WriteMessage(reqres.Request, bw); err != nil {
-			cli.stopForError(fmt.Errorf("write to buffer: %w", err))
+			cli.stopForError(ctx, fmt.Errorf("write to buffer: %w", err))
 			return
 		}
 
 		if err := bw.Flush(); err != nil {
-			cli.stopForError(fmt.Errorf("flush buffer: %w", err))
+			cli.stopForError(ctx, fmt.Errorf("flush buffer: %w", err))
 			return
 		}
 	}
@@ -181,18 +183,18 @@ func (cli *socketClient) recvResponseRoutine(ctx context.Context, conn io.Reader
 		res := &types.Response{}
 
 		if err := types.ReadMessage(r, res); err != nil {
-			cli.stopForError(fmt.Errorf("read message: %w", err))
+			cli.stopForError(ctx, fmt.Errorf("read message: %w", err))
 			return
 		}
 
 		switch r := res.Value.(type) {
 		case *types.Response_Exception: // app responded with error
 			// XXX After setting cli.err, release waiters (e.g. reqres.Done())
-			cli.stopForError(errors.New(r.Exception.Error))
+			cli.stopForError(ctx, errors.New(r.Exception.Error))
 			return
 		default:
 			if err := cli.didRecvResponse(res); err != nil {
-				cli.stopForError(err)
+				cli.stopForError(ctx, err)
 				return
 			}
 		}
@@ -435,11 +437,10 @@ func resMatchesReq(req *types.Request, res *types.Response) (ok bool) {
 	return ok
 }
 
-func (cli *socketClient) stopForError(err error) {
-	if !cli.IsRunning() {
+func (cli *socketClient) stopForError(ctx context.Context, err error) {
+	if ctx.Err() != nil {
 		return
 	}
-
 	cli.mtx.Lock()
 	cli.err = err
 	cli.mtx.Unlock()

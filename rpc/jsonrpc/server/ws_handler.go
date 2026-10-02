@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"runtime/debug"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -178,10 +179,6 @@ type wsConnection struct {
 	// writeChan is never closed, to allow WriteRPCResponse() to fail.
 	writeChan chan rpctypes.RPCResponse
 
-	// chan, which is closed when/if readRoutine errors
-	// used to abort writeRoutine
-	readRoutineQuit chan struct{}
-
 	funcMap map[string]*RPCFunc
 
 	// Connection times out if we haven't received *anything* in this long, not even pings.
@@ -196,8 +193,11 @@ type wsConnection struct {
 	// callback which is called upon disconnect
 	onDisconnect func(remoteAddr string)
 
-	ctx    context.Context
-	cancel context.CancelFunc
+	ctx      context.Context
+	cancel   context.CancelFunc
+	workerMu sync.Mutex
+	workers  sync.WaitGroup
+	stopping bool
 }
 
 // NewWSConnection wraps websocket.Conn.
@@ -208,13 +208,12 @@ type wsConnection struct {
 // disconnect. see https://github.com/gorilla/websocket/issues/97
 func newWSConnection(baseConn *websocket.Conn, funcMap map[string]*RPCFunc, logger log.Logger, options ...func(*wsConnection)) *wsConnection {
 	wsc := &wsConnection{
-		Logger:          logger,
-		remoteAddr:      baseConn.RemoteAddr().String(),
-		baseConn:        baseConn,
-		funcMap:         funcMap,
-		readWait:        defaultWSReadWait,
-		pingPeriod:      defaultWSPingPeriod,
-		readRoutineQuit: make(chan struct{}),
+		Logger:     logger,
+		remoteAddr: baseConn.RemoteAddr().String(),
+		baseConn:   baseConn,
+		funcMap:    funcMap,
+		readWait:   defaultWSReadWait,
+		pingPeriod: defaultWSPingPeriod,
 	}
 	for _, option := range options {
 		option(wsc)
@@ -257,25 +256,64 @@ func ReadLimit(readLimit int64) func(*wsConnection) {
 
 // Start starts the client service routines and blocks until there is an error.
 func (wsc *wsConnection) Start(ctx context.Context) error {
+	wsc.ctx, wsc.cancel = context.WithCancel(ctx)
 	wsc.writeChan = make(chan rpctypes.RPCResponse, defaultWSWriteChanCapacity)
+	// https://github.com/gorilla/websocket/issues/97
+	pongs := make(chan string, 1)
+	wsc.baseConn.SetPingHandler(func(m string) error {
+		select {
+		case pongs <- m:
+		default:
+		}
+		return nil
+	})
 
-	// Read subscriptions/unsubscriptions to events
-	go wsc.readRoutine(ctx)
-	// Write responses, BLOCKING.
-	wsc.writeRoutine(ctx)
-
-	return nil
-}
-
-// Stop unsubscribes the remote from all subscriptions.
-func (wsc *wsConnection) Stop() error {
+	readDone, closeDone := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(readDone)
+		defer wsc.cancel()
+		// A handler panic is isolated to its request; retry on this same reader.
+		for wsc.ctx.Err() == nil && wsc.readRoutine(wsc.ctx) {
+		}
+	}()
+	go func() {
+		defer close(closeDone)
+		<-wsc.ctx.Done()
+		_ = wsc.baseConn.Close()
+	}()
+	wsc.writeRoutine(wsc.ctx, pongs)
+	wsc.cancel()
+	<-closeDone
+	<-readDone
+	wsc.workerMu.Lock()
+	wsc.stopping = true
+	wsc.workerMu.Unlock()
+	wsc.workers.Wait()
 	if wsc.onDisconnect != nil {
 		wsc.onDisconnect(wsc.remoteAddr)
 	}
-	if wsc.ctx != nil {
+	return nil
+}
+
+// Stop cancels the session without joining, so it is safe inside a handler.
+// Start joins the reader and performs subscription cleanup before returning.
+func (wsc *wsConnection) Stop() error {
+	if wsc.cancel != nil {
 		wsc.cancel()
 	}
 	return nil
+}
+
+// Go starts session work that Start joins before subscription cleanup.
+func (wsc *wsConnection) Go(fn func(context.Context)) bool {
+	wsc.workerMu.Lock()
+	defer wsc.workerMu.Unlock()
+	if wsc.stopping || wsc.ctx.Err() != nil {
+		return false
+	}
+	wsc.workers.Add(1)
+	go func() { defer wsc.workers.Done(); fn(wsc.ctx) }()
+	return true
 }
 
 // GetRemoteAddr returns the remote address of the underlying connection.
@@ -289,6 +327,8 @@ func (wsc *wsConnection) GetRemoteAddr() string {
 // It implements WSRPCConnection. It is Goroutine-safe.
 func (wsc *wsConnection) WriteRPCResponse(ctx context.Context, resp rpctypes.RPCResponse) error {
 	select {
+	case <-wsc.ctx.Done():
+		return wsc.ctx.Err()
 	case <-ctx.Done():
 		return ctx.Err()
 	case wsc.writeChan <- resp:
@@ -313,17 +353,13 @@ func (wsc *wsConnection) TryWriteRPCResponse(ctx context.Context, resp rpctypes.
 // Context returns the connection's context.
 // The context is canceled when the client's connection closes.
 func (wsc *wsConnection) Context() context.Context {
-	if wsc.ctx != nil {
-		return wsc.ctx
-	}
-	wsc.ctx, wsc.cancel = context.WithCancel(context.Background())
 	return wsc.ctx
 }
 
 // Read from the socket and subscribe to or unsubscribe from events
-func (wsc *wsConnection) readRoutine(ctx context.Context) {
+func (wsc *wsConnection) readRoutine(ctx context.Context) (retry bool) {
 	// readRoutine will block until response is written or WS connection is closed
-	writeCtx := context.Background()
+	writeCtx := ctx
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -337,7 +373,7 @@ func (wsc *wsConnection) readRoutine(ctx context.Context) {
 				req.MakeErrorf(rpctypes.CodeInternalError, "Panic in handler: %v", err)); err != nil {
 				wsc.Logger.Error("error writing RPC response", "err", err)
 			}
-			go wsc.readRoutine(ctx)
+			retry = true
 		}
 	}()
 
@@ -348,7 +384,7 @@ func (wsc *wsConnection) readRoutine(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return false
 		default:
 			// reset deadline for every type of message (control or data)
 			if err := wsc.baseConn.SetReadDeadline(time.Now().Add(wsc.readWait)); err != nil {
@@ -365,8 +401,7 @@ func (wsc *wsConnection) readRoutine(ctx context.Context) {
 				if err := wsc.Stop(); err != nil {
 					wsc.Logger.Error("error closing websocket connection", "err", err)
 				}
-				close(wsc.readRoutineQuit)
-				return
+				return false
 			}
 
 			dec := json.NewDecoder(r)
@@ -419,25 +454,13 @@ func (wsc *wsConnection) readRoutine(ctx context.Context) {
 }
 
 // receives on a write channel and writes out on the socket
-func (wsc *wsConnection) writeRoutine(ctx context.Context) {
+func (wsc *wsConnection) writeRoutine(ctx context.Context, pongs <-chan string) {
 	pingTicker := time.NewTicker(wsc.pingPeriod)
 	defer pingTicker.Stop()
-
-	// https://github.com/gorilla/websocket/issues/97
-	pongs := make(chan string, 1)
-	wsc.baseConn.SetPingHandler(func(m string) error {
-		select {
-		case pongs <- m:
-		default:
-		}
-		return nil
-	})
 
 	for {
 		select {
 		case <-ctx.Done():
-			return
-		case <-wsc.readRoutineQuit: // error in readRoutine
 			return
 		case m := <-pongs:
 			err := wsc.writeMessageWithDeadline(websocket.PongMessage, []byte(m))

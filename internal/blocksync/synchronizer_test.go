@@ -114,6 +114,7 @@ func (suite *SynchronizerTestSuite) TestBasic() {
 		return !sync.IsCaughtUp()
 	}, 2*time.Second, 10*time.Millisecond)
 	sync.Stop()
+	sync.Wait()
 }
 
 func (suite *SynchronizerTestSuite) TestHandoverPreservesInFlightFinalization() {
@@ -175,6 +176,7 @@ func (suite *SynchronizerTestSuite) assertHandoverWaitsForConsumer(beforeApply b
 	stopped := make(chan struct{})
 	go func() {
 		pool.Stop()
+		pool.Wait()
 		close(stopped)
 	}()
 	select {
@@ -256,6 +258,7 @@ func (suite *SynchronizerTestSuite) TestHandoverCancelsBlockedPeerError() {
 	stopped := make(chan struct{})
 	go func() {
 		pool.Stop()
+		pool.Wait()
 		close(stopped)
 	}()
 	select {
@@ -814,6 +817,7 @@ func (suite *SynchronizerTestSuite) TestStopReleasesHandlers() {
 	time.Sleep(50 * time.Millisecond)
 
 	sync.Stop()
+	sync.Wait()
 
 	// With the parent ctx still live, both handler goroutines must have exited.
 	suite.Require().NoError(ctx.Err())

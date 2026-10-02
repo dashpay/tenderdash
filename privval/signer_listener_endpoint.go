@@ -74,10 +74,15 @@ func (sl *SignerListenerEndpoint) OnStart(ctx context.Context) error {
 	sl.pingInterval = time.Duration(sl.signerEndpoint.timeoutReadWrite.Milliseconds()*2/3) * time.Millisecond
 	sl.pingTimer = time.NewTicker(sl.pingInterval)
 
-	go sl.serviceLoop(ctx)
-	go sl.pingLoop(ctx)
+	sl.Go(ctx, sl.serviceLoop)
+	sl.Go(ctx, sl.pingLoop)
 
-	sl.connectRequestCh <- struct{}{}
+	select {
+	case sl.connectRequestCh <- struct{}{}:
+	case <-ctx.Done():
+		sl.OnStop()
+		return ctx.Err()
+	}
 
 	return nil
 }
@@ -92,7 +97,6 @@ func (sl *SignerListenerEndpoint) OnStop() {
 	if sl.listener != nil {
 		if err := sl.listener.Close(); err != nil {
 			sl.logger.Error("Closing Listener", "err", err)
-			sl.listener = nil
 		}
 	}
 
@@ -149,7 +153,7 @@ func (sl *SignerListenerEndpoint) ensureConnection(ctx context.Context, maxWait 
 }
 
 func (sl *SignerListenerEndpoint) acceptNewConnection() (net.Conn, error) {
-	if !sl.IsRunning() || sl.listener == nil {
+	if sl.listener == nil {
 		return nil, fmt.Errorf("endpoint is closing")
 	}
 
@@ -188,6 +192,7 @@ func (sl *SignerListenerEndpoint) serviceLoop(ctx context.Context) {
 					select {
 					case sl.connectionAvailableCh <- conn:
 					case <-ctx.Done():
+						_ = conn.Close()
 						return
 					}
 				}

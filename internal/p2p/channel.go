@@ -321,25 +321,7 @@ func (ch *legacyChannel) String() string { return fmt.Sprintf("p2p.Channel<%d:%s
 // Receive returns a new unbuffered iterator to receive messages from ch.
 // The iterator runs until ctx ends.
 func (ch *legacyChannel) Receive(ctx context.Context) ChannelIterator {
-	iter := &channelIterator{
-		pipe: make(chan Envelope), // unbuffered
-	}
-	go func(pipe chan<- Envelope) {
-		defer close(iter.pipe)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case envelope := <-ch.inCh:
-				select {
-				case <-ctx.Done():
-					return
-				case pipe <- envelope:
-				}
-			}
-		}
-	}(iter.pipe)
-	return iter
+	return &channelIterator{pipe: ch.inCh, done: ctx.Done()}
 }
 
 // ChannelIterator is an iterator for receiving messages from a Channel.
@@ -364,7 +346,8 @@ type ChannelIterator interface {
 // MergedChannelIterator makes it possible to combine multiple
 // channels into a single iterator.
 type channelIterator struct {
-	pipe    chan Envelope
+	pipe    <-chan Envelope
+	done    <-chan struct{}
 	current *Envelope
 }
 
@@ -375,6 +358,9 @@ func NewChannelIterator(pipe chan Envelope) ChannelIterator {
 
 func (iter *channelIterator) Next(ctx context.Context) bool {
 	select {
+	case <-iter.done:
+		iter.current = nil
+		return false
 	case <-ctx.Done():
 		iter.current = nil
 		return false
@@ -402,8 +388,9 @@ func (iter *channelIterator) Envelope() *Envelope { return iter.current }
 // This allows the caller to consume messages from multiple channels
 // without needing to manage the concurrency separately.
 func MergedChannelIterator(ctx context.Context, chs ...Channel) ChannelIterator {
+	pipe := make(chan Envelope)
 	iter := &channelIterator{
-		pipe: make(chan Envelope), // unbuffered
+		pipe: pipe, // unbuffered
 	}
 	wg := new(sync.WaitGroup)
 
@@ -419,19 +406,16 @@ func MergedChannelIterator(ctx context.Context, chs ...Channel) ChannelIterator 
 				case pipe <- *iter.Envelope():
 				}
 			}
-		}(ch, iter.pipe)
+		}(ch, pipe)
 	}
 
-	done := make(chan struct{})
-	go func() { defer close(done); wg.Wait() }()
-
 	go func() {
-		defer close(iter.pipe)
+		defer close(pipe)
 		// we could return early if the context is canceled,
 		// but this is safer because it means the pipe stays
 		// open until all of the ch worker threads end, which
 		// should happen very quickly.
-		<-done
+		wg.Wait()
 	}()
 
 	return iter

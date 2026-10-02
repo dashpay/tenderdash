@@ -99,6 +99,9 @@ func (pu *PeerUpdate) SetProTxHash(proTxHash types.ProTxHash) {
 // PeerUpdates is a peer update subscription with notifications about peer
 // events (currently just status changes).
 type PeerUpdates struct {
+	lifecycleMtx     sync.Mutex
+	cancel           context.CancelFunc
+	done             chan struct{}
 	routerUpdatesCh  chan PeerUpdate
 	reactorUpdatesCh chan PeerUpdate
 	// subscriberName is a label used for debugging
@@ -119,6 +122,27 @@ func NewPeerUpdates(updatesCh chan PeerUpdate, routerUpdatesBufSize int, subscri
 // Updates returns a channel for consuming peer updates.
 func (pu *PeerUpdates) Updates() <-chan PeerUpdate {
 	return pu.reactorUpdatesCh
+}
+
+// Close cancels and joins the registered subscription worker.
+func (pu *PeerUpdates) Close() {
+	pu.lifecycleMtx.Lock()
+	cancel := pu.cancel
+	pu.lifecycleMtx.Unlock()
+	if cancel != nil {
+		cancel()
+		pu.Wait()
+	}
+}
+
+// Wait joins the registered subscription worker after its context is canceled.
+func (pu *PeerUpdates) Wait() {
+	pu.lifecycleMtx.Lock()
+	done := pu.done
+	pu.lifecycleMtx.Unlock()
+	if done != nil {
+		<-done
+	}
 }
 
 // SendUpdate pushes information about a peer into the routing layer,
@@ -1411,9 +1435,17 @@ func (m *PeerManager) Unsubscribe(sub *PeerUpdates) {
 func (m *PeerManager) Register(ctx context.Context, peerUpdates *PeerUpdates) {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
+	peerUpdates.lifecycleMtx.Lock()
+	defer peerUpdates.lifecycleMtx.Unlock()
+	if peerUpdates.done != nil {
+		return
+	}
+	ctx, peerUpdates.cancel = context.WithCancel(ctx)
+	peerUpdates.done = make(chan struct{})
 	m.subscriptions[peerUpdates] = peerUpdates
 
 	go func() {
+		defer close(peerUpdates.done)
 		defer m.Unsubscribe(peerUpdates)
 		for {
 			select {

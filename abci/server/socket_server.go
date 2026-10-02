@@ -55,7 +55,7 @@ func (s *SocketServer) OnStart(ctx context.Context) error {
 	}
 
 	s.listener = ln
-	go s.acceptConnectionsRoutine(ctx)
+	s.Go(ctx, s.acceptConnectionsRoutine)
 
 	return nil
 }
@@ -103,7 +103,7 @@ func (s *SocketServer) acceptConnectionsRoutine(ctx context.Context) {
 		s.logger.Info("Waiting for new connection...")
 		conn, err := s.listener.Accept()
 		if err != nil {
-			if !s.IsRunning() {
+			if ctx.Err() != nil {
 				return // Ignore error from listener closing.
 			}
 			s.logger.Warn("Failed to accept connection", "err", err)
@@ -153,9 +153,15 @@ func (s *SocketServer) acceptConnectionsRoutine(ctx context.Context) {
 		}
 
 		// Read requests from conn and deal with them
-		go s.handleRequests(cctx, closer, conn, responses)
+		if !s.Go(cctx, func(ctx context.Context) { s.handleRequests(ctx, closer, conn, responses) }) {
+			closer(context.Canceled)
+			return
+		}
 		// Pull responses from 'responses' and write them to conn.
-		go s.handleResponses(cctx, closer, conn, responses)
+		if !s.Go(cctx, func(ctx context.Context) { s.handleResponses(ctx, closer, conn, responses) }) {
+			closer(context.Canceled)
+			return
+		}
 	}
 }
 
