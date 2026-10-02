@@ -1,32 +1,50 @@
-<!--- Provide a general summary of your changes in the Title above -->
+<!-- markdownlint-disable-file MD041 -->
 <!--- Pull request titles must use the [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/#summary) format -->
+<!--- Drop sections that don't apply, but keep the order. -->
+<!--- TL;DR, User story and Scenario are plain-language and user-facing; -->
+<!--- Detailed discussion is technical, for implementors and reviewers. -->
 
-## Issue being fixed or feature implemented
-<!--- Why is this change required? What problem does it solve? -->
-<!--- If it fixes an open issue, please link to the issue here. -->
+**TL;DR:** <!--- One plain-language sentence describing what this PR does. -->
 
-
-## What was done?
-<!--- Describe your changes in detail -->
-
-
-## How Has This Been Tested?
-<!--- Please describe in detail how you tested your changes. -->
-<!--- Include details of your testing environment, and the tests you ran to -->
-<!--- see how your change affects other areas of the code, etc. -->
+## User story
+<!--- As a **<role>**, I want to <what-to-do>, to achieve <user-goal>. -->
 
 
-## Breaking Changes
-<!--- Please describe any breaking changes your code introduces and verify that -->
-<!--- the title includes "!" following the conventional commit type (e.g. "feat!: ..."-->
+## Scenario
+
+### Base flow
+<!--- The ordinary steps that lead to this situation — plain narrative. -->
 
 
-## Checklist:
-<!--- Go over all the following points, and put an `x` in all the boxes that apply. -->
-- [ ] I have performed a self-review of my own code
-- [ ] I have commented my code, particularly in hard-to-understand areas
-- [ ] I have added or updated relevant unit/integration/functional/e2e tests
-- [ ] I have made corresponding changes to the documentation
+### Actual behavior
+<!--- What happens today — the bug, gap, or missing capability. -->
 
-**For repository code-owners and collaborators only**
-- [ ] I have assigned this pull request to a milestone
+
+### Expected behavior
+<!--- What should happen, or become possible, after this PR. -->
+
+
+## Detailed discussion
+
+### What was done
+<!--- Describe your changes in detail. -->
+<!--- If it fixes an open issue, add `Closes #<issue-number>`. -->
+
+
+### Testing
+<!--- Describe how you tested your changes: environment, tests run, -->
+<!--- and how you verified the impact on other areas of the code. -->
+
+
+### Breaking changes
+<!--- Describe any breaking changes and verify that the title includes "!" -->
+<!--- following the conventional commit type (e.g. "feat!: ..."). -->
+
+
+### Prior work
+<!--- Links to related or similar PRs/issues, each with a one-sentence summary -->
+<!--- of how it relates to this one. Omit if none. -->
+
+
+### Attribution
+<!--- Optional: credit co-authors or tools (e.g. AI assistants) used to prepare this PR. -->
