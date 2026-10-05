@@ -203,25 +203,25 @@ func (txmp *TxMempool) CheckTx(
 	// During the initial phase of CheckTx, we do not need to modify any state.
 	// A transaction will not actually be added to the mempool until it survives
 	// a call to the ABCI CheckTx method and size constraint checks.
-	height, err := func() (int64, error) {
+	height, rejection, err := func() (int64, *abci.ResponseCheckTx, error) {
 		txmp.mtx.RLock()
 		defer txmp.mtx.RUnlock()
 
 		// Reject transactions in excess of the configured maximum transaction size.
 		if len(tx) > txmp.config.MaxTxBytes {
-			return 0, types.ErrTxTooLarge{Max: txmp.config.MaxTxBytes, Actual: len(tx)}
+			return 0, nil, types.ErrTxTooLarge{Max: txmp.config.MaxTxBytes, Actual: len(tx)}
 		}
 
 		// If a precheck hook is defined, call it before invoking the application.
 		if txmp.preCheck != nil {
 			if err := txmp.preCheck(tx); err != nil {
-				return 0, types.ErrPreCheck{Reason: err}
+				return 0, nil, types.ErrPreCheck{Reason: err}
 			}
 		}
 
 		// Early exit if the proxy connection has an error.
 		if err := txmp.proxyAppConn.Error(); err != nil {
-			return 0, err
+			return 0, nil, err
 		}
 
 		txKey := tx.Key()
@@ -233,12 +233,25 @@ func (txmp *TxMempool) CheckTx(
 				w := elt.Value.(*WrappedTx)
 				w.SetPeer(txInfo.SenderID)
 			}
-			return 0, types.ErrTxInCache
+			// A local caller (e.g. RPC) learns why the transaction was rejected;
+			// peers only need to know that it is a duplicate.
+			if txInfo.SenderID == UnknownPeerID {
+				if rsp := txmp.cache.Rejection(tx); rsp != nil {
+					return 0, rsp, nil
+				}
+			}
+			return 0, nil, types.ErrTxInCache
 		}
-		return txmp.height, nil
+		return txmp.height, nil, nil
 	}()
 	if err != nil {
 		return err
+	}
+	if rejection != nil {
+		if cb != nil {
+			cb(rejection)
+		}
+		return nil
 	}
 
 	// Invoke an ABCI CheckTx for this transaction.
@@ -450,6 +463,8 @@ func (txmp *TxMempool) Update(
 		// the cache unless the operator has explicitly requested we keep them.
 		if deliverTxResponses[i].Code == abci.CodeTypeOK {
 			_ = txmp.cache.Push(tx)
+			// A committed transaction is no longer rejected, whatever CheckTx said before.
+			txmp.cache.SetRejection(tx, nil)
 		} else if !txmp.config.KeepInvalidTxsInCache {
 			txmp.cache.Remove(tx)
 		}
@@ -531,6 +546,8 @@ func (txmp *TxMempool) addNewTransaction(wtx *WrappedTx, checkTxRes *abci.Respon
 		// instructed us to keep invalid transactions.
 		if !txmp.config.KeepInvalidTxsInCache {
 			txmp.cache.Remove(wtx.tx)
+		} else if checkTxRes.Code != abci.CodeTypeOK {
+			txmp.cache.SetRejection(wtx.tx, checkTxRes)
 		}
 
 		if err != nil {
@@ -751,6 +768,8 @@ func (txmp *TxMempool) handleRecheckResult(tx types.Tx, checkTxRes *abci.Respons
 	txmp.metrics.FailedTxs.Add(1)
 	if !txmp.config.KeepInvalidTxsInCache {
 		txmp.cache.Remove(wtx.tx)
+	} else if checkTxRes.Code != abci.CodeTypeOK {
+		txmp.cache.SetRejection(wtx.tx, checkTxRes)
 	}
 	txmp.metrics.Size.Set(float64(txmp.Size()))
 }
