@@ -205,6 +205,33 @@ func TestTxMempool_CommittedWhileCheckTxInFlight(t *testing.T) {
 	assert.Nil(t, got)
 }
 
+// The cache is smaller than the mempool, so a pending transaction can lose its
+// cache entry and be checked, and rejected, a second time.
+func TestTxMempool_PendingTxRejectedOnDuplicateCheck(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	txmp, app := setupScripted(ctx, t, true, &abci.ResponseCheckTx{Code: abci.CodeTypeOK, GasWanted: 1})
+	txmp.cache = NewLRUTxCache(1)
+	pending, other := types.Tx("sender-1=key=1"), types.Tx("sender-2=key=2")
+
+	_, err := submit(ctx, txmp, pending, TxInfo{})
+	require.NoError(t, err)
+	require.Equal(t, 1, txmp.Size())
+
+	app.response.Store(rejection())
+	_, err = submit(ctx, txmp, other, TxInfo{})
+	require.NoError(t, err)
+	_, err = submit(ctx, txmp, pending, TxInfo{})
+	require.NoError(t, err)
+	require.Equal(t, 1, txmp.Size())
+	require.Equal(t, int32(3), app.calls.Load())
+
+	got, err := submit(ctx, txmp, pending, TxInfo{})
+	require.ErrorIs(t, err, types.ErrTxInCache)
+	assert.Nil(t, got)
+}
+
 func TestTxMempool_ResubmitTxRejectedOnRecheck(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

@@ -229,9 +229,11 @@ func (txmp *TxMempool) CheckTx(
 		// Check for the transaction in the cache.
 		if !txmp.cache.Push(tx) {
 			// If the cached transaction is also in the pool, record its sender.
+			// It is still pending, whatever a later duplicate check said.
 			if elt, ok := txmp.txByKey[txKey]; ok {
 				w := elt.Value.(*WrappedTx)
 				w.SetPeer(txInfo.SenderID)
+				return 0, nil, types.ErrTxInCache
 			}
 			// A local caller (e.g. RPC) learns why the transaction was rejected;
 			// peers only need to know that it is a duplicate. A peer without a
