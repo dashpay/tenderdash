@@ -36,9 +36,13 @@ type TxCache interface {
 
 	// SetRejection records the CheckTx response that rejected tx, so that it can
 	// be reported again when tx is resubmitted. It does nothing if tx is not in
-	// the cache or the response exceeds maxCachedRejectionBytes. A nil res
-	// clears the record.
+	// the cache, is marked as committed, or the response exceeds
+	// maxCachedRejectionBytes.
 	SetRejection(tx types.Tx, res *abci.ResponseCheckTx)
+
+	// MarkCommitted drops the rejection recorded for tx and makes the cache
+	// ignore further ones for as long as tx stays in it.
+	MarkCommitted(tx types.Tx)
 
 	// Rejection returns a copy of the response recorded with SetRejection, or
 	// nil if there is none.
@@ -56,6 +60,7 @@ type LRUTxCache struct {
 	cacheMap   map[types.TxKey]*list.Element
 	list       *list.List
 	rejections map[types.TxKey]*abci.ResponseCheckTx
+	committed  map[types.TxKey]struct{}
 }
 
 func NewLRUTxCache(cacheSize int) *LRUTxCache {
@@ -64,6 +69,7 @@ func NewLRUTxCache(cacheSize int) *LRUTxCache {
 		cacheMap:   make(map[types.TxKey]*list.Element, cacheSize),
 		list:       list.New(),
 		rejections: make(map[types.TxKey]*abci.ResponseCheckTx),
+		committed:  make(map[types.TxKey]struct{}),
 	}
 }
 
@@ -79,6 +85,7 @@ func (c *LRUTxCache) Reset() {
 
 	c.cacheMap = make(map[types.TxKey]*list.Element, c.size)
 	c.rejections = make(map[types.TxKey]*abci.ResponseCheckTx)
+	c.committed = make(map[types.TxKey]struct{})
 	c.list.Init()
 }
 
@@ -100,6 +107,7 @@ func (c *LRUTxCache) Push(tx types.Tx) bool {
 			frontKey := front.Value.(types.TxKey)
 			delete(c.cacheMap, frontKey)
 			delete(c.rejections, frontKey)
+			delete(c.committed, frontKey)
 			c.list.Remove(front)
 		}
 	}
@@ -118,6 +126,7 @@ func (c *LRUTxCache) Remove(tx types.Tx) {
 	e := c.cacheMap[key]
 	delete(c.cacheMap, key)
 	delete(c.rejections, key)
+	delete(c.committed, key)
 
 	if e != nil {
 		c.list.Remove(e)
@@ -137,11 +146,10 @@ func (c *LRUTxCache) SetRejection(tx types.Tx, res *abci.ResponseCheckTx) {
 	defer c.mtx.Unlock()
 
 	key := tx.Key()
-	if res == nil {
-		delete(c.rejections, key)
+	if _, ok := c.cacheMap[key]; !ok {
 		return
 	}
-	if _, ok := c.cacheMap[key]; !ok {
+	if _, ok := c.committed[key]; ok {
 		return
 	}
 	if len(res.Codespace)+len(res.Info)+len(res.Data) > maxCachedRejectionBytes {
@@ -155,6 +163,18 @@ func (c *LRUTxCache) SetRejection(tx types.Tx, res *abci.ResponseCheckTx) {
 		Info:      res.Info,
 		Data:      bytes.Clone(res.Data),
 	}
+}
+
+func (c *LRUTxCache) MarkCommitted(tx types.Tx) {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	key := tx.Key()
+	if _, ok := c.cacheMap[key]; !ok {
+		return
+	}
+	delete(c.rejections, key)
+	c.committed[key] = struct{}{}
 }
 
 func (c *LRUTxCache) Rejection(tx types.Tx) *abci.ResponseCheckTx {
@@ -185,4 +205,5 @@ func (NopTxCache) Remove(types.Tx)    {}
 func (NopTxCache) Has(types.Tx) bool  { return false }
 
 func (NopTxCache) SetRejection(types.Tx, *abci.ResponseCheckTx) {}
+func (NopTxCache) MarkCommitted(types.Tx)                       {}
 func (NopTxCache) Rejection(types.Tx) *abci.ResponseCheckTx     { return nil }

@@ -234,8 +234,9 @@ func (txmp *TxMempool) CheckTx(
 				w.SetPeer(txInfo.SenderID)
 			}
 			// A local caller (e.g. RPC) learns why the transaction was rejected;
-			// peers only need to know that it is a duplicate.
-			if txInfo.SenderID == UnknownPeerID {
+			// peers only need to know that it is a duplicate. A peer without a
+			// reserved ID also has UnknownPeerID, so check its node ID too.
+			if txInfo.SenderID == UnknownPeerID && txInfo.SenderNodeID == "" {
 				if rsp := txmp.cache.Rejection(tx); rsp != nil {
 					return 0, rsp, nil
 				}
@@ -463,8 +464,9 @@ func (txmp *TxMempool) Update(
 		// the cache unless the operator has explicitly requested we keep them.
 		if deliverTxResponses[i].Code == abci.CodeTypeOK {
 			_ = txmp.cache.Push(tx)
-			// A committed transaction is no longer rejected, whatever CheckTx said before.
-			txmp.cache.SetRejection(tx, nil)
+			// A committed transaction is not rejected, whatever CheckTx said
+			// before or says in a check that is still in flight.
+			txmp.cache.MarkCommitted(tx)
 		} else if !txmp.config.KeepInvalidTxsInCache {
 			txmp.cache.Remove(tx)
 		}

@@ -74,8 +74,25 @@ func TestCacheRejection(t *testing.T) {
 			want: want,
 		},
 		{
-			name: "cleared with nil",
-			run:  func(cache *LRUTxCache) { cache.SetRejection(tx, nil) },
+			name: "cleared when marked committed",
+			run:  func(cache *LRUTxCache) { cache.MarkCommitted(tx) },
+		},
+		{
+			name: "not stored for a committed transaction",
+			run: func(cache *LRUTxCache) {
+				cache.MarkCommitted(tx)
+				cache.SetRejection(tx, rejected)
+			},
+		},
+		{
+			name: "stored again once the committed transaction is removed and pushed back",
+			run: func(cache *LRUTxCache) {
+				cache.MarkCommitted(tx)
+				cache.Remove(tx)
+				cache.Push(tx)
+				cache.SetRejection(tx, rejected)
+			},
+			want: want,
 		},
 		{
 			name: "dropped when replaced by an oversized response",
