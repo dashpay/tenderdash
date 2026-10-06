@@ -53,7 +53,7 @@ type Client struct {
 	prt       *merkle.ProofRuntime
 	keyPathFn KeyPathFunc
 
-	closers []func()
+	serviceCtx context.Context
 }
 
 var _ rpcclient.Client = (*Client)(nil)
@@ -106,19 +106,22 @@ func NewClient(logger log.Logger, next rpcclient.Client, lc LightClient, opts ..
 }
 
 func (c *Client) OnStart(ctx context.Context) error {
-	nctx, ncancel := context.WithCancel(ctx)
-	if err := c.next.Start(nctx); err != nil {
-		ncancel()
+	c.serviceCtx = ctx
+	if err := c.next.Start(ctx); err != nil {
 		return err
 	}
-	c.closers = append(c.closers, ncancel)
 
 	return nil
 }
 
-func (c *Client) OnStop() {
-	for _, closer := range c.closers {
-		closer()
+func (c *Client) OnStop() {}
+
+// OnDrain joins clients exposing transport shutdown in addition to the RPC API.
+func (c *Client) OnDrain() {
+	if waiter, ok := c.next.(interface{ Wait() }); ok {
+		waiter.Wait()
+	} else if stopper, ok := c.next.(interface{ Stop() error }); ok {
+		_ = stopper.Stop()
 	}
 }
 
@@ -648,19 +651,31 @@ func (c *Client) RegisterOpDecoder(typ string, dec merkle.OpDecoder) {
 // a subscriber, but does not verify responses (UNSAFE)!
 // TODO: verify data
 func (c *Client) SubscribeWS(ctx context.Context, query string) (*coretypes.ResultSubscribe, error) {
-	bctx, bcancel := context.WithCancel(context.Background())
-	c.closers = append(c.closers, bcancel)
+	if !c.IsRunning() {
+		return nil, fmt.Errorf("light RPC client is not running")
+	}
+	bctx, cancel := context.WithCancel(c.serviceCtx)
 
 	callInfo := rpctypes.GetCallInfo(ctx)
+	stopCancel := context.AfterFunc(callInfo.WSConn.Context(), cancel)
 	out, err := c.next.Subscribe(bctx, callInfo.RemoteAddr(), query) //nolint:staticcheck
 	if err != nil {
+		stopCancel()
+		cancel()
 		return nil, err
 	}
 
-	go func() {
+	done := make(chan struct{})
+	if !c.Go(bctx, func(bctx context.Context) {
+		defer close(done)
+		defer cancel()
+		defer stopCancel()
 		for {
 			select {
-			case resultEvent := <-out:
+			case resultEvent, ok := <-out:
+				if !ok {
+					return
+				}
 				// We should have a switch here that performs a validation
 				// depending on the event's type.
 				callInfo.WSConn.TryWriteRPCResponse(bctx, callInfo.RPCRequest.MakeResponse(resultEvent))
@@ -668,7 +683,17 @@ func (c *Client) SubscribeWS(ctx context.Context, query string) (*coretypes.Resu
 				return
 			}
 		}
-	}()
+	}) {
+		stopCancel()
+		cancel()
+		return nil, fmt.Errorf("light RPC client is stopping")
+	}
+
+	if !callInfo.WSConn.Go(func(context.Context) { <-done }) {
+		cancel()
+		<-done
+		return nil, fmt.Errorf("websocket session is stopping")
+	}
 
 	return &coretypes.ResultSubscribe{}, nil
 }

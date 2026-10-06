@@ -170,6 +170,7 @@ type Router struct {
 	// channels on router start. This depends on whether we want to allow
 	// dynamic channels in the future.
 	channelMtx    sync.RWMutex
+	ctx           context.Context
 	channelQueues map[ChannelID]queue // inbound messages from all peers to a single channel
 }
 
@@ -260,6 +261,9 @@ type ChannelCreator func(context.Context, *ChannelDescriptor) (Channel, error)
 func (r *Router) OpenChannel(ctx context.Context, chDesc *ChannelDescriptor) (Channel, error) {
 	r.channelMtx.Lock()
 	defer r.channelMtx.Unlock()
+	if r.ctx == nil || r.ctx.Err() != nil {
+		return nil, errors.New("router is not running")
+	}
 
 	id := chDesc.ID
 	if _, ok := r.channelQueues[id]; ok {
@@ -279,16 +283,28 @@ func (r *Router) OpenChannel(ctx context.Context, chDesc *ChannelDescriptor) (Ch
 
 	r.transport.AddChannelDescriptors([]*ChannelDescriptor{chDesc})
 
-	go func() {
+	channelCtx, cancel := context.WithCancel(ctx)
+	stopCancel := context.AfterFunc(r.ctx, cancel)
+	if !r.Go(r.ctx, func(context.Context) {
+		defer stopCancel()
+		defer cancel()
 		defer func() {
 			r.channelMtx.Lock()
 			delete(r.channelQueues, id)
 			r.channelMtx.Unlock()
 			queue.close()
+			<-queue.closed()
 		}()
 
-		r.routeChannel(ctx, chDesc.ID, outCh, errCh)
-	}()
+		r.routeChannel(channelCtx, chDesc.ID, outCh, errCh)
+	}) {
+		stopCancel()
+		cancel()
+		delete(r.channelQueues, id)
+		queue.close()
+		<-queue.closed()
+		return nil, errors.New("router is stopping")
+	}
 
 	return channel, nil
 }
@@ -463,13 +479,16 @@ func (r *Router) acceptPeers(ctx context.Context, transport Transport) {
 		}
 
 		// Spawn a goroutine for the handshake, to avoid head-of-line blocking.
-		go r.openConnection(ctx, conn)
+		if !r.Go(ctx, func(ctx context.Context) { r.openConnection(ctx, conn) }) {
+			r.closeConnection(conn)
+			r.connTracker.RemoveConn(incomingIP)
+		}
 
 	}
 }
 
 func (r *Router) openConnection(ctx context.Context, conn Connection) {
-	defer conn.Close()
+	defer r.closeConnection(conn)
 	defer r.connTracker.RemoveConn(conn.RemoteEndpoint().IP)
 
 	re := conn.RemoteEndpoint()
@@ -583,14 +602,14 @@ func (r *Router) connectPeer(ctx context.Context, address NodeAddress) {
 	peerInfo, err := r.handshakePeer(ctx, conn, address.NodeID)
 	switch {
 	case errors.Is(err, context.Canceled):
-		conn.Close()
+		r.closeConnection(conn)
 		return
 	case err != nil:
 		r.logger.Error("failed to handshake with peer", "peer", address, "err", err)
 		if err = r.peerManager.DialFailed(ctx, address); err != nil {
 			r.logger.Error("failed to report dial failure", "peer", address, "err", err)
 		}
-		conn.Close()
+		r.closeConnection(conn)
 		return
 	}
 
@@ -598,12 +617,25 @@ func (r *Router) connectPeer(ctx context.Context, address NodeAddress) {
 	if err != nil {
 		r.logger.Error("failed to dial peer", "op", "outgoing/dialing", "peer", address.NodeID, "err", err)
 		r.peerManager.dialWaker.Wake()
-		conn.Close()
+		r.closeConnection(conn)
 		return
 	}
 
 	// routePeer (also) calls connection close
-	go r.routePeer(ctx, address.NodeID, conn, toChannelIDs(peerInfo.Channels.ToSlice()))
+	if !r.Go(ctx, func(ctx context.Context) {
+		r.routePeer(ctx, address.NodeID, conn, toChannelIDs(peerInfo.Channels.ToSlice()))
+	}) {
+		r.closeConnection(conn)
+		r.peerManager.Disconnected(ctx, address.NodeID)
+	}
+}
+
+// closeConnection joins transport workers from their owner, never from a callback.
+func (r *Router) closeConnection(conn Connection) {
+	_ = conn.Close()
+	if waiter, ok := conn.(interface{ Wait() }); ok {
+		waiter.Wait()
+	}
 }
 
 func (r *Router) getOrMakeQueue(peerID types.NodeID, channels ChannelIDSet) queue {
@@ -733,8 +765,9 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 		r.peerMtx.Unlock()
 		r.completePeerDeliveries(peerID)
 
-		_ = conn.Close()
+		r.closeConnection(conn)
 		sendQueue.close()
+		<-sendQueue.closed()
 
 		r.peerManager.Disconnected(ctx, peerID)
 		r.metrics.PeersConnected.Add(-1)
@@ -1046,6 +1079,9 @@ func (r *Router) setupQueueFactory(ctx context.Context) error {
 
 // OnStart implements service.Service.
 func (r *Router) OnStart(ctx context.Context) error {
+	r.channelMtx.Lock()
+	r.ctx = ctx
+	r.channelMtx.Unlock()
 	if err := r.setupQueueFactory(ctx); err != nil {
 		return err
 	}
@@ -1054,9 +1090,9 @@ func (r *Router) OnStart(ctx context.Context) error {
 		return err
 	}
 
-	go r.dialPeers(ctx)
-	go r.evictPeers(ctx)
-	go r.acceptPeers(ctx, r.transport)
+	r.Go(ctx, r.dialPeers)
+	r.Go(ctx, r.evictPeers)
+	r.Go(ctx, func(ctx context.Context) { r.acceptPeers(ctx, r.transport) })
 
 	return nil
 }
@@ -1073,7 +1109,7 @@ func (r *Router) OnStop() {
 		r.logger.Error("failed to close transport", "err", err)
 	}
 
-	// Collect all remaining queues, and wait for them to close.
+	// Queue owners join their workers after cancellation.
 	queues := []queue{}
 
 	r.channelMtx.RLock()
@@ -1090,7 +1126,6 @@ func (r *Router) OnStop() {
 
 	for _, q := range queues {
 		q.close()
-		<-q.closed()
 	}
 }
 

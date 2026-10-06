@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1126,6 +1127,7 @@ func TestNodeStartRetryAfterRPCListenFailure(t *testing.T) {
 					n.Wait()
 				} else {
 					n.OnStop()
+					n.OnDrain()
 				}
 			}()
 			err = n.Start(ctx)
@@ -1163,9 +1165,11 @@ func TestNodeStartFailureReleasesRPCListeners(t *testing.T) {
 	ns, err := newDefaultNode(ctx, cfg, log.NewNopLogger())
 	require.NoError(t, err)
 	n := ns.(*nodeImpl)
+	defer n.OnDrain()
 	defer n.OnStop()
 	app := abcimocks.NewClient(t)
 	appErr := errors.New("application unavailable")
+	app.On("Wait").Return()
 	app.On("Start", mock.Anything).Run(func(mock.Arguments) {
 		probe, bindErr := net.Listen("tcp", address)
 		if bindErr == nil {
@@ -1184,12 +1188,14 @@ func TestNodeStartFailureReleasesRPCListeners(t *testing.T) {
 // finalizePausedClient holds the first commit between block-store and state-store writes.
 type finalizePausedClient struct {
 	abciclient.Client
-	entered chan struct{}
-	release chan struct{}
+	entered     chan struct{}
+	release     chan struct{}
+	finalizeCtx context.Context
 }
 
 func (c *finalizePausedClient) FinalizeBlock(ctx context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
 	if req.Block.Header.Height == 1 {
+		c.finalizeCtx = ctx
 		close(c.entered)
 		<-c.release
 	}
@@ -1214,8 +1220,6 @@ func (s startupPausedService) Start(ctx context.Context) error {
 }
 
 func TestNodeStartDuringFirstCommit(t *testing.T) {
-	// Wait for consensus goroutines before TempDir cleanup removes their files.
-	defer leaktest.CheckTimeout(t, 5*time.Second)()
 	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
 	require.NoError(t, err)
 	cfg.Consensus = config.DefaultConsensusConfig()
@@ -1244,6 +1248,7 @@ func TestNodeStartDuringFirstCommit(t *testing.T) {
 			n.Wait()
 		} else {
 			n.OnStop()
+			n.OnDrain()
 		}
 	}()
 	err = n.Start(ctx)
@@ -1253,4 +1258,126 @@ func TestNodeStartDuringFirstCommit(t *testing.T) {
 	state, err := n.stateStore.Load()
 	require.NoError(t, err)
 	require.Zero(t, state.LastBlockHeight, "the application has not completed FinalizeBlock")
+}
+
+type shutdownPausedService struct {
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (*shutdownPausedService) Start(context.Context) error { return nil }
+func (*shutdownPausedService) IsRunning() bool             { return true }
+func (s *shutdownPausedService) Wait()                     { close(s.entered); <-s.release }
+
+func TestNodeWaitPreservesFinalization(t *testing.T) {
+	for _, manual := range []bool{false, true} {
+		t.Run(fmt.Sprintf("manual=%t", manual), func(t *testing.T) {
+			cfg, err := config.ResetTestRoot(t.TempDir(), strings.ReplaceAll(t.Name(), "/", "-"))
+			require.NoError(t, err)
+			cfg.Consensus = config.DefaultConsensusConfig()
+			cfg.SetRoot(cfg.RootDir)
+			cfg.RPC.ListenAddress = ""
+			cfg.P2P.ListenAddress = "tcp://127.0.0.1:0"
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			logger := log.NewNopLogger()
+			client, _, err := proxy.ClientFactory(logger, *cfg.Abci, cfg.DBDir())
+			require.NoError(t, err)
+			app := &finalizePausedClient{Client: client, entered: make(chan struct{}), release: make(chan struct{})}
+			unpauseApp := sync.OnceFunc(func() { close(app.release) })
+			gate := &shutdownPausedService{entered: make(chan struct{}), release: make(chan struct{})}
+			unpauseShutdown := sync.OnceFunc(func() { close(gate.release) })
+			ns, err := New(ctx, cfg, logger, app, nil)
+			require.NoError(t, err)
+			n := ns.(*nodeImpl)
+			for i, reactor := range n.services {
+				if reactor == n.rpcEnv.ConsensusReactor {
+					n.services[i] = startupPausedService{Service: reactor, entered: app.entered}
+				}
+			}
+			n.services = append(n.services, gate)
+			require.NoError(t, n.Start(ctx))
+			t.Cleanup(func() { unpauseApp(); unpauseShutdown(); cancel(); n.Wait() })
+			stopped := make(chan struct{})
+			if manual {
+				go n.Stop()
+			} else {
+				cancel()
+			}
+			go func() { n.Wait(); close(stopped) }()
+			select {
+			case <-stopped:
+				t.Fatal("node Wait returned during finalization")
+			case <-time.After(25 * time.Millisecond):
+			}
+			require.NoError(t, app.finalizeCtx.Err())
+			unpauseApp()
+			select {
+			case <-gate.entered:
+			case <-time.After(5 * time.Second):
+				t.Fatal("consensus did not finish finalization")
+			}
+			state, err := n.stateStore.Load()
+			require.NoError(t, err)
+			require.EqualValues(t, 1, state.LastBlockHeight)
+			unpauseShutdown()
+			select {
+			case <-stopped:
+			case <-time.After(5 * time.Second):
+				t.Fatal("node shutdown did not finish")
+			}
+		})
+	}
+}
+
+type startupBlockedClient struct {
+	abciclient.Client
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (c *startupBlockedClient) Start(ctx context.Context) error {
+	close(c.entered)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-c.release:
+		return errors.New("startup unblocked by test cleanup")
+	}
+}
+
+func (*startupBlockedClient) Wait() {}
+
+func TestNodeCancellationInterruptsApplicationStartup(t *testing.T) {
+	for _, manual := range []bool{false, true} {
+		t.Run(fmt.Sprintf("manual=%t", manual), func(t *testing.T) {
+			cfg, err := config.ResetTestRoot(t.TempDir(), strings.ReplaceAll(t.Name(), "/", "-"))
+			require.NoError(t, err)
+			cfg.RPC.ListenAddress = ""
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			ns, err := newDefaultNode(ctx, cfg, log.NewNopLogger())
+			require.NoError(t, err)
+			n := ns.(*nodeImpl)
+			defer n.OnDrain()
+			app := &startupBlockedClient{entered: make(chan struct{}), release: make(chan struct{})}
+			defer close(app.release)
+			n.rpcEnv.ProxyApp = app
+			started := make(chan error, 1)
+			go func() { started <- n.Start(ctx) }()
+			<-app.entered
+			if manual {
+				n.Stop()
+			} else {
+				cancel()
+			}
+			select {
+			case err := <-started:
+				require.ErrorIs(t, err, context.Canceled)
+			case <-time.After(time.Second):
+				t.Fatal("application startup did not observe cancellation")
+			}
+			n.Wait()
+		})
+	}
 }

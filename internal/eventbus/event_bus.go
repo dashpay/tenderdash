@@ -40,7 +40,10 @@ func (b *EventBus) OnStart(ctx context.Context) error {
 	return b.pubsub.Start(ctx)
 }
 
-func (b *EventBus) OnStop() {}
+func (b *EventBus) OnStop() { b.pubsub.Stop() }
+
+// OnDrain waits for queued events and observers to finish.
+func (b *EventBus) OnDrain() { b.pubsub.Wait() }
 
 func (b *EventBus) NumClients() int {
 	return b.pubsub.NumClients()
@@ -65,6 +68,9 @@ func (b *EventBus) UnsubscribeAll(ctx context.Context, subscriber string) error 
 func (b *EventBus) Observe(ctx context.Context, observe func(tmpubsub.Message) error, queries ...*tmquery.Query) error {
 	return b.pubsub.Observe(ctx, observe, queries...)
 }
+
+// RemoveObserver waits for active observation and prevents subsequent callbacks.
+func (b *EventBus) RemoveObserver() { b.pubsub.RemoveObserver() }
 
 func (b *EventBus) Publish(eventValue string, eventData types.EventData) error {
 	tokens := strings.Split(types.EventTypeKey, ".")

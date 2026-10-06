@@ -60,7 +60,8 @@ type consensusReactor interface {
 // Reactor handles long-term catchup syncing.
 type Reactor struct {
 	service.BaseService
-	logger log.Logger
+	serviceCtx context.Context
+	logger     log.Logger
 
 	// immutable
 	initialState sm.State
@@ -162,6 +163,7 @@ func WithSynchronizerOptions(opts ...OptionFunc) ReactorOption {
 // If blockSyncFlag is enabled, we also start the synchronizer
 // If the synchronizer fails to start, an error is returned.
 func (r *Reactor) OnStart(ctx context.Context) error {
+	r.serviceCtx = ctx
 	state, err := r.stateStore.Load()
 	if err != nil {
 		return err
@@ -184,24 +186,29 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 		if err := r.synchronizer.Start(ctx); err != nil {
 			return err
 		}
-		go r.requestRoutine(ctx, r.p2pClient)
-		go r.poolRoutine(ctx, false)
+		r.Go(ctx, func(ctx context.Context) { r.requestRoutine(ctx, r.p2pClient) })
+		r.Go(ctx, func(ctx context.Context) { r.poolRoutine(ctx, false) })
 	}
 	consumer, messageHandler := consumerHandler(ctx, r.logger, r.store, r.synchronizer)
 	r.messageHandler = messageHandler
-	go func() {
+	r.Go(ctx, func(ctx context.Context) {
 		err := r.p2pClient.Consume(ctx, consumer)
 		if err != nil {
 			r.logger.Error("failed to consume p2p blocksync messages", "error", err)
 		}
-	}()
-	go r.processPeerUpdates(ctx, r.peerEvents(ctx, "blocksync"), r.p2pClient, messageHandler)
+	})
+	updates := r.peerEvents(ctx, "blocksync")
+	if !r.Go(ctx, func(ctx context.Context) {
+		defer updates.Close()
+		r.processPeerUpdates(ctx, updates, r.p2pClient, messageHandler)
+	}) {
+		updates.Close()
+	}
 
 	return nil
 }
 
-// OnStop stops the reactor by signaling to all spawned goroutines to exit and
-// blocking until they all exit.
+// OnStop shuts down the request handler and synchronizer.
 func (r *Reactor) OnStop() {
 	if r.messageHandler != nil {
 		r.messageHandler.stop()
@@ -209,6 +216,12 @@ func (r *Reactor) OnStop() {
 	if r.blockSyncFlag.Load() {
 		r.synchronizer.Stop()
 	}
+}
+
+// OnDrain joins the synchronizer before its owner releases block storage.
+func (r *Reactor) OnDrain() {
+	r.synchronizer.Stop()
+	r.synchronizer.Wait()
 }
 
 // processPeerUpdate processes a PeerUpdate.
@@ -273,6 +286,21 @@ func (r *Reactor) processPeerUpdates(
 // SwitchToBlockSync is called by the state sync reactor when switching to fast
 // sync.
 func (r *Reactor) SwitchToBlockSync(ctx context.Context, state sm.State) error {
+	result := make(chan error, 1)
+	if !r.Go(r.serviceCtx, func(serviceCtx context.Context) {
+		result <- r.switchToBlockSync(serviceCtx, state)
+	}) {
+		return errors.New("block sync reactor is stopping")
+	}
+	select {
+	case err := <-result:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (r *Reactor) switchToBlockSync(ctx context.Context, state sm.State) error {
 	r.blockSyncFlag.Store(true)
 	r.initialState = state
 	r.executor.UpdateState(state)
@@ -284,8 +312,8 @@ func (r *Reactor) SwitchToBlockSync(ctx context.Context, state sm.State) error {
 
 	r.syncStartTime = time.Now()
 
-	go r.requestRoutine(ctx, r.p2pClient)
-	go r.poolRoutine(ctx, true)
+	r.Go(ctx, func(ctx context.Context) { r.requestRoutine(ctx, r.p2pClient) })
+	r.Go(ctx, func(ctx context.Context) { r.poolRoutine(ctx, true) })
 
 	if err := r.PublishStatus(types.EventDataBlockSyncStatus{
 		Complete: false,
@@ -321,6 +349,7 @@ func (r *Reactor) requestRoutine(ctx context.Context, p2pClient *client.Client) 
 func (r *Reactor) poolRoutine(ctx context.Context, stateSynced bool) {
 	caughtUp, targetHeight := r.synchronizer.WaitForSync(ctx)
 	r.synchronizer.Stop()
+	r.synchronizer.Wait()
 	// Wait for an application holding the applier lock and use its final state.
 	state := r.executor.State()
 	r.blockSyncFlag.Store(false)

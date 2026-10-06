@@ -139,8 +139,13 @@ func (is *Service) OnStart(ctx context.Context) error {
 	return nil
 }
 
-// OnStop implements service.Service by closing the event sinks.
-func (is *Service) OnStop() {
+func (is *Service) OnStop() {}
+
+// OnDrain detaches the observer before releasing its sinks.
+func (is *Service) OnDrain() {
+	if IndexingEnabled(is.eventSinks) {
+		is.eventBus.RemoveObserver()
+	}
 	for _, sink := range is.eventSinks {
 		if err := sink.Stop(); err != nil {
 			is.logger.Error("failed to close eventsink", "eventsink", sink.Type(), "err", err)
