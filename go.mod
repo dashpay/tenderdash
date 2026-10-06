@@ -343,7 +343,7 @@ require (
 	github.com/libp2p/go-buffer-pool v0.1.0
 	github.com/mroth/weightedrand v1.0.0
 	github.com/oasisprotocol/curve25519-voi v0.0.0-20251114093237-2ab5a27a1729
-	github.com/oasisprotocol/oasis-core/go v0.2601.0
+	github.com/oasisprotocol/oasis-core/go v0.2602.0
 	github.com/ory/dockertest/v3 v3.12.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/client_model v0.6.3
