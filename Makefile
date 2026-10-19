@@ -321,7 +321,7 @@ vet:
 
 vulncheck:
 	@echo "--> Running vulnerability scanner"
-	go run golang.org/x/vuln/cmd/govulncheck@v1.3.0 ./...
+	go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 .PHONY: vulncheck
 
 DESTINATION = ./index.html.md
