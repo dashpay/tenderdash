@@ -37,7 +37,7 @@ jobs:
       - uses: actions/setup-go@v7.0.0
         if: "env.GIT_DIFF != ''"
         with:
-          go-version: "1.27.1"
+          go-version: "1.27.2"
           cache-dependency-path: |
             go.sum
             .github/workflows/build.yml
@@ -70,7 +70,7 @@ jobs:
       - uses: actions/setup-go@v7.0.0
         if: "env.GIT_DIFF != ''"
         with:
-          go-version: "1.27.1"
+          go-version: "1.27.2"
           cache-dependency-path: |
             go.sum
             .github/workflows/build.yml
@@ -99,7 +99,7 @@ jobs:
       - uses: actions/setup-go@v7.0.0
         if: "env.GIT_DIFF != ''"
         with:
-          go-version: "1.27.1"
+          go-version: "1.27.2"
           cache-dependency-path: |
             go.sum
             .github/workflows/build.yml
