@@ -276,7 +276,7 @@ format:
 # Exact version, kept identical to the `version:` in .github/workflows/lint.yml
 # and to the golangci-lint requirement in go.mod, so local and CI lint agree
 # (a floating minor lets the two drift onto different formatter builds).
-GOLANGCI_LINT_VERSION ?= v2.14.0
+GOLANGCI_LINT_VERSION ?= v2.15.0
 GOLANGCI_LINT := $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
 # Use the newest fetched development branch by default. For another PR target,
@@ -322,7 +322,7 @@ vet:
 
 vulncheck:
 	@echo "--> Running vulnerability scanner"
-	go run golang.org/x/vuln/cmd/govulncheck@v1.3.0 ./...
+	go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 .PHONY: vulncheck
 
 DESTINATION = ./index.html.md
