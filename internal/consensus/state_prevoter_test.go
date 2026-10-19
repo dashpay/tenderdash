@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	"github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/state/mocks"
 	"github.com/dashpay/tenderdash/internal/test/factory"
@@ -196,6 +197,70 @@ func (suite *PrevoterTestSuite) TestCheckProposalBlock() {
 	}
 }
 
+func (suite *PrevoterTestSuite) TestDoProposerProTxHash() {
+	for _, tc := range []struct {
+		name       string
+		round      int32
+		polRound   int32
+		wrong      bool
+		pol        bool
+		otherBlock bool
+		wantVote   bool
+	}{
+		{name: "new block round zero", polRound: -1, wantVote: true},
+		{name: "new block later round", round: 1, polRound: -1, wantVote: true},
+		{name: "wrong proposer round zero", polRound: -1, wrong: true},
+		{name: "predecessor capture", round: 1, polRound: -1, wrong: true},
+		{name: "reproposal retains original proposer", round: 1, polRound: 0, wrong: true, pol: true, wantVote: true},
+		{name: "claimed POL without votes", round: 1, polRound: 0, wrong: true},
+		{name: "POL for another block", round: 1, polRound: 0, wrong: true, pol: true, otherBlock: true},
+	} {
+		suite.Run(tc.name, func() {
+			suite.SetupTest()
+			stateData := suite.makeValidStateData()
+			stateData.Round = tc.round
+			stateData.Proposal.Round = tc.round
+			stateData.Proposal.POLRound = tc.polRound
+			proposer, err := stateData.ProposerSelector.GetProposer(stateData.Height, tc.round)
+			suite.Require().NoError(err)
+			stateData.ProposalBlock.ProposerProTxHash = proposer.ProTxHash
+			if tc.wrong {
+				index, _ := suite.valSet.GetByProTxHash(proposer.ProTxHash)
+				size := int32(suite.valSet.Size())
+				stateData.ProposalBlock.ProposerProTxHash = suite.valSet.GetByIndex((index + size - 1) % size).ProTxHash
+			}
+			stateData.Proposal.BlockID = types.BlockID{Hash: stateData.ProposalBlock.Hash()}
+			if tc.pol {
+				stateData.Votes = suite.makeHeightVoteSetMaj23(stateData, tc.polRound)
+			}
+			if tc.otherBlock {
+				stateData.ProposalBlock.ProposedAppVersion++
+				stateData.Proposal.BlockID = types.BlockID{Hash: stateData.ProposalBlock.Hash()}
+			}
+			rejectBeforeProcess := tc.wrong && tc.polRound == -1
+			if !rejectBeforeProcess {
+				suite.mockExecutor.On("ProcessProposal", mock.Anything, mock.Anything, tc.round,
+					mock.Anything, true, types.VerifiedCommit{}).Once().Return(sm.CurrentRoundState{}, nil)
+				suite.mockExecutor.On("ValidateBlockWithRoundState", mock.Anything, mock.Anything,
+					mock.Anything, mock.Anything, mock.Anything).Once().Return(nil)
+			}
+			wantBlockID := types.BlockID{}
+			if tc.wantVote {
+				wantBlockID = stateData.Proposal.BlockID
+			}
+			suite.mockWAL.On("FlushAndSync").Return(nil)
+			suite.mockQueueSender.On("send", mock.Anything, mock.MatchedBy(func(msg *VoteMessage) bool {
+				return msg.Vote.Type == tmproto.PrevoteType && msg.Vote.BlockID.Equals(wantBlockID)
+			}), types.NodeID("")).Once().Return(nil)
+			suite.Require().NoError(suite.prevoter.Do(context.Background(), &stateData))
+			if rejectBeforeProcess {
+				suite.mockExecutor.AssertNotCalled(suite.T(), "ProcessProposal", mock.Anything, mock.Anything,
+					mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+			}
+		})
+	}
+}
+
 func (suite *PrevoterTestSuite) makeHeightVoteSetMaj23(stateData StateData, round int32) *cstypes.HeightVoteSet {
 	ctx := context.Background()
 	vote1 := types.Vote{
@@ -300,8 +365,9 @@ func (suite *PrevoterTestSuite) makeValidStateData() StateData {
 	}
 	block := &types.Block{
 		Header: types.Header{
-			Time:           now,
-			ValidatorsHash: []byte{1, 2, 3, 4},
+			Time:              now,
+			ValidatorsHash:    []byte{1, 2, 3, 4},
+			ProposerProTxHash: suite.valSet.Proposer().ProTxHash,
 		},
 		Data: types.Data{
 			Txs: types.Txs{[]byte{1}, []byte{2}},
@@ -323,6 +389,9 @@ func (suite *PrevoterTestSuite) makeValidStateData() StateData {
 		Validators: suite.valSet,
 		Votes:      cstypes.NewHeightVoteSet("test-chain", 1000, suite.valSet),
 	}
+	selector, err := selectproposer.NewHeightRoundProposerSelector(suite.valSet.Copy(), 1000, 0, nil, suite.logger)
+	suite.Require().NoError(err)
+	validRoundState.ProposerSelector = selector
 	return StateData{
 		state:      validState,
 		RoundState: validRoundState,
