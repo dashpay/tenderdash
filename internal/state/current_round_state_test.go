@@ -10,6 +10,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -90,4 +91,45 @@ func TestValsetUpdateOverlaysVotingPowerThreshold(t *testing.T) {
 		assert.Equal(t, newThreshold, got.VotingPowerThreshold)
 		assert.Equal(t, int64(newThreshold), got.QuorumVotingThresholdPower())
 	})
+}
+
+func TestEvidenceModeConsensusUpdates(t *testing.T) {
+	for _, source := range []string{InitChainSource, PrepareProposalSource, ProcessProposalSource} {
+		t.Run(source, func(t *testing.T) {
+			for _, tc := range []struct {
+				name          string
+				before, after int64
+				wantErr       bool
+			}{
+				{"enable", 0, 1000, true}, {"disable", 1000, 0, true},
+				{"stay disabled", 0, 0, false}, {"resize enabled", 1000, 2000, false},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					params := *types.DefaultConsensusParams()
+					params.Evidence.MaxBytes = tc.before
+					updates := params.ToProto()
+					updates.Evidence.MaxBytes = tc.after
+					vals, _ := factory.MockValidatorSet()
+					base := State{InitialHeight: 1, ConsensusParams: params, Validators: vals}
+					candidate, err := NewCurrentRoundState(
+						nil,
+						RoundParams{
+							Source: source,
+							ConsensusParamUpdates: &tmproto.ConsensusParams{
+								Evidence: updates.Evidence,
+							},
+						},
+						base,
+					)
+					if tc.wantErr {
+						require.ErrorContains(t, err, "evidence mode is fixed")
+					} else {
+						require.NoError(t, err)
+						require.Equal(t, tc.after, candidate.NextConsensusParams.Evidence.MaxBytes)
+					}
+					require.Equal(t, tc.before, base.ConsensusParams.Evidence.MaxBytes)
+				})
+			}
+		})
+	}
 }

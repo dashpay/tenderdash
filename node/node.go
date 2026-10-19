@@ -68,7 +68,7 @@ type nodeImpl struct {
 	initialState   sm.State
 	stateStore     sm.Store
 	blockStore     *store.BlockStore // store the blockchain to disk
-	evPool         *evidence.Pool
+	evPool         evidencePool
 	indexerService *indexer.Service
 	services       []service.Service
 	rpcListeners   []net.Listener // rpc servers
@@ -286,7 +286,7 @@ func makeNode(
 		},
 	}
 
-	node.router, err = createRouter(logger, nodeMetrics.p2p, node.NodeInfo, nodeKey, peerManager, cfg, proxyApp)
+	node.router, err = createRouter(logger, nodeMetrics.p2p, node.NodeInfo, nodeKey, peerManager, cfg, proxyApp, state.ConsensusParams.Evidence)
 	if err != nil {
 		return nil, combineCloseError(
 			fmt.Errorf("failed to create router: %w", err),
@@ -300,13 +300,15 @@ func makeNode(
 		p2pclient.WithSendRateLimits(p2pclient.NewRateLimit(ctx, cfg.Mempool.TxSendRateLimit, false, logger), p2p.MempoolChannel),
 	)
 
-	evReactor, evPool, edbCloser, err := createEvidenceReactor(logger, cfg, dbProvider,
+	evReactor, evPool, edbCloser, err := createEvidenceReactor(logger, cfg, state.ConsensusParams.Evidence, dbProvider,
 		stateStore, blockStore, peerManager.Subscribe, node.router.OpenChannel, nodeMetrics.evidence, eventBus)
 	closers = append(closers, edbCloser)
 	if err != nil {
 		return nil, combineCloseError(err, makeCloser(closers))
 	}
-	node.services = append(node.services, evReactor)
+	if evReactor != nil {
+		node.services = append(node.services, evReactor)
+	}
 	node.rpcEnv.EvidencePool = evPool
 	node.evPool = evPool
 
@@ -547,7 +549,7 @@ func (n *nodeImpl) OnStart(ctx context.Context) (err error) {
 
 	// TODO: Fetch and provide real options and do proper p2p bootstrapping.
 	// TODO: Use a persistent peer database.
-	n.nodeInfo, err = makeNodeInfo(n.config, n.nodeKey, proTxHash, n.eventSinks, n.genesisDoc, state.Version.Consensus)
+	n.nodeInfo, err = makeNodeInfo(n.config, n.nodeKey, proTxHash, n.eventSinks, n.genesisDoc, state)
 	if err != nil {
 		return err
 	}
@@ -573,6 +575,9 @@ func (n *nodeImpl) OnStart(ctx context.Context) (err error) {
 	state, err = n.stateStore.Load()
 	if err != nil {
 		return err
+	}
+	if err := n.initialState.ConsensusParams.Evidence.ValidateUpdate(state.ConsensusParams.Evidence); err != nil {
+		return fmt.Errorf("evidence mode changed during handshake: %w", err)
 	}
 	if err := n.evPool.Start(state); err != nil {
 		return err

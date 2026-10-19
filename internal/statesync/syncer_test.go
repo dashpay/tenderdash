@@ -933,3 +933,22 @@ func makeChannel(ID p2p.ChannelID, name string) (p2p.Channel, chan p2p.Envelope,
 	errCh := make(chan p2p.PeerError, 1)
 	return p2p.NewChannel(ID, name, inCh, outCh, errCh), inCh, outCh, errCh
 }
+
+func (suite *SyncerTestSuite) TestEvidenceModeRejectsBeforeChunkApplication() {
+	state := sm.State{ConsensusParams: *types.DefaultConsensusParams()}
+	suite.stateProvider.On("AppHash", mock.Anything, uint64(1)).Return(tmbytes.HexBytes("app_hash"), nil).Once()
+	suite.stateProvider.On("State", mock.Anything, uint64(1)).Return(state, nil).Once()
+	suite.conn.On("OfferSnapshot", mock.Anything, mock.Anything).Return(&abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_ACCEPT}, nil).Once()
+	suite.syncer.SetStateProvider(evidenceModeStateProvider{StateProvider: suite.stateProvider, evidenceParams: types.EvidenceParams{MaxBytes: 0}})
+	suite.syncer.fetchers = 0
+	snapshot := &snapshot{Height: 1, Version: 1, Hash: []byte{1}}
+	queue, err := newChunkQueue(snapshot, suite.T().TempDir(), 1)
+	suite.Require().NoError(err)
+	defer func() { suite.Require().NoError(queue.Close()) }()
+	restored, commit, err := suite.syncer.Sync(suite.T().Context(), snapshot, queue)
+	suite.Require().ErrorIs(err, errRejectSnapshot)
+	suite.Require().True(restored.IsEmpty())
+	suite.Require().Nil(commit)
+	suite.conn.AssertNotCalled(suite.T(), "ApplySnapshotChunk", mock.Anything, mock.Anything)
+	suite.stateProvider.AssertNotCalled(suite.T(), "Commit", mock.Anything, mock.Anything)
+}

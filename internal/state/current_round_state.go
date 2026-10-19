@@ -174,6 +174,9 @@ func (candidate *CurrentRoundState) populateConsensusParams() error {
 	if err != nil {
 		return fmt.Errorf("error updating consensus params: %w", err)
 	}
+	if err := current.Evidence.ValidateUpdate(nextParams.Evidence); err != nil {
+		return fmt.Errorf("error updating consensus params: %w", err)
+	}
 	candidate.NextConsensusParams = nextParams
 
 	// Change results from this height but only applies to the next height.

@@ -1,12 +1,15 @@
 package statesync
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	sm "github.com/dashpay/tenderdash/internal/state"
+	"github.com/dashpay/tenderdash/internal/statesync/mocks"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -115,4 +118,39 @@ func TestApplyVotingPowerThreshold(t *testing.T) {
 
 func ptr[T any](value T) *T {
 	return &value
+}
+
+func TestStateProviderEvidenceMode(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		before, after int64
+		wantErr       bool
+	}{
+		{"cannot enable", 0, 1000, true}, {"cannot disable", 1000, 0, true},
+		{"disabled snapshot", 0, 0, false}, {"enabled snapshot", 1000, 2000, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			state := sm.State{ConsensusParams: *types.DefaultConsensusParams(), LastBlockHeight: 10}
+			state.ConsensusParams.Evidence.MaxBytes = tc.after
+			inner := mocks.NewStateProvider(t)
+			inner.EXPECT().State(t.Context(), uint64(10)).Return(state, nil).Once()
+			provider := evidenceModeStateProvider{
+				StateProvider:  inner,
+				evidenceParams: types.EvidenceParams{MaxBytes: tc.before},
+			}
+			restored, err := provider.State(t.Context(), 10)
+			if tc.wantErr {
+				require.ErrorContains(t, err, "restored state evidence mode differs")
+				require.True(t, restored.IsEmpty())
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, state, restored)
+			}
+		})
+	}
+	inner := mocks.NewStateProvider(t)
+	inner.EXPECT().State(t.Context(), uint64(10)).Return(sm.State{}, context.Canceled).Once()
+	provider := evidenceModeStateProvider{StateProvider: inner}
+	_, err := provider.State(t.Context(), 10)
+	require.True(t, errors.Is(err, context.Canceled))
 }
