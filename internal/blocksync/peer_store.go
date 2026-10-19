@@ -1,12 +1,8 @@
 package blocksync
 
 import (
-	"math"
-	"time"
-
 	"golang.org/x/exp/constraints"
 
-	"github.com/dashpay/tenderdash/internal/libs/flowrate"
 	"github.com/dashpay/tenderdash/libs/store"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -31,13 +27,7 @@ type (
 		// missingThrough records unavailable history independently of advertised status.
 		missingThrough int64
 		peerID         types.NodeID
-		recvMonitor    *flowrate.Monitor
-		startAt        time.Time
 	}
-)
-
-const (
-	flowRateInitialValue = float64(minRecvRate) * math.E
 )
 
 // NewInMemPeerStore creates a new in-memory peer store
@@ -71,9 +61,9 @@ func (p *InMemPeerStore) Put(peerID types.NodeID, newPeer PeerData) {
 //
 // The advertised base and height are the only things a peer tells us about itself;
 // everything else held in PeerData - the count of requests we have issued and not
-// yet accounted for, the run of consecutive failures, the receive-rate monitor and
-// the time we first saw the peer - describes our own outstanding requests and the
-// peer's service quality. Peers re-advertise their range every few seconds, far
+// yet accounted for, the run of consecutive failures and unavailable history -
+// describes our own outstanding requests and the peer's service quality.
+// Peers re-advertise their range every few seconds, far
 // more often than a block request times out, so replacing those counters here
 // would reset them faster than any threshold built on them can be reached and
 // would leave requests in flight that nothing accounts for.
@@ -102,8 +92,8 @@ func (p *InMemPeerStore) Delete(peerID types.NodeID) {
 // gone or already lowered. This value decides whether the node considers itself
 // caught up and whether a stalled sync gives up, so a height no peer can serve does
 // not merely misreport - it keeps the node in block sync waiting for a block that
-// will never arrive. The scan is O(peers), the same order as FindPeer and
-// FindTimedoutPeers, which the producing loop already runs for every job.
+// will never arrive. The scan is O(peers), the same order as FindPeer,
+// which the producing loop already runs for every job.
 func (p *InMemPeerStore) MaxHeight() int64 {
 	var maxHeight int64
 	// All takes a snapshot under the store's lock, so the result is the maximum of
@@ -133,7 +123,6 @@ func (p *InMemPeerStore) FindPeer(height int64) (PeerData, bool) {
 	spec := store.AndX(
 		peerNumPendingCond(maxPendingRequestsPerPeer, "<"),
 		heightBetweenPeerHeightRange(height),
-		ignoreTimedOutPeers(minRecvRate),
 	)
 	peers := p.Query(spec, 1)
 	if len(peers) == 0 {
@@ -142,30 +131,11 @@ func (p *InMemPeerStore) FindPeer(height int64) (PeerData, bool) {
 	return peers[0], true
 }
 
-// HasPeerForHeight reports whether height is fetchable at all: some peer both
-// advertises a range covering it and is one FindPeer would still select.
-//
-// It takes two of FindPeer's three criteria, and the line between them is
-// transient versus permanent unusability rather than holding versus serving.
-//
-// The receive-rate check is in. A peer whose rate has fallen below minRecvRate
-// is not merely slow, it is out of the game for good: FindPeer will not select
-// it, so nextJob never resets its monitor, so the rate never recovers; and
-// FindTimedoutPeers only removes peers with requests outstanding, so once its
-// last request completes nothing evicts it either. Counting such a peer as
-// fetchable is the same lock-out this predicate exists to prevent, reached by a
-// merely slow peer instead of a lying one.
-//
-// The pending-request limit is out. A peer at its cap is busy for as long as its
-// in-flight requests take and then selectable again, so excluding it would make
-// the verdict flap under load and end block sync exactly when the request
-// pipeline is fullest.
+// HasPeerForHeight reports whether a peer advertises the height without having
+// reported it missing. A peer at its pending-request limit is temporarily busy,
+// so it must still count when deciding whether block sync can make progress.
 func (p *InMemPeerStore) HasPeerForHeight(height int64) bool {
-	spec := store.AndX(
-		heightBetweenPeerHeightRange(height),
-		ignoreTimedOutPeers(minRecvRate),
-	)
-	return len(p.Query(spec, 1)) > 0
+	return len(p.Query(heightBetweenPeerHeightRange(height), 1)) > 0
 }
 
 // AddFailure records a block request that this peer failed to answer: the
@@ -190,14 +160,6 @@ func (p *InMemPeerStore) RecordMissingBlock(peerID types.NodeID, height int64) {
 		peer.addPending(-1)
 		peer.missingThrough = max(peer.missingThrough, height)
 	})
-}
-
-// FindTimedoutPeers finds and returns the timed out peers
-func (p *InMemPeerStore) FindTimedoutPeers() []PeerData {
-	return p.Query(store.AndX(
-		peerNumPendingCond(0, ">"),
-		transferRateNotZeroAndLessMinRate(minRecvRate),
-	), 0)
 }
 
 // All returns all stored peers in the store
@@ -234,38 +196,8 @@ func heightBetweenPeerHeightRange(height int64) store.QueryFunc[types.NodeID, Pe
 	}
 }
 
-func transferRateNotZeroAndLessMinRate(minRate int64) store.QueryFunc[types.NodeID, PeerData] {
-	return func(peerID types.NodeID, peer PeerData) bool {
-		curRate := peer.recvMonitor.CurrentTransferRate()
-		return curRate != 0 && curRate < minRate
-	}
-}
-
-func ignoreTimedOutPeers(minRate int64) store.QueryFunc[types.NodeID, PeerData] {
-	return func(peerID types.NodeID, peer PeerData) bool {
-		curRate := peer.recvMonitor.CurrentTransferRate()
-		if curRate == 0 {
-			return true
-		}
-		return curRate >= minRate
-	}
-}
-
 func newPeerData(peerID types.NodeID, base, height int64) PeerData {
-	startAt := time.Now()
-	return PeerData{
-		peerID:      peerID,
-		base:        base,
-		height:      height,
-		recvMonitor: newPeerMonitor(startAt),
-		startAt:     startAt,
-	}
-}
-
-func newPeerMonitor(at time.Time) *flowrate.Monitor {
-	m := flowrate.New(at, time.Second, time.Second*40)
-	m.SetREMA(flowRateInitialValue)
-	return m
+	return PeerData{peerID: peerID, base: base, height: height}
 }
 
 // AddNumPending adds a value to the numPending field
@@ -282,9 +214,7 @@ func AddNumPending(val int32) store.UpdateFunc[types.NodeID, PeerData] {
 // answered or fails, so a negative value is always a bug in the accounting. It is
 // floored here rather than at the call sites because there are several of them and
 // the consequences are silent: a negative count always satisfies the per-peer
-// request limit, so the peer is handed unlimited concurrent requests, and it never
-// satisfies the slow-peer check, so the peer can no longer be evicted for being
-// too slow.
+// request limit, so the peer can be handed too many concurrent requests.
 func (p *PeerData) addPending(delta int32) {
 	p.numPending += delta
 	if p.numPending < 0 {
@@ -297,24 +227,6 @@ func (p *PeerData) addPending(delta int32) {
 func ResetFailures() store.UpdateFunc[types.NodeID, PeerData] {
 	return func(_ types.NodeID, peer *PeerData) {
 		peer.numFailures = 0
-	}
-}
-
-// UpdateMonitor adds a block size value to the peer monitor if numPending is greater than zero
-func UpdateMonitor(recvSize int) store.UpdateFunc[types.NodeID, PeerData] {
-	return func(peerID types.NodeID, peer *PeerData) {
-		if peer.numPending > 0 {
-			peer.recvMonitor.Update(recvSize)
-		}
-	}
-}
-
-// ResetMonitor replaces a peer monitor on a new one if numPending is zero
-func ResetMonitor() store.UpdateFunc[types.NodeID, PeerData] {
-	return func(peerID types.NodeID, peer *PeerData) {
-		if peer.numPending == 0 {
-			peer.recvMonitor = newPeerMonitor(peer.startAt)
-		}
 	}
 }
 

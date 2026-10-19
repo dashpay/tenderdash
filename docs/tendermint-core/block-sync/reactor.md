@@ -16,7 +16,14 @@ using (and turns on) the Consensus Reactor.
 
 ## Architecture and algorithm
 
-The Blocksync reactor is organised as a set of concurrent tasks:
+The pseudocode below describes the historical requester-based implementation.
+The current synchronizer in `internal/blocksync` uses a worker pool and judges
+peer health by failed requests, including request timeouts. Five consecutive
+failures remove a peer; a successful response resets the count. It does not
+reject peers for low byte throughput, which can reflect small blocks or slow
+local application even when peers respond promptly.
+
+The historical Blocksync reactor is organised as a set of concurrent tasks:
 
 - Receive routine of Blocksync Reactor
 - Task for creating Requesters

@@ -94,19 +94,15 @@ const (
 	// limits cover.
 	maxOutstandingHeights = 64
 
+	// Peer health is based on request failures, including client timeouts. Byte
+	// throughput also depends on block size and local application backpressure,
+	// so it cannot distinguish an unresponsive peer from a healthy one.
+	//
 	// maxConsecutiveFailures is how many block requests in a row a peer may fail
 	// before we drop it. Requests time out under load, and a peer serves its
 	// requests one at a time, so a single failure says very little about the
 	// peer. Dropping one costs the rest of its in-flight requests too.
 	maxConsecutiveFailures int32 = 5
-
-	// Minimum recv rate to ensure we're receiving blocks from a peer fast
-	// enough. If a peer is not sending us data at at least that rate, we
-	// consider them to have timed out and we disconnect.
-	//
-	// Assuming a DSL connection (not a good choice) 128 Kbps (upload) ~ 15 KB/s,
-	// sending data across atlantic ~ 7.5 KB/s.
-	minRecvRate = 7680
 )
 
 // errDuplicateBlock reports a block response for a height that is already pending
@@ -275,8 +271,6 @@ func (s *Synchronizer) produceJob(ctx context.Context) error {
 		}
 		return nil
 	}
-	// remove timed out peers and redo its heights again
-	s.removeTimedoutPeers(ctx)
 	// Count the job as in-progress before Send: a worker may run it and
 	// consumeJobResult may decrement before Send even returns, so incrementing
 	// afterwards could drive the counter transiently negative. Every path that
@@ -350,7 +344,7 @@ func (s *Synchronizer) consumeJobResult(ctx, applyCtx context.Context) error {
 		return nil
 	}
 	resp := res.Value.(*BlockResponse)
-	s.peerStore.Update(resp.PeerID, AddNumPending(-1), ResetFailures(), UpdateMonitor(resp.Size))
+	s.peerStore.Update(resp.PeerID, AddNumPending(-1), ResetFailures())
 	err = s.addBlock(*resp)
 	if err != nil {
 		if !errors.Is(err, errDuplicateBlock) {
@@ -528,10 +522,9 @@ func (s *Synchronizer) stallSnapshot() (
 	defer s.mtx.RUnlock()
 	peers := s.peerStore.All()
 	hasHeight := heightBetweenPeerHeightRange(s.height)
-	responsive := ignoreTimedOutPeers(minRecvRate)
 	for _, peer := range peers {
 		maxPeerHeight = max(maxPeerHeight, peer.height)
-		if hasHeight(peer.peerID, peer) && responsive(peer.peerID, peer) {
+		if hasHeight(peer.peerID, peer) {
 			servable = true
 			maxServableHeight = max(maxServableHeight, peer.height)
 		}
@@ -741,21 +734,6 @@ func (s *Synchronizer) addBlock(resp BlockResponse) error {
 	}
 	s.pendingToApply[block.Height] = resp
 	return nil
-}
-
-func (s *Synchronizer) removeTimedoutPeers(ctx context.Context) {
-	peers := s.peerStore.FindTimedoutPeers()
-	for _, peer := range peers {
-		s.RemovePeer(peer.peerID)
-		curRate := peer.recvMonitor.CurrentTransferRate()
-		err := errors.New("peer is not sending us data fast enough")
-		s.logger.Error("SendTimeout", "peer", peer.peerID,
-			"reason", "peer is not sending us data fast enough",
-			"curRate", fmt.Sprintf("%d KB/s", curRate/1024),
-			"minRate", fmt.Sprintf("%d KB/s", minRecvRate/1024),
-		)
-		_ = s.client.Send(ctx, p2p.PeerError{NodeID: peer.peerID, Err: err})
-	}
 }
 
 func (s *Synchronizer) targetSyncBlocks() int64 {
