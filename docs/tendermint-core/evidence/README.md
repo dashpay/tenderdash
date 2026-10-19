@@ -14,23 +14,29 @@ in stopping the peer.
 
 ## Disabling evidence
 
-A chain with consensus parameter `evidence.max_bytes` set to `0` disables the
-Tenderdash evidence subsystem. Nodes use the persisted chain state on restart,
-falling back to genesis for a new chain. They do not open the evidence database,
-run the evidence reactor, or register or advertise its P2P channel. Conflicting
-votes are not buffered, and `broadcast_evidence` returns an evidence-disabled
-error for an otherwise valid submission. Proposals contain no evidence, and the
-existing consensus byte-limit validation rejects blocks containing evidence.
-Existing evidence databases are left untouched.
+Consensus parameter `evidence.max_bytes = 0` disables evidence admission,
+conflict collection and gossip. `broadcast_evidence` returns an explicit disabled
+error. Proposals contain no evidence, and the consensus byte limit rejects blocks
+containing evidence.
 
-The evidence mode is fixed by genesis. `InitChain`, `PrepareProposal`, and
-`ProcessProposal` consensus parameter updates cannot change `evidence.max_bytes`
-between zero and positive. Updates between positive limits remain supported.
-State sync also rejects a snapshot whose evidence mode differs from the locally
-trusted chain state, before applying snapshot chunks or bootstrapping that state.
-There is no local configuration override.
+Applications can enable or disable evidence on an existing chain through
+`PrepareProposal` and `ProcessProposal` consensus parameter updates. An update in
+block H takes effect for H+1, only after H commits. A block that disables evidence
+can still contain evidence under its current positive limit. `InitChain` may
+also override the genesis value for the first block.
 
-This transition restriction is a consensus behavior change. Coordinate upgrades
-across validators; a chain that needs to switch evidence mode requires a separate
-coordinated protocol change. An application starting a new chain must preserve
-the evidence mode specified in genesis in its `InitChain` response.
+Nodes keep the evidence database, reactor and advertised P2P channel available
+throughout their lifetime, so activation works with existing peer connections.
+While disabled, local admission, conflict collection and periodic gossip skip
+verification and database access; peer sync timers perform only a cheap mode
+check. Consensus block validation and recording committed evidence remain active,
+including evidence in the block that disables admission. Messages whose sends
+began before disabling may still arrive; disabled receivers discard them.
+
+Pending evidence is retained across disabled periods and restarts, then pruned
+against the current expiration limits before reactivation. Committed-evidence
+markers remain available to prevent submitting the same evidence again. Conflicts
+observed while disabled are not buffered. Restart uses persisted consensus state;
+state sync installs the restored state before block sync begins, without requiring
+its evidence mode to match genesis. Existing state-provider verification and trust
+requirements are unchanged. There is no local configuration override.

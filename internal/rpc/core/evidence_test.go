@@ -11,6 +11,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/evidence"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/state/mocks"
+	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/rpc/coretypes"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -31,7 +32,9 @@ func TestBroadcastEvidence(t *testing.T) {
 			name = "disabled"
 		}
 		t.Run(name, func(t *testing.T) {
-			var pool sm.EvidencePool = evidence.DisabledPool{}
+			disabledPool := evidence.NewPool(log.NewNopLogger(), nil, nil, nil, evidence.NopMetrics(), nil)
+			require.NoError(t, disabledPool.Start(sm.State{}))
+			var pool sm.EvidencePool = disabledPool
 			if !disabled {
 				enabled := mocks.NewEvidencePool(t)
 				enabled.EXPECT().AddEvidence(t.Context(), ev).Return(nil).Once()

@@ -83,7 +83,7 @@ func makeSeedNode(
 		return nil, err
 	}
 
-	node.router, err = createRouter(logger, p2pMetrics, node.NodeInfo, nodeKey, peerManager, cfg, nil, state.ConsensusParams.Evidence)
+	node.router, err = createRouter(logger, p2pMetrics, node.NodeInfo, nodeKey, peerManager, cfg, nil)
 	if err != nil {
 		return nil, combineCloseError(
 			fmt.Errorf("failed to create router: %w", err),

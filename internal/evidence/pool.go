@@ -65,7 +65,12 @@ type Pool struct {
 	blockBase atomic.Int64
 	blockTop  atomic.Int64
 
-	mtx sync.Mutex
+	// opMtx serializes storage operations with transitions and Close.
+	// Acquire it before mtx; never hold either across a network send.
+	opMtx         sync.Mutex
+	closed        bool
+	pendingLoaded bool
+	mtx           sync.Mutex
 	// latest state
 	state     sm.State
 	isStarted bool
@@ -104,6 +109,11 @@ func NewPool(logger log.Logger, evidenceDB dbm.DB, stateStore sm.Store, blockSto
 // PendingEvidence is used primarily as part of block proposal and returns up to
 // maxNum of uncommitted evidence.
 func (evpool *Pool) PendingEvidence(maxBytes int64) ([]types.Evidence, int64) {
+	evpool.opMtx.Lock()
+	defer evpool.opMtx.Unlock()
+	if evpool.closed || !evpool.Enabled() || maxBytes == 0 {
+		return nil, 0
+	}
 	if evpool.Size() == 0 {
 		return []types.Evidence{}, 0
 	}
@@ -116,21 +126,33 @@ func (evpool *Pool) PendingEvidence(maxBytes int64) ([]types.Evidence, int64) {
 	return evidence, size
 }
 
-// Update takes both the new state and the evidence committed at that height and performs
-// the following operations:
-//  1. Take any conflicting votes from consensus and use the state's LastBlockTime to form
-//     DuplicateVoteEvidence and add it to the pool.
-//  2. Update the pool's state which contains evidence params relating to expiry.
-//  3. Moves pending evidence that has now been committed into the committed pool.
-//  4. Removes any expired evidence based on both height and time.
+// Update records the evidence committed under the old parameters, then applies
+// the committed state's parameters for the next height. Disabled periods retain
+// pending evidence without processing it; activation prunes it before use.
 func (evpool *Pool) Update(ctx context.Context, state sm.State, ev types.EvidenceList) {
-	// sanity check
-	if state.LastBlockHeight <= evpool.state.LastBlockHeight {
+	evpool.opMtx.Lock()
+	defer evpool.opMtx.Unlock()
+	if evpool.closed {
+		return
+	}
+	previous := evpool.State()
+	if state.LastBlockHeight <= previous.LastBlockHeight {
 		panic(fmt.Sprintf(
 			"failed EvidencePool.Update new state height is less than or equal to previous state height: %d <= %d",
 			state.LastBlockHeight,
-			evpool.state.LastBlockHeight,
+			previous.LastBlockHeight,
 		))
+	}
+	// Evidence in the just-committed block uses the old height's parameters.
+	if len(ev) > 0 {
+		evpool.markEvidenceAsCommitted(ev, state.LastBlockHeight)
+	}
+	if state.ConsensusParams.Evidence.MaxBytes == 0 {
+		evpool.mtx.Lock()
+		evpool.state = state
+		evpool.consensusBuffer = nil
+		evpool.mtx.Unlock()
+		return
 	}
 
 	evpool.logger.Debug(
@@ -145,10 +167,14 @@ func (evpool *Pool) Update(ctx context.Context, state sm.State, ev types.Evidenc
 	// update state
 	evpool.updateState(state)
 
-	// move committed evidence out from the pending pool and into the committed pool
-	evpool.markEvidenceAsCommitted(ev, state.LastBlockHeight)
-
 	evpool.refreshBlockRange()
+	if !evpool.pendingLoaded {
+		if err := evpool.loadPendingEvidence(); err != nil {
+			panic(fmt.Errorf("activating evidence pool: %w", err))
+		}
+	} else if previous.ConsensusParams.Evidence.MaxBytes == 0 {
+		evpool.pruningHeight, evpool.pruningTime = evpool.removeExpiredPendingEvidence()
+	}
 
 	// Prune pending evidence when it has expired. This also updates when the next
 	// evidence will expire.
@@ -160,6 +186,14 @@ func (evpool *Pool) Update(ctx context.Context, state sm.State, ev types.Evidenc
 
 // AddEvidence checks the evidence is valid and adds it to the pool.
 func (evpool *Pool) AddEvidence(ctx context.Context, ev types.Evidence) error {
+	evpool.opMtx.Lock()
+	defer evpool.opMtx.Unlock()
+	if evpool.closed {
+		return errors.New("evidence pool is closed")
+	}
+	if !evpool.Enabled() {
+		return types.ErrEvidenceDisabled
+	}
 	evpool.logger.Debug("attempting to add evidence", "evidence", ev)
 
 	// Both questions are asked of the same hash, and hashing means marshaling
@@ -212,6 +246,11 @@ func (evpool *Pool) AddEvidence(ctx context.Context, ev types.Evidence) error {
 //
 // Votes are not verified.
 func (evpool *Pool) ReportConflictingVotes(voteA, voteB *types.Vote) {
+	evpool.opMtx.Lock()
+	defer evpool.opMtx.Unlock()
+	if evpool.closed || !evpool.Enabled() {
+		return
+	}
 	evpool.mtx.Lock()
 	defer evpool.mtx.Unlock()
 	evpool.consensusBuffer = append(evpool.consensusBuffer, duplicateVoteSet{
@@ -225,6 +264,16 @@ func (evpool *Pool) ReportConflictingVotes(voteA, voteB *types.Vote) {
 // evidence has already been committed or is being proposed twice. It also adds any
 // evidence that it doesn't currently have so that it can quickly form ABCI Evidence later.
 func (evpool *Pool) CheckEvidence(ctx context.Context, evList types.EvidenceList) error {
+	if len(evList) == 0 {
+		return nil
+	}
+	evpool.opMtx.Lock()
+	defer evpool.opMtx.Unlock()
+	if evpool.closed {
+		return errors.New("evidence pool is closed")
+	}
+	// Block limits are checked against consensus state by the block executor.
+	// A local admission gate must not decide whether block evidence is valid.
 	hashes := make([][]byte, len(evList))
 	for idx, ev := range evList {
 
@@ -241,12 +290,14 @@ func (evpool *Pool) CheckEvidence(ctx context.Context, evList types.EvidenceList
 				return err
 			}
 
-			if err := evpool.addPendingEvidence(ctx, ev); err != nil {
-				// Something went wrong with adding the evidence but we already know it is valid
-				// hence we log an error and continue
-				evpool.logger.Error("failed to add evidence to pending list", "err", err, "evidence", ev)
-			} else {
-				evpool.rememberIdentity(ev, verified)
+			if evpool.Enabled() {
+				if err := evpool.addPendingEvidence(ctx, ev); err != nil {
+					// Something went wrong with adding the evidence but we already know it is valid
+					// hence we log an error and continue
+					evpool.logger.Error("failed to add evidence to pending list", "err", err, "evidence", ev)
+				} else {
+					evpool.rememberIdentity(ev, verified)
+				}
 			}
 
 			evpool.logger.Info("check evidence: verified evidence of byzantine behavior", "evidence", ev)
@@ -287,16 +338,36 @@ func (evpool *Pool) State() sm.State {
 	return evpool.state
 }
 
+func (evpool *Pool) Enabled() bool {
+	evpool.mtx.Lock()
+	defer evpool.mtx.Unlock()
+	return evpool.state.ConsensusParams.Evidence.MaxBytes > 0
+}
+
 func (evpool *Pool) Start(state sm.State) error {
+	evpool.opMtx.Lock()
+	defer evpool.opMtx.Unlock()
+	if evpool.closed {
+		return errors.New("evidence pool is closed")
+	}
 	if evpool.isStarted {
 		return errors.New("pool is already running")
 	}
 
-	evpool.state = state
+	evpool.updateState(state)
+	if evpool.Enabled() {
+		evpool.refreshBlockRange()
+		if err := evpool.loadPendingEvidence(); err != nil {
+			return err
+		}
+	}
+	evpool.isStarted = true
+	return nil
+}
 
+func (evpool *Pool) loadPendingEvidence() error {
 	// If pending evidence already in db, in event of prior failure, then check
 	// for expiration, update the size and load it back to the evidenceList.
-	evpool.refreshBlockRange()
 	evpool.pruningHeight, evpool.pruningTime = evpool.removeExpiredPendingEvidence()
 	evList, _, err := evpool.listEvidence(prefixPending, -1)
 	if err != nil {
@@ -309,7 +380,7 @@ func (evpool *Pool) Start(state sm.State) error {
 	for _, ev := range evList {
 		evpool.evidenceList.PushBack(ev)
 	}
-
+	evpool.pendingLoaded = true
 	return nil
 }
 
@@ -379,6 +450,15 @@ func (evpool *Pool) rememberIdentity(ev types.Evidence, verified bool) {
 }
 
 func (evpool *Pool) Close() error {
+	evpool.opMtx.Lock()
+	defer evpool.opMtx.Unlock()
+	if evpool.closed {
+		return nil
+	}
+	evpool.closed = true
+	if evpool.evidenceStore == nil {
+		return nil
+	}
 	return evpool.evidenceStore.Close()
 }
 
@@ -412,6 +492,11 @@ func (evpool *Pool) isPending(evidence types.Evidence) bool {
 // sender does not pay for, on a path that runs before the work budget is
 // consulted.
 func (evpool *Pool) alreadyHave(evidence types.Evidence) bool {
+	evpool.opMtx.Lock()
+	defer evpool.opMtx.Unlock()
+	if evpool.closed || !evpool.Enabled() {
+		return true
+	}
 	height, hash := evidence.Height(), evidence.Hash()
 	return evpool.isPendingHash(height, hash) || evpool.isCommittedHash(height, hash)
 }

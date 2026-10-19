@@ -47,26 +47,6 @@ type StateProvider interface {
 	State(ctx context.Context, height uint64) (sm.State, error)
 }
 
-// evidenceModeStateProvider refuses snapshots that require different evidence subsystem wiring.
-type evidenceModeStateProvider struct {
-	StateProvider
-	evidenceParams types.EvidenceParams
-}
-
-func (s evidenceModeStateProvider) State(ctx context.Context, height uint64) (sm.State, error) {
-	state, err := s.StateProvider.State(ctx, height)
-	if err != nil {
-		return sm.State{}, err
-	}
-	if err := s.evidenceParams.ValidateUpdate(state.ConsensusParams.Evidence); err != nil {
-		return sm.State{}, fmt.Errorf(
-			"restored state evidence mode differs from locally trusted chain state: %w",
-			err,
-		)
-	}
-	return state, nil
-}
-
 // stateProviderRPC is a state provider using RPC to communicate with light clients.
 // Deprecated, will be removed in future.
 type stateProviderRPC struct {

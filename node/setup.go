@@ -51,12 +51,6 @@ const (
 	httpReadHeaderTimeout = 10 * time.Second
 )
 
-type evidencePool interface {
-	sm.EvidencePool
-	ReportConflictingVotes(*types.Vote, *types.Vote)
-	Start(sm.State) error
-}
-
 type closer func() error
 
 func makeCloser(cs []closer) closer {
@@ -194,7 +188,6 @@ func createMempoolReactor(
 func createEvidenceReactor(
 	logger log.Logger,
 	cfg *config.Config,
-	params types.EvidenceParams,
 	dbProvider config.DBProvider,
 	store sm.Store,
 	blockStore *store.BlockStore,
@@ -202,11 +195,7 @@ func createEvidenceReactor(
 	chCreator p2p.ChannelCreator,
 	metrics *evidence.Metrics,
 	eventBus *eventbus.EventBus,
-) (*evidence.Reactor, evidencePool, closer, error) {
-	if params.MaxBytes == 0 {
-		logger.Info("Evidence is disabled by consensus parameters")
-		return nil, evidence.DisabledPool{}, func() error { return nil }, nil
-	}
+) (*evidence.Reactor, *evidence.Pool, closer, error) {
 	evidenceDB, err := dbProvider(&config.DBContext{ID: "evidence", Config: cfg})
 	if err != nil {
 		return nil, nil, func() error { return nil }, fmt.Errorf("unable to initialize evidence db: %w", err)
@@ -217,7 +206,7 @@ func createEvidenceReactor(
 	evidencePool := evidence.NewPool(logger, evidenceDB, store, blockStore, metrics, eventBus)
 	evidenceReactor := evidence.NewReactor(logger, chCreator, peerEvents, evidencePool)
 
-	return evidenceReactor, evidencePool, evidenceDB.Close, nil
+	return evidenceReactor, evidencePool, evidencePool.Close, nil
 }
 
 func createPeerManager(
@@ -323,12 +312,10 @@ func createPeerManager(
 // speaks on it early (e.g. a seed answering on the PEX channel) as a protocol
 // violation and drop the peer with "unknown channel". Registered up front, the
 // router merely drops messages for a channel no reactor has opened yet.
-func channelDescriptors(cfg *config.Config, params types.EvidenceParams) []*p2p.ChannelDescriptor {
+func channelDescriptors(cfg *config.Config) []*p2p.ChannelDescriptor {
 	descs := []*p2p.ChannelDescriptor{pex.ChannelDescriptor()}
 	if cfg.Mode != config.ModeSeed {
-		if params.MaxBytes != 0 {
-			descs = append(descs, evidence.GetChannelDescriptor())
-		}
+		descs = append(descs, evidence.GetChannelDescriptor())
 		// p2p.ChannelDescriptors already merges the consensus and state sync
 		// sets, so it is the only p2p set to pull in: adding either of them
 		// again would hand the transport two descriptors per channel ID.
@@ -347,8 +334,8 @@ func channelDescriptors(cfg *config.Config, params types.EvidenceParams) []*p2p.
 // it. It exists so that Channel.SendError can hand a p2p.PeerError to the
 // router, which consumes it locally and evicts the peer, so a peer has no use
 // for knowing about it.
-func advertisedChannels(cfg *config.Config, params types.EvidenceParams) []uint16 {
-	descs := channelDescriptors(cfg, params)
+func advertisedChannels(cfg *config.Config) []uint16 {
+	descs := channelDescriptors(cfg)
 	ids := make([]uint16, 0, len(descs))
 	for _, desc := range descs {
 		if desc.ID == p2p.ErrorChannel {
@@ -367,7 +354,6 @@ func createRouter(
 	peerManager *p2p.PeerManager,
 	cfg *config.Config,
 	appClient abciclient.Client,
-	params types.EvidenceParams,
 ) (*p2p.Router, error) {
 
 	p2pLogger := logger.With("module", "p2p")
@@ -378,7 +364,7 @@ func createRouter(
 	transportConf.RecvRate = cfg.P2P.RecvRate
 	transportConf.MaxPacketMsgPayloadSize = cfg.P2P.MaxPacketMsgPayloadSize
 	transport := p2p.NewMConnTransport(
-		p2pLogger, transportConf, channelDescriptors(cfg, params),
+		p2pLogger, transportConf, channelDescriptors(cfg),
 		p2p.MConnTransportOptions{
 			MaxAcceptedConnections: uint32(cfg.P2P.MaxConnections),
 		},
@@ -412,7 +398,7 @@ func makeNodeInfo(
 	proTxHash crypto.ProTxHash,
 	eventSinks []indexer.EventSink,
 	genDoc *types.GenesisDoc,
-	state sm.State,
+	versionInfo version.Consensus,
 ) (types.NodeInfo, error) {
 
 	txIndexerStatus := "off"
@@ -424,13 +410,13 @@ func makeNodeInfo(
 	nodeInfo := types.NodeInfo{
 		ProtocolVersion: types.ProtocolVersion{
 			P2P:   version.P2PProtocol, // global
-			Block: state.Version.Consensus.Block,
-			App:   state.Version.Consensus.App,
+			Block: versionInfo.Block,
+			App:   versionInfo.App,
 		},
 		NodeID:   nodeKey.ID,
 		Network:  genDoc.ChainID,
 		Version:  version.TMCoreSemVer,
-		Channels: tmsync.NewConcurrentSlice(advertisedChannels(cfg, state.ConsensusParams.Evidence)...),
+		Channels: tmsync.NewConcurrentSlice(advertisedChannels(cfg)...),
 		Moniker:  cfg.Moniker,
 		Other: types.NodeInfoOther{
 			TxIndex:    txIndexerStatus,
@@ -465,7 +451,7 @@ func makeSeedNodeInfo(
 		NodeID:   nodeKey.ID,
 		Network:  genDoc.ChainID,
 		Version:  version.TMCoreSemVer,
-		Channels: tmsync.NewConcurrentSlice(advertisedChannels(cfg, state.ConsensusParams.Evidence)...),
+		Channels: tmsync.NewConcurrentSlice(advertisedChannels(cfg)...),
 		Moniker:  cfg.Moniker,
 		Other: types.NodeInfoOther{
 			TxIndex:    "off",

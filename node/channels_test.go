@@ -12,6 +12,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/p2p/pex"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/types"
+	"github.com/dashpay/tenderdash/version"
 )
 
 // openedChannels returns, per node mode, the descriptors every component of a
@@ -63,7 +64,7 @@ func TestChannelDescriptorsCoverEveryOpenedChannel(t *testing.T) {
 			cfg.Mode = mode
 
 			registered := make(map[p2p.ChannelID]string)
-			for _, desc := range channelDescriptors(cfg, types.DefaultEvidenceParams()) {
+			for _, desc := range channelDescriptors(cfg) {
 				name, dup := registered[desc.ID]
 				require.False(t, dup,
 					"channel %#x is registered twice, as %q and %q", desc.ID, name, desc.Name)
@@ -80,7 +81,7 @@ func TestChannelDescriptorsCoverEveryOpenedChannel(t *testing.T) {
 			if mode == config.ModeSeed {
 				nodeInfo, err = makeSeedNodeInfo(cfg, nodeKey, genDoc, sm.State{})
 			} else {
-				nodeInfo, err = makeNodeInfo(cfg, nodeKey, nil, nil, genDoc, sm.State{ConsensusParams: *types.DefaultConsensusParams()})
+				nodeInfo, err = makeNodeInfo(cfg, nodeKey, nil, nil, genDoc, version.Consensus{})
 			}
 			// Validate, called by both builders, rejects a duplicate or
 			// over-long (types.maxNumChannels) advertised channel list.

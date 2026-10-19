@@ -18,7 +18,7 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
-func TestInitChainCannotChangeEvidenceMode(t *testing.T) {
+func TestInitChainChangesEvidenceMode(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
 		before, after int64
@@ -42,10 +42,10 @@ func TestInitChainCannotChangeEvidenceMode(t *testing.T) {
 			client := abciclient.NewLocalClient(log.NewNopLogger(), app)
 			replayer := newBlockReplayer(stateStore, blockStore, genesis, nil, client, nil)
 			_, err = replayer.Replay(t.Context(), state, genesis.AppHash, 0)
-			require.ErrorContains(t, err, "evidence mode is fixed by genesis")
+			require.NoError(t, err)
 			stored, err := stateStore.Load()
 			require.NoError(t, err)
-			require.True(t, stored.IsEmpty(), "invalid InitChain must not persist a new chain state")
+			require.Equal(t, tc.after, stored.ConsensusParams.Evidence.MaxBytes)
 		})
 	}
 }

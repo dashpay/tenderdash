@@ -393,14 +393,7 @@ func (r *Reactor) Sync(ctx context.Context) (sm.State, error) {
 	if err := r.startStateProvider(ctx); err != nil {
 		return sm.State{}, err
 	}
-	localState, err := r.stateStore.Load()
-	if err != nil {
-		return sm.State{}, fmt.Errorf("loading evidence mode for state sync: %w", err)
-	}
-	r.getSyncer().SetStateProvider(evidenceModeStateProvider{
-		StateProvider:  r.stateProvider,
-		evidenceParams: localState.ConsensusParams.Evidence,
-	})
+	r.getSyncer().SetStateProvider(r.stateProvider)
 
 	state, commit, err := r.syncer.SyncAny(ctx, r.cfg.DiscoveryTime, r.cfg.Retries, r.requestSnapshot)
 	if err != nil {

@@ -65,16 +65,6 @@ type EvidenceParams struct {
 	MaxBytes        int64         `json:"max_bytes,string"`
 }
 
-// ValidateUpdate keeps evidence subsystem wiring consistent with the chain's initial mode.
-func (params EvidenceParams) ValidateUpdate(next EvidenceParams) error {
-	if (params.MaxBytes == 0) != (next.MaxBytes == 0) {
-		return errors.New(
-			"evidence mode is fixed by genesis: evidence.max_bytes cannot change between zero and positive",
-		)
-	}
-	return nil
-}
-
 // ValidatorParams restrict the public key types validators can use.
 // NOTE: uses ABCI pubkey naming, not Amino names.
 type ValidatorParams struct {

@@ -99,10 +99,9 @@ func TestEvidenceModeConsensusUpdates(t *testing.T) {
 			for _, tc := range []struct {
 				name          string
 				before, after int64
-				wantErr       bool
 			}{
-				{"enable", 0, 1000, true}, {"disable", 1000, 0, true},
-				{"stay disabled", 0, 0, false}, {"resize enabled", 1000, 2000, false},
+				{"enable", 0, 1000}, {"disable", 1000, 0},
+				{"stay disabled", 0, 0}, {"resize enabled", 1000, 2000},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					params := *types.DefaultConsensusParams()
@@ -121,12 +120,10 @@ func TestEvidenceModeConsensusUpdates(t *testing.T) {
 						},
 						base,
 					)
-					if tc.wantErr {
-						require.ErrorContains(t, err, "evidence mode is fixed")
-					} else {
-						require.NoError(t, err)
-						require.Equal(t, tc.after, candidate.NextConsensusParams.Evidence.MaxBytes)
-					}
+					require.NoError(t, err)
+					require.Equal(t, tc.after, candidate.NextConsensusParams.Evidence.MaxBytes)
+					require.Equal(t, candidate.GetHeight()+1, candidate.LastHeightConsensusParamsChanged)
+
 					require.Equal(t, tc.before, base.ConsensusParams.Evidence.MaxBytes)
 				})
 			}
