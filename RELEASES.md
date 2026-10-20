@@ -71,7 +71,9 @@ Publish tags only at the reviewed release commit. Existing tags are immutable.
 A draft GitHub release is reviewable; publishing it triggers Docker image work.
 The signed-artifact helper verifies the exact tag/SHA and creates Linux amd64
 and arm64 binaries with detached GPG signatures, tarballs, `SHA256SUMS`, and
-`SOURCE_COMMIT`. It does not upload, overwrite assets, or select a release.
+`SOURCE_COMMIT`. Archives include the reviewed root license and any root NOTICE,
+plus the local database license, provenance and NOTICE when present in that
+source revision. It does not upload, overwrite assets, or select a release.
 
 When preparing an older deployment-line fix, check Docker alias behavior before
 publishing: the current workflow promotes every non-dev release to `latest`

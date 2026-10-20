@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import tarfile
 import unittest
 
 SCRIPTS = Path(__file__).resolve().parent
@@ -116,6 +117,29 @@ class ReleaseTests(unittest.TestCase):
         self.assertIn("Revert", plan["commits"])
 
     def test_artifacts_use_only_requested_tag_and_preserve_checkout(self):
+        self.assert_artifacts_preserve_checkout(component_notices=False)
+
+    def test_artifacts_include_component_license_and_provenance_when_present(self):
+        self.assert_artifacts_preserve_checkout(component_notices=True)
+
+    def assert_artifacts_preserve_checkout(self, component_notices):
+        licenses = {"LICENSE": "reviewed root license"}
+        if component_notices:
+            licenses.update(
+                {
+                    "NOTICE": "reviewed root attribution",
+                    "libs/db/LICENSE": "reviewed component license",
+                    "libs/db/README.md": "reviewed component provenance",
+                    "libs/db/NOTICE": "reviewed component attribution",
+                }
+            )
+        for name, text in licenses.items():
+            path = self.repo / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text)
+        self.git("add", *licenses)
+        self.git("commit", "-qm", "license fixtures")
+        self.dev = self.git("rev-parse", "HEAD").strip()
         self.git("tag", "v2.0.0", self.dev)
         self.git("tag", "v99.0.0", self.dev)
         tools = self.root / "bin"
@@ -141,6 +165,7 @@ if '--detach-sign' in args:
         for tool in tools.iterdir():
             tool.chmod(0o755)
         output = self.root / "artifacts"
+        (self.repo / "LICENSE").write_text("unreviewed working-copy license")
         before = self.git("status", "--porcelain")
         result = subprocess.run(
             [
@@ -158,6 +183,13 @@ if '--detach-sign' in args:
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((output / "SOURCE_COMMIT").read_text().strip(), self.dev)
         self.assertEqual(len(list(output.glob("*.tar.gz"))), 2)
+        for archive in output.glob("*.tar.gz"):
+            with tarfile.open(archive) as package:
+                for name, text in licenses.items():
+                    self.assertIn(name, package.getnames())
+                    self.assertEqual(package.extractfile(name).read().decode(), text)
+                if not component_notices:
+                    self.assertNotIn("libs/db/LICENSE", package.getnames())
         subprocess.run(
             ["sha256sum", "-c", "SHA256SUMS"],
             cwd=output,

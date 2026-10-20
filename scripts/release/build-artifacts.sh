@@ -36,6 +36,12 @@ git -C "$scratch/source" fetch --quiet --no-tags "$repo" "refs/tags/$tag:refs/ta
 }
 git -C "$scratch/source" checkout --quiet --detach "$reviewed_sha"
 git -C "$scratch/source" submodule update --init --recursive
+notice_files=(LICENSE)
+for notice in NOTICE libs/db/LICENSE libs/db/NOTICE libs/db/README.md; do
+	[[ ! -f $scratch/source/$notice ]] || notice_files+=("$notice")
+done
+# Package notices from the reviewed source, never the caller's working tree.
+(cd "$scratch/source" && cp --parents "${notice_files[@]}" "$output/")
 build_options=tenderdash,stable
 [[ $tag != *-dev.* ]] || build_options=tenderdash,dev
 sign_args=()
@@ -54,7 +60,7 @@ for arch in amd64 arm64; do
 	image=''
 	gpg "${sign_args[@]}" --armor --output "$output/$binary.sig" --detach-sign "$output/$binary"
 	gpg --verify "$output/$binary.sig" "$output/$binary"
-	tar -C "$output" -czf "$output/tenderdash-${tag#v}-linux-$arch.tar.gz" "$binary" "$binary.sig"
+	tar -C "$output" -czf "$output/tenderdash-${tag#v}-linux-$arch.tar.gz" "$binary" "$binary.sig" "${notice_files[@]}"
 done
 (cd "$output" && sha256sum ./*.tar.gz > SHA256SUMS)
 printf '%s\n' "$reviewed_sha" > "$output/SOURCE_COMMIT"
