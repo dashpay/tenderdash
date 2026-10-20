@@ -1,3 +1,6 @@
+// Modified by Tenderdash contributors from cometbft-db v1.0.4.
+// See README.md for provenance and LICENSE for license terms.
+
 package db
 
 import "errors"
@@ -20,10 +23,13 @@ var (
 // read-only, both when returned and when given, and must be copied before they are modified.
 type DB interface {
 	// Get fetches the value of the given key, or nil if it does not exist.
+	// GoLevelDB also returns nil for stored empty values; MemDB returns a non-nil empty slice.
+	// This inherited difference is tracked at https://github.com/dashpay/tenderdash/issues/1554.
 	// CONTRACT: key, value readonly []byte
 	Get(key []byte) ([]byte, error)
 
 	// Has checks if a key exists.
+	// GoLevelDB reports false for stored empty values; MemDB reports true.
 	// CONTRACT: key, value readonly []byte
 	Has(key []byte) (bool, error)
 

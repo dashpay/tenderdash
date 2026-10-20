@@ -137,12 +137,15 @@ func testBackendGetSetDelete(t *testing.T, backend BackendType) {
 	require.NoError(t, err)
 	value, err = db.Get([]byte("x"))
 	require.NoError(t, err)
-	t.Run("empty value is non-nil", func(t *testing.T) {
-		if backend == GoLevelDBBackend {
-			t.Skip("inherited GoLevelDB contract mismatch: the pinned engine returns nil for a stored empty value")
-		}
+	has, err := db.Has([]byte("x"))
+	require.NoError(t, err)
+	if backend == GoLevelDBBackend {
+		require.Nil(t, value)
+		require.False(t, has, "GoLevelDB cannot distinguish a stored empty value from an absent key")
+	} else {
 		require.Equal(t, []byte{}, value)
-	})
+		require.True(t, has)
+	}
 
 	err = db.Compact(nil, nil)
 	require.NoError(t, err)
