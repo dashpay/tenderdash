@@ -129,8 +129,9 @@ func (c *EnterPrecommitAction) Execute(ctx context.Context, stateEvent StateEven
 	// Precommitting nil is always safe and the lock is kept as it is. Honest
 	// validators that received the proposal for the block precommit it, and a
 	// later proposer re-proposes its valid block with this round as its POL round.
+	lockedMatches := stateData.LockedBlock.BlockID(stateData.LockedBlockParts).Equals(blockID)
 	proposalMatches := stateData.ProposalBlock.BlockID(stateData.ProposalBlockParts).Equals(blockID)
-	if !proposalMatches && stateData.LockedBlock.HashesTo(blockID.Hash) {
+	if !proposalMatches && lockedMatches {
 		logger.Error("precommit step: +2/3 prevoted locked block, but this round's proposal is for another block; precommitting nil",
 			"locked_block", blockID.Hash,
 			"proposal_block", tmstrings.LazyBlockHash(stateData.ProposalBlock))
@@ -155,7 +156,7 @@ func (c *EnterPrecommitAction) Execute(ctx context.Context, stateEvent StateEven
 		// here: the polka and the proposal block are both for this round, and
 		// whichever arrived last already made the block valid for this round
 		// (addVoteUpdateValidBlockMw or ProposalCompletedAction).
-		if stateData.LockedBlock.HashesTo(blockID.Hash) {
+		if lockedMatches {
 			logger.Debug("precommit step: +2/3 prevoted locked block; relocking", "hash", blockID.Hash)
 			stateData.LockedRound = round
 

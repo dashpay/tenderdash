@@ -12,6 +12,8 @@ import (
 
 	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/dash"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -41,9 +43,9 @@ type extendVoteContractApp struct {
 	violations []string
 }
 
-func newExtendVoteContractApp(t *testing.T) *extendVoteContractApp {
+func newExtendVoteContractApp(t *testing.T, opts ...kvstore.OptFunc) *extendVoteContractApp {
 	t.Helper()
-	app, err := kvstore.NewMemoryApp()
+	app, err := kvstore.NewMemoryApp(opts...)
 	require.NoError(t, err)
 	return &extendVoteContractApp{Application: app}
 }
@@ -274,11 +276,119 @@ func TestStateLock_RelockLateProposalProcessesBeforeExtending(t *testing.T) {
 	// The polka handling made B valid for this round; relock relies on it.
 	rs := cs1.GetRoundState()
 	require.Equal(t, round, rs.ValidRound)
-	require.True(t, rs.ValidBlock.HashesTo(blockID.Hash))
+	require.True(t, rs.ValidBlock.BlockID(rs.ValidBlockParts).Equals(blockID))
 
 	extended := app.Extended()
 	require.NotEmpty(t, extended)
 	last := extended[len(extended)-1]
 	require.Equal(t, round, last.round)
 	require.Equal(t, []byte(blockID.Hash), last.hash)
+}
+
+// An equivocating proposer supplies A, then the polka retargets the round to B.
+// Equal application outputs do not make A the execution context for B.
+func TestStateLock_ReplacementProcessesExactBlock(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// Accept replacement proposals while enforcing the exact-block ExtendVote contract.
+	app := newExtendVoteContractApp(t, kvstore.WithDuplicateRequestDetection(false))
+	cs, vss := makeState(ctx, t, makeStateArgs{application: app, logger: log.NewNopLogger()})
+	ctx = dash.ContextWithProTxHash(ctx, cs.privValidator.ProTxHash)
+	sd := cs.GetStateData()
+	_, block := decideProposal(ctx, t, cs, vss[0], sd.Height, 0)
+	parts, err := block.MakePartSet(types.BlockPartSizeBytes)
+	require.NoError(t, err)
+	blockID := block.BlockID(parts)
+	sd.ProposalBlock, sd.ProposalBlockParts = block, parts
+	require.NoError(t, cs.blockExecutor.ensureProcess(ctx, &sd.RoundState, 0))
+	sd.LockedBlock, sd.LockedBlockParts, sd.LockedRound = block, parts, 0
+	sd.ValidBlock, sd.ValidBlockParts, sd.ValidRound = block, parts, 0
+	for _, vs := range vss[1:] {
+		vote := signVote(ctx, t, vs, tmproto.PrevoteType, sd.state.ChainID, blockID, sd.Validators.QuorumType, sd.Validators.QuorumHash)
+		_, err := sd.Votes.AddVote(vote)
+		require.NoError(t, err)
+	}
+	sd.Votes.SetRound(1)
+	sd.updateRoundStep(1, cstypes.RoundStepPropose)
+	incrementRound(vss...)
+
+	pb, err := block.ToProto()
+	require.NoError(t, err)
+	pb.Header.ProposerProTxHash, err = vss[1].GetProTxHash(ctx)
+	require.NoError(t, err)
+	other, err := types.BlockFromProto(pb)
+	require.NoError(t, err)
+	require.NotEqual(t, block.Hash(), other.Hash())
+	require.Equal(t, block.AppHash, other.AppHash)
+	require.Equal(t, block.ResultsHash, other.ResultsHash)
+	otherParts, err := other.MakePartSet(types.BlockPartSizeBytes)
+	require.NoError(t, err)
+	sd.Proposal = makeProposal(sd.Height, sd.Round, -1, other, otherParts)
+	sd.ProposalReceiveTime = other.Time
+	sd.ProposalBlock, sd.ProposalBlockParts = other, otherParts
+	require.NoError(t, cs.ctrl.Dispatch(ctx, &EnterPrevoteEvent{Height: sd.Height, Round: sd.Round}, &sd))
+	require.True(t, processedFor(&sd.RoundState, sd.Round))
+
+	for _, vs := range vss[1:] {
+		vote := signVote(ctx, t, vs, tmproto.PrevoteType, sd.state.ChainID, blockID, sd.Validators.QuorumType, sd.Validators.QuorumHash)
+		require.NoError(t, cs.msgDispatcher.dispatch(ctx, &sd, msgInfo{Msg: &VoteMessage{Vote: vote}, PeerID: "peer"}))
+	}
+	require.Nil(t, sd.Proposal)
+	require.Nil(t, sd.ProposalBlock)
+	proposal := makeProposal(sd.Height, sd.Round, 0, block, parts)
+	protoProposal := proposal.ToProto()
+	_, err = vss[1].SignProposal(ctx, sd.state.ChainID, sd.Validators.QuorumType, sd.Validators.QuorumHash, protoProposal)
+	require.NoError(t, err)
+	proposal.Signature = protoProposal.Signature
+	require.NoError(t, cs.msgDispatcher.dispatch(ctx, &sd, msgInfo{Msg: &ProposalMessage{Proposal: proposal}, PeerID: "peer", ReceiveTime: block.Time}))
+	for i := uint32(0); i < parts.Total(); i++ {
+		require.NoError(t, cs.msgDispatcher.dispatch(ctx, &sd, msgInfo{Msg: &BlockPartMessage{Height: sd.Height, Round: sd.Round, Part: parts.GetPart(int(i))}, PeerID: "peer"}))
+	}
+	require.True(t, sd.ProposalBlock.BlockID(sd.ProposalBlockParts).Equals(blockID))
+	require.NotPanics(t, func() {
+		require.NoError(t, cs.ctrl.Dispatch(ctx, &EnterPrecommitEvent{Height: sd.Height, Round: sd.Round}, &sd))
+	})
+	require.Empty(t, app.Violations())
+	require.Len(t, app.Extended(), 1)
+	require.Equal(t, sd.Round, app.Extended()[0].round)
+	require.Equal(t, []byte(blockID.Hash), app.Extended()[0].hash)
+	require.Equal(t, sd.Round, sd.LockedRound)
+	require.True(t, sd.LockedBlock.BlockID(sd.LockedBlockParts).Equals(blockID))
+}
+
+func TestStateLock_SameHashDifferentPartsTakesNewLock(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	app := newExtendVoteContractApp(t)
+	cs, vss := makeState(ctx, t, makeStateArgs{application: app, logger: log.NewNopLogger()})
+	ctx = dash.ContextWithProTxHash(ctx, cs.privValidator.ProTxHash)
+	sd := cs.GetStateData()
+	_, block := decideProposal(ctx, t, cs, vss[0], sd.Height, 0)
+	oldParts, err := block.MakePartSet(types.BlockPartSizeBytes)
+	require.NoError(t, err)
+	parts, err := block.MakePartSet(multiPartBlockPartSize)
+	require.NoError(t, err)
+	blockID := block.BlockID(parts)
+	require.Equal(t, block.Hash(), blockID.Hash)
+	require.False(t, oldParts.HasHeader(blockID.PartSetHeader))
+	sd.LockedBlock, sd.LockedBlockParts, sd.LockedRound = block, oldParts, 0
+	sd.ValidBlock, sd.ValidBlockParts, sd.ValidRound = block, oldParts, 0
+	sd.ProposalBlock, sd.ProposalBlockParts = block, parts
+	sd.Proposal = makeProposal(sd.Height, 1, -1, block, parts)
+	sd.ProposalReceiveTime = block.Time
+	sd.Votes.SetRound(1)
+	sd.updateRoundStep(1, cstypes.RoundStepPrevote)
+	incrementRound(vss...)
+	for _, vs := range vss[1:] {
+		vote := signVote(ctx, t, vs, tmproto.PrevoteType, sd.state.ChainID, blockID, sd.Validators.QuorumType, sd.Validators.QuorumHash)
+		require.NoError(t, cs.msgDispatcher.dispatch(ctx, &sd, msgInfo{Msg: &VoteMessage{Vote: vote}, PeerID: "peer"}))
+	}
+	majority, ok := sd.Votes.Prevotes(sd.Round).TwoThirdsMajority()
+	require.True(t, ok)
+	require.True(t, majority.Equals(blockID))
+	require.NoError(t, cs.ctrl.Dispatch(ctx, &EnterPrecommitEvent{Height: sd.Height, Round: sd.Round}, &sd))
+	require.Equal(t, sd.Round, sd.LockedRound)
+	require.True(t, sd.LockedBlock.BlockID(sd.LockedBlockParts).Equals(blockID), "the lock must name the complete precommitted value")
+	require.True(t, sd.ValidBlock.BlockID(sd.ValidBlockParts).Equals(blockID), "the valid value must name the complete polka")
+	require.Empty(t, app.Violations())
 }
