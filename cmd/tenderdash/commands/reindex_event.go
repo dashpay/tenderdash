@@ -16,7 +16,6 @@ import (
 	"github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/state/indexer"
 	"github.com/dashpay/tenderdash/internal/state/indexer/sink/kv"
-	"github.com/dashpay/tenderdash/internal/state/indexer/sink/psql"
 	"github.com/dashpay/tenderdash/internal/store"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/libs/os"
@@ -93,6 +92,9 @@ either or both arguments.
 }
 
 func loadEventSinks(cfg *tmcfg.Config) ([]indexer.EventSink, error) {
+	if err := cfg.TxIndex.ValidateBasic(); err != nil {
+		return nil, err
+	}
 	// Check duplicated sinks.
 	sinks := map[string]bool{}
 	for _, s := range cfg.TxIndex.Indexer {
@@ -115,16 +117,6 @@ func loadEventSinks(cfg *tmcfg.Config) ([]indexer.EventSink, error) {
 				return nil, err
 			}
 			eventSinks = append(eventSinks, kv.NewEventSink(store))
-		case string(indexer.PSQL):
-			conn := cfg.TxIndex.PsqlConn
-			if conn == "" {
-				return nil, errors.New("the psql connection settings cannot be empty")
-			}
-			es, err := psql.NewEventSink(conn, cfg.ChainID())
-			if err != nil {
-				return nil, err
-			}
-			eventSinks = append(eventSinks, es)
 		default:
 			return nil, errors.New("unsupported event sink type")
 		}
