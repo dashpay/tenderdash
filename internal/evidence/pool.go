@@ -10,10 +10,11 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	dbm "github.com/cometbft/cometbft-db"
 	"github.com/cosmos/gogoproto/proto"
 	gogotypes "github.com/cosmos/gogoproto/types"
 	"github.com/google/orderedcode"
+
+	dbm "github.com/dashpay/tenderdash/libs/db"
 
 	"github.com/dashpay/tenderdash/internal/eventbus"
 	clist "github.com/dashpay/tenderdash/internal/libs/clist"
