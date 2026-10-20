@@ -1,6 +1,7 @@
 package blocksync
 
 import (
+	"github.com/jonboulle/clockwork"
 	"golang.org/x/exp/constraints"
 
 	"github.com/dashpay/tenderdash/libs/store"
@@ -15,10 +16,12 @@ type (
 		// out of the interface's Get, Put and Update reintroduces a window in which
 		// a concurrent write is lost. Nothing here substitutes another store.
 		store *store.InMemStore[types.NodeID, PeerData]
+		clock clockwork.Clock
 	}
 	// PeerData uses to keep peer related data like base height and the current height etc
 	PeerData struct {
 		numPending int32
+		service    *peerService
 		// numFailures counts block requests this peer failed in a row. It resets
 		// on the first successful response.
 		numFailures int32
@@ -34,6 +37,7 @@ type (
 func NewInMemPeerStore(peers ...PeerData) *InMemPeerStore {
 	mem := &InMemPeerStore{
 		store: store.NewInMemStore[types.NodeID, PeerData](),
+		clock: clockwork.NewRealClock(),
 	}
 	for _, peer := range peers {
 		mem.Put(peer.peerID, peer)
@@ -53,6 +57,7 @@ func (p *InMemPeerStore) GetAndDelete(peerID types.NodeID) (PeerData, bool) {
 
 // Put adds the peer data to the store if the peer does not exist, otherwise update the current value
 func (p *InMemPeerStore) Put(peerID types.NodeID, newPeer PeerData) {
+	newPeer.service.setClock(p.clock)
 	p.store.Put(peerID, newPeer)
 }
 
@@ -73,6 +78,7 @@ func (p *InMemPeerStore) Put(peerID types.NodeID, newPeer PeerData) {
 // them, so a lookup followed by a separate write would let a peer inserted in
 // between be overwritten - losing precisely the state this exists to keep.
 func (p *InMemPeerStore) Upsert(newPeer PeerData) {
+	newPeer.service.setClock(p.clock)
 	p.store.Upsert(newPeer.peerID, newPeer, func(_ types.NodeID, peer *PeerData) {
 		peer.base = newPeer.base
 		peer.height = newPeer.height
@@ -114,21 +120,39 @@ func (p *InMemPeerStore) Query(spec store.QueryFunc[types.NodeID, PeerData], lim
 	return p.store.Query(spec, limit)
 }
 
-// FindPeer finds a peer for the request
-// criteria by which the peer is looked up:
-// 1. the number of pending requests must be less allowed (maxPendingRequestsPerPeer)
-// 2. the height must be between two values base and height
-// otherwise return the empty peer data and false
+// FindPeer prefers ordinary service except when a bounded recovery probe is due.
 func (p *InMemPeerStore) FindPeer(height int64) (PeerData, bool) {
-	spec := store.AndX(
-		peerNumPendingCond(maxPendingRequestsPerPeer, "<"),
-		heightBetweenPeerHeightRange(height),
-	)
-	peers := p.Query(spec, 1)
-	if len(peers) == 0 {
+	peers := p.Query(store.AndX(peerNumPendingCond(maxPendingRequestsPerPeer, "<"),
+		heightBetweenPeerHeightRange(height)), 0)
+	var selected PeerData
+	priority := 0
+	for _, peer := range peers {
+		if next := peer.service.priority(peer.numPending, false); next > priority {
+			selected, priority = peer, next
+		}
+	}
+	return selected, priority > 0
+}
+
+// reservePeer checks and reserves both pending capacity and the single probe
+// under the store lock. Concurrent producers cannot reserve the same probe.
+func (p *InMemPeerStore) reservePeer(height int64) (PeerData, bool) {
+	peer, found := p.FindPeer(height)
+	if !found {
 		return PeerData{}, false
 	}
-	return peers[0], true
+	reserved := false
+	p.store.Update(peer.peerID, func(_ types.NodeID, current *PeerData) {
+		if current.service != peer.service || current.numPending >= maxPendingRequestsPerPeer ||
+			!heightBetweenPeerHeightRange(height)(current.peerID, *current) ||
+			current.service.priority(current.numPending, true) == 0 {
+			return
+		}
+		current.addPending(1)
+		peer = *current
+		reserved = true
+	})
+	return peer, reserved
 }
 
 // HasPeerForHeight reports whether a peer advertises the height without having
@@ -197,7 +221,7 @@ func heightBetweenPeerHeightRange(height int64) store.QueryFunc[types.NodeID, Pe
 }
 
 func newPeerData(peerID types.NodeID, base, height int64) PeerData {
-	return PeerData{peerID: peerID, base: base, height: height}
+	return PeerData{peerID: peerID, base: base, height: height, service: newPeerService(clockwork.NewRealClock())}
 }
 
 // AddNumPending adds a value to the numPending field

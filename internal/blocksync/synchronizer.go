@@ -94,10 +94,6 @@ const (
 	// limits cover.
 	maxOutstandingHeights = 64
 
-	// Peer health is based on request failures, including client timeouts. Byte
-	// throughput also depends on block size and local application backpressure,
-	// so it cannot distinguish an unresponsive peer from a healthy one.
-	//
 	// maxConsecutiveFailures is how many block requests in a row a peer may fail
 	// before we drop it. Requests time out under load, and a peer serves its
 	// requests one at a time, so a single failure says very little about the
@@ -214,6 +210,7 @@ func NewSynchronizer(start int64, client client.BlockClient, blockExec *blockApp
 	for _, opt := range opts {
 		opt(bp)
 	}
+	bp.peerStore.clock = bp.clock
 	bp.BaseService = *service.NewBaseService(logger, "Synchronizer", bp)
 	return bp
 }

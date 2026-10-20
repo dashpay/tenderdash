@@ -28,9 +28,13 @@ func (e *errBlockFetch) Error() string {
 
 // blockFetchJobHandler requests for a block by height from the peer, if the peer responds to the block in time, then the job
 // will return it, otherwise the job will return an error
-func blockFetchJobHandler(client client.BlockClient, peer PeerData, height int64) workerpool.JobHandler {
+func blockFetchJobHandler(blockClient client.BlockClient, peer PeerData, height int64) workerpool.JobHandler {
 	return func(ctx context.Context) workerpool.Result {
-		promise, err := client.GetBlock(ctx, height, peer.peerID)
+		observation := peer.service.request()
+		size := 0
+		defer func() { observation.complete(size) }()
+		ctx = client.WithBlockRequestObserver(ctx, observation)
+		promise, err := blockClient.GetBlock(ctx, height, peer.peerID)
 		if err != nil {
 			return errorResult(peer.peerID, height, err)
 		}
@@ -50,6 +54,7 @@ func blockFetchJobHandler(client client.BlockClient, peer PeerData, height int64
 			return errorResult(peer.peerID, height,
 				fmt.Errorf("peer sent block at height %d, requested height %d", resp.Block.Height, height))
 		}
+		size = protoResp.Size()
 		return workerpool.Result{Value: resp}
 	}
 }
@@ -102,7 +107,6 @@ func (p *jobGenerator) nextJob(ctx context.Context) (*workerpool.Job, error) {
 	if err != nil {
 		return nil, err
 	}
-	p.peerStore.Update(peer.peerID, AddNumPending(1))
 	return workerpool.NewJob(blockFetchJobHandler(p.client, peer, height)), nil
 }
 
@@ -144,7 +148,7 @@ func (p *jobGenerator) getPeer(ctx context.Context, height int64) (PeerData, err
 		if ctx.Err() != nil {
 			return PeerData{}, ctx.Err()
 		}
-		peer, found := p.peerStore.FindPeer(height)
+		peer, found := p.peerStore.reservePeer(height)
 		if found {
 			return peer, nil
 		}
