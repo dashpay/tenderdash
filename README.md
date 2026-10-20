@@ -2,85 +2,52 @@
 
 ![banner](docs/tendermint-core-image.jpg)
 
-[Byzantine-Fault Tolerant](https://en.wikipedia.org/wiki/Byzantine_fault_tolerance)
-[State Machine Replication](https://en.wikipedia.org/wiki/State_machine_replication).
-Or [Blockchain](<https://en.wikipedia.org/wiki/Blockchain_(database)>), for short.
+Tenderdash is the consensus component of [Dash Platform](https://github.com/dashpay/platform).
+It orders and finalizes Platform blocks using Dash masternode quorums, threshold
+signatures, and validator rotation. It is developed and supported as part of
+Dash Platform, rather than as an independent general-purpose consensus product.
 
 [![version](https://img.shields.io/github/tag/dashpay/tenderdash.svg)](https://github.com/dashpay/tenderdash/releases/latest)
-[![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/dashpay/tenderdash)](https://github.com/moovweb/gvm)
-[![dashpay/tenderdash](https://tokei.rs/b1/github/dashpay/tenderdash?category=lines)](https://github.com/dashpay/tenderdash)
+[![Tests](https://github.com/dashpay/tenderdash/actions/workflows/tests.yml/badge.svg)](https://github.com/dashpay/tenderdash/actions/workflows/tests.yml)
+[![Golang Linter](https://github.com/dashpay/tenderdash/actions/workflows/lint.yml/badge.svg)](https://github.com/dashpay/tenderdash/actions/workflows/lint.yml)
 
-| Branch                                   | Tests                                                                                                                                                      | Coverage                                                                                                       | Linting                                                                                                                                                          |
-| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Development (latest `vMAJOR.MINOR-dev`) | [![Tests](https://github.com/dashpay/tenderdash/actions/workflows/tests.yml/badge.svg)](https://github.com/dashpay/tenderdash/actions/workflows/tests.yml) | [![codecov](https://codecov.io/gh/dashpay/tenderdash/graph/badge.svg)](https://codecov.io/gh/dashpay/tenderdash) | [![Golang Linter](https://github.com/dashpay/tenderdash/actions/workflows/lint.yml/badge.svg)](https://github.com/dashpay/tenderdash/actions/workflows/lint.yml) |
+## Dash Platform integration and support
 
-Tenderdash is a Byzantine Fault Tolerant (BFT) middleware that takes a state transition machine -
-written in any programming language - and securely replicates it on many machines.
+Use the Tenderdash version selected for your Dash Platform release and network.
+A newer Tenderdash tag alone does not establish compatibility with an existing
+Platform deployment. Changes to consensus rules, wire formats, ABCI, configuration,
+or stored data can require a coordinated Platform upgrade.
+
+Support and security fixes follow Dash Platform development and deployment
+requirements. Tenderdash does not provide an independent support window for a
+fixed number of minor releases, or support for arbitrary downstream applications.
+Report security concerns through [SECURITY.md](SECURITY.md).
+
+`dev` is the integration branch and `master` is the latest stable release line.
+During the planned branch rename, `v1.8-dev` remains the integration branch until
+`dev` exists. Production deployments should use the release artifacts selected
+by Dash Platform, not a moving development branch. See [releases](https://github.com/dashpay/tenderdash/releases)
+and the [release process](RELEASES.md).
 
 ## Background
 
-Tenderdash started as a fork of the [Tendermint Core](https://www.github.com/tendermint/tendermint)
-project and has been used in public environments such as the Cosmos Network. Although based on
-Tendermint, Tenderdash differs from Tendermint through its use of Dash's [long-living masternode
-quorums (LLMQs)](https://github.com/dashpay/dips/blob/master/dip-0006.md) to support threshold
-signatures, quorum-based voting, and dynamic validator set rotation. These enhancements to support
-rapid transaction finality and maintain strong security guarantees make Tenderdash ideal for Dash
-Platform’s needs.
+Tenderdash originated as a fork of [Tendermint Core](https://github.com/tendermint/tendermint).
+Its Dash-specific consensus uses [long-living masternode quorums](https://github.com/dashpay/dips/blob/master/dip-0006.md).
+The inherited [specifications](spec/README.md) and [architecture documents](docs/architecture/)
+provide background; Dash Platform integration and the current implementation
+remain the context for development and compatibility decisions.
 
-For Tendermint protocol details, refer to the [Tendermint Specification](./spec/README.md). For a
-detailed analysis of the consensus protocol, including safety and liveness proofs, read the
-Tendermint paper, "[The latest gossip on BFT consensus](https://arxiv.org/abs/1807.04938)".
-Tendermint documentation can be found on [docs.tendermint.com](https://docs.tendermint.com/).
+## Development
 
-## Releases
+See the [installation instructions](docs/introduction/install.md),
+[contributing guide](CONTRIBUTING.md), and [style guide](STYLE_GUIDE.md).
+Building from source requires Go 1.27.2 or newer and the BLS native dependency;
+`make build` handles the dependency build.
 
-Please do not depend on the development branch (latest `vMAJOR.MINOR-dev`) as
-your production branch. Use the binaries provided on the [GitHub releases
-page](https://github.com/dashpay/tenderdash/releases) instead.
+Tenderdash uses Semantic Versioning for releases. Compatibility review includes
+exported Go APIs, RPC, ABCI, P2P and block protocols, persisted data, and operator
+configuration. Release notes describe migration and coordinated rollout needs.
+The [project release skill](.agents/skills/tenderdash-release/SKILL.md) reviews
+actual changes before choosing a version; commit prefixes alone do not decide it.
 
-## Install
-
-See the [install instructions](./docs/introduction/install.md). Make sure to meet the minimum
-requirements if installing from source.
-
-### Minimum requirements
-
-| Requirement | Notes              |
-| ----------- | ------------------ |
-| Go version  | Go1.27.2 or higher |
-
-## Versioning
-
-### Semantic Versioning
-
-Tenderdash uses [Semantic Versioning](http://semver.org/) to determine when and how the version
-changes.
-
-The Tenderdash API includes all publicly exposed types, functions, and methods in non-internal Go
-packages as well as the types and methods accessible via the RPC interface. Breaking changes to
-these public APIs will be documented in the [CHANGELOG](./CHANGELOG.md).
-
-### Supported Versions
-
-Because we are a small core team, we only ship patch updates, including security updates, to the
-most recent minor release and the second-most recent minor release. Consequently, we strongly
-recommend keeping Tenderdash up-to-date.
-
-## Resources
-
-- [The latest gossip on BFT consensus](https://arxiv.org/abs/1807.04938)
-- [Master's Thesis on Tendermint](https://atrium.lib.uoguelph.ca/xmlui/handle/10214/9769)
-- [Original Whitepaper: "Tendermint: Consensus Without Mining"](https://tendermint.com/static/docs/tendermint.pdf)
-
-## Contributing
-
-Before contributing to the project, please take a look at the [contributing
-guidelines](CONTRIBUTING.md) and the [style guide](STYLE_GUIDE.md). You may also find it helpful to
-read the [Tendermint specifications](./spec/README.md), and familiarize yourself with the
-[Architectural Decision Records (ADRs)](./docs/architecture/) and [Request For Comments
-(RFCs)](./docs/rfc/).
-
-## Join us
-
-Tenderdash is maintained by [Dash Core Group](https://www.dash.org/dcg/). If you'd like to work
-full-time on Tenderdash, [see our Jobs page](https://www.dash.org/dcg/jobs/).
+Tenderdash is maintained by [Dash Core Group](https://www.dash.org/dcg/).

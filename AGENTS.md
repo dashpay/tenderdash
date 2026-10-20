@@ -71,13 +71,15 @@ make format
 
 ## Branching and PR Workflow
 
-- Main development branch is the highest-versioned `vMAJOR.MINOR-dev` branch.
-  Find it with: `git branch -r --list 'origin/v[0-9]*-dev' --sort=-version:refname | head -1`
-- Create feature branches from the development branch; open PRs back into it.
+- `dev` is the integration branch; `master` is the latest stable Dash Platform release line.
+- During the planned rename, use `v1.8-dev` until `origin/dev` exists. Do not
+  infer the integration branch from the highest versioned branch name.
+- Create feature branches from integration and open PRs back into it. Stable
+  hotfixes branch from `master` and are forward-ported to integration.
 - Keep commits focused and well-described.
 - Use conventional commit format for commit and PR titles.
 - Do not manually edit or generate `CHANGELOG.md` for development changes.
-  The release script generates the changelog as part of the release process.
+  The project release skill prepares it only for a requested release.
 - PR descriptions: read `.github/PULL_REQUEST_TEMPLATE.md`, fill in every
   section, base content on the full diff against the target branch.
 - AI code review (`.github/workflows/claude-code-review.yml`) is opt-in:
@@ -101,3 +103,12 @@ make format
   unexpected Go types; always check the generated code after proto changes.
 - Some packages under `internal/` import `dash/` types; be mindful of import
   cycles when moving code between packages.
+
+## Dash Platform releases
+
+Tenderdash is supported as a component of Dash Platform development, not as an
+independent consensus product with a fixed minor-version support window.
+Use [tenderdash-release](.agents/skills/tenderdash-release/SKILL.md) for release
+analysis or a requested release. Read the actual history and diffs before
+selecting SemVer; a normal development task does not authorize publication.
+See [RELEASES.md](RELEASES.md) for the branch migration and coordinated rollout.
