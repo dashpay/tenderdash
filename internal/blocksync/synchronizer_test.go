@@ -19,7 +19,6 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/dashpay/tenderdash/config"
-	"github.com/dashpay/tenderdash/internal/libs/flowrate"
 	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/internal/p2p/client"
 	clientmocks "github.com/dashpay/tenderdash/internal/p2p/client/mocks"
@@ -1977,9 +1976,6 @@ func (suite *SynchronizerTestSuite) TestSmallBlocksAfterSlowApplyKeepPeersUsable
 	ctx := context.Background()
 	h := suite.newBacklogHarness()
 	fakeClock := clockwork.NewFakeClock()
-	// Use one clock for local processing and receive-rate measurements.
-	flowrate.Now = fakeClock.Now
-	suite.T().Cleanup(func() { flowrate.Now = flowrate.TimeNow })
 	h.pool.clock = fakeClock
 	h.pool.lastAdvance = fakeClock.Now()
 	for _, peer := range h.pool.peerStore.All() {
