@@ -12,6 +12,13 @@ CometBFT DB is a fork of [tm-db](https://github.com/tendermint/tm-db).
 The retained source files are `db.go`, `types.go`, `util.go`, `goleveldb*.go`,
 `memdb*.go`, and `prefixdb*.go`. Only GoLevelDB and MemDB are registered.
 The upstream test helper `test_helpers.go` is named `test_helpers_test.go` here.
+Local changes narrow backend registration, close the debugging Print iterator,
+and adapt tests and documentation to the retained implementations.
+
+GoLevelDB returns nil from Get and false from Has for a stored empty value;
+MemDB returns a non-nil empty slice and true. This inherited difference is
+characterized by tests and tracked in [#1554](https://github.com/dashpay/tenderdash/issues/1554).
+Use non-empty values when callers must distinguish existing from absent keys.
 
 Callers must close databases, batches and iterators. PrefixDB borrows its prefix
 slice, so callers must not mutate it. Closing a PrefixDB closes its underlying

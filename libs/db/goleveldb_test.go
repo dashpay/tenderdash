@@ -57,3 +57,14 @@ func TestGoLevelDBBackend(t *testing.T) {
 	_, ok := db.(*GoLevelDB)
 	assert.True(t, ok)
 }
+
+func TestGoLevelDBPrintReleasesIterator(t *testing.T) {
+	db, err := NewGoLevelDB("print", t.TempDir())
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+	require.NoError(t, db.Set([]byte("key"), []byte("value")))
+
+	before := db.Stats()["leveldb.aliveiters"]
+	require.NoError(t, db.Print())
+	require.Equal(t, before, db.Stats()["leveldb.aliveiters"], "Print must release its iterator before returning")
+}

@@ -1,3 +1,6 @@
+// Modified by Tenderdash contributors from cometbft-db v1.0.4.
+// See README.md for provenance and LICENSE for license terms.
+
 package db
 
 import (
@@ -138,6 +141,7 @@ func (db *GoLevelDB) Print() error {
 	fmt.Printf("%v\n", str)
 
 	itr := db.db.NewIterator(nil, nil)
+	defer itr.Release()
 	for itr.Next() {
 		key := itr.Key()
 		value := itr.Value()
