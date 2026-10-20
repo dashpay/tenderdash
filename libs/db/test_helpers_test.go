@@ -1,3 +1,6 @@
+// Modified by Tenderdash contributors from cometbft-db v1.0.4.
+// See README.md for provenance and LICENSE for license terms.
+
 package db
 
 import "math/rand"
