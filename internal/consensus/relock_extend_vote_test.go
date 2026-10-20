@@ -221,7 +221,6 @@ func TestStateLock_RelockLateProposalProcessesBeforeExtending(t *testing.T) {
 	height, round := stateData.Height, stateData.Round
 
 	timeoutWaitCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryTimeoutWait)
-	timeoutProposeCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryTimeoutPropose)
 	proposalCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryCompleteProposal)
 	proTxHash, err := cs1.privValidator.GetProTxHash(ctx)
 	require.NoError(t, err)
@@ -243,6 +242,7 @@ func TestStateLock_RelockLateProposalProcessesBeforeExtending(t *testing.T) {
 	ensureLock(t, lockCh, height, round)
 	ensurePrecommit(t, voteCh, height, round)
 	validatePrecommit(ctx, t, cs1, round, round, vss[0], blockID.Hash, blockID.Hash)
+	timeoutProposeCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryTimeoutPropose)
 	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), types.BlockID{}, vs2, vs3, vs4)
 	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 
