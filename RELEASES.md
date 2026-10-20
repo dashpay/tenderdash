@@ -8,8 +8,9 @@ Tenderdash minor versions; see [README.md](README.md) and [SECURITY.md](SECURITY
 ## Project release skill
 
 Use [$tenderdash-release](.agents/skills/tenderdash-release/SKILL.md) to analyze
-or prepare a release. Agents discover it under `.agents/skills/`; other tools
-can read the same entrypoint directly. It reviews actual commits and net diffs,
+or prepare a release. Codex discovers it under `.agents/skills/`. Claude Code
+uses `/tenderdash-release` through the `.claude/skills/tenderdash-release` symlink
+to the same canonical `SKILL.md`. It reviews actual commits and net diffs,
 selects the baseline and SemVer with a compatibility rationale, and prepares
 reviewable release metadata. Analysis alone never creates a tag or release.
 
