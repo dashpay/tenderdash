@@ -1439,7 +1439,8 @@ func (m *PeerManager) processPeerEvent(ctx context.Context, pu PeerUpdate) {
 
 	peer, ok := m.store.Get(pu.NodeID)
 	if !ok {
-		peer = peerInfo{}
+		// Preserve identity, address storage, and reservation metadata on first sight.
+		peer = m.newPeerInfo(pu.NodeID)
 	}
 
 	// A peer holding a reserved slot ranks by the reservation while it holds, but

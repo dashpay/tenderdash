@@ -80,19 +80,24 @@ func (rat *connTrackerImpl) Len() int {
 }
 
 func (rat *connTrackerImpl) AddConn(addr net.IP) error {
+	if len(addr) == 0 {
+		// Nothing to rate limit per address. Transports without an IP endpoint,
+		// such as the in-process memory transport, would otherwise all share one
+		// key and throttle each other despite being unrelated peers.
+		return nil
+	}
+
 	address := connKey(addr, rat.ipv6PrefixBits)
 	rat.mutex.Lock()
 	defer rat.mutex.Unlock()
 
 	if num := rat.cache[address]; num >= rat.max {
 		return fmt.Errorf("%q has %d connections [max=%d]", address, num, rat.max)
-	} else if num == 0 {
-		// if there is already at least one connection, check to
-		// see if it was established before within the window,
-		// and error if so.
-		if last := rat.lastConnect[address]; time.Since(last) < rat.window {
-			return fmt.Errorf("%q tried to connect within window of last %s", address, rat.window)
-		}
+	}
+
+	// A retained connection must not let the same address bypass the window.
+	if last := rat.lastConnect[address]; time.Since(last) < rat.window {
+		return fmt.Errorf("%q tried to connect within window of last %s", address, rat.window)
 	}
 
 	rat.cache[address]++
@@ -107,6 +112,10 @@ func (rat *connTrackerImpl) AddConn(addr net.IP) error {
 }
 
 func (rat *connTrackerImpl) RemoveConn(addr net.IP) {
+	if len(addr) == 0 {
+		return // never tracked; see AddConn
+	}
+
 	address := connKey(addr, rat.ipv6PrefixBits)
 	rat.mutex.Lock()
 	defer rat.mutex.Unlock()

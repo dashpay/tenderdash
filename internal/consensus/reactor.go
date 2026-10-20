@@ -1071,7 +1071,12 @@ func (r *Reactor) handleMessage(ctx context.Context, envelope *p2p.Envelope, cha
 
 	msg, err := MsgFromProto(envelope.Message)
 	if err != nil {
-		return err
+		if errors.Is(err, ErrUnrecognizedMessage) {
+			// Unknown types may reflect version skew; retain ordinary error policy.
+			return err
+		}
+		// A recognized message failed structural validation.
+		return fmt.Errorf("%w: %w", p2p.ErrInvalidData, err)
 	}
 
 	switch envelope.ChannelID {

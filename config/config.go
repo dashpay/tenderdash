@@ -151,6 +151,9 @@ func (cfg *Config) ValidateBasic() error {
 	if err := cfg.RPC.ValidateBasic(); err != nil {
 		errs = multierror.Append(errs, fmt.Errorf("error in [rpc] section: %w", err))
 	}
+	if err := cfg.P2P.ValidateBasic(); err != nil {
+		errs = multierror.Append(errs, fmt.Errorf("error in [p2p] section: %w", err))
+	}
 	if err := cfg.Mempool.ValidateBasic(); err != nil {
 		errs = multierror.Append(errs, fmt.Errorf("error in [mempool] section: %w", err))
 	}
@@ -842,28 +845,34 @@ func DefaultP2PConfig() *P2PConfig {
 // returns an error if any check fails.
 func (cfg *P2PConfig) ValidateBasic() error {
 	if cfg.FlushThrottleTimeout < 0 {
-		return errors.New("flush-throttle-timeout can't be negative")
+		return fmt.Errorf("flush-throttle-timeout must be a non-negative duration, got %s",
+			cfg.FlushThrottleTimeout)
 	}
 	if cfg.MaxPacketMsgPayloadSize < 0 {
-		return errors.New("max-packet-msg-payload-size can't be negative")
+		return fmt.Errorf("max-packet-msg-payload-size must be >= 0, got %d",
+			cfg.MaxPacketMsgPayloadSize)
 	}
 	if cfg.SendRate < 0 {
-		return errors.New("send-rate can't be negative")
+		return fmt.Errorf("send-rate must be >= 0 bytes/second, got %d", cfg.SendRate)
 	}
 	if cfg.RecvRate < 0 {
-		return errors.New("recv-rate can't be negative")
+		return fmt.Errorf("recv-rate must be >= 0 bytes/second, got %d", cfg.RecvRate)
 	}
 	if cfg.MaxOutgoingConnections > cfg.MaxConnections {
-		return errors.New("max-outgoing-connections cannot be larger than max-connections")
+		return fmt.Errorf("max-outgoing-connections must be <= max-connections (%d), got %d",
+			cfg.MaxConnections, cfg.MaxOutgoingConnections)
 	}
 	if cfg.MaxIncomingConnectionTime < 0 {
-		return errors.New("max-incoming-connection-time can't be negative")
+		return fmt.Errorf("max-incoming-connection-time must be a non-negative duration (0 disables it), got %s",
+			cfg.MaxIncomingConnectionTime)
 	}
 	if cfg.IncomingConnectionWindow < 1*time.Millisecond {
-		return errors.New("incoming-connection-window must be set to at least 1ms")
+		return fmt.Errorf("incoming-connection-window must be at least 1ms, got %s;"+
+			" omit the key to use the default of %s",
+			cfg.IncomingConnectionWindow, DefaultP2PConfig().IncomingConnectionWindow)
 	}
 	if cfg.AllowlistOnly && strings.TrimSpace(cfg.PersistentPeers) == "" && strings.TrimSpace(cfg.BootstrapPeers) == "" {
-		return errors.New("allowlist-only requires at least one of persistent-peers or bootstrap-peers")
+		return errors.New("allowlist-only requires at least one of persistent-peers or bootstrap-peers to be set")
 	}
 	return nil
 }

@@ -46,8 +46,11 @@ type RouterOptions struct {
 	MaxIncomingConnectionAttempts uint
 
 	// IncomingConnectionWindow describes how often an IP address
-	// can attempt to create a new connection. Defaults to 10
-	// milliseconds, and cannot be less than 1 millisecond.
+	// can attempt to create a new connection. Cannot be less than 1
+	// millisecond. A zero value here selects 100 milliseconds, which is the
+	// configless default for programmatic construction; a node built from
+	// configuration takes the documented 10 millisecond default instead, and
+	// rejects an explicit zero.
 	IncomingConnectionWindow time.Duration
 
 	// FilterPeerByIP is used by the router to inject filtering
@@ -92,7 +95,7 @@ func (o *RouterOptions) Validate() error {
 	case o.IncomingConnectionWindow == 0:
 		o.IncomingConnectionWindow = 100 * time.Millisecond
 	case o.IncomingConnectionWindow < time.Millisecond:
-		return fmt.Errorf("incomming connection window must be grater than 1m [%s]",
+		return fmt.Errorf("incoming connection window must be at least 1ms, got %s",
 			o.IncomingConnectionWindow)
 	}
 
@@ -381,30 +384,34 @@ func (r *Router) routeChannel(
 			}
 
 		case peerError := <-errCh:
-			disconnect := r.peerManager.ShouldDisconnectOnError(peerError.NodeID, peerError.Fatal)
-			r.logger.Error("peer error",
-				"peer", peerError.NodeID,
-				"err", peerError.Err,
-				"disconnecting", disconnect,
-			)
-
-			if disconnect {
-				// The error is fatal, or all peer slots
-				// are in use and this peer is one we may
-				// shed to relieve the pressure.
-				r.peerManager.Errored(peerError.NodeID, peerError.Err)
-			} else {
-				// this just decrements the peer
-				// score.
-				r.peerManager.processPeerEvent(ctx, PeerUpdate{
-					NodeID: peerError.NodeID,
-					Status: PeerStatusBad,
-				})
-			}
+			r.reportPeerError(ctx, peerError)
 
 		case <-ctx.Done():
 			return
 		}
+	}
+}
+
+// reportPeerError records a bad-peer event even when eviction is required, so
+// ordinary peers retain their penalty across reconnects. Reserved peers keep
+// the peer manager's scoring exemption and protection from capacity eviction.
+func (r *Router) reportPeerError(ctx context.Context, peerError PeerError) {
+	disconnect := r.peerManager.ShouldDisconnectOnError(peerError.NodeID,
+		peerError.Fatal || errors.Is(peerError.Err, ErrInvalidData))
+
+	r.logger.Debug("peer error",
+		"peer", peerError.NodeID,
+		"err", peerError.Err,
+		"disconnecting", disconnect,
+	)
+
+	r.peerManager.processPeerEvent(ctx, PeerUpdate{
+		NodeID: peerError.NodeID,
+		Status: PeerStatusBad,
+	})
+
+	if disconnect {
+		r.peerManager.Errored(peerError.NodeID, peerError.Err)
 	}
 }
 
@@ -888,14 +895,23 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 
 		var protoEnvelope p2p.Envelope
 		if err := proto.Unmarshal(bz, &protoEnvelope); err != nil {
-			r.logger.Error("message decoding failed, dropping message", "peer", peerID, "err", err)
-			continue
+			// Authenticated frames must contain valid protobuf, even with unknown fields.
+			err = fmt.Errorf("%w: undecodable message: %w", ErrInvalidData, err)
+			r.reportPeerError(ctx, PeerError{NodeID: peerID, Err: err})
+			return err
 		}
 		envelope, err := EnvelopeFromProto(protoEnvelope)
 		if err != nil {
-			// A policy rejection of a peer-supplied value, not an unexpected decode
-			// failure: any peer can trigger it on demand, so it must not be Error.
-			r.logger.Debug("envelope rejected, dropping message", "peer", peerID, "err", err)
+			if errors.Is(err, ErrTooManyEnvelopeAttributes) || errors.Is(err, ErrEnvelopeAttributesTooLarge) {
+				err = fmt.Errorf("%w: %w", ErrInvalidData, err)
+				r.reportPeerError(ctx, PeerError{NodeID: peerID, Err: err})
+				return err
+			}
+			// Unknown payloads can reflect version skew; apply ordinary peer-error policy.
+			r.reportPeerError(ctx, PeerError{
+				NodeID: peerID,
+				Err:    fmt.Errorf("unrecognized envelope payload: %w", err),
+			})
 			continue
 		}
 		envelope.From = peerID

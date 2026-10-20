@@ -1,11 +1,19 @@
 package p2p
 
 import (
+	"errors"
 	"fmt"
 	"net"
 
 	"github.com/dashpay/tenderdash/types"
 )
+
+// ErrInvalidData marks malformed peer data that requires eviction, even for a
+// reserved peer. Ordinary peers also retain a score penalty. Wrap only errors
+// attributable to the sender, never local failures or unknown message types
+// that could reflect version skew. Unmarked errors follow the normal capacity
+// policy unless explicitly marked fatal.
+var ErrInvalidData = errors.New("peer sent invalid data")
 
 // ErrFilterTimeout indicates that a filter operation timed out.
 type ErrFilterTimeout struct{}

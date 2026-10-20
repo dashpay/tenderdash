@@ -15,6 +15,12 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
+// ErrUnrecognizedMessage is returned when a consensus proto message carries a
+// payload type this build does not know. A peer running a newer version can
+// cause this legitimately, so it must stay distinguishable from a message whose
+// type we do know and whose contents are invalid.
+var ErrUnrecognizedMessage = errors.New("consensus: message not recognized")
+
 // Message defines an interface that the consensus domain types implement. When
 // a proto message is received on a consensus p2p Channel, it is wrapped and then
 // converted to a Message via MsgFromProtoMsg.
@@ -558,7 +564,7 @@ func MsgFromProtoMsg(msg *tmcons.Message) (Message, error) {
 	case *tmcons.Message_VoteSetBits:
 		return MsgFromProto(msg.VoteSetBits)
 	default:
-		return nil, fmt.Errorf("consensus: message not recognized: %T", msg)
+		return nil, fmt.Errorf("%w: %T", ErrUnrecognizedMessage, msg)
 	}
 }
 
@@ -694,7 +700,7 @@ func MsgFromProto(msg proto.Message) (Message, error) {
 			Votes:   bits,
 		}
 	default:
-		return nil, fmt.Errorf("consensus: message not recognized: %T", msg)
+		return nil, fmt.Errorf("%w: %T", ErrUnrecognizedMessage, msg)
 	}
 
 	if err := pb.ValidateBasic(); err != nil {
