@@ -1221,7 +1221,11 @@ func (m *PeerManager) Disconnected(ctx context.Context, peerID types.NodeID) {
 // FIXME: This will cause the peer manager to immediately try to reconnect to
 // the peer, which is probably not always what we want.
 func (m *PeerManager) Errored(peerID types.NodeID, err error) {
-	m.logger.Error("peer errored", "peer", peerID, "error", err)
+	if isPeerInputError(err) {
+		m.logger.Debug("peer errored", "peer", peerID, "error", err)
+	} else {
+		m.logger.Error("peer errored", "peer", peerID, "error", err)
+	}
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 

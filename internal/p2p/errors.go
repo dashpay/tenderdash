@@ -15,6 +15,14 @@ import (
 // policy unless explicitly marked fatal.
 var ErrInvalidData = errors.New("peer sent invalid data")
 
+// ErrUnrecognizedMessage marks unknown peer payloads that may reflect version
+// skew. They follow ordinary scoring and eviction policy, but log at Debug.
+var ErrUnrecognizedMessage = errors.New("unrecognized peer message")
+
+func isPeerInputError(err error) bool {
+	return errors.Is(err, ErrInvalidData) || errors.Is(err, ErrUnrecognizedMessage)
+}
+
 // ErrFilterTimeout indicates that a filter operation timed out.
 type ErrFilterTimeout struct{}
 

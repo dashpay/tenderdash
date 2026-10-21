@@ -814,9 +814,11 @@ FOR:
 		err = ctxErr
 	}
 
-	switch err {
-	case nil, io.EOF:
+	switch {
+	case err == nil || err == io.EOF:
 		r.logger.Info("peer disconnected", "peer", peerID, "endpoint", conn)
+	case isPeerInputError(err):
+		r.logger.Debug("peer failure", "peer", peerID, "endpoint", conn, "err", err)
 	default:
 		r.logger.Error("peer failure", "peer", peerID, "endpoint", conn, "err", err)
 	}
@@ -910,7 +912,7 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 			// Unknown payloads can reflect version skew; apply ordinary peer-error policy.
 			r.reportPeerError(ctx, PeerError{
 				NodeID: peerID,
-				Err:    fmt.Errorf("unrecognized envelope payload: %w", err),
+				Err:    fmt.Errorf("%w: envelope payload: %w", ErrUnrecognizedMessage, err),
 			})
 			continue
 		}

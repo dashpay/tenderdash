@@ -1073,7 +1073,7 @@ func (r *Reactor) handleMessage(ctx context.Context, envelope *p2p.Envelope, cha
 	if err != nil {
 		if errors.Is(err, ErrUnrecognizedMessage) {
 			// Unknown types may reflect version skew; retain ordinary error policy.
-			return err
+			return fmt.Errorf("%w: %w", p2p.ErrUnrecognizedMessage, err)
 		}
 		// A recognized message failed structural validation.
 		return fmt.Errorf("%w: %w", p2p.ErrInvalidData, err)

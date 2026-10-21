@@ -265,16 +265,85 @@ func TestReceivePeer_ExcessiveAttributes_EvictsAndScores(t *testing.T) {
 }
 
 func TestReceivePeer_UnknownPayloadDoesNotFloodErrorLog(t *testing.T) {
+	for _, capacity := range []uint16{1, 10} {
+		t.Run(fmt.Sprint(capacity), func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			f := newPunishFixture(ctx, t, capacity)
+			f.registerChannel(ctx, t)
+			var output bytes.Buffer
+			logger, err := log.NewLogger("info", &output)
+			require.NoError(t, err)
+			f.router.logger = logger
+			f.pm.SetLogger(logger)
+			conn := &fakeConn{payloads: [][]byte{{}, {}, {}}}
+			require.ErrorIs(t, f.router.receivePeer(ctx, f.peerID, conn, 1), io.EOF)
+			require.Empty(t, output.String(), "peer-controlled unknown payloads must not flood production logs")
+			require.Equal(t, capacity == 1, f.isEvicted())
+		})
+	}
+}
+
+// routePeer must preserve input classification through connection teardown.
+func TestRoutePeer_InputLoggingAndInternalFailure(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		payloads   [][]byte
+		receiveErr error
+		wantError  bool
+	}{
+		{name: "malformed", payloads: [][]byte{{0xff, 0xff, 0xff, 0xff}}},
+		{name: "internal", receiveErr: errors.New("internal transport failure"), wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			f := newPunishFixture(ctx, t, 1)
+			f.registerChannel(ctx, t)
+			var output bytes.Buffer
+			logger, err := log.NewLogger("info", &output)
+			require.NoError(t, err)
+			f.router.logger = logger
+			f.pm.SetLogger(logger)
+			f.router.peerQueues = map[types.NodeID]queue{}
+			f.router.peerChannels = map[types.NodeID]ChannelIDSet{}
+			f.router.queueFactory = newFIFOQueue
+			conn := &routeLoggingConn{fakeConn: fakeConn{payloads: tc.payloads}, receiveErr: tc.receiveErr}
+			f.router.routePeer(ctx, f.peerID, conn, ChannelIDSet{1: {}})
+			require.Equal(t, tc.wantError, strings.Contains(output.String(), `"level":"error"`), output.String())
+			if tc.wantError {
+				require.Contains(t, output.String(), "internal transport failure")
+			} else {
+				require.Equal(t, 1, conn.pos)
+			}
+		})
+	}
+}
+
+type routeLoggingConn struct {
+	fakeConn
+	receiveErr error
+}
+
+func (c *routeLoggingConn) ReceiveMessage(ctx context.Context) (ChannelID, []byte, error) {
+	if c.receiveErr != nil {
+		return 0, nil, c.receiveErr
+	}
+	return c.fakeConn.ReceiveMessage(ctx)
+}
+
+func (*routeLoggingConn) Close() error { return nil }
+
+func TestPeerManagerErrored_InternalFailureStaysVisible(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	f := newPunishFixture(ctx, t, 10)
-	f.registerChannel(ctx, t)
+	f := newPunishFixture(ctx, t, 1)
 	var output bytes.Buffer
 	logger, err := log.NewLogger("info", &output)
 	require.NoError(t, err)
-	f.router.logger = logger
-	conn := &fakeConn{payloads: [][]byte{{}, {}, {}}}
-	require.ErrorIs(t, f.router.receivePeer(ctx, f.peerID, conn, 1), io.EOF)
-	require.Empty(t, output.String(), "peer-controlled unknown payloads must not flood production logs")
-	require.False(t, f.isEvicted())
+	f.pm.SetLogger(logger)
+	f.pm.Errored(f.peerID, errors.New("internal peer manager failure"))
+	require.Contains(t, output.String(), `"level":"error"`)
+	require.Contains(t, output.String(), "internal peer manager failure")
+	require.True(t, f.isEvicted())
 }
