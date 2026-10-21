@@ -442,6 +442,8 @@ cache-size = {{ .Mempool.CacheSize }}
 # Do not remove invalid transactions from the cache (default: false)
 # Set to true if it's not possible for any invalid transaction to become valid
 # again in the future.
+# When true, resubmitting a rejected transaction over RPC returns the CheckTx
+# result that rejected it, as long as it stays in the cache.
 keep-invalid-txs-in-cache = {{ .Mempool.KeepInvalidTxsInCache }}
 
 # Maximum size of a single transaction.

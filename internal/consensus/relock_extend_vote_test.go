@@ -290,7 +290,8 @@ func TestStateLock_RelockLateProposalProcessesBeforeExtending(t *testing.T) {
 func TestStateLock_ReplacementProcessesExactBlock(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	// Accept replacement proposals while enforcing the exact-block ExtendVote contract.
+	// Model Drive with https://github.com/dashpay/platform/pull/4462: execute a replacement
+	// at the same height/round after discarding stale context. Drive v4.1.1 rejects it.
 	app := newExtendVoteContractApp(t, kvstore.WithDuplicateRequestDetection(false))
 	cs, vss := makeState(ctx, t, makeStateArgs{application: app, logger: log.NewNopLogger()})
 	ctx = dash.ContextWithProTxHash(ctx, cs.privValidator.ProTxHash)

@@ -107,6 +107,26 @@ This check protects the commit supplied for the block being finalized. It does
 not authenticate the extension vector embedded in a proposal's `LastCommit`;
 applications must not trust that vector solely on its block threshold signature.
 
+### RPC: resubmitting a rejected transaction returns its CheckTx result
+
+With `mempool.keep-invalid-txs-in-cache = true`, `broadcast_tx`,
+`broadcast_tx_sync` and `broadcast_tx_commit` no longer answer a resubmitted
+transaction that CheckTx rejected with the JSON-RPC error
+`tx already exists in cache`. They return the CheckTx result that rejected it
+(`code`, `codespace`, `info`, `data`) for as long as the transaction stays in
+the mempool cache; `broadcast_tx_commit` reports it the same way as a first
+rejection. The result is the one recorded at rejection time: the transaction is
+not checked again.
+
+A transaction that is pending in the mempool or already committed still returns
+`tx already exists in cache`, as does a rejected one whose result is larger than
+2048 bytes (`codespace`, `info` and `data` combined). Nodes with
+`keep-invalid-txs-in-cache = false` are not affected.
+
+**Before you upgrade:** clients that treat `tx already exists in cache` as "this
+transaction is already known" must also handle a non-zero `code` in a successful
+response to a resubmission.
+
 ## v1.7.0
 
 ### Consensus DoS hardening (peer verification limits)

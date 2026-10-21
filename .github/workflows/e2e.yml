@@ -43,7 +43,7 @@ jobs:
       - uses: actions/setup-go@v7.0.0
         if: "github.event_name != 'pull_request' || env.GIT_DIFF != ''"
         with:
-          go-version: "1.27.1"
+          go-version: "1.27.2"
           # A dedicated key: the default one (a hash of go.mod) is shared with
           # tests.yml and lint.yml, whose caches hold -race and lint artifacts
           # this job does not build. BLS headers are part of the key because
