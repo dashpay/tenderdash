@@ -65,15 +65,16 @@ type Pool struct {
 	blockBase atomic.Int64
 	blockTop  atomic.Int64
 
-	// opMtx serializes storage operations with transitions and Close.
-	// Acquire it before mtx; never hold either across a network send.
+	// opMtx protects the consensus buffer and serializes storage operations,
+	// lifecycle changes and transitions. Acquire it before stateMtx; never hold
+	// either across a network send.
 	opMtx         sync.Mutex
 	closed        bool
 	pendingLoaded bool
-	mtx           sync.Mutex
-	// latest state
-	state     sm.State
-	isStarted bool
+	isStarted     bool
+	// stateMtx protects the published state; readers may observe it during an operation.
+	stateMtx sync.Mutex
+	state    sm.State
 	// evidence from consensus is buffered to this slice, awaiting until the next height
 	// before being flushed to the pool. This prevents broadcasting and proposing of
 	// evidence before the height with which the evidence happened is finished.
@@ -148,10 +149,8 @@ func (evpool *Pool) Update(ctx context.Context, state sm.State, ev types.Evidenc
 		evpool.markEvidenceAsCommitted(ev, state.LastBlockHeight)
 	}
 	if state.ConsensusParams.Evidence.MaxBytes == 0 {
-		evpool.mtx.Lock()
-		evpool.state = state
+		evpool.updateState(state)
 		evpool.consensusBuffer = nil
-		evpool.mtx.Unlock()
 		return
 	}
 
@@ -251,8 +250,6 @@ func (evpool *Pool) ReportConflictingVotes(voteA, voteB *types.Vote) {
 	if evpool.closed || !evpool.Enabled() {
 		return
 	}
-	evpool.mtx.Lock()
-	defer evpool.mtx.Unlock()
 	evpool.consensusBuffer = append(evpool.consensusBuffer, duplicateVoteSet{
 		VoteA: voteA,
 		VoteB: voteB,
@@ -333,14 +330,14 @@ func (evpool *Pool) Size() uint32 {
 
 // State returns the current state of the evpool.
 func (evpool *Pool) State() sm.State {
-	evpool.mtx.Lock()
-	defer evpool.mtx.Unlock()
+	evpool.stateMtx.Lock()
+	defer evpool.stateMtx.Unlock()
 	return evpool.state
 }
 
 func (evpool *Pool) Enabled() bool {
-	evpool.mtx.Lock()
-	defer evpool.mtx.Unlock()
+	evpool.stateMtx.Lock()
+	defer evpool.stateMtx.Unlock()
 	return evpool.state.ConsensusParams.Evidence.MaxBytes > 0
 }
 
@@ -740,15 +737,15 @@ func (evpool *Pool) removeEvidenceFromList(
 }
 
 func (evpool *Pool) updateState(state sm.State) {
-	evpool.mtx.Lock()
-	defer evpool.mtx.Unlock()
+	evpool.stateMtx.Lock()
+	defer evpool.stateMtx.Unlock()
 	evpool.state = state
 }
 
 // hasPublicKeys returns true if we have public keys of the current validator set.
 func (evpool *Pool) hasPublicKeys() bool {
-	evpool.mtx.Lock()
-	defer evpool.mtx.Unlock()
+	evpool.stateMtx.Lock()
+	defer evpool.stateMtx.Unlock()
 	return evpool.state.Validators.HasPublicKeys
 }
 
@@ -756,9 +753,8 @@ func (evpool *Pool) hasPublicKeys() bool {
 // into DuplicateVoteEvidence. It sets the evidence timestamp to the block height
 // from the most recently committed block.
 // Evidence is then added to the pool so as to be ready to be broadcasted and proposed.
+// The caller must hold opMtx.
 func (evpool *Pool) processConsensusBuffer(ctx context.Context, state sm.State) {
-	evpool.mtx.Lock()
-	defer evpool.mtx.Unlock()
 	for _, voteSet := range evpool.consensusBuffer {
 
 		// Check the height of the conflicting votes and fetch the corresponding time and validator set
