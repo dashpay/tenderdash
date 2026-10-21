@@ -41,7 +41,7 @@ remain the context for development and compatibility decisions.
 
 See the [installation instructions](docs/introduction/install.md),
 [contributing guide](CONTRIBUTING.md), and [style guide](STYLE_GUIDE.md).
-Building from source requires Go 1.27.2 or newer and the BLS native dependency;
+Building from source requires Go 1.27.3 or newer and the BLS native dependency;
 `make build` handles the dependency build.
 
 Tenderdash uses Semantic Versioning for releases. Compatibility review includes
