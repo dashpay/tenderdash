@@ -87,13 +87,15 @@ func runSlowApply(ctx context.Context, cli *CLI, logger log.Logger, image string
 	}
 	// Never use the existing global e2e-label cleanup: other test networks may be running.
 	defer func() {
-		cleanup, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		logs := exec.CommandContext(cleanup, "docker", "compose", "-f", compose, "logs", "--no-color")
+		logsCtx, cancelLogs := context.WithTimeout(context.Background(), 30*time.Second)
+		logs := exec.CommandContext(logsCtx, "docker", "compose", "-f", compose, "logs", "--no-color")
 		if out, err := logs.CombinedOutput(); err == nil {
 			_ = os.WriteFile(filepath.Join(net.Dir, "nodes.log"), out, 0600)
 		}
-		down := exec.CommandContext(cleanup, "docker", "compose", "-f", compose, "down", "--remove-orphans")
+		cancelLogs()
+		cleanupCtx, cancelCleanup := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancelCleanup()
+		down := exec.CommandContext(cleanupCtx, "docker", "compose", "-f", compose, "down", "--remove-orphans")
 		if out, err := down.CombinedOutput(); err != nil {
 			logger.Error("manual network cleanup failed", "error", err, "output", string(out))
 		}
@@ -171,7 +173,7 @@ func runSlowApply(ctx context.Context, cli *CLI, logger log.Logger, image string
 	backlogCtx, cancelBacklog := context.WithTimeout(ctx, 30*time.Second)
 	defer cancelBacklog()
 	if err := slowPoll(backlogCtx, 200*time.Millisecond, func() (bool, error) {
-		m, e := readSlowMetrics(ctx, metricsURL)
+		m, e := readSlowMetrics(backlogCtx, metricsURL)
 		held = m
 		return e == nil && m.responses > 16*1024, nil
 	}); err != nil {
@@ -232,11 +234,11 @@ func runSlowApply(ctx context.Context, cli *CLI, logger log.Logger, image string
 		if e != nil {
 			return false, nil
 		}
-		tip, e := source.Status(ctx)
+		tip, e := source.Status(recoveryCtx)
 		if e != nil {
 			return false, nil
 		}
-		m, e := readSlowMetrics(ctx, metricsURL)
+		m, e := readSlowMetrics(recoveryCtx, metricsURL)
 		if e != nil {
 			return false, e
 		}

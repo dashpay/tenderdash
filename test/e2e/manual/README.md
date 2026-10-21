@@ -16,8 +16,8 @@ E2E subnet and host ports must be unused; do not run another E2E network in
 parallel. Existing named containers and output directories are rejected. The
 command removes only its own Compose project on completion, SIGINT, or SIGTERM (SIGKILL cannot run cleanup),
 and preserves generated files, node logs, goroutine profiles, and metrics in
-`$run_dir/network`. A normal run takes about five minutes; the overall deadline
-is twelve minutes.
+`$run_dir/network`. A normal run takes about five minutes; the scenario deadline
+is twelve minutes, followed by at most one minute of cleanup.
 
 One genesis validator produces at least 100 small blocks (each checked to be
 at most 2 KiB), using a one-second empty-block interval to bound production
