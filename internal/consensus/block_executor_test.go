@@ -240,3 +240,41 @@ func (suite *BlockExecutorTestSuite) TestProcess() {
 		})
 	}
 }
+
+func (suite *BlockExecutorTestSuite) TestConcurrentCommittedStateUpdate() {
+	ctx := context.Background()
+	state := sm.State{InitialHeight: 1}
+	suite.blockExec.setCommittedState(state)
+	block := &types.Block{Header: types.Header{Height: 1}}
+	suite.mockBlockExec.On("CreateProposalBlock", mock.Anything, int64(1), int32(0),
+		state, mock.Anything, mock.Anything, uint64(0)).
+		Return(block, sm.CurrentRoundState{}, nil)
+	suite.mockBlockExec.On("ProcessProposal", mock.Anything, block, int32(0),
+		state, true, types.VerifiedCommit{}).
+		Return(sm.CurrentRoundState{}, nil)
+
+	stop, done := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				suite.blockExec.setCommittedState(state)
+			}
+		}
+	}()
+	defer func() {
+		close(stop)
+		<-done
+	}()
+
+	for range 100 {
+		rs := cstypes.RoundState{Height: 1, ProposalBlock: block}
+		got, err := suite.blockExec.create(ctx, &rs, 0)
+		suite.Require().NoError(err)
+		suite.Require().Same(block, got)
+		suite.Require().NoError(suite.blockExec.ensureProcess(ctx, &rs, 0))
+	}
+}

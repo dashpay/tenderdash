@@ -201,6 +201,33 @@ func (e VoteExtensions) IsSameWithProto(right tmproto.VoteExtensions) bool {
 	return true
 }
 
+// SameVoteExtensionShape reports whether a and b hold, in the same order, the
+// same extensions as the application sees them: type, extension bytes and sign
+// request ID. Signatures are ignored.
+//
+// An unset and an empty sign request ID are the same: ToExtendProto hands
+// neither to the application, and ThresholdRawVoteExtension.SignItem derives the
+// same request ID from both. Nil entries equal only each other.
+func SameVoteExtensionShape(a, b []*tmproto.VoteExtension) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		x, y := a[i], b[i]
+		if x == nil || y == nil {
+			if x != y {
+				return false
+			}
+			continue
+		}
+		if x.Type != y.Type || !bytes.Equal(x.Extension, y.Extension) ||
+			!bytes.Equal(x.GetSignRequestId(), y.GetSignRequestId()) {
+			return false
+		}
+	}
+	return true
+}
+
 func (e VoteExtensions) Len() int {
 	return len(e)
 }

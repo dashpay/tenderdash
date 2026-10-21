@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/dash"
+	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -203,8 +204,46 @@ func TestCommitRejectionsAreFloodable(t *testing.T) {
 		isPeerFloodableError(fmt.Errorf("error verifying commit: %w", types.ErrInvalidCommitQuorumHash{})),
 		"must see through the verifyCommit wrapping")
 
+	assert.True(t, isPeerFloodableError(fmt.Errorf("commit extensions rejected: %w", sm.ErrCommitExtensionsRejected)),
+		"a genuine commit with an altered extension vector is peer-triggerable at will")
+
 	assert.False(t, isPeerFloodableError(types.ErrInvalidCommitSignature{}),
 		"a forged threshold signature is not free to produce and evicts the sender")
+}
+
+// A peer resending a genuine commit with an altered extension vector gets it
+// refused each time, first by the application and then from its remembered
+// expectation. Neither refusal may log at Error, or the resends become a log
+// flood.
+func TestCommitExtensionRejectionLogsAtDebug(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := newCommitExtFixture(ctx, t)
+	ctx = dash.ContextWithProTxHash(ctx, f.node.privValidator.ProTxHash)
+	f.checker.round = -1
+	future := *f.sign(ctx, t, 2, withdrawalExtension)
+	future.ThresholdVoteExtensions = nil
+	f.holdBlock(ctx, t)
+
+	var buf bytes.Buffer
+	logger, err := log.NewLogger("debug", &buf)
+	require.NoError(t, err)
+	handler := loggingMiddleware(logger)(func(ctx context.Context, sd *StateData, env msgEnvelope) error {
+		commit := env.Msg.(*CommitMessage).Commit
+		return f.node.ctrl.Dispatch(ctx, &TryAddCommitEvent{Commit: commit, PeerID: env.PeerID}, sd)
+	})
+	f.node.msgInfoQueue.admitPeer("attacker")
+	// The application's rejection, then a refusal from the expectation it
+	// taught: round 2 is processed last when round 0's commit comes back.
+	for _, commit := range []*types.Commit{f.bad, &future, f.bad} {
+		env := msgEnvelope{msgInfo: msgInfo{Msg: &CommitMessage{Commit: commit}, PeerID: "attacker"}}
+		require.NoError(t, handler(ctx, &f.stateData, env))
+	}
+	require.Equal(t, []string{"verify", "process", "verify"}, f.checker.calls)
+	out := buf.String()
+	assert.NotContains(t, out, `"level":"error"`, "a rejected peer commit must not log at Error")
+	assert.Contains(t, out, "differ from those the application expects")
+	assert.Contains(t, out, `"level":"debug"`)
 }
 
 // TestLoggingMiddlewareSeparatesLocalFaultsFromReplay pins the two conditions on

@@ -117,6 +117,11 @@ func (c *EnterPrecommitAction) Execute(ctx context.Context, stateEvent StateEven
 		logger.Debug("precommit step: +2/3 prevoted locked block; relocking")
 		stateData.LockedRound = round
 
+		// ExtendVote answers from the round processed last, which a rejected
+		// commit of another round may have moved; Drive fails it for any other.
+		if stateData.ProposalBlock.HashesTo(blockID.Hash) {
+			c.blockExec.mustEnsureProcess(ctx, &stateData.RoundState, round)
+		}
 		c.eventPublisher.PublishRelockEvent(stateData.RoundState)
 		c.voteSigner.signAddVote(ctx, stateData, tmproto.PrecommitType, blockID)
 		return nil

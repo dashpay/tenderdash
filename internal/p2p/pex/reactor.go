@@ -370,13 +370,15 @@ func (r *Reactor) sendRequestForPeers(ctx context.Context, pexCh p2p.Channel) er
 // The minimum interval will be minReceiveRequestInterval to ensure we will not
 // request from any peer more often than we would allow them to do from us.
 func (r *Reactor) calculateNextRequestTime(added int) time.Duration {
+	// PeerManager broadcasts need PEX to drain updates without waiting for this lock.
+	ratio := r.peerManager.PeerRatio()
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
 
 	r.totalPeers += added
 
 	// If the peer store is nearly full, wait the maximum interval.
-	if ratio := r.peerManager.PeerRatio(); ratio >= 0.95 {
+	if ratio >= 0.95 {
 		r.logger.Debug("Peer manager is nearly full",
 			"sleep_period", fullCapacityInterval,
 			"ratio", ratio)

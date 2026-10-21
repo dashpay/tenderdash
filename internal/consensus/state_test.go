@@ -1635,11 +1635,12 @@ func TestStateLock_POLSafety2(t *testing.T) {
 	// the block for round 1
 	// We add some tx so that the proposal will differ from the round 0 one
 	// We cannot rely on time because blocks at initial height have genesis time
-	mpool := (cs1.txNotifier).(mempool.Mempool)
+	cs2 := newState(ctx, t, cs1.logger, stateData.state, vs2, newKVStoreFunc(t)(cs1.logger, ""))
+	mpool := (cs2.txNotifier).(mempool.Mempool)
 	err = mpool.CheckTx(ctx, types.Tx("round1"), nil, mempool.TxInfo{})
 	assert.NoError(t, err)
 
-	prop1, propBlock1 := decideProposal(ctx, t, cs1, vs2, vs2.Height, vs2.Round+1)
+	prop1, propBlock1 := decideProposal(ctx, t, cs2, vs2, vs2.Height, vs2.Round+1)
 	propBlockParts1, err := propBlock1.MakePartSet(partSize)
 	require.NoError(t, err)
 	propBlockID1 := propBlock1.BlockID(propBlockParts1)
@@ -2277,7 +2278,7 @@ func TestExtendVote(t *testing.T) {
 			assert.Equal(t, height, req.Height) &&
 			assert.Equal(t, round, req.Round) &&
 			assert.Equal(t, voteExtensions.ToExtendProto(), req.VoteExtensions) &&
-			assert.True(t, ok)
+			assert.True(t, ok || len(req.ValidatorProTxHash) == 0)
 	})
 	m.On("VerifyVoteExtension", mock.Anything, reqVerifyVoteExtFunc).
 		Return(&abci.ResponseVerifyVoteExtension{
@@ -2427,7 +2428,7 @@ func TestVerifyVoteExtensionNotCalledOnAbsentPrecommit(t *testing.T) {
 			assert.Equal(t, height, req.Height) &&
 			assert.Equal(t, round, req.Round) &&
 			assert.Equal(t, voteExtensions.ToExtendProto(), req.VoteExtensions) &&
-			assert.True(t, ok)
+			assert.True(t, ok || len(req.ValidatorProTxHash) == 0)
 	})
 	m.On("VerifyVoteExtension", mock.Anything, reqVerifyVoteExtFunc).
 		Return(&abci.ResponseVerifyVoteExtension{
@@ -3376,6 +3377,8 @@ func TestStateTimestamp_ProposalMatch(t *testing.T) {
 	round++
 	incrementRound(vss[1:]...)
 
+	propBlock.ProposerProTxHash, err = vs2.GetProTxHash(ctx)
+	require.NoError(t, err)
 	propBlockParts, err := propBlock.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
 	blockID := propBlock.BlockID(propBlockParts)
@@ -3489,7 +3492,7 @@ func mockProposerApplicationCalls(t *testing.T, m *abcimocks.Application, round 
 		m.On("VerifyVoteExtension", mock.Anything, roundMatcher).
 			Return(&abci.ResponseVerifyVoteExtension{
 				Status: abci.ResponseVerifyVoteExtension_ACCEPT,
-			}, nil).Times(2) // we need 2/3 votes
+			}, nil).Times(3) // two peer precommits and the complete quorum commit
 
 		m.On("FinalizeBlock", mock.Anything, roundMatcher).
 			Return(&abci.ResponseFinalizeBlock{}, nil).
