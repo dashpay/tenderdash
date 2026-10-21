@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	dbm "github.com/cometbft/cometbft-db"
+	dbm "github.com/dashpay/tenderdash/libs/db"
 
 	dashcore "github.com/dashpay/tenderdash/dash/core"
 	"github.com/dashpay/tenderdash/libs/log"

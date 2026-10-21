@@ -6,8 +6,9 @@ import (
 	"math/rand"
 	"testing"
 
-	dbm "github.com/cometbft/cometbft-db"
 	"github.com/cosmos/gogoproto/proto"
+
+	dbm "github.com/dashpay/tenderdash/libs/db"
 
 	"github.com/dashpay/tenderdash/types"
 )
