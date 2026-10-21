@@ -173,6 +173,7 @@ func startApp(ctx context.Context, logger log.Logger, cfg *Config) error {
 	if err != nil {
 		return err
 	}
+	app.SetFinalizeBlockGate(cfg.FinalizeBlockGate)
 	srv, err := server.NewServer(logger, cfg.Listen, cfg.Protocol, app)
 	if err != nil {
 		return err
@@ -195,6 +196,7 @@ func startNode(ctx context.Context, cfg *Config) error {
 		return err
 	}
 
+	app.SetFinalizeBlockGate(cfg.FinalizeBlockGate)
 	tmcfg, nodeLogger, err := setupNode()
 	if err != nil {
 		return fmt.Errorf("failed to setup config: %w", err)

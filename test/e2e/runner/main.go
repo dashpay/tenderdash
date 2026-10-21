@@ -167,6 +167,7 @@ func NewCLI(logger log.Logger) *CLI {
 		Use:    "no-help",
 		Hidden: true,
 	})
+	cli.root.AddCommand(newSlowApplyCommand(cli, logger))
 
 	cli.root.AddCommand(&cobra.Command{
 		Use:   "setup",

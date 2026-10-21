@@ -27,6 +27,8 @@ type Config struct {
 	// ProposeNextBlockImmediately makes every FinalizeBlock response ask Tenderdash
 	// to propose the next height without waiting for transactions.
 	ProposeNextBlockImmediately bool `toml:"propose_next_block_immediately"`
+	// FinalizeBlockGate is an opt-in manual E2E file gate, never a node setting.
+	FinalizeBlockGate string `toml:"finalize_block_gate"`
 
 	// dash parameters
 	ThesholdPublicKeyUpdate map[string]string `toml:"threshold_public_key_update"`

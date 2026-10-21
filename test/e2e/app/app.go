@@ -35,8 +35,9 @@ type Application struct {
 	*kvstore.Application
 	mu sync.Mutex
 
-	logger log.Logger
-	cfg    *kvstore.Config
+	logger       log.Logger
+	cfg          *kvstore.Config
+	finalizeGate string
 
 	PreviousCommittedState kvstore.State
 }
@@ -182,6 +183,9 @@ func expectedVoteExtensions(height int64) []*abci.ExtendVoteExtension {
 }
 
 func (app *Application) FinalizeBlock(ctx context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
+	if err := waitForFinalizeGate(ctx, app.finalizeGate); err != nil {
+		return nil, err
+	}
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
