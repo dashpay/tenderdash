@@ -71,44 +71,18 @@ func NewBaseService(logger log.Logger, name string, impl Implementation) *BaseSe
 // Start calls OnStart with a context canceled by either the parent or Stop.
 // Repeated calls while running succeed; concurrent startup returns an error.
 func (bs *BaseService) Start(ctx context.Context) error {
-	bs.mtx.Lock()
-	if a := bs.attempt; a != nil {
-		var err error
-		switch {
-		case a.stopping:
-			err = errAlreadyStopped
-		case a.starting:
-			err = errStarting
-		}
-		bs.mtx.Unlock()
+	workCtx, a, err := bs.beginStart(ctx)
+	if a == nil {
 		return err
 	}
-	workCtx, cancel := context.WithCancel(ctx)
-	a := &serviceAttempt{cancel: cancel, stoppingCh: workCtx.Done(), done: make(chan struct{}), starting: true}
-	bs.attempt = a
-	workCtx = context.WithValue(workCtx, attemptKey{}, a)
-	bs.mtx.Unlock()
 
 	bs.logger.Info("starting service", "service", bs.name)
-	err := bs.impl.OnStart(workCtx)
-	bs.mtx.Lock()
-	a.starting = false
+	err = bs.impl.OnStart(workCtx)
+	stopping := bs.completeStart(a, err)
 	if err != nil {
-		a.stopping = true
-		bs.mtx.Unlock()
-		cancel()
-		a.workers.Wait()
-		bs.mtx.Lock()
-		close(a.done)
-		bs.attempt = nil
-		bs.mtx.Unlock()
+		bs.drainFailedStart(a)
 		return err
 	}
-	stopping := a.stopping
-	if !stopping {
-		atomic.StoreUint32(&bs.running, 1)
-	}
-	bs.mtx.Unlock()
 	if stopping {
 		bs.finishStop(a)
 	} else {
@@ -121,6 +95,50 @@ func (bs *BaseService) Start(ctx context.Context) error {
 		}()
 	}
 	return nil
+}
+
+// beginStart admits one attempt and publishes it before startup hooks run.
+func (bs *BaseService) beginStart(ctx context.Context) (context.Context, *serviceAttempt, error) {
+	bs.mtx.Lock()
+	defer bs.mtx.Unlock()
+	if a := bs.attempt; a != nil {
+		switch {
+		case a.stopping:
+			return nil, nil, errAlreadyStopped
+		case a.starting:
+			return nil, nil, errStarting
+		default:
+			return nil, nil, nil
+		}
+	}
+	workCtx, cancel := context.WithCancel(ctx)
+	a := &serviceAttempt{cancel: cancel, stoppingCh: workCtx.Done(), done: make(chan struct{}), starting: true}
+	bs.attempt = a
+	return context.WithValue(workCtx, attemptKey{}, a), a, nil
+}
+
+// completeStart publishes the hook result and observes concurrent Stop requests.
+func (bs *BaseService) completeStart(a *serviceAttempt, err error) bool {
+	bs.mtx.Lock()
+	defer bs.mtx.Unlock()
+	a.starting = false
+	if err != nil {
+		a.stopping = true
+	} else if !a.stopping {
+		atomic.StoreUint32(&bs.running, 1)
+	}
+	return a.stopping
+}
+
+// drainFailedStart joins rejected startup work before making retry possible.
+func (bs *BaseService) drainFailedStart(a *serviceAttempt) {
+	a.cancel()
+	a.workers.Wait()
+
+	bs.mtx.Lock()
+	defer bs.mtx.Unlock()
+	close(a.done)
+	bs.attempt = nil
 }
 
 // Go registers work belonging to the context received by OnStart (or a child).

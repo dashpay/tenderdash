@@ -78,3 +78,15 @@ Group rotation reuses its AutoFile and closes the current descriptor before
 renaming; it does not create a worker or signal registration per rotation. The
 owner must Close the group, including when it never started, to join the head's
 single timer/signal worker. Context cancellation alone does not release the head.
+
+## CLI shutdown deadline
+
+The `start` command cancels the node on SIGINT or SIGTERM and waits for
+`Node.Wait` before returning. `--shutdown-timeout` controls this wait (default
+30 seconds; must be positive). Set the deployment supervisor's termination grace
+period longer than this timeout to allow Tenderdash to report incomplete cleanup.
+If the deadline expires, the command returns an error and the Tenderdash binary
+exits nonzero. This does not skip reactor joins or close stores while workers
+remain active. An embedded command caller must also terminate on this error;
+cleanup may still be running. The deadline bounds shutdown after startup returns,
+not a blocked startup hook.
