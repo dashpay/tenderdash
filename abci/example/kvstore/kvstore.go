@@ -12,9 +12,10 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	dbm "github.com/cometbft/cometbft-db"
 	"github.com/cosmos/gogoproto/proto"
 	"github.com/dashpay/dashd-go/btcjson"
+
+	dbm "github.com/dashpay/tenderdash/libs/db"
 
 	"github.com/dashpay/tenderdash/abci/example/code"
 	abci "github.com/dashpay/tenderdash/abci/types"
