@@ -1635,11 +1635,12 @@ func TestStateLock_POLSafety2(t *testing.T) {
 	// the block for round 1
 	// We add some tx so that the proposal will differ from the round 0 one
 	// We cannot rely on time because blocks at initial height have genesis time
-	mpool := (cs1.txNotifier).(mempool.Mempool)
+	cs2 := newState(ctx, t, cs1.logger, stateData.state, vs2, newKVStoreFunc(t)(cs1.logger, ""))
+	mpool := (cs2.txNotifier).(mempool.Mempool)
 	err = mpool.CheckTx(ctx, types.Tx("round1"), nil, mempool.TxInfo{})
 	assert.NoError(t, err)
 
-	prop1, propBlock1 := decideProposal(ctx, t, cs1, vs2, vs2.Height, vs2.Round+1)
+	prop1, propBlock1 := decideProposal(ctx, t, cs2, vs2, vs2.Height, vs2.Round+1)
 	propBlockParts1, err := propBlock1.MakePartSet(partSize)
 	require.NoError(t, err)
 	propBlockID1 := propBlock1.BlockID(propBlockParts1)
@@ -1936,6 +1937,111 @@ func TestProposeValidBlock(t *testing.T) {
 	assert.True(t, bytes.Equal(rs.ProposalBlock.Hash(), rs.ValidBlock.Hash()))
 	assert.True(t, rs.Proposal.POLRound == rs.ValidRound)
 	assert.True(t, bytes.Equal(rs.Proposal.BlockID.Hash, rs.ValidBlock.Hash()))
+}
+
+// What we want:
+// P0 holds an untimely valid block B, not locked, when its turn to propose
+// comes. It proposes a new block X instead, without a POL round, and prevotes
+// X. Carrying B's valid round as X's POL round makes every receiver, P0
+// included, prevote nil: the polka at that round is for B, not X.
+func TestProposeNewBlockOverUntimelyValidBlock(t *testing.T) {
+	config := configSetup(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const untimelyHeight = 2 // the initial height checks the genesis time, not timeliness
+	// B's proposal is dated as received an hour after its timestamp.
+	delayProposal := func(cs *State) {
+		cs.msgMiddlewares = append(cs.msgMiddlewares, func(hd msgHandlerFunc) msgHandlerFunc {
+			return func(ctx context.Context, stateData *StateData, msg msgEnvelope) error {
+				if m, ok := msg.Msg.(*ProposalMessage); ok &&
+					m.Proposal.Height == untimelyHeight && m.Proposal.Round == 0 {
+					msg.ReceiveTime = m.Proposal.Timestamp.Add(time.Hour)
+				}
+				return hd(ctx, stateData, msg)
+			}
+		})
+	}
+	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, stateOpts: []StateOption{delayProposal}})
+	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
+	require.EqualValues(t, untimelyHeight-1, height)
+
+	proposalCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryCompleteProposal)
+	newRoundCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryNewRound)
+	newBlockHeaderCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryNewBlockHeader)
+	proTxHash, err := cs1.privValidator.GetProTxHash(ctx)
+	require.NoError(t, err)
+	voteCh := subscribeToVoter(ctx, t, cs1, proTxHash)
+
+	// Height 1: P0 proposes and everyone commits its block.
+	startTestRound(ctx, cs1, height, round)
+	ensureNewRound(t, newRoundCh, height, round)
+	ensureNewProposal(t, proposalCh, height, round)
+	rs := cs1.GetRoundState()
+	blockID := rs.BlockID()
+	ensurePrevoteMatch(t, voteCh, height, round, blockID.Hash)
+	signAddVotes(ctx, t, cs1, tmproto.PrevoteType, config.ChainID(), blockID, vs2, vs3, vs4)
+	ensurePrecommitMatch(t, voteCh, height, round, blockID.Hash)
+	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), blockID, vs2, vs3, vs4)
+	ensureNewBlockHeader(t, newBlockHeaderCh, height, blockID.Hash)
+
+	height++
+	incrementHeight(vs2, vs3, vs4)
+	ensureNewRound(t, newRoundCh, height, round)
+
+	// Height 2, round 0: vs2 proposes B, which P0 misses until after its
+	// precommit, so P0 does not lock B.
+	ensurePrevoteMatch(t, voteCh, height, round, nil)
+	prop, propBlock := decideProposal(ctx, t, cs1, vs2, height, round)
+	propParts, err := propBlock.MakePartSet(types.BlockPartSizeBytes)
+	require.NoError(t, err)
+	validBlockID := propBlock.BlockID(propParts)
+	signAddVotes(ctx, t, cs1, tmproto.PrevoteType, config.ChainID(), validBlockID, vs2, vs3, vs4)
+	ensurePrecommitMatch(t, voteCh, height, round, nil)
+
+	// B completes after the polka: it becomes the valid block, dated untimely.
+	require.NoError(t, cs1.SetProposalAndBlock(ctx, prop, propParts, "some peer"))
+	ensureNewProposal(t, proposalCh, height, round)
+	sp := stateData.state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()
+	require.Eventually(t, func() bool {
+		rs := cs1.GetRoundState()
+		return rs.ValidRound == round && bytes.Equal(rs.ValidBlock.Hash(), validBlockID.Hash)
+	}, ensureTimeout, 10*time.Millisecond, "B must become the valid block")
+	rs = cs1.GetRoundState()
+	require.EqualValues(t, -1, rs.LockedRound, "precondition: P0 must not be locked")
+	require.False(t, rs.ValidBlock.IsTimely(rs.ValidBlockRecvTime, sp, rs.ValidRound),
+		"precondition: the valid block must be untimely")
+
+	// Nil rounds until P0's turn to propose.
+	proposerRound := round + 1
+	for {
+		proposer, err := rs.ProposerSelector.Copy().GetProposer(height, proposerRound)
+		require.NoError(t, err)
+		if bytes.Equal(proposer.ProTxHash, proTxHash) {
+			break
+		}
+		proposerRound++
+	}
+	for ; round < proposerRound; round++ {
+		if round > 0 {
+			ensurePrevoteMatch(t, voteCh, height, round, nil)
+		}
+		signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), types.BlockID{}, vs2, vs3, vs4)
+		if round > 0 {
+			ensurePrecommitMatch(t, voteCh, height, round, nil)
+		}
+		incrementRound(vs2, vs3, vs4)
+		ensureNewRound(t, newRoundCh, height, round+1)
+	}
+
+	ensureNewProposal(t, proposalCh, height, round)
+	rs = cs1.GetRoundState()
+	require.False(t, bytes.Equal(rs.ProposalBlock.Hash(), validBlockID.Hash),
+		"the untimely valid block must not be re-proposed")
+	ensurePrevoteMatch(t, voteCh, height, round, rs.ProposalBlock.Hash())
+	assert.EqualValues(t, -1, rs.Proposal.POLRound)
 }
 
 // What we want:
@@ -3376,6 +3482,8 @@ func TestStateTimestamp_ProposalMatch(t *testing.T) {
 	round++
 	incrementRound(vss[1:]...)
 
+	propBlock.ProposerProTxHash, err = vs2.GetProTxHash(ctx)
+	require.NoError(t, err)
 	propBlockParts, err := propBlock.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
 	blockID := propBlock.BlockID(propBlockParts)

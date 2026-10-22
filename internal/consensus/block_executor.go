@@ -62,6 +62,7 @@ func (c *blockExecutor) create(ctx context.Context, rs *cstypes.RoundState, roun
 		panic(err)
 	}
 	rs.CurrentRoundState = uncommittedState
+	rs.ProcessedBlockID = types.BlockID{}
 	return ret, nil
 }
 
@@ -94,9 +95,11 @@ func (c *blockExecutor) ensureProcess(ctx context.Context, rs *cstypes.RoundStat
 			types.VerifiedCommit{})
 		if err != nil {
 			rs.CurrentRoundState = sm.CurrentRoundState{}
+			rs.ProcessedBlockID = types.BlockID{}
 			return fmt.Errorf("ProcessProposal abci method: %w", err)
 		}
 		rs.CurrentRoundState = uncommittedState
+		rs.ProcessedBlockID = block.BlockID(rs.ProposalBlockParts).Copy()
 	}
 	return nil
 }
@@ -107,7 +110,8 @@ func (c *blockExecutor) ensureProcess(ctx context.Context, rs *cstypes.RoundStat
 func processedFor(rs *cstypes.RoundState, round int32) bool {
 	crs := &rs.CurrentRoundState
 	return rs.ProposalBlock != nil && crs.Params.Source == sm.ProcessProposalSource &&
-		crs.MatchesBlock(rs.ProposalBlock.Header, round)
+		crs.MatchesBlock(rs.ProposalBlock.Header, round) &&
+		!rs.ProcessedBlockID.IsNil() && rs.ProcessedBlockID.Equals(rs.ProposalBlock.BlockID(rs.ProposalBlockParts))
 }
 
 // ensureOwnRound undoes a commit check that left the application processing
@@ -133,7 +137,7 @@ func (c *blockExecutor) ensureOwnRound(ctx context.Context, rs *cstypes.RoundSta
 	// Cheapest first: this runs for every peer precommit, and hashing the block
 	// is needed only once another round was processed last.
 	if processed == rs.Round || rs.Proposal == nil || !processedFor(rs, processed) ||
-		!rs.ProposalBlock.HashesTo(rs.Proposal.BlockID.Hash) {
+		!rs.ProposalBlock.BlockID(rs.ProposalBlockParts).Equals(rs.Proposal.BlockID) {
 		return nil
 	}
 	return c.ensureProcess(ctx, rs, rs.Round)

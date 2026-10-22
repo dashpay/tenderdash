@@ -95,7 +95,7 @@ jobs:
       - name: Create claudbot token
         id: app-token
         if: ${{ env.CLAUDE_CODE_OAUTH_TOKEN_LKLIMEK != '' }}
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510  # v3.3.0
         with:
           client-id: ${{ vars.CLAUDBOT_CLIENT_ID }}
           private-key: ${{ secrets.CLAUDBOT_PRIVATE_KEY }}
@@ -114,6 +114,8 @@ jobs:
           memcan_url: ${{ vars.MEMCAN_URL }}
           memcan_api_key: ${{ secrets.MEMCAN_API_KEY }}
           claude_extra_args: "--permission-mode auto"
+          upload_transcripts: "true"
+          transcripts_recipients: "github:lklimek"
           # Claudius-Maginificent only has triage access to this repo (no git
           # push), so the collaborator-permission API reports it as "read" —
           # below claude-code-action's admin/write bar. It's a trusted bot

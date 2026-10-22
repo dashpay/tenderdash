@@ -102,7 +102,7 @@ func (p *jobGenerator) nextJob(ctx context.Context) (*workerpool.Job, error) {
 	if err != nil {
 		return nil, err
 	}
-	p.peerStore.Update(peer.peerID, ResetMonitor(), AddNumPending(1))
+	p.peerStore.Update(peer.peerID, AddNumPending(1))
 	return workerpool.NewJob(blockFetchJobHandler(p.client, peer, height)), nil
 }
 
