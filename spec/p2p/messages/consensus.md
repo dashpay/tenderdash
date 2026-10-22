@@ -4,6 +4,9 @@ order: 7
 
 # Consensus
 
+Wire format of the messages exchanged by the consensus reactor. How a node
+acts on them is specified in the [consensus protocol](../../consensus/consensus.md).
+
 ## Channel
 
 Consensus has four separate channels. The channel identifiers are listed below.

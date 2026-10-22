@@ -18,15 +18,21 @@ what will happen during a block height _h_ in these frequent, benign conditions:
 * `PrepareProposal` will be called exactly once at the proposer process of round 0, height _h_;
 * `ProcessProposal` will be called exactly once at all processes, and
   will return _accept_ in its `Response*`;
-* `ExtendVote` will be called exactly once at all processes;
+* `ExtendVote` will be called exactly once at each validator process (it is called only when a
+  validator precommits a non-nil block);
 * `VerifyVoteExtension` will be called exactly _n-1_ times at each validator process, where _n_ is
   the number of validators, to verify the other validators' precommits, plus once at all processes
   to verify the commit's extensions before `FinalizeBlock`, and will always return _accept_ in its
-  `Response*`;
+  `Response*`; and
 * `FinalizeBlock` will be called exactly once at all processes, conveying the same prepared
   block that all calls to `PrepareProposal` and `ProcessProposal` had previously reported for
-  height _h_; and
-* `Commit` will finally be called exactly once at all processes at the end of height _h_.
+  height _h_.
+
+There is no `Commit` method in Tenderdash's ABCI++: the application persists its state as part of
+`FinalizeBlock`. The consensus-side view of the same sequence, including the
+alternative paths that produce the other call orders below, is specified in the
+[consensus protocol](../consensus/consensus.md) (see in particular
+[ABCI calls per height](../consensus/consensus-happy-path.md#abci-calls-per-height-on-the-happy-path)).
 
 However, the Application logic must be ready to cope with any possible run of Tendermint for a given
 height, including bad periods (byzantine proposers, network being asynchronous).
@@ -55,7 +61,7 @@ success-sync        = offer-snapshot 1*apply-chunk
 recovery            = info consensus-exec
 
 consensus-exec      = (inf)consensus-height
-consensus-height    = *consensus-round 1*verify-commit decide commit
+consensus-height    = *consensus-round 1*verify-commit decide
 consensus-round     = proposer / non-proposer
 
 proposer            = *got-vote prepare-proposal *got-vote process-proposal [extend]
@@ -72,7 +78,6 @@ extend-vote         = %s"<ExtendVote>"
 got-vote            = %s"<VerifyVoteExtension>"
 verify-commit       = %s"<VerifyVoteExtension>"
 decide              = %s"<FinalizeBlock>"
-commit              = %s"<Commit>"
 ```
 
 We have kept some ABCI methods out of the grammar, in order to keep it as clear and concise as possible.
@@ -146,7 +151,7 @@ Let us now examine the grammar line by line, providing further details.
 >```
 
 * A consensus height consists of zero or more rounds before deciding and executing via a call to
-  `FinalizeBlock`, followed by a call to `Commit`. In each round, the sequence of method calls
+  `FinalizeBlock`. In each round, the sequence of method calls
   depends on whether the local process is the proposer or not. Note that, if a height contains zero
   rounds, this means the process is replaying an already decided value (catch-up mode).
   Before `FinalizeBlock`, the commit's extensions are verified by a call to `VerifyVoteExtension`
@@ -156,11 +161,11 @@ Let us now examine the grammar line by line, providing further details.
   Tenderdash may also call `ExtendVote` once for the rejected commit's block and round, on any
   node, to learn the vector it expects; the grammar does not show that call either. This production describes a height that
   completes successfully. During startup replay/catch-up, rejection of a stored
-  commit instead terminates the run before `FinalizeBlock` and `Commit`, without
+  commit instead terminates the run before `FinalizeBlock`, without
   retry; see the [VerifyVoteExtension REJECT paths](abci++_methods.md#verifyvoteextension).
 
 >```abnf
->consensus-height    = *consensus-round 1*verify-commit decide commit
+>consensus-height    = *consensus-round 1*verify-commit decide
 >consensus-round     = proposer / non-proposer
 >```
 
@@ -200,7 +205,6 @@ Let us now examine the grammar line by line, providing further details.
 >got-vote            = %s"<VerifyVoteExtension>"
 >verify-commit       = %s"<VerifyVoteExtension>"
 >decide              = %s"<FinalizeBlock>"
->commit              = %s"<Commit>"
 >```
 
 ## Adapting existing Applications that use ABCI
@@ -233,6 +237,6 @@ As for the new methods:
   wrap the legacy `DeliverTx` logic in a loop that executes one transaction iteration per
   transaction in `RequestFinalizeBlock.tx`.
 
-Finally, `Commit`, which is kept in ABCI++, no longer returns the `AppHash`. It is now up to
-`FinalizeBlock` to do so. Thus, a slight refactoring of the old `Commit` implementation will be
-needed to move the return of `AppHash` to `FinalizeBlock`.
+Finally, there is no `Commit` method: `FinalizeBlock` returns the `AppHash` and the Application
+persists its state as part of it. Thus, the old `Commit` implementation must be folded into
+`FinalizeBlock`.

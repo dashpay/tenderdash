@@ -1,352 +1,280 @@
 ---
-order: 1
+order: 2
 ---
-# Byzantine Consensus Algorithm
 
-## Terms
+# Tenderdash Consensus Protocol
 
-- The network is composed of optionally connected _nodes_. Nodes
-  directly connected to a particular node are called _peers_.
-- The consensus process in deciding the next block (at some _height_
-  `H`) is composed of one or many _rounds_.
-- `NewHeight`, `Propose`, `Prevote`, `Precommit`, and `Commit`
-  represent state machine states of a round. (aka `RoundStep` or
-  just "step").
-- A node is said to be _at_ a given height, round, and step, or at
-  `(H,R,S)`, or at `(H,R)` in short to omit the step.
-- To _prevote_ or _precommit_ something means to broadcast a [prevote
-  vote](https://godoc.org/github.com/tendermint/tendermint/types#Vote)
-  or [first precommit
-  vote](https://godoc.org/github.com/tendermint/tendermint/types#FirstPrecommit)
-  for something.
-- A vote _at_ `(H,R)` is a vote signed with the bytes for `H` and `R`
-  included in its [sign-bytes](../core/data_structures.md#vote).
-- _+2/3_ is short for "more than 2/3"
-- _1/3+_ is short for "1/3 or more"
-- A set of +2/3 of prevotes for a particular block or `<nil>` at
-  `(H,R)` is called a _proof-of-lock-change_ or _PoLC_ for short.
+This document and its companions specify the Tenderdash consensus protocol
+**as implemented** in `internal/consensus` and the packages it depends on.
+Every non-trivial rule cites the function that implements it. Where the
+implementation diverges from the Tendermint algorithm it descends from, the
+implementation wins and the divergence is recorded in
+[Known issues and discrepancies](./consensus-known-issues.md).
 
-## State Machine Overview
+Audience: protocol engineers and auditors. Readers are expected to know the
+Tendermint consensus algorithm ([consensus paper](./consensus-paper/README.md))
+and the ABCI++ interface ([ABCI++ spec](../abci++/README.md)).
 
-At each height of the blockchain a round-based protocol is run to
-determine the next block. Each round is composed of three _steps_
-(`Propose`, `Prevote`, and `Precommit`), along with two special steps
-`Commit` and `NewHeight`.
+## Documents
 
-In the optimal scenario, the order of steps is:
+| Document | Content |
+|----------|---------|
+| [Consensus Protocol](./consensus.md) (this page) | Scope, terminology, system model, round state, step state machine, invariants |
+| [Primary flow of a height](./consensus-happy-path.md) | The happy path from `NewHeight` to the next `NewHeight`, with the ABCI calls it makes |
+| [Transitions and decision rules](./consensus-transitions.md) | Formal transition table: guards, actions and postconditions of every step action; timeout semantics; vote-driven dispatch; prevote, precommit and proposal-validity decision procedures |
+| [Alternative flows and edge cases](./consensus-alternative-flows.md) | Missing or invalid proposals, locking, valid-block bookkeeping, round skipping, nil rounds, equivocation, vote extensions, timestamps, empty blocks, non-validators, panics, DoS budgets |
+| [Commit handling](./consensus-commit.md) | Commits built from local precommits and commits received from peers: verification, parking, candidates, application of a commit, gossip |
+| [Recovery and synchronisation](./consensus-recovery.md) | WAL, crash recovery, ABCI handshake replay, block-sync handover |
+| [Known issues and discrepancies](./consensus-known-issues.md) | Behaviour that looks like a bug or diverges from the intended algorithm |
 
-```md
-NewHeight -> (Propose -> Prevote -> Precommit)+ -> Commit -> NewHeight ->...
+Related specifications that this one links to rather than restates:
+
+- [Proposer selection](./proposer-selection.md) — which validator proposes at `(height, round)`.
+- [Signing](./signing.md) — sign bytes, request IDs and double-signing rules for proposals and votes.
+- [Write-ahead log](./wal.md) — WAL file layout and replay.
+- [Evidence](./evidence.md) — evidence model for misbehaviour.
+- [Consensus channel messages](../p2p/messages/consensus.md) — wire format of the messages exchanged.
+- [ABCI++ expected behaviour](../abci++/abci++_tmint_expected_behavior.md) — the ABCI++ call sequence from the application's point of view.
+- [Proposer-based timestamps](./proposer-based-timestamp/README.md) — the timestamp algorithm the timeliness rules come from.
+
+## Scope
+
+In scope: the consensus state machine of a single node (validator or
+full node), the rules that decide what it signs, the interaction with the
+application over ABCI++, and the parts of message exchange that change
+consensus state. Out of scope: the p2p transport, mempool internals, block
+sync and state sync (except their handover to consensus), light clients,
+and the DoS-defence design (see `docs/CONSENSUS_DOS_*.md`).
+
+Source of truth: the code at the revision this document was written against
+(branch `v1.8-dev`). Citations use `path/file.go` and a function name; line
+numbers are omitted because they drift.
+
+## Terminology
+
+| Term | Definition | Source |
+|------|------------|--------|
+| **Height** `h` | Index of the block being decided. `State.LastBlockHeight + 1`, or `InitialHeight` for the first block. | `StateData.updateToState` in `internal/consensus/state_data.go` |
+| **Round** `r` | Attempt number within a height, starting at 0. | `RoundState.Round` in `internal/consensus/types/round_state.go` |
+| **Step** | Position within a round: one of the `RoundStepType` values listed in [Round steps](#round-steps). | `internal/consensus/types/round_state.go` |
+| **Validator set** | The members of the active Dash LLMQ quorum: `ValidatorSet{Validators, QuorumType, QuorumHash, ThresholdPublicKey, VotingPowerThreshold, HasPublicKeys}`. Every validator has voting power `DefaultDashVotingPower = 100`. | `types/validator_set.go` |
+| **Validator / observer** | A node whose `PrivValidator` pro-tx-hash is in the validator set is a *validator*; any other node is an *observer*. Observers do not sign and ignore votes (see [Non-validators](./consensus-alternative-flows.md#non-validators-and-signer-problems)). | `StateData.isValidator`, `Reactor.handleVoteMessage` in `internal/consensus/reactor.go` |
+| **Commit threshold** `T` | Voting power at or above which a vote set is treated as "+2/3". `T = ValidatorSet.VotingPowerThreshold` when that field is set (`> 0`), otherwise the LLMQ-type threshold `QuorumTypeThresholdVotingPower()` (threshold member count × 100). A configured `T` below the strict floor `⌊2·total/3⌋ + 1` is only **warned** about (`BelowStrictThreshold`). | `ValidatorSet.QuorumVotingThresholdPower`, `ValidatorSet.BelowStrictThreshold` in `types/validator_set.go`; warning logged in `StateData.updateToState` |
+| **Recovery threshold** `R` | Voting power whose BLS signature shares suffice to recover the quorum's threshold signature: `QuorumTypeThresholdVotingPower()`. It ignores the `VotingPowerThreshold` override. | `ValidatorSet.QuorumTypeThresholdVotingPower` in `types/validator_set.go` |
+| **"+2/3 any"** | A vote set whose total admitted power `≥ T`, regardless of which block ids the votes name. | `VoteSet.HasTwoThirdsAny` in `types/vote_set.go` |
+| **"+2/3 majority"** / **maj23** | A vote set whose votes for one block id (possibly nil) reach `T`. For precommit sets the majority is additionally recognised only once the threshold signature over the block has been recovered and verified (see [Threshold recovery](#threshold-recovery)). | `VoteSet.TwoThirdsMajority`, `VoteSet.addVerifiedVote` in `types/vote_set.go` |
+| **Polka** | A +2/3 majority of prevotes for one block id (nil included) in one round. | `HeightVoteSet.POLInfo` in `internal/consensus/types/height_vote_set.go` |
+| **POLRound** | The round whose polka a proposal claims as justification; `-1` when the proposal claims none. | `types.Proposal.POLRound` |
+| **BlockID** | `(Hash, PartSetHeader, StateID)`. Nil block id = all three empty. | `types/block.go`, `types/block_meta.go` |
+| **StateID** | Hash of `{AppVersion, Height, AppHash, CoreChainLockedHeight, Time}` of the block header; the app hash is the state **after** executing that block (same-block execution). | `Header.StateID` in `types/block.go` |
+| **Commit** | `(Height, Round, BlockID, QuorumHash, ThresholdBlockSignature, ThresholdVoteExtensions)`: a single aggregate BLS threshold signature plus one threshold signature per threshold-recoverable vote extension. There are no per-validator signatures in a commit. | `types.Commit` in `types/block.go` |
+| **Locked block / round** | The block the node precommitted most recently and the round it did so; `-1`/nil when none. | `RoundState.LockedRound/LockedBlock` |
+| **Valid block / round** | The most recent block (and round) for which the node saw a polka in a round `≥` any previous one. | `RoundState.ValidRound/ValidBlock` |
+| **CurrentRoundState** | The application's answer to the latest `PrepareProposal`/`ProcessProposal` for the block held in `ProposalBlock`, tagged with the round it was processed for. | `RoundState.CurrentRoundState`, `RoundState.ProcessedBlockID`; `processedFor` in `internal/consensus/block_executor.go` |
+| **Parked commit** | A verified commit for the current height whose block has not yet been assembled (`RoundState.Commit != nil`). | `StateData.adoptCommit` in `internal/consensus/state_data.go` |
+| **Timely** | A proposal whose receive time lies within `[ts − Precision, ts + MessageDelay·2^⌊round/10⌋ + Precision]` of its timestamp `ts`. | `checkTimely` in `types/validation.go` |
+
+Throughout, `rs` denotes the node's `RoundState` and `state` the committed
+`sm.State` (state as of height `h − 1`).
+
+## System model as enforced by the code
+
+- **Single writer.** `State.receiveRoutine` (`internal/consensus/state.go`) is
+  the only goroutine that mutates `RoundState`. It `select`s over three inputs:
+  transactions becoming available in the mempool (`txNotifier.TxsAvailable()`),
+  messages (`msgInfoQueue.read()`: the node's own proposal/votes on an internal
+  queue, peers' messages on per-peer lanes), and timer expiries
+  (`timeoutTicker.Chan()`). Go's `select` picks randomly among ready cases, so
+  there is **no ordering guarantee** between a timeout and a message that are
+  both ready.
+- **Actions and guards.** Every transition is an `ActionHandler` registered in
+  the `Controller` (`internal/consensus/state_controller.go`) and invoked via
+  `Controller.Dispatch`. Each `Enter*` action begins with a staleness guard on
+  `(height, round, step)`; a dispatch that fails its guard is a silent no-op.
+  Dispatches nest: an action may dispatch further actions before returning.
+- **Copy-on-read state.** Handlers work on a `StateData` copy taken from
+  `StateDataStore` and persist it with `StateData.Save` /
+  `StateDataStore.Update`, which checks an optimistic version counter
+  (`StateDataStore.update`). A version mismatch is only logged.
+- **Equal voting power.** Every validator has power 100; quorum arithmetic is
+  therefore a member count × 100.
+- **Threshold signatures.** Validators sign with BLS shares of the quorum key.
+  A commit is one recovered threshold signature, verifiable against
+  `ValidatorSet.ThresholdPublicKey` alone. See [Signing](./signing.md).
+- **Same-block execution.** `Header.AppHash` is the application state after
+  executing the block's own transactions; consensus validates it against the
+  `ProcessProposal` result before voting (`BlockExecutor.ValidateBlockWithRoundState`
+  in `internal/state/execution.go`).
+- **Safety assumption.** Safety follows the Tendermint argument only while
+  `T ≥ ⌊2·total/3⌋ + 1`. The code does not enforce this: a lower
+  `VotingPowerThreshold` (or an LLMQ type with a 50 % threshold) is accepted
+  with a warning (`ValidatorSet.BelowStrictThreshold`).
+- **Time.** The block timestamp is the proposer's local clock
+  (`State.makeBlockTime` in `internal/state/state.go`; genesis time for the
+  initial height). Receivers judge timeliness with `SynchronyParams`
+  (`Precision` default 505 ms, `MessageDelay` default 12 s,
+  `types/params.go`). There is no median/BFT time.
+
+## Round state
+
+`RoundState` (`internal/consensus/types/round_state.go`) holds, per node:
+
+| Field | Meaning |
+|-------|---------|
+| `Height, Round, Step, StartTime` | Position in the protocol; `StartTime` is when round 0 of this height may start (= `CommitTime` of the previous height). |
+| `CommitTime, CommitRound` | When and in which round +2/3 precommits for a block were observed locally; `CommitRound = -1` until then. |
+| `Validators, LastValidators, ProposerSelector` | Validator set for this height, for the previous height, and the proposer-selection strategy. |
+| `Proposal, ProposalReceiveTime, ProposalBlock, ProposalBlockParts` | The accepted proposal of the current round, when it was received, and the block being assembled from parts. |
+| `LockedRound, LockedBlock, LockedBlockParts` | Lock. |
+| `ValidRound, ValidBlock, ValidBlockParts, ValidBlockRecvTime` | Valid block. `ValidBlockRecvTime` is the receive time used when re-proposing. |
+| `Commit` | Parked commit (see [Commit handling](./consensus-commit.md)). |
+| `Votes` | `HeightVoteSet`: prevote and precommit `VoteSet`s for rounds `0..Round+1` plus up to two catch-up rounds per validator. |
+| `LastCommit` | The commit of height `h − 1`, included in the next proposed block. There is no `LastCommit` vote set: late precommits for `h − 1` are dropped. |
+| `TriggeredTimeoutPrecommit` | Whether the precommit-wait timeout was already scheduled for this round. |
+| `ProposeNextBlockImmediately` | Hint from `ResponseFinalizeBlock.propose_next_block_immediately` of the previous height; consumed once, not persisted. |
+| `CurrentRoundState, ProcessedBlockID` | Latest application result for `ProposalBlock` (see Terminology). |
+
+`StateData.updateToState` re-initialises `Height`, `Validators`,
+`LastValidators`, `LastCommit`, `ProposerSelector` and `StartTime` for the
+new height and resets every proposal, lock, valid-block, commit, vote and
+flag field. `CurrentRoundState`/`ProcessedBlockID` are left untouched; they
+are compared against the new height's block by `processedFor`. Within a
+height `LockedRound/Block` and `ValidRound/Block` are never reset; `Commit`
+is cleared only when a parked commit is rejected (`selectParkedCommit`,
+`TryAddCommitAction.Execute`).
+
+## Round steps
+
+`RoundStepType` is an ordered enum (`internal/consensus/types/round_state.go`):
+
+| Value | Step | Entered by |
+|-------|------|------------|
+| 1 | `NewHeight` | `StateData.updateToState` (after a block is applied, after block sync, at start) |
+| 2 | `NewRound` | `EnterNewRoundAction` |
+| 3 | `Propose` | `EnterProposeAction` |
+| 4 | `Prevote` | `EnterPrevoteAction` |
+| 5 | `PrevoteWait` | `EnterPrevoteWaitAction` |
+| 6 | `Precommit` | `EnterPrecommitAction` |
+| 7 | `PrecommitWait` | **never assigned** — `EnterPrecommitWaitAction` sets `TriggeredTimeoutPrecommit` but leaves `Step` at `Precommit` (see [Known issues](./consensus-known-issues.md#precommitwait-step-is-never-entered)). The value is still used as the timeout's step and in peer-state comparisons. |
+| 8 | `ApplyCommit` | `EnterCommitAction`, `AddCommitAction` |
+
+```mermaid
+stateDiagram-v2
+    direction TB
+    [*] --> NewHeight : updateToState (height h, round 0)
+    NewHeight --> NewRound : tock NewHeight / EnterNewRound(h,0)
+    NewRound --> NewRound : proposer waits for clock > LastBlockTime (NewRound tock rescheduled)
+    NewRound --> Propose : EnterPropose (immediately, or after txs available / empty-block interval)
+    Propose --> Prevote : proposal + block (+ POL) complete, or tock Propose
+    Prevote --> PrevoteWait : prevotes reach +2/3 any without a usable majority
+    Prevote --> Precommit : polka (block held or nil)
+    PrevoteWait --> Precommit : polka, or tock PrevoteWait
+    Precommit --> Precommit : precommits reach +2/3 any (TriggeredTimeoutPrecommit, PrecommitWait tock scheduled)
+    Precommit --> NewRound : tock PrecommitWait / EnterNewRound(h, r+1)
+    Precommit --> ApplyCommit : +2/3 precommits for a block (threshold signature recovered)
+    state "any step" as Any
+    Any --> NewRound : +2/3 any prevotes or precommits at round r' > r (round skip)
+    Any --> ApplyCommit : verified CommitMessage for height h
+    ApplyCommit --> NewHeight : block applied (height h+1)
+    ApplyCommit --> ApplyCommit : waiting for block parts, or application rejected own commit
 ```
 
-The sequence `(Propose -> Prevote -> Precommit)` is called a _round_.
-There may be more than one round required to commit a block at a given
-height. Examples for why more rounds may be required include:
+The precise guards of every arrow are in
+[Transitions and decision rules](./consensus-transitions.md).
 
-- The designated proposer was not online.
-- The block proposed by the designated proposer was not valid.
-- The block proposed by the designated proposer did not propagate
-  in time.
-- The block proposed was valid, but +2/3 of prevotes for the proposed
-  block were not received in time for enough validator nodes by the
-  time they reached the `Precommit` step. Even though +2/3 of prevotes
-  are necessary to progress to the next step, at least one validator
-  may have voted `<nil>` or maliciously voted for something else.
-- The block proposed was valid, and +2/3 of prevotes were received for
-  enough nodes, but +2/3 of precommits for the proposed block were not
-  received for enough validator nodes.
+## Invariants
 
-Some of these problems are resolved by moving onto the next round &
-proposer. Others are resolved by increasing certain round timeout
-parameters over each successive round.
+The following hold by construction of the code; each names the function that
+preserves it.
 
-## State Machine Diagram
+1. **Lock monotonicity.** `LockedRound` only increases within a height. It is
+   written by `StateData.updateLockedBlock` (first lock) and by the relock
+   branch of `EnterPrecommitAction.Execute` (`LockedRound = round`), both at
+   the current round, and reset to `-1` only by `StateData.updateToState`.
+   There is no unlock: a nil polka at a later round does not clear the lock
+   (`TestStateLock_POLDoesNotUnlock` in `internal/consensus/state_test.go`).
+2. **Lock implies polka.** A node locks on block `B` at round `r` only after
+   `Prevotes(r).TwoThirdsMajority() == B` and only when `B` is this round's
+   proposal block (`EnterPrecommitAction.Execute`).
+3. **Precommit implies processed.** A non-nil precommit for `B` at round `r`
+   is signed only after `ProcessProposal(B, r)` succeeded and
+   `ValidateBlockWithRoundState` passed for this round
+   (`blockExecutor.mustEnsureProcess`, `blockExecutor.mustValidate` called from
+   `EnterPrecommitAction.Execute`). Consequently `ExtendVote` is asked for the
+   round the application processed last.
+4. **Valid-round monotonicity.** `ValidRound` is set to the current round by
+   `StateData.updateValidBlock`; callers only invoke it when
+   `ValidRound < Round` (`addVoteUpdateValidBlockMw`, `ProposalCompletedAction`)
+   or from the lock branch at the current round.
+5. **One proposal per round.** `Proposaler.Set` ignores any proposal once
+   `rs.Proposal != nil`; the first proposal that verifies wins.
+6. **Application result currency.** `CurrentRoundState` describes the
+   application's latest successful `ProcessProposal`/`PrepareProposal` for
+   `ProposalBlock`; a result for another round or block is never reused
+   (`blockExecutor.ensureProcess`, `processedFor`, `ensureOwnRound`).
+7. **Commit = recovered threshold signature.** `VoteSet.MakeCommit` panics
+   unless `maj23` is set and `thresholdBlockSig` was recovered; for precommit
+   sets `maj23` is set only after recovery and verification succeed
+   (`VoteSet.addVerifiedVote`, `VoteSet.recoverThresholdSignsAndVerify`).
+8. **Commit matches held block.** A commit is applied only when its
+   `BlockID` (hash, part-set header **and** state id) equals that of the block
+   held (`verifyCommitBlock` in `internal/consensus/state_try_add_commit.go`,
+   called by both `prepareCommitForApply` and `ApplyCommitAction.Execute`).
+9. **WAL before signature.** The WAL is flushed and fsynced before the node
+   signs a proposal or a vote (`EnterProposeAction.Execute`,
+   `voteSigner.signVote`), and `EndHeightMessage` is fsynced after the block is
+   saved and before `FinalizeBlock` (`ApplyCommitAction.Execute`).
+10. **Height votes only.** Votes and commits for any height other than
+    `rs.Height` are dropped (`addVoteValidateVoteMw`,
+    `StateData.readyToApplyCommit`).
 
-```md
-                         +-------------------------------------+
-                         v                                     |(Wait til `CommmitTime+timeoutCommit`)
-                   +-----------+                         +-----+-----+
-      +----------> |  Propose  +--------------+          | NewHeight |
-      |            +-----------+              |          +-----------+
-      |                                       |                ^
-      |(Else, after timeoutPrecommit)         v                |
-+-----+-----+                           +-----------+          |
-| Precommit |  <------------------------+  Prevote  |          |
-+-----+-----+                           +-----------+          |
-      |(When +2/3 Precommits for block found)                  |
-      v                                                        |
-+--------------------------------------------------------------------+
-|  Commit                                                            |
-|                                                                    |
-|  * Set CommitTime = now;                                           |
-|  * Wait for block, then stage/save/commit block;                   |
-+--------------------------------------------------------------------+
-```
+## Threshold recovery
 
-# Background Gossip
+`VoteSet.addVerifiedVote` (`types/vote_set.go`) sets `maj23` for a block id
+when the power behind it reaches `T`. For **precommit** sets it then calls
+`recoverThresholdSignsAndVerify`:
 
-A node may not have a corresponding validator private key, but it
-nevertheless plays an active role in the consensus process by relaying
-relevant meta-data, proposals, blocks, and votes to its peers. A node
-that has the private keys of an active validator and is engaged in
-signing votes is called a _validator-node_. All nodes (not just
-validator-nodes) have an associated state (the current height, round,
-and step) and work to make progress.
+1. With a single validator the vote's own signatures are used.
+2. Otherwise `canonicalVoteExtensionGroup` picks the group of votes that carry
+   an identical ordered vector of threshold-recoverable extensions and whose
+   power is `≥ R` (ties broken by lexicographic order of the group identity,
+   empty vector first).
+3. `NewSignsRecoverer(...).Recover()` recovers the block threshold signature
+   from all votes for the block and the extension threshold signatures from the
+   canonical group's votes.
+4. The recovered signatures are verified against
+   `ValidatorSet.ThresholdPublicKey` over the canonical vote's sign data.
 
-Between two nodes there exists a `Connection`, and multiplexed on top of
-this connection are fairly throttled `Channel`s of information. An
-epidemic gossip protocol is implemented among some of these channels to
-bring peers up to speed on the most recent state of consensus. For
-example,
+If any step fails, `maj23` and the recovered signatures are rolled back and
+the attempt is repeated when a later vote makes the block cross `T` again or
+makes an extension group cross `R`. Externally, therefore, a precommit
+majority is observable only once a verifiable commit can be built from it.
+Prevote sets set `maj23` at `T` without recovery.
 
-- Nodes gossip `PartSet` parts of the current round's proposer's
-  proposed block. A LibSwift inspired algorithm is used to quickly
-  broadcast blocks across the gossip network.
-- Nodes gossip prevote/precommit votes. A node `NODE_A` that is ahead
-  of `NODE_B` can send `NODE_B` prevotes or precommits for `NODE_B`'s
-  current (or future) round to enable it to progress forward.
-- Nodes gossip prevotes for the proposed PoLC (proof-of-lock-change)
-  round if one is proposed.
-- Nodes gossip to nodes lagging in blockchain height with block
-  [commits](https://godoc.org/github.com/tendermint/tendermint/types#Commit)
-  for older blocks.
-- Nodes opportunistically gossip `ReceivedVote` messages to hint peers what
-  votes it already has.
-- Nodes broadcast their current state to all neighboring peers. (but
-  is not gossiped further)
+## Timeouts and consensus parameters
 
-There's more, but let's not get ahead of ourselves here.
+Timeouts come from `ConsensusParams.Timeout` of the committed state (changes
+proposed in block `h` apply from `h + 1`, `CurrentRoundState` in
+`internal/state/current_round_state.go`), with zero fields replaced by defaults
+(`TimeoutParams.TimeoutParamsOrDefaults`, `types/params.go`):
 
-## Proposals
+| Parameter | Default | Used for |
+|-----------|---------|----------|
+| `Propose` | 3000 ms | `proposeTimeout(r) = Propose + ProposeDelta·r` |
+| `ProposeDelta` | 500 ms | |
+| `Vote` | 1000 ms | `voteTimeout(r) = Vote + VoteDelta·r` (prevote wait, precommit wait, and the signing deadline of a non-nil precommit) |
+| `VoteDelta` | 500 ms | |
+| `Synchrony.Precision` | 505 ms | Timeliness window |
+| `Synchrony.MessageDelay` | 12 s | Timeliness window; doubled every 10 rounds |
 
-A proposal is signed and published by the designated proposer at each
-round. The proposer is chosen by a deterministic and non-choking round
-robin selection algorithm that selects proposers in proportion to their
-voting power (see
-[implementation](https://github.com/tendermint/tendermint/blob/master/types/validator_set.go)).
+Per-node `Unsafe*TimeoutOverride` settings in `config.ConsensusConfig` replace
+the corresponding parameter locally (`StateData.proposeTimeout`,
+`StateData.voteTimeout`); they desynchronise timing between nodes and are not
+part of the protocol. There is **no commit timeout**: `StartTime` of the next
+height equals `CommitTime`, so round 0 starts as soon as the block is applied
+(`StateData.updateToState`, `roundScheduler.ScheduleRound0`). The
+`unsafe-commit-timeout-override` / `unsafe-bypass-commit-timeout-override`
+settings are deprecated no-ops that only produce a warning
+(`config.ConsensusConfig`).
 
-A proposal at `(H,R)` is composed of a block and an optional latest
-`PoLC-Round < R` which is included iff the proposer knows of one. This
-hints the network to allow nodes to unlock (when safe) to ensure the
-liveness property.
-
-## State Machine Spec
-
-### Propose Step (height:H,round:R)
-
-Upon entering `Propose`:
-
-- The designated proposer proposes a block at `(H,R)`.
-
-The `Propose` step ends:
-
-- After `timeoutProposeR` after entering `Propose`. --> goto
-  `Prevote(H,R)`
-- After receiving proposal block and all prevotes at `PoLC-Round`. -->
-  goto `Prevote(H,R)`
-- After [common exit conditions](#common-exit-conditions)
-
-### Prevote Step (height:H,round:R)
-
-Upon entering `Prevote`, each validator broadcasts its prevote vote.
-
-- First, if the validator is locked on a block since `LastLockRound`
-  but now has a PoLC for something else at round `PoLC-Round` where
-  `LastLockRound < PoLC-Round < R`, then it unlocks.
-- If the validator is still locked on a block, it prevotes that.
-- Else, if the proposed block from `Propose(H,R)` is good, it
-  prevotes that.
-- Else, if the proposal is invalid or wasn't received on time, it
-  prevotes `<nil>`.
-
-The `Prevote` step ends:
-
-- After +2/3 prevotes for a particular block or `<nil>`. -->; goto
-  `Precommit(H,R)`
-- After `timeoutPrevote` after receiving any +2/3 prevotes. --> goto
-  `Precommit(H,R)`
-- After [common exit conditions](#common-exit-conditions)
-
-### Precommit Step (height:H,round:R)
-
-Upon entering `Precommit`, each validator broadcasts its precommit vote.
-
-- If the validator has a PoLC at `(H,R)` for a particular block `B`, it
-  (re)locks (or changes lock to) and precommits `B` and sets
-  `LastLockRound = R`.
-- Else, if the validator has a PoLC at `(H,R)` for `<nil>`, it unlocks
-  and precommits `<nil>`.
-- Else, it keeps the lock unchanged and precommits `<nil>`.
-
-A precommit for `<nil>` means "I didn’t see a PoLC for this round, but I
-did get +2/3 prevotes and waited a bit".
-
-The Precommit step ends:
-
-- After +2/3 precommits for `<nil>`. --> goto `Propose(H,R+1)`
-- After `timeoutPrecommit` after receiving any +2/3 precommits. --> goto
-  `Propose(H,R+1)`
-- After [common exit conditions](#common-exit-conditions)
-
-### Common exit conditions
-
-- After +2/3 precommits for a particular block. --> goto
-  `Commit(H)`
-- After any +2/3 prevotes received at `(H,R+x)`. --> goto
-  `Prevote(H,R+x)`
-- After any +2/3 precommits received at `(H,R+x)`. --> goto
-  `Precommit(H,R+x)`
-
-### Commit Step (height:H)
-
-- Set `CommitTime = now()`
-- Wait until block is received. --> goto `NewHeight(H+1)`
-
-### NewHeight Step (height:H)
-
-- Move `Precommits` to `LastCommit` and increment height.
-- Set `StartTime = CommitTime+timeoutCommit`
-- Wait until `StartTime` to receive straggler commits. --> goto
-  `Propose(H,0)`
-
-## Proofs
-
-### Proof of Safety
-
-Assume that at most -1/3 of the voting power of validators is byzantine.
-If a validator commits block `B` at round `R`, it's because it saw +2/3
-of precommits at round `R`. This implies that 1/3+ of honest nodes are
-still locked at round `R' > R`. These locked validators will remain
-locked until they see a PoLC at `R' > R`, but this won't happen because
-1/3+ are locked and honest, so at most -2/3 are available to vote for
-anything other than `B`.
-
-### Proof of Liveness
-
-If 1/3+ honest validators are locked on two different blocks from
-different rounds, a proposers' `PoLC-Round` will eventually cause nodes
-locked from the earlier round to unlock. Eventually, the designated
-proposer will be one that is aware of a PoLC at the later round. Also,
-`timeoutProposalR` increments with round `R`, while the size of a
-proposal are capped, so eventually the network is able to "fully gossip"
-the whole proposal (e.g. the block & PoLC).
-
-### Proof of Fork Accountability
-
-Define the JSet (justification-vote-set) at height `H` of a validator
-`V1` to be all the votes signed by the validator at `H` along with
-justification PoLC prevotes for each lock change. For example, if `V1`
-signed the following precommits: `Precommit(B1 @ round 0)`,
-`Precommit(<nil> @ round 1)`, `Precommit(B2 @ round 4)` (note that no
-precommits were signed for rounds 2 and 3, and that's ok),
-`Precommit(B1 @ round 0)` must be justified by a PoLC at round 0, and
-`Precommit(B2 @ round 4)` must be justified by a PoLC at round 4; but
-the precommit for `<nil>` at round 1 is not a lock-change by definition
-so the JSet for `V1` need not include any prevotes at round 1, 2, or 3
-(unless `V1` happened to have prevoted for those rounds).
-
-Further, define the JSet at height `H` of a set of validators `VSet` to
-be the union of the JSets for each validator in `VSet`. For a given
-commit by honest validators at round `R` for block `B` we can construct
-a JSet to justify the commit for `B` at `R`. We say that a JSet
-_justifies_ a commit at `(H,R)` if all the committers (validators in the
-commit-set) are each justified in the JSet with no duplicitous vote
-signatures (by the committers).
-
-- **Lemma**: When a fork is detected by the existence of two
-  conflicting [commits](../core/data_structures.md#commit), the
-  union of the JSets for both commits (if they can be compiled) must
-  include double-signing by at least 1/3+ of the validator set.
-  **Proof**: The commit cannot be at the same round, because that
-  would immediately imply double-signing by 1/3+. Take the union of
-  the JSets of both commits. If there is no double-signing by at least
-  1/3+ of the validator set in the union, then no honest validator
-  could have precommitted any different block after the first commit.
-  Yet, +2/3 did. Reductio ad absurdum.
-
-As a corollary, when there is a fork, an external process can determine
-the blame by requiring each validator to justify all of its round votes.
-Either we will find 1/3+ who cannot justify at least one of their votes,
-and/or, we will find 1/3+ who had double-signed.
-
-### Alternative algorithm
-
-Alternatively, we can take the JSet of a commit to be the "full commit".
-That is, if light clients and validators do not consider a block to be
-committed unless the JSet of the commit is also known, then we get the
-desirable property that if there ever is a fork (e.g. there are two
-conflicting "full commits"), then 1/3+ of the validators are immediately
-punishable for double-signing.
-
-There are many ways to ensure that the gossip network efficiently share
-the JSet of a commit. One solution is to add a new message type that
-tells peers that this node has (or does not have) a +2/3 majority for B
-(or) at (H,R), and a bitarray of which votes contributed towards that
-majority. Peers can react by responding with appropriate votes.
-
-We will implement such an algorithm for the next iteration of the
-Tendermint consensus protocol.
-
-Other potential improvements include adding more data in votes such as
-the last known PoLC round that caused a lock change, and the last voted
-round/step (or, we may require that validators not skip any votes). This
-may make JSet verification/gossip logic easier to implement.
-
-### Censorship Attacks
-
-Due to the definition of a block
-[commit](https://github.com/tendermint/tendermint/blob/master/docs/tendermint-core/validators.md), any 1/3+ coalition of
-validators can halt the blockchain by not broadcasting their votes. Such
-a coalition can also censor particular transactions by rejecting blocks
-that include these transactions, though this would result in a
-significant proportion of block proposals to be rejected, which would
-slow down the rate of block commits of the blockchain, reducing its
-utility and value. The malicious coalition might also broadcast votes in
-a trickle so as to grind blockchain block commits to a near halt, or
-engage in any combination of these attacks.
-
-If a global active adversary were also involved, it can partition the
-network in such a way that it may appear that the wrong subset of
-validators were responsible for the slowdown. This is not just a
-limitation of Tendermint, but rather a limitation of all consensus
-protocols whose network is potentially controlled by an active
-adversary.
-
-### Overcoming Forks and Censorship Attacks
-
-For these types of attacks, a subset of the validators through external
-means should coordinate to sign a reorg-proposal that chooses a fork
-(and any evidence thereof) and the initial subset of validators with
-their signatures. Validators who sign such a reorg-proposal forego its
-collateral on all other forks. Clients should verify the signatures on
-the reorg-proposal, verify any evidence, and make a judgement or prompt
-the end-user for a decision. For example, a phone wallet app may prompt
-the user with a security warning, while a refrigerator may accept any
-reorg-proposal signed by +1/2 of the original validators.
-
-No non-synchronous Byzantine fault-tolerant algorithm can come to
-consensus when 1/3+ of validators are dishonest, yet a fork assumes that
-1/3+ of validators have already been dishonest by double-signing or
-lock-changing without justification. So, signing the reorg-proposal is a
-coordination problem that cannot be solved by any non-synchronous
-protocol (i.e. automatically, and without making assumptions about the
-reliability of the underlying network). It must be provided by means
-external to the weakly-synchronous Tendermint consensus algorithm. For
-now, we leave the problem of reorg-proposal coordination to human
-coordination via internet media. Validators must take care to ensure
-that there are no significant network partitions, to avoid situations
-where two conflicting reorg-proposals are signed.
-
-Assuming that the external coordination medium and protocol is robust,
-it follows that forks are less of a concern than [censorship
-attacks](#censorship-attacks).
-
-### Canonical vs subjective commit
-
-We distinguish between "canonical" and "subjective" commits. A subjective commit is what
-each validator sees locally when they decide to commit a block. The canonical commit is
-what is included by the proposer of the next block in the `LastCommit` field of
-the block. This is what makes it canonical and ensures every validator agrees on the canonical commit,
-even if it is different from the +2/3 votes a validator has seen, which caused the validator to
-commit the respective block. Each block contains a canonical +2/3 commit for the previous
-block.
+Escalation with the round is linear, not exponential.
