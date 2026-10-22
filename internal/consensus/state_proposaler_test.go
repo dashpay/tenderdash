@@ -284,6 +284,8 @@ func (suite *ProposalerTestSuite) TestDecide() {
 	state := suite.committedState
 	proposalH100R0 := types.NewProposal(100, state.LastCoreChainLockedBlockHeight, 0, 0, blockID, suite.blockH100R0.Time)
 	suite.signProposal(ctx, proposalH100R0)
+	freshProposalH100R0 := types.NewProposal(100, state.LastCoreChainLockedBlockHeight, 0, -1, blockID, suite.blockH100R0.Time)
+	suite.signProposal(ctx, freshProposalH100R0)
 	vs, err := selectproposer.NewProposerSelector(types.ConsensusParams{}, suite.mockValSet, 100, 0, nil, nil)
 	suite.Require().NoError(err)
 	testCases := []struct {
@@ -295,6 +297,8 @@ func (suite *ProposalerTestSuite) TestDecide() {
 		wantErr      string
 	}{
 		{
+			// no ValidBlock: a new block is created and proposed without a POL
+			// round, whatever ValidRound says
 			height: 100,
 			round:  0,
 			rs: cstypes.RoundState{
@@ -319,7 +323,7 @@ func (suite *ProposalerTestSuite) TestDecide() {
 					Once().
 					Return(suite.blockH100R0, sm.CurrentRoundState{}, nil)
 			},
-			wantProposal: proposalH100R0,
+			wantProposal: freshProposalH100R0,
 		},
 		{
 			height: 100,
