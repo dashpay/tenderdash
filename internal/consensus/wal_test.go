@@ -201,6 +201,8 @@ func TestWALWriteCommit(t *testing.T) {
 }
 
 func TestWALSearchForEndHeight(t *testing.T) {
+	// Registered first so it runs after every other cleanup, including the WAL's.
+	t.Cleanup(leaktest.Check(t))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -214,6 +216,8 @@ func TestWALSearchForEndHeight(t *testing.T) {
 
 	wal, err := NewWAL(ctx, logger, walFile)
 	require.NoError(t, err)
+	// The WAL is never started, so Stop/Wait would not release its group.
+	t.Cleanup(wal.Group().Close)
 
 	h := int64(3)
 	gr, found, err := wal.SearchForEndHeight(h, &WALSearchOptions{})
@@ -228,8 +232,6 @@ func TestWALSearchForEndHeight(t *testing.T) {
 	rs, ok := msg.Msg.(tmtypes.EventDataRoundState)
 	assert.True(t, ok, "expected message of type EventDataRoundState")
 	assert.Equal(t, rs.Height, h+1, "wrong height")
-
-	t.Cleanup(leaktest.Check(t))
 }
 
 func TestWALPeriodicSync(t *testing.T) {
