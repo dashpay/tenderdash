@@ -242,11 +242,10 @@ and `addVoteErrorMw` (`internal/consensus/state_add_vote.go`).
   `THRESHOLD_RECOVER` and `THRESHOLD_RECOVER_RAW` (threshold-recoverable;
   `RAW` may carry an application-supplied sign request id that binds no
   height or round). `DEFAULT` exists in the enum but is **not supported**:
-  `VoteExtension.Validate` (`proto/tendermint/types/dash.go`) rejects it, so
-  a precommit carrying one fails `Vote.ValidateBasic` at every peer, and
-  `MakeQuorumSigns` excludes non-threshold-recoverable extensions from the
-  sign items (see
-  [Known issues](./consensus-known-issues.md#a-default-vote-extension-from-extendvote-is-not-rejected-before-signing)).
+  `NewVoteExtensionsFromABCIExtended` rejects it in an `ExtendVote` response
+  (`ErrUnsupportedVoteExtensionType`), and `VoteExtension.Validate`
+  (`proto/tendermint/types/dash.go`) rejects it in a peer's vote
+  (`Vote.ValidateBasic`).
   A prevote or nil precommit carrying extensions fails `Vote.ValidateBasic`.
 - Each peer precommit's extension signatures are verified after the block
   signature (`types.VerifyVoteSignatures`), then ABCI `VerifyVoteExtension`
