@@ -60,7 +60,7 @@ managed-worker migrations. The in-tree hook/callback audit covers these groups:
 | Implementations | Cancellation and cleanup policy |
 | --- | --- |
 | Consensus State, reactor, ticker, WAL; autofile Group | Managed work is joined; commit uses the State parent context; file ownership ends with explicit Close. |
-| Blocksync reactor and Synchronizer | Handoff preserves application work across Synchronizer.Stop; stopping its parent reactor may cancel it. |
+| Blocksync reactor and Synchronizer | Handoff preserves application work across Synchronizer.Stop; stopping its parent reactor may cancel it. Reactor OnStop stops and waits for the Synchronizer, so reactor Wait covers in-flight application. |
 | P2P Router and MConnection | Connection callbacks retain the parent. Router removes peer bookkeeping even with a canceled context; final PeerStatusDown broadcasts are best effort. |
 | PEX, mempool, statesync and evidence reactors | Processing uses the work context; stop hooks close resources/dispatchers or require no extra signal. Existing plain-worker ownership is unchanged. |
 | EventBus, pubsub Server and indexer Service | Event processing is cancellation-driven; indexer closes sinks in its existing hook. No guarantee of a live cleanup callback context. |

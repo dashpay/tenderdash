@@ -208,6 +208,9 @@ func (r *Reactor) OnStop() {
 	}
 	if r.blockSyncFlag.Load() {
 		r.synchronizer.Stop()
+		// Stop returns early if the synchronizer is already stopping (e.g. on
+		// parent cancellation); join its application drain before store teardown.
+		r.synchronizer.Wait()
 	}
 }
 

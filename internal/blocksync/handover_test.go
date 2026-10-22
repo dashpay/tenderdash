@@ -158,3 +158,38 @@ type handoverStopHook struct{ fn func() }
 
 func (*handoverStopHook) OnStart(context.Context) error { return nil }
 func (h *handoverStopHook) OnStop()                     { h.fn() }
+
+// Node cancellation stops the reactor and its synchronizer concurrently. When the
+// synchronizer's own stop wins, the reactor must still join its application drain.
+func TestReactorWaitJoinsSynchronizerDrain(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	draining, releaseApply := make(chan struct{}), make(chan struct{})
+	var applyReturned atomic.Bool
+	synchronizer := NewSynchronizer(1, nil, nil)
+	// Stands in for Synchronizer.OnStop blocked on consumerDone during Apply.
+	synchronizer.BaseService = *service.NewBaseService(log.NewNopLogger(), "synchronizer",
+		&handoverStopHook{fn: func() { close(draining); <-releaseApply; applyReturned.Store(true) }})
+	require.NoError(t, synchronizer.Start(ctx))
+	reactor := &Reactor{synchronizer: synchronizer, blockSyncFlag: new(atomic.Bool)}
+	reactor.blockSyncFlag.Store(true)
+	reactor.BaseService = *service.NewBaseService(log.NewNopLogger(), "BlockSync",
+		&handoverStopHook{fn: reactor.OnStop})
+	require.NoError(t, reactor.Start(ctx))
+
+	// The synchronizer's own stop wins and holds its drain open.
+	go synchronizer.Stop()
+	<-draining
+	cancel()
+	waited := make(chan struct{})
+	go func() { reactor.Wait(); close(waited) }()
+	select {
+	case <-waited:
+		t.Fatal("reactor Wait returned while synchronizer application was still running")
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(releaseApply)
+	<-waited
+	require.True(t, applyReturned.Load())
+	synchronizer.Wait()
+}
