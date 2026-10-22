@@ -182,7 +182,10 @@ func (bs *BaseService) stopAttempt(a *serviceAttempt) {
 	}
 }
 
+// finishStop runs shutdown hooks. Stop may publish stopping before it cancels,
+// so cancel here too: OnStop must observe a canceled attempt context.
 func (bs *BaseService) finishStop(a *serviceAttempt) {
+	a.cancel()
 	bs.logger.Info("stopping service", "service", bs.name)
 	bs.impl.OnStop()
 	go func() {

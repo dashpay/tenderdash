@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -263,6 +264,43 @@ func TestFailedStartupRacingStopSkipsShutdownHooks(t *testing.T) {
 	close(release)
 	require.ErrorIs(t, <-started, context.DeadlineExceeded)
 	<-waited
+	s.Wait()
+	require.False(t, s.IsRunning())
+}
+
+// Stop publishes its request before canceling the attempt; if OnStart returns in
+// that window, Start runs the shutdown hook and must cancel first.
+func TestStopDuringStartupCancelsBeforeShutdownHook(t *testing.T) {
+	s := newLifecycleService(t)
+	entered, stopRequested, releaseStop := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var startCtx context.Context
+	var stopCtxErr error
+	s.start = func(ctx context.Context) error {
+		startCtx = ctx
+		a := ctx.Value(attemptKey{}).(*serviceAttempt)
+		cancel, delayed := a.cancel, new(atomic.Bool)
+		// Hold only the Stop caller between publishing stopping and canceling.
+		a.cancel = func() {
+			if delayed.CompareAndSwap(false, true) {
+				close(stopRequested)
+				<-releaseStop
+			}
+			cancel()
+		}
+		close(entered)
+		<-stopRequested // returns independently of ctx.Done
+		return nil
+	}
+	s.stop = func() { stopCtxErr = startCtx.Err() }
+	started := make(chan error, 1)
+	go func() { started <- s.Start(context.Background()) }()
+	<-entered
+	stopReturned := make(chan struct{})
+	go func() { s.Stop(); close(stopReturned) }()
+	require.NoError(t, <-started)
+	require.ErrorIs(t, stopCtxErr, context.Canceled, "OnStop ran before the attempt was canceled")
+	close(releaseStop)
+	<-stopReturned
 	s.Wait()
 	require.False(t, s.IsRunning())
 }
