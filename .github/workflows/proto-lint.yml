@@ -6,6 +6,7 @@ on:
       - "buf.yaml"
       - "buf.lock"
       - "go.mod"
+      - ".github/workflows/proto-lint.yml"
   push:
     branches:
       - master
