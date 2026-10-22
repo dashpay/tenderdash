@@ -142,13 +142,14 @@ func (bs *BaseService) drainFailedStart(a *serviceAttempt) {
 }
 
 // Go registers work belonging to the context received by OnStart (or a child).
-// It returns false before startup, after stopping begins, or for an old attempt.
+// It returns false before startup, after stopping begins, for a canceled ctx
+// (cancellation can precede the published stop), or for an old attempt.
 // A worker may call Stop, but must not call Wait on its own service.
 func (bs *BaseService) Go(ctx context.Context, fn func(context.Context)) bool {
 	bs.mtx.Lock()
 	defer bs.mtx.Unlock()
 	a := bs.attempt
-	if a == nil || a.stopping || ctx.Value(attemptKey{}) != a {
+	if a == nil || a.stopping || ctx.Err() != nil || ctx.Value(attemptKey{}) != a {
 		return false
 	}
 	a.workers.Add(1)

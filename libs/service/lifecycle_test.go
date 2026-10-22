@@ -304,3 +304,20 @@ func TestStopDuringStartupCancelsBeforeShutdownHook(t *testing.T) {
 	s.Wait()
 	require.False(t, s.IsRunning())
 }
+
+// Parent cancellation closes the attempt context before the watcher publishes
+// stopping; Go must not admit work in that window.
+func TestGoRejectsCanceledContextBeforeStopping(t *testing.T) {
+	parent, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s := newLifecycleService(t)
+	admitted := false
+	s.start = func(ctx context.Context) error {
+		cancel() // no watcher exists yet, so stopping stays unpublished
+		admitted = s.Go(ctx, func(context.Context) {})
+		return nil
+	}
+	require.NoError(t, s.Start(parent))
+	s.Wait()
+	require.False(t, admitted, "Go admitted work for a canceled attempt context")
+}
