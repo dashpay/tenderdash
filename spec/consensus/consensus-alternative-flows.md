@@ -123,7 +123,7 @@ The lock is defined by `LockedRound/LockedBlock` and the rules
 and [C-Lock, C-Relock, C-LockedNotProposed](./consensus-transitions.md#precommit-decision-enterprecommitactionexecute).
 
 | Situation | Behaviour | Evidence |
-|-----------|-----------|----------|
+| ----------- | ----------- | ---------- |
 | Locked on `B` at `r`; round `r + k` proposes `B` with `POLRound ≥ LockedRound` or without POL | Prevote `B` (lock match) | `prevoter.checkProposalBlock`, `checkPrevoteMaj23`; `TestStateLock_POLRelock` |
 | Locked on `B`; round `r + k` proposes `C ≠ B` with `POLRound = -1` | Prevote nil (`ProcessProposal` still runs for `C`) | `TestStateLock_PrevoteNilWhenLockedAndDifferentProposal` |
 | Locked on `B`; proposal `C` with `POLRound = p ≥ LockedRound` and a polka for `C` at `p` | Prevote `C`; if a polka for `C` forms this round → lock moves to `C` (`updateLockedBlock`) | `TestStateLock_POLUpdateLock` |
@@ -345,7 +345,7 @@ even without transactions (empty block). Rounds `≥ 1` never wait.
 following stop the node (liveness-relevant for operators):
 
 | Trigger | Function |
-|---------|----------|
+| --------- | ---------- |
 | WAL `WriteSync` failure for own messages or `EndHeightMessage` | `walMiddleware`, `ApplyCommitAction.Execute` |
 | `PrepareProposal` error | `blockExecutor.create` |
 | `ProcessProposal` unknown error at prevote; any failure in `mustEnsureProcess` (precommit, commit, apply) | `prevoter.handleError`, `blockExecutor.mustEnsureProcess` |

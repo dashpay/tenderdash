@@ -18,7 +18,7 @@ and the ABCI++ interface ([ABCI++ spec](../abci++/README.md)).
 ## Documents
 
 | Document | Content |
-|----------|---------|
+| ---------- | --------- |
 | [Consensus Protocol](./consensus.md) (this page) | Scope, terminology, system model, round state, step state machine, invariants |
 | [Primary flow of a height](./consensus-happy-path.md) | The happy path from `NewHeight` to the next `NewHeight`, with the ABCI calls it makes |
 | [Transitions and decision rules](./consensus-transitions.md) | Formal transition table: guards, actions and postconditions of every step action; timeout semantics; vote-driven dispatch; prevote, precommit and proposal-validity decision procedures |
@@ -53,7 +53,7 @@ numbers are omitted because they drift.
 ## Terminology
 
 | Term | Definition | Source |
-|------|------------|--------|
+| ------ | ------------ | -------- |
 | **Height** `h` | Index of the block being decided. `State.LastBlockHeight + 1`, or `InitialHeight` for the first block. | `StateData.updateToState` in `internal/consensus/state_data.go` |
 | **Round** `r` | Attempt number within a height, starting at 0. | `RoundState.Round` in `internal/consensus/types/round_state.go` |
 | **Step** | Position within a round: one of the `RoundStepType` values listed in [Round steps](#round-steps). | `internal/consensus/types/round_state.go` |
@@ -120,7 +120,7 @@ Throughout, `rs` denotes the node's `RoundState` and `state` the committed
 `RoundState` (`internal/consensus/types/round_state.go`) holds, per node:
 
 | Field | Meaning |
-|-------|---------|
+| ------- | --------- |
 | `Height, Round, Step, StartTime` | Position in the protocol; `StartTime` is when round 0 of this height may start (= `CommitTime` of the previous height). |
 | `CommitTime, CommitRound` | When and in which round +2/3 precommits for a block were observed locally; `CommitRound = -1` until then. |
 | `Validators, LastValidators, ProposerSelector` | Validator set for this height, for the previous height, and the proposer-selection strategy. |
@@ -148,7 +148,7 @@ is cleared only when a parked commit is rejected (`selectParkedCommit`,
 `RoundStepType` is an ordered enum (`internal/consensus/types/round_state.go`):
 
 | Value | Step | Entered by |
-|-------|------|------------|
+| ------- | ------ | ------------ |
 | 1 | `NewHeight` | `StateData.updateToState` (after a block is applied, after block sync, at start) |
 | 2 | `NewRound` | `EnterNewRoundAction` |
 | 3 | `Propose` | `EnterProposeAction` |
@@ -259,7 +259,7 @@ proposed in block `h` apply from `h + 1`, `CurrentRoundState` in
 (`TimeoutParams.TimeoutParamsOrDefaults`, `types/params.go`):
 
 | Parameter | Default | Used for |
-|-----------|---------|----------|
+| ----------- | --------- | ---------- |
 | `Propose` | 3000 ms | `proposeTimeout(r) = Propose + ProposeDelta·r` |
 | `ProposeDelta` | 500 ms | |
 | `Vote` | 1000 ms | `voteTimeout(r) = Vote + VoteDelta·r` (prevote wait, precommit wait, and the signing deadline of a non-nil precommit) |

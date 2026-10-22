@@ -301,7 +301,7 @@ immediately (step 1 above).
 ## ABCI calls per height on the happy path
 
 | Node role | Calls |
-|-----------|-------|
+| ----------- | ------- |
 | Proposer | `PrepareProposal`, `ProcessProposal`, `ExtendVote`, `VerifyVoteExtension` × (n − 1 peer precommits) + 1 (commit), `FinalizeBlock` |
 | Other validator | `ProcessProposal`, `ExtendVote`, `VerifyVoteExtension` × (n − 1) + 1, `FinalizeBlock` |
 | Observer (not in the validator set) | `ProcessProposal` (once a `CommitMessage` and the block arrive; peers gossip proposals only to validators), `VerifyVoteExtension` × 1 (commit), `FinalizeBlock` — observers neither prevote nor precommit, see [Non-validators](./consensus-alternative-flows.md#non-validators-and-signer-problems) |

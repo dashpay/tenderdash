@@ -10,7 +10,7 @@ The consensus WAL (`internal/consensus/wal.go`; file layout in
 [WAL](./wal.md)) records, per height:
 
 | Record | Written by | Durability |
-|--------|------------|------------|
+| -------- | ------------ | ------------ |
 | `msgInfo` — proposal, block part, vote or commit, with the peer id and receive time | `walMiddleware` (`internal/consensus/msg_handlers.go`) | peer messages `Write` (buffered); the node's own messages `WriteSync` (fsync), **panic** on failure |
 | `timeoutInfo` — every tock | `State.receiveRoutine` | `Write` |
 | `EventDataRoundState` — every step change | `EventPublisher.PublishNewRoundStepEvent` | `Write` |
@@ -40,7 +40,7 @@ application's `(LastBlockHeight, LastBlockAppHash)`:
 3. Cases (`syncStateIfItIsEqualStore`, `syncStateIfItIsOneAheadOfStore`):
 
 | Store vs state | App vs state | Action |
-|----------------|--------------|--------|
+| ---------------- | -------------- | -------- |
 | equal | behind | replay stored blocks into the application: per block `ProcessProposal(round = commit.Round)`, `VerifyCommitExtensions`, `FinalizeBlock` (`replayBlock`); the resulting app hash must equal the block's; a rejected commit vector stops replay (`commitExtensionsReplayError`) |
 | equal | equal | app hash must equal `state.LastAppHash` |
 | store = state + 1 | behind state | replay all but the last block as above, then apply the last one through `BlockExecutor.ApplyBlock` with the real application |
@@ -74,7 +74,7 @@ Then `receiveRoutine` starts and `ScheduleRound0` arms the first tock.
 ## Crash windows
 
 | Crash point | Recovery |
-|-------------|----------|
+| ------------- | ---------- |
 | Before `EndHeightMessage{h}` is written | WAL replay re-delivers the height's messages and timeouts; the node re-reaches the same step |
 | After `SaveBlock` + `EndHeightMessage`, before `FinalizeBlock` completed | handshake case "store = state + 1, app = state": `ApplyBlock` with the real application |
 | After `FinalizeBlock`, before `stateStore.Save` | handshake case "app = store": mock replay from saved `ABCIResponses` (`BlockExecutor.FinalizeBlock` saves them **before** calling the application) |

@@ -19,7 +19,7 @@ Notation: `h = rs.Height`, `r = rs.Round`, `step = rs.Step`;
 ## Inputs
 
 | Input | Handler | Resulting dispatch |
-|-------|---------|--------------------|
+| ------- | --------- | -------------------- |
 | Tock `(H, R, NewHeight)` | `State.handleTimeout` | `EnterNewRound{H}` (round 0) |
 | Tock `(H, R, NewRound)` | `State.handleTimeout` | `EnterPropose{H, R}` |
 | Tock `(H, R, Propose)` | `State.handleTimeout` | publish `TimeoutPropose`; `EnterPrevote{H, R}` |
@@ -286,7 +286,7 @@ unless it is the node's own key.
 `addVoteDispatchPrevoteMw`:
 
 | Condition | Dispatch |
-|-----------|----------|
+| ----------- | ---------- |
 | `r < vote.Round ∧ any23(P)` | `EnterNewRound{h, vote.Round}` (round skip) |
 | `r == vote.Round ∧ step ≥ Prevote ∧ maj23(P) = B ∧ (complete() ∨ B = nil)` | `EnterPrecommit{h, r}` |
 | `r == vote.Round ∧ step ≥ Prevote ∧ any23(P)` (otherwise) | `EnterPrevoteWait{h, r}` |
@@ -297,7 +297,7 @@ unless it is the node's own key.
 `addVoteDispatchPrecommitMw`, with `C = Precommits(vote.Round)`:
 
 | Condition | Dispatch |
-|-----------|----------|
+| ----------- | ---------- |
 | `¬maj23(C) ∧ r ≤ vote.Round ∧ any23(C)` | `EnterNewRound{h, vote.Round}`; `EnterPrecommitWait{h, vote.Round}` |
 | `maj23(C) = nil` | `EnterNewRound{h, vote.Round}`; `EnterPrecommit{h, vote.Round}`; `EnterPrecommitWait{h, vote.Round}` |
 | `maj23(C) = B ≠ nil` | `EnterNewRound{h, vote.Round}`; `EnterPrecommit{h, vote.Round}`; `EnterCommit{h, vote.Round}`; then `EnterNewRound{Height: rs.Height}` (which is `h + 1` if the commit was applied synchronously) |
@@ -448,7 +448,7 @@ A block becomes **prevotable** when all of the following hold; the function
 that checks each is given.
 
 | Check | Where |
-|-------|-------|
+| ------- | ------- |
 | Proposal signed by `proposer(h, r)` | `Proposaler.verifyProposal` |
 | `POLRound ∈ {-1} ∪ [0, r)` | `Proposaler.Set` |
 | Proposal `BlockID` hash and part-set header equal the assembled block's | `AddProposalBlockPartAction.addProposalBlockPart` |

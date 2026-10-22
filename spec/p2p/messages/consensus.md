@@ -139,14 +139,14 @@ the votes a process has.
 
 Message is a [`oneof` protobuf type](https://developers.google.com/protocol-buffers/docs/proto#oneof).
 
-| Name            | Type                            | Description                            | Field Number |
-|-----------------|---------------------------------|----------------------------------------|--------------|
-| new_round_step  | [NewRoundStep](#newroundstep)   | Height of corresponding block          | 1            |
-| new_valid_block | [NewValidBlock](#newvalidblock) | Round of voting to finalize the block. | 2            |
-| proposal        | [Proposal](#proposal)           |                                        | 3            |
-| proposal_pol    | [ProposalPOL](#proposalpol)     |                                        | 4            |
-| block_part      | [BlockPart](#blockpart)         |                                        | 5            |
-| vote            | [Vote](#vote)                   |                                        | 6            |
-| received_vote       | [ReceivedVote](#ReceivedVote)           |                                        | 7            |
-| vote_set_maj23  | [VoteSetMaj23](#votesetmaj23)   |                                        | 8            |
-| vote_set_bits   | [VoteSetBits](#votesetbits)     |                                        | 9            |
+| Name | Type | Description | Field Number |
+| --- | --- | --- | --- |
+| new_round_step | [NewRoundStep](#newroundstep) | Height of corresponding block | 1 |
+| new_valid_block | [NewValidBlock](#newvalidblock) | Round of voting to finalize the block. | 2 |
+| proposal | [Proposal](#proposal) | | 3 |
+| proposal_pol | [ProposalPOL](#proposalpol) | | 4 |
+| block_part | [BlockPart](#blockpart) | | 5 |
+| vote | [Vote](#vote) | | 6 |
+| received_vote | [ReceivedVote](#ReceivedVote) | | 7 |
+| vote_set_maj23 | [VoteSetMaj23](#votesetmaj23) | | 8 |
+| vote_set_bits | [VoteSetBits](#votesetbits) | | 9 |

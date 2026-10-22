@@ -34,7 +34,7 @@ Both follow from the construction below.
 strategy by `ConsensusParams.Version.ConsensusVersion`:
 
 | `ConsensusVersion` | Strategy | File |
-|--------------------|----------|------|
+| --- | --- | --- |
 | 0 (default) | **Height-based**: the index advances once per height; the round offset is derived without being persisted | `height_proposer.go` (`heightProposerSelector`) |
 | 1 | **Height-and-round-based**: the index advances once per height and once per round | `height_round_proposer.go` (`heightRoundProposerSelector`) |
 
@@ -65,7 +65,7 @@ re-proposed block keeps its header — and `meta.Round` is the round in which
 it was committed).
 
 | Case | v0 (`height_proposer.go`) | v1 (`height_round_proposer.go`) |
-|------|---------------------------|---------------------------------|
+| ------ | --------------------------- | --------------------------------- |
 | `h ∈ {0, 1}` | `V[0]` | `V[0]` |
 | `meta(h)` stored, `meta(h).ValidatorsHash == hash(V)` | `idx(meta(h).Proposer) − meta(h).Round` | `idx(meta(h).Proposer) + r − meta(h).Round` |
 | `meta(h)` stored, hash differs | error | error |
