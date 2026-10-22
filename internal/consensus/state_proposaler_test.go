@@ -284,6 +284,8 @@ func (suite *ProposalerTestSuite) TestDecide() {
 	state := suite.committedState
 	proposalH100R0 := types.NewProposal(100, state.LastCoreChainLockedBlockHeight, 0, 0, blockID, suite.blockH100R0.Time)
 	suite.signProposal(ctx, proposalH100R0)
+	freshProposalH100R0 := types.NewProposal(100, state.LastCoreChainLockedBlockHeight, 0, -1, blockID, suite.blockH100R0.Time)
+	suite.signProposal(ctx, freshProposalH100R0)
 	vs, err := selectproposer.NewProposerSelector(types.ConsensusParams{}, suite.mockValSet, 100, 0, nil, nil)
 	suite.Require().NoError(err)
 	testCases := []struct {
@@ -295,6 +297,8 @@ func (suite *ProposalerTestSuite) TestDecide() {
 		wantErr      string
 	}{
 		{
+			// no ValidBlock: a new block is created and proposed without a POL
+			// round, whatever ValidRound says
 			height: 100,
 			round:  0,
 			rs: cstypes.RoundState{
@@ -319,7 +323,7 @@ func (suite *ProposalerTestSuite) TestDecide() {
 					Once().
 					Return(suite.blockH100R0, sm.CurrentRoundState{}, nil)
 			},
-			wantProposal: proposalH100R0,
+			wantProposal: freshProposalH100R0,
 		},
 		{
 			height: 100,
@@ -360,6 +364,56 @@ func (suite *ProposalerTestSuite) TestDecide() {
 			suite.Require().Equal(tc.rs.Round, blockPartMessage.Round)
 		})
 	}
+}
+
+// TestCreateFreshBlockOverUntimelyValidBlockHasNoPOLRound pins the POLRound of
+// a proposal whose block was built fresh because the held ValidBlock is not
+// timely. The POL round vouches for one block: receivers check the polka at
+// POLRound against the proposed block, so a fresh block carrying the
+// ValidBlock's round is prevoted nil and the round is wasted. A fresh block has
+// no polka behind it, hence POLRound must be -1.
+func (suite *ProposalerTestSuite) TestCreateFreshBlockOverUntimelyValidBlockHasNoPOLRound() {
+	ctx := context.Background()
+	validBlock := suite.blockH100R0
+	validParts, err := validBlock.MakePartSet(types.BlockPartSizeBytes)
+	suite.Require().NoError(err)
+
+	// Learned an hour after its timestamp, e.g. from a polka seen before (or
+	// without) its round-0 proposal, so updateValidBlock dated it on arrival.
+	validRecvTime := validBlock.Time.Add(time.Hour)
+	sp := suite.committedState.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()
+	suite.Require().False(validBlock.IsTimely(validRecvTime, sp, 0), "precondition: ValidBlock must be untimely")
+
+	freshBlock := suite.committedState.MakeBlock(100, []types.Tx{types.Tx("fresh")}, &suite.commitH99R0, nil,
+		suite.proposer.privVal.ProTxHash, 0)
+	freshParts, err := freshBlock.MakePartSet(types.BlockPartSizeBytes)
+	suite.Require().NoError(err)
+	freshBlockID := freshBlock.BlockID(freshParts)
+	suite.Require().NotEqual(validBlock.BlockID(validParts), freshBlockID, "precondition: blocks must differ")
+
+	rs := cstypes.RoundState{
+		Height:             100,
+		Round:              1,
+		Validators:         suite.mockValSet,
+		ProposerSelector:   suite.proposerSelector,
+		LastCommit:         &suite.commitH99R0,
+		ValidRound:         0,
+		ValidBlock:         validBlock,
+		ValidBlockParts:    validParts,
+		ValidBlockRecvTime: validRecvTime,
+	}
+	suite.mockBlockExec.
+		On("CreateProposalBlock", mock.Anything, rs.Height, rs.Round, mock.Anything, rs.LastCommit, mock.Anything, uint64(0)).
+		Once().
+		Return(freshBlock, sm.CurrentRoundState{}, nil)
+
+	suite.Require().NoError(suite.proposer.Create(ctx, rs.Height, rs.Round, &rs))
+
+	msg := <-suite.msgInfoQueue.read()
+	proposal := msg.Msg.(*ProposalMessage).Proposal
+	suite.Require().Equal(freshBlockID, proposal.BlockID, "untimely ValidBlock must be replaced by a fresh block")
+	suite.Require().Equal(int32(-1), proposal.POLRound,
+		"a freshly built block has no polka; carrying ValidRound as POLRound makes receivers prevote nil")
 }
 
 func (suite *ProposalerTestSuite) TestVerifyProposal() {
