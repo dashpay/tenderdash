@@ -24,8 +24,16 @@ have a polka), `checkProposalBlock` is false (`POLRound ≠ -1`), and
 `checkPrevoteMaj23` is false because the polka's block id differs from the
 fresh block's. Every honest validator prevotes nil; the round is wasted. The
 proposer also violates the paper's rule that `v_r` names a polka for the
-proposed value. (Confirmed by reading; `TestProposeValidBlock` covers only
-the timely case.)
+proposed value.
+
+Trigger: the proposer's `ValidBlock` is untimely for `ValidRound`. This
+happens when `updateValidBlock` dates the block with `tmtime.Now()` because
+the node learned it without a matching proposal, which puts the receive time
+well after `block.Time`. The proposer logs `proposal block is not timely` at
+ERROR level when this branch runs. The impact is liveness only: one lost
+round. Reproduced by
+`ProposalerTestSuite.TestCreateFreshBlockOverUntimelyValidBlockHasNoPOLRound`
+([#1563](https://github.com/dashpay/tenderdash/pull/1563)).
 
 ## `PrecommitWait` step is never entered
 
