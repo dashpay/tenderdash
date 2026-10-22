@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -690,4 +691,144 @@ func (suite *ChannelTestSuite) pendingLen() int {
 		return true
 	})
 	return n
+}
+
+func (suite *ChannelTestSuite) TestResponseBeforeSendReturns() {
+	ctx := context.Background()
+	suite.p2pChannel.On("Send", mock.Anything, mock.Anything).Once().Run(func(args mock.Arguments) {
+		request := args.Get(1).(p2p.Envelope)
+		suite.Require().NoError(suite.client.resolveMessage(ctx, request.Attributes[RequestIDAttribute], result{Value: suite.response}))
+	}).Return(nil)
+	p, err := suite.client.GetBlock(ctx, suite.height, suite.peerID)
+	suite.Require().NoError(err)
+	response, err := p.Await()
+	suite.Require().NoError(err)
+	suite.Require().Equal(suite.response, response)
+}
+
+type countingBlockObserver struct {
+	mtx      sync.Mutex
+	starts   int
+	finishes int
+}
+
+func (o *countingBlockObserver) Started()  { o.mtx.Lock(); defer o.mtx.Unlock(); o.starts++ }
+func (o *countingBlockObserver) Finished() { o.mtx.Lock(); defer o.mtx.Unlock(); o.finishes++ }
+func (o *countingBlockObserver) counts() (int, int) {
+	o.mtx.Lock()
+	defer o.mtx.Unlock()
+	return o.starts, o.finishes
+}
+
+func (suite *ChannelTestSuite) TestBlockObservationLifecycle() {
+	for _, ending := range []string{"reply", "timeout", "cancel", "missing"} {
+		suite.Run(ending, func() {
+			suite.fakeClock = clockwork.NewFakeClock()
+			suite.client.clock = suite.fakeClock
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			observer := &countingBlockObserver{}
+			ctx = WithBlockRequestObserver(ctx, observer)
+			var request p2p.Envelope
+			suite.p2pChannel.On("Send", mock.Anything, mock.Anything).Once().Run(func(args mock.Arguments) {
+				request = args.Get(1).(p2p.Envelope)
+			}).Return(nil)
+			p, err := suite.client.GetBlock(ctx, suite.height, suite.peerID)
+			suite.Require().NoError(err)
+			starts, finishes := observer.counts()
+			suite.Equal(1, starts)
+			suite.Zero(finishes)
+			id := request.Attributes[RequestIDAttribute]
+			response := result{Value: suite.response}
+			switch ending {
+			case "reply", "missing":
+				if ending == "missing" {
+					response.Err = &ErrBlockNotFound{Height: suite.height}
+				}
+				suite.Require().NoError(suite.client.resolveMessage(ctx, id, response))
+				// Finished must have run without waiting for Await or any consumer.
+				_, finishes = observer.counts()
+				suite.Equal(1, finishes)
+			case "timeout":
+				wait, stop := context.WithTimeout(ctx, time.Second)
+				defer stop()
+				suite.Require().NoError(suite.fakeClock.BlockUntilContext(wait, 1))
+				suite.fakeClock.Advance(peerTimeout)
+			case "cancel":
+				cancel()
+			}
+			_, err = p.Await()
+			if ending == "reply" {
+				suite.NoError(err)
+			} else {
+				suite.Error(err)
+			}
+			// Neither late nor duplicate replies are another lifecycle completion.
+			_ = suite.client.resolveMessage(context.Background(), id, response)
+			starts, finishes = observer.counts()
+			suite.Equal(1, starts)
+			suite.Equal(1, finishes)
+		})
+	}
+}
+
+func (suite *ChannelTestSuite) TestBlockObserverResponseBeforeAdmission() {
+	observer := &countingBlockObserver{}
+	ctx := WithBlockRequestObserver(context.Background(), observer)
+	suite.p2pChannel.On("Send", mock.Anything, mock.Anything).Once().Run(func(args mock.Arguments) {
+		request := args.Get(1).(p2p.Envelope)
+		suite.Require().NoError(suite.client.resolveMessage(ctx, request.Attributes[RequestIDAttribute], result{Value: suite.response}))
+		starts, finishes := observer.counts()
+		suite.Zero(starts)
+		suite.Zero(finishes)
+	}).Return(nil)
+	p, err := suite.client.GetBlock(ctx, suite.height, suite.peerID)
+	suite.Require().NoError(err)
+	_, err = p.Await()
+	suite.Require().NoError(err)
+	starts, finishes := observer.counts()
+	suite.Equal(1, starts)
+	suite.Equal(1, finishes)
+}
+
+func (suite *ChannelTestSuite) TestFailedAdmissionDoesNotStartObservation() {
+	observer := &countingBlockObserver{}
+	ctx := WithBlockRequestObserver(context.Background(), observer)
+	sendErr := errors.New("send failed")
+	suite.p2pChannel.On("Send", mock.Anything, mock.Anything).Once().Return(sendErr)
+	suite.p2pChannel.On("SendError", mock.Anything, mock.Anything).Once().Return(nil)
+	p, err := suite.client.GetBlock(ctx, suite.height, suite.peerID)
+	suite.ErrorIs(err, sendErr)
+	suite.Nil(p)
+	starts, finishes := observer.counts()
+	suite.Zero(starts)
+	suite.Zero(finishes)
+}
+
+func (suite *ChannelTestSuite) TestBlockObserverConcurrentReplyAndCancellation() {
+	for range 100 {
+		observer := &countingBlockObserver{}
+		ctx, cancel := context.WithCancel(WithBlockRequestObserver(context.Background(), observer))
+		var id string
+		suite.p2pChannel.On("Send", mock.Anything, mock.Anything).Once().Run(func(args mock.Arguments) {
+			id = args.Get(1).(p2p.Envelope).Attributes[RequestIDAttribute]
+		}).Return(nil)
+		p, err := suite.client.GetBlock(ctx, suite.height, suite.peerID)
+		suite.Require().NoError(err)
+		var wg sync.WaitGroup
+		wg.Add(3)
+		go func() { defer wg.Done(); cancel() }()
+		for range 2 {
+			go func() {
+				defer wg.Done()
+				// An answered request may already be retired; duplicate rejection is valid.
+				_ = suite.client.resolveMessage(context.Background(), id, result{Value: suite.response})
+			}()
+		}
+		_, _ = p.Await()
+		wg.Wait()
+		starts, finishes := observer.counts()
+		suite.Equal(1, starts)
+		suite.Equal(1, finishes)
+	}
 }
