@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	dbm "github.com/cometbft/cometbft-db"
@@ -346,4 +347,41 @@ func TestPeerManagerErrored_InternalFailureStaysVisible(t *testing.T) {
 	require.Contains(t, output.String(), `"level":"error"`)
 	require.Contains(t, output.String(), "internal peer manager failure")
 	require.True(t, f.isEvicted())
+}
+
+// countingDB counts writes so tests can bound per-frame persistence cost.
+type countingDB struct {
+	dbm.DB
+	sets atomic.Int64
+}
+
+func (d *countingDB) Set(key, value []byte) error {
+	d.sets.Add(1)
+	return d.DB.Set(key, value)
+}
+
+func (d *countingDB) SetSync(key, value []byte) error {
+	d.sets.Add(1)
+	return d.DB.SetSync(key, value)
+}
+
+// An unknown-payload burst must not cost one database write per frame:
+// MutableScore is ephemeral, so only the in-memory score may change.
+func TestReceivePeer_UnknownPayloadBurstDoesNotWriteDatabase(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	f := newPunishFixture(ctx, t, 10)
+	f.registerChannel(ctx, t)
+	db := &countingDB{DB: dbm.NewMemDB()}
+	f.pm.store.db = db
+	before := f.score()
+
+	const frames = 100
+	conn := &fakeConn{payloads: make([][]byte, frames)}
+	require.ErrorIs(t, f.router.receivePeer(ctx, f.peerID, conn, 1), io.EOF)
+
+	require.EqualValues(t, before-frames, f.score(), "every unknown payload must still cost score")
+	require.Zero(t, db.sets.Load(), "ephemeral score changes must not be persisted")
+	require.False(t, f.isEvicted())
 }

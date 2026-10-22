@@ -1470,6 +1470,12 @@ func (m *PeerManager) processPeerEvent(ctx context.Context, pu PeerUpdate) {
 		}
 		peer.MutableScore++
 	}
+	// MutableScore is not persisted, so a known peer's score change must not
+	// write the database: peers can trigger these events once per frame.
+	if ok {
+		m.store.SetMutableScore(pu.NodeID, peer.MutableScore)
+		return
+	}
 	if err := m.store.Set(peer); err != nil {
 		m.logger.Error("cannot save peer to database", "peer", peer, "error", err)
 	}
@@ -1736,6 +1742,15 @@ func (s *peerStore) Set(peer peerInfo) error {
 	}
 
 	return nil
+}
+
+// SetMutableScore updates a known peer's ephemeral score in memory only, since
+// peerInfo.ToProto omits MutableScore. Unknown peers are ignored.
+func (s *peerStore) SetMutableScore(id types.NodeID, score int64) {
+	if peer, ok := s.peers[id]; ok && peer.MutableScore != score {
+		peer.MutableScore = score
+		s.ranked = nil // score changes invalidate the Ranked() cache
+	}
 }
 
 // Delete deletes a peer, or does nothing if it does not exist.

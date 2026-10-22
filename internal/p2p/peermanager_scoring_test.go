@@ -320,3 +320,18 @@ func TestPeerScoringUnknownPeer_LaterAddressDoesNotPanic(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, added, "the first address for a penalized peer must be stored")
 }
+
+// SetMutableScore skips persistence, so it must still invalidate the Ranked() cache.
+func TestPeerStoreSetMutableScoreReranks(t *testing.T) {
+	low := peerInfo{ID: types.NodeID(strings.Repeat("a1", 20)), MutableScore: -1}
+	high := peerInfo{ID: types.NodeID(strings.Repeat("b2", 20)), MutableScore: 1}
+	store := makeMockPeerStore(t, low, high)
+	require.Equal(t, high.ID, store.Ranked()[0].ID)
+
+	store.SetMutableScore(low.ID, 2)
+
+	require.Equal(t, low.ID, store.Ranked()[0].ID)
+	got, ok := store.Get(low.ID)
+	require.True(t, ok)
+	require.EqualValues(t, 2, got.MutableScore)
+}
