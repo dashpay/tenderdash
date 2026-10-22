@@ -33,7 +33,8 @@ well after `block.Time`. The proposer logs `proposal block is not timely` at
 ERROR level when this branch runs. The impact is liveness only: one lost
 round. Reproduced by
 `ProposalerTestSuite.TestCreateFreshBlockOverUntimelyValidBlockHasNoPOLRound`
-([#1563](https://github.com/dashpay/tenderdash/pull/1563)).
+and fixed in
+[#1564](https://github.com/dashpay/tenderdash/pull/1564).
 
 ## `PrecommitWait` step is never entered
 
