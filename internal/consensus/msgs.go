@@ -35,6 +35,9 @@ func init() {
 	jsontypes.MustRegister(&VoteSetMaj23Message{})
 	jsontypes.MustRegister(&VoteSetBitsMessage{})
 	jsontypes.MustRegister(&CommitMessage{})
+	jsontypes.MustRegister(&ProposerHeartbeatMessage{})
+	jsontypes.MustRegister(&RoundSkipVoteMessage{})
+	jsontypes.MustRegister(&RoundSkipCertificateMessage{})
 }
 
 // NewRoundStepMessage is sent for every step taken in the ConsensusState.
@@ -310,6 +313,60 @@ func (m *HasCommitMessage) String() string {
 	return fmt.Sprintf("[HasCommit C:{%02d/%02d}]", m.Height, m.Round)
 }
 
+// ProposerHeartbeatMessage carries a heartbeat from the proposer of a round
+// that waits for transactions.
+type ProposerHeartbeatMessage struct {
+	Heartbeat *types.ProposerHeartbeat
+}
+
+func (*ProposerHeartbeatMessage) TypeTag() string { return "tendermint/ProposerHeartbeat" }
+
+// ValidateBasic performs basic validation.
+func (m *ProposerHeartbeatMessage) ValidateBasic() error {
+	return m.Heartbeat.ValidateBasic()
+}
+
+// String returns a string representation.
+func (m *ProposerHeartbeatMessage) String() string {
+	return fmt.Sprintf("[ProposerHeartbeat %v]", m.Heartbeat)
+}
+
+// RoundSkipVoteMessage carries a validator's vote to skip a round whose
+// proposer went silent.
+type RoundSkipVoteMessage struct {
+	Vote *types.RoundSkipVote
+}
+
+func (*RoundSkipVoteMessage) TypeTag() string { return "tendermint/RoundSkipVote" }
+
+// ValidateBasic performs basic validation.
+func (m *RoundSkipVoteMessage) ValidateBasic() error {
+	return m.Vote.ValidateBasic()
+}
+
+// String returns a string representation.
+func (m *RoundSkipVoteMessage) String() string {
+	return fmt.Sprintf("[RoundSkipVote %v]", m.Vote)
+}
+
+// RoundSkipCertificateMessage carries the proof that +2/3 of the validators
+// voted to skip a round.
+type RoundSkipCertificateMessage struct {
+	Certificate *types.RoundSkipCertificate
+}
+
+func (*RoundSkipCertificateMessage) TypeTag() string { return "tendermint/RoundSkipCertificate" }
+
+// ValidateBasic performs basic validation.
+func (m *RoundSkipCertificateMessage) ValidateBasic() error {
+	return m.Certificate.ValidateBasic()
+}
+
+// String returns a string representation.
+func (m *RoundSkipCertificateMessage) String() string {
+	return fmt.Sprintf("[RoundSkipCertificate %v]", m.Certificate)
+}
+
 // VoteSetMaj23Message is sent to indicate that a given BlockID has seen +2/3 votes.
 type VoteSetMaj23Message struct {
 	Height  int64 `json:",string"`
@@ -525,6 +582,33 @@ func MsgToProto(msg Message) (*tmcons.Message, error) {
 			Sum: vsb,
 		}
 
+	case *ProposerHeartbeatMessage:
+		pb = tmcons.Message{
+			Sum: &tmcons.Message_ProposerHeartbeat{
+				ProposerHeartbeat: &tmcons.ProposerHeartbeat{
+					Heartbeat: *msg.Heartbeat.ToProto(),
+				},
+			},
+		}
+
+	case *RoundSkipVoteMessage:
+		pb = tmcons.Message{
+			Sum: &tmcons.Message_RoundSkipVote{
+				RoundSkipVote: &tmcons.RoundSkipVote{
+					Vote: *msg.Vote.ToProto(),
+				},
+			},
+		}
+
+	case *RoundSkipCertificateMessage:
+		pb = tmcons.Message{
+			Sum: &tmcons.Message_RoundSkipCertificate{
+				RoundSkipCertificate: &tmcons.RoundSkipCertificate{
+					Certificate: *msg.Certificate.ToProto(),
+				},
+			},
+		}
+
 	default:
 		return nil, fmt.Errorf("consensus: message not recognized: %T", msg)
 	}
@@ -557,6 +641,12 @@ func MsgFromProtoMsg(msg *tmcons.Message) (Message, error) {
 		return MsgFromProto(msg.VoteSetMaj23)
 	case *tmcons.Message_VoteSetBits:
 		return MsgFromProto(msg.VoteSetBits)
+	case *tmcons.Message_ProposerHeartbeat:
+		return MsgFromProto(msg.ProposerHeartbeat)
+	case *tmcons.Message_RoundSkipVote:
+		return MsgFromProto(msg.RoundSkipVote)
+	case *tmcons.Message_RoundSkipCertificate:
+		return MsgFromProto(msg.RoundSkipCertificate)
 	default:
 		return nil, fmt.Errorf("consensus: message not recognized: %T", msg)
 	}
@@ -692,6 +782,30 @@ func MsgFromProto(msg proto.Message) (Message, error) {
 			Type:    msg.Type,
 			BlockID: *bi,
 			Votes:   bits,
+		}
+	case *tmcons.ProposerHeartbeat:
+		hb, err := types.ProposerHeartbeatFromProto(&msg.Heartbeat)
+		if err != nil {
+			return nil, fmt.Errorf("proposer heartbeat msg from proto error: %w", err)
+		}
+		pb = &ProposerHeartbeatMessage{
+			Heartbeat: hb,
+		}
+	case *tmcons.RoundSkipVote:
+		vote, err := types.RoundSkipVoteFromProto(&msg.Vote)
+		if err != nil {
+			return nil, fmt.Errorf("round skip vote msg from proto error: %w", err)
+		}
+		pb = &RoundSkipVoteMessage{
+			Vote: vote,
+		}
+	case *tmcons.RoundSkipCertificate:
+		certificate, err := types.RoundSkipCertificateFromProto(&msg.Certificate)
+		if err != nil {
+			return nil, fmt.Errorf("round skip certificate msg from proto error: %w", err)
+		}
+		pb = &RoundSkipCertificateMessage{
+			Certificate: certificate,
 		}
 	default:
 		return nil, fmt.Errorf("consensus: message not recognized: %T", msg)

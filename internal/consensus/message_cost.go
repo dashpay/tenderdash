@@ -90,6 +90,18 @@ func peerMessageCost(msg proto.Message) (int, error) {
 		// One verification of the proposal signature, and nothing that scales
 		// with the message contents.
 		return baseMessageCost, nil
+	case *tmcons.ProposerHeartbeat:
+		// One verification of the heartbeat signature, staged only for a
+		// heartbeat newer than any seen for the round being waited in.
+		return baseMessageCost, nil
+	case *tmcons.RoundSkipVote:
+		// One verification of the vote's signature share. Recovering a
+		// certificate once +2/3 have voted is driven by the collected set, not
+		// by this message.
+		return baseMessageCost, nil
+	case *tmcons.RoundSkipCertificate:
+		// One verification of the quorum signature.
+		return baseMessageCost, nil
 	case *tmcons.NewRoundStep, *tmcons.NewValidBlock, *tmcons.ProposalPOL,
 		*tmcons.BlockPart, *tmcons.HasVote, *tmcons.HasCommit,
 		*tmcons.VoteSetMaj23, *tmcons.VoteSetBits:
@@ -125,6 +137,12 @@ func budgetedMessageCost(msg Message) (int, error) {
 			return 0, nil
 		}
 		return commitCost(len(m.Commit.ThresholdVoteExtensions))
+	case *RoundSkipCertificateMessage:
+		if m.Certificate == nil {
+			return 0, nil
+		}
+		// One verification of the quorum signature.
+		return baseMessageCost, nil
 	}
 	return 0, nil
 }

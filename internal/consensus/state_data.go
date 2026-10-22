@@ -321,6 +321,7 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockSto
 	s.LastValidators = state.LastValidators
 	s.TriggeredTimeoutPrecommit = false
 	s.ProposeNextBlockImmediately = false
+	s.RoundSkip = nil
 
 	s.state = state
 
@@ -631,6 +632,19 @@ func (s *StateData) replaceProposalBlockOnLockedBlock(blockID types.BlockID) {
 	s.ProposalBlock = s.LockedBlock
 	s.ProposalBlockParts = s.LockedBlockParts
 	s.logger.Trace("commit is for a locked block; set ProposalBlock=LockedBlock", "block_hash", blockID.Hash)
+}
+
+// waitsAfterRoundSkip reports whether round, which a certificate let the node
+// enter after +2/3 of the validators skipped the round before it, waits for
+// transactions as round 0 does. It does once nothing at this height is locked
+// or has a polka: the skipped rounds produced no proposal, and the next
+// proposer waits for something to propose like the silent one did.
+func (s *StateData) waitsAfterRoundSkip(round int32) bool {
+	return round > 0 &&
+		s.RoundSkip != nil &&
+		s.RoundSkip.Round == round-1 &&
+		s.LockedRound == -1 &&
+		s.ValidRound == -1
 }
 
 func (s *StateData) proposeTimeout(round int32) time.Duration {

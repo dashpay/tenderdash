@@ -40,6 +40,12 @@ enum SignedMsgType {
   // Proposals
   SIGNED_MSG_TYPE_PROPOSAL = 32
       [(gogoproto.enumvalue_customname) = "ProposalType"];
+
+  // Proposer liveness
+  SIGNED_MSG_TYPE_PROPOSER_HEARTBEAT = 48
+      [(gogoproto.enumvalue_customname) = "ProposerHeartbeatType"];
+  SIGNED_MSG_TYPE_ROUND_SKIP = 49
+      [(gogoproto.enumvalue_customname) = "RoundSkipType"];
 }
 
 // PartsetHeader
@@ -175,6 +181,41 @@ message Proposal {
   uint32 core_chain_locked_height = 8;
   // core chain lock to be used to sign/verify next block
   tendermint.types.CoreChainLock core_chain_lock_update = 9;
+}
+
+// ProposerHeartbeat is broadcast by the proposer of a round while it waits for
+// transactions, so validators can tell a live proposer from a silent one.
+message ProposerHeartbeat {
+  int64 height = 1;
+  int32 round  = 2;
+  // sequence grows with every heartbeat the proposer sends for this height and
+  // round, so a copy relayed late cannot pass for a fresh one.
+  uint64 sequence             = 3;
+  bytes  proposer_pro_tx_hash = 4;
+  google.protobuf.Timestamp timestamp = 5
+      [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  bytes signature = 6;
+}
+
+// RoundSkipVote is a validator's vote to hand a round to the next proposer,
+// sent when the proposer of the round went silent while the validator waited
+// for transactions. Every validator signs the same message for a height and
+// round, so the votes of +2/3 recover into one quorum signature.
+message RoundSkipVote {
+  int64 height                = 1;
+  int32 round                 = 2;
+  bytes validator_pro_tx_hash = 3;
+  int32 validator_index       = 4;
+  bytes signature             = 5;
+}
+
+// RoundSkipCertificate proves that +2/3 of the validator set voted to skip a
+// round: it carries the quorum signature recovered from their skip votes.
+message RoundSkipCertificate {
+  int64 height              = 1;
+  int32 round               = 2;
+  bytes quorum_hash         = 3;
+  bytes threshold_signature = 4;
 }
 
 message SignedHeader {

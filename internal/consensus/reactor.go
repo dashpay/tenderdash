@@ -112,6 +112,14 @@ const (
 	// second per peer against the two an honest one sends.
 	maj23TokenCost = 100
 
+	// livenessTokenCost is what one ProposerHeartbeat, RoundSkipVote or
+	// RoundSkipCertificate charges. Each that is new to this node costs a
+	// signature verification. An honest peer relays about one heartbeat a
+	// second, and a skip vote per validator only in a round whose proposer went
+	// silent, so a weight that bounds a forging sender to fifty verifications a
+	// second leaves the honest rate far inside the allowance.
+	livenessTokenCost = 100
+
 	// maj23ClaimsPerTick is how many majority claims a peer's gossip loop offers
 	// in one pass: a prevote majority for its round, one for the proposal's POL
 	// round, a precommit majority, and a catch-up commit.
@@ -562,6 +570,37 @@ func (r *Reactor) subscribeToBroadcastEvents(ctx context.Context, stateCh p2p.Ch
 		},
 	)
 
+	r.state.emitter.AddListener(
+		proposerHeartbeatEventName,
+		func(data eventemitter.EventData) error {
+			hb := data.(*types.ProposerHeartbeat)
+			err := r.broadcast(ctx, stateCh, &tmcons.ProposerHeartbeat{Heartbeat: *hb.ToProto()})
+			r.logResult(err, r.logger, "broadcasting proposer heartbeat", "height", hb.Height, "round", hb.Round)
+			return err
+		},
+	)
+
+	r.state.emitter.AddListener(
+		roundSkipVoteEventName,
+		func(data eventemitter.EventData) error {
+			vote := data.(*types.RoundSkipVote)
+			err := r.broadcast(ctx, stateCh, &tmcons.RoundSkipVote{Vote: *vote.ToProto()})
+			r.logResult(err, r.logger, "broadcasting round skip vote", "height", vote.Height, "round", vote.Round)
+			return err
+		},
+	)
+
+	r.state.emitter.AddListener(
+		roundSkipCertificateEventName,
+		func(data eventemitter.EventData) error {
+			certificate := data.(*types.RoundSkipCertificate)
+			err := r.broadcast(ctx, stateCh, &tmcons.RoundSkipCertificate{Certificate: *certificate.ToProto()})
+			r.logResult(err, r.logger, "broadcasting round skip certificate",
+				"height", certificate.Height, "round", certificate.Round)
+			return err
+		},
+	)
+
 	r.state.emitter.AddListener(types.EventCommitValue,
 		func(data eventemitter.EventData) error {
 			commit := data.(*types.Commit)
@@ -734,7 +773,13 @@ func (r *Reactor) peerDown(_ context.Context, peerUpdate p2p.PeerUpdate, _chans 
 // If we fail to find the peer state for the envelope sender, we perform a no-op
 // and return. This can happen when we process the envelope after the peer is
 // removed.
-func (r *Reactor) handleStateMessage(ctx context.Context, envelope *p2p.Envelope, msgI Message, voteSetCh p2p.Channel) error {
+func (r *Reactor) handleStateMessage(
+	ctx context.Context,
+	envelope *p2p.Envelope,
+	msgI Message,
+	stateCh p2p.Channel,
+	voteSetCh p2p.Channel,
+) error {
 	ps, ok := r.GetPeerState(envelope.From)
 	if !ok || ps == nil {
 		r.logger.Debug("failed to find peer state", "peer", envelope.From, "ch_id", "StateChannel")
@@ -762,6 +807,50 @@ func (r *Reactor) handleStateMessage(ctx context.Context, envelope *p2p.Envelope
 
 	case *tmcons.HasCommit:
 		ps.ApplyHasCommitMessage(msgI.(*HasCommitMessage))
+
+	case *tmcons.ProposerHeartbeat:
+		hb := msgI.(*ProposerHeartbeatMessage).Heartbeat
+		relay, err := r.state.liveness.heard(hb)
+		if err != nil {
+			return err
+		}
+		// Each node relays a heartbeat the first time it verifies one, so it
+		// reaches validators that are not connected to the proposer. The sender
+		// gets it back too, and drops it as one it has seen.
+		if relay {
+			err := r.broadcast(ctx, stateCh, msg)
+			r.logResult(err, r.logger, "relaying proposer heartbeat", "height", hb.Height, "round", hb.Round)
+		}
+
+	case *tmcons.RoundSkipVote:
+		vote := msgI.(*RoundSkipVoteMessage).Vote
+		added, certificate, err := r.state.roundSkips.add(vote, true)
+		if err != nil {
+			return err
+		}
+		// Relayed the first time it is counted, as heartbeats are, so every
+		// validator can recover the certificate whoever it is connected to.
+		if added {
+			err := r.broadcast(ctx, stateCh, msg)
+			r.logResult(err, r.logger, "relaying round skip vote", "height", vote.Height, "round", vote.Round)
+		}
+		if certificate != nil {
+			return r.state.sendMessage(ctx, &RoundSkipCertificateMessage{Certificate: certificate}, "")
+		}
+
+	case *tmcons.RoundSkipCertificate:
+		certMsg := msgI.(*RoundSkipCertificateMessage)
+		stateData := r.state.GetStateData()
+		// The state machine verifies and applies it, and broadcasts it if it
+		// moved the node on; one for a round already passed is dropped here.
+		if certMsg.Certificate.Height != stateData.Height || certMsg.Certificate.Round < stateData.Round {
+			return nil
+		}
+		laneCtx, ok := r.laneCtx(ctx, ps, envelope)
+		if !ok {
+			return nil
+		}
+		return r.state.sendMessage(laneCtx, certMsg, envelope.From)
 
 	case *tmcons.HasVote:
 		if err := ps.ApplyHasVoteMessage(msgI.(*HasVoteMessage)); err != nil {
@@ -1076,7 +1165,7 @@ func (r *Reactor) handleMessage(ctx context.Context, envelope *p2p.Envelope, cha
 
 	switch envelope.ChannelID {
 	case p2p.ConsensusStateChannel:
-		err = r.handleStateMessage(ctx, envelope, msg, chans.voteSet)
+		err = r.handleStateMessage(ctx, envelope, msg, chans.state, chans.voteSet)
 	case p2p.ConsensusDataChannel:
 		err = r.handleDataMessage(ctx, envelope, msg)
 	case p2p.ConsensusVoteChannel:
@@ -1193,8 +1282,11 @@ func newMaj23PeerShareLimiter(
 // every validator; everything else on these channels only updates a peer's
 // recorded round state.
 func stateChannelMessageCost(msg proto.Message) int {
-	if _, ok := msg.(*tmcons.VoteSetMaj23); ok {
+	switch msg.(type) {
+	case *tmcons.VoteSetMaj23:
 		return maj23TokenCost
+	case *tmcons.ProposerHeartbeat, *tmcons.RoundSkipVote, *tmcons.RoundSkipCertificate:
+		return livenessTokenCost
 	}
 	return 1
 }

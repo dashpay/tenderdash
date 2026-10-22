@@ -22,6 +22,7 @@ import (
 	tmos "github.com/dashpay/tenderdash/libs/os"
 	"github.com/dashpay/tenderdash/libs/service"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -202,7 +203,11 @@ type State struct {
 	ctrl           *Controller
 	roundScheduler *roundScheduler
 	// holds back proposals while the node catches up after a block-sync handover
-	catchup        *catchupTracker
+	catchup *catchupTracker
+	// sends or watches proposer heartbeats while the node waits for transactions
+	liveness *proposerLiveness
+	// gathers the votes to skip a round whose proposer went silent
+	roundSkips     *roundSkipCollector
 	msgMiddlewares []msgMiddlewareFunc
 
 	stopFn func(cs *State) bool
@@ -311,6 +316,13 @@ func NewState(
 		withLaneLogger(cs.logger),
 		withLaneMetrics(cs.metrics),
 	)
+
+	var appReady func(context.Context) error
+	if cs.blockExec != nil {
+		appReady = cs.blockExec.AppReady
+	}
+	cs.liveness = newProposerLiveness(cs.logger, cs.metrics, cs.emitter, appReady)
+	cs.roundSkips = newRoundSkipCollector(cs.logger)
 
 	cs.stateDataStore = NewStateDataStore(cs.metrics, logger, cfg, cs.emitter)
 	wal := &wrapWAL{getter: func() WALWriteFlusher { return cs.wal }}
@@ -694,6 +706,7 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 		cs.wal.Stop()
 		cs.wal.Wait()
 		cs.msgInfoQueue.stop()
+		cs.liveness.stop()
 	}
 
 	defer func() {
@@ -789,11 +802,23 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 			if err != nil {
 				cs.logger.Error("failed update state-data", "err", err)
 			}
+		case silence := <-cs.liveness.silent():
+			stateData := cs.stateDataStore.Get()
+			cs.handleProposerSilence(ctx, &stateData, silence)
+			err := stateData.Save()
+			if err != nil {
+				cs.logger.Error("failed update state-data", "err", err)
+			}
 		case <-ctx.Done():
 			onExit(cs)
 			return
 
 		}
+		// Whatever was handled may have moved the node into or out of a round
+		// that waits for transactions.
+		stateData := cs.stateDataStore.Get()
+		cs.roundSkips.track(&stateData)
+		cs.liveness.reconcile(ctx, &stateData, cs.privValidator)
 		// TODO should we handle context cancels here?
 	}
 }
@@ -850,8 +875,9 @@ func (cs *State) handleTimeout(
 func (cs *State) handleTxsAvailable(ctx context.Context, stateData *StateData) {
 	// TODO: Change to trace
 	cs.logger.Debug("new transactions are available", "height", stateData.Height, "round", stateData.Round, "step", stateData.Step)
-	// We only need to do this for round 0.
-	if stateData.Round != 0 {
+	// Only round 0 waits for transactions, and a round entered because +2/3
+	// skipped the one before it while waiting.
+	if stateData.Round != 0 && !stateData.waitsAfterRoundSkip(stateData.Round) {
 		return
 	}
 
@@ -868,6 +894,67 @@ func (cs *State) handleTxsAvailable(ctx context.Context, stateData *StateData) {
 
 	case cstypes.RoundStepNewRound: // after timeoutCommit
 		_ = cs.ctrl.Dispatch(ctx, &EnterProposeEvent{Height: stateData.Height, Round: stateData.Round}, stateData)
+	}
+}
+
+// handleProposerSilence acts on a report that the proposer of the round this
+// node waits in has stopped sending heartbeats.
+func (cs *State) handleProposerSilence(ctx context.Context, stateData *StateData, silence proposerSilence) {
+	// The report was raised on another goroutine and may describe a round the
+	// node has already left.
+	if silence.Height != stateData.Height || silence.Round != stateData.Round || !waitingRound(stateData) {
+		return
+	}
+	if !stateData.isValidator(cs.privValidator.ProTxHash) {
+		return
+	}
+	cs.metrics.ProposerSilences.Add(1)
+	cs.logger.Info("proposer of the round is silent, voting to skip the round",
+		"height", silence.Height,
+		"round", silence.Round,
+		"proposer", silence.Proposer.ShortString())
+	cs.voteToSkipRound(ctx, stateData)
+}
+
+// voteToSkipRound signs this validator's vote to skip the round it waits in,
+// counts it, and hands it to the reactor to broadcast. If the vote completes
+// +2/3, the certificate goes to the state machine like one from a peer.
+func (cs *State) voteToSkipRound(ctx context.Context, stateData *StateData) {
+	pv := cs.privValidator
+	index, val := stateData.Validators.GetByProTxHash(pv.ProTxHash)
+	if pv.IsZero() || val == nil {
+		return
+	}
+	pb := &tmproto.RoundSkipVote{
+		Height:             stateData.Height,
+		Round:              stateData.Round,
+		ValidatorProTxHash: pv.ProTxHash,
+		ValidatorIndex:     index,
+	}
+	timeouts := stateData.state.ConsensusParams.Timeout.TimeoutParamsOrDefaults()
+	signCtx, cancel := context.WithTimeout(ctx, timeouts.ProposerSilenceTimeout(stateData.Round))
+	defer cancel()
+	err := pv.SignRoundSkipVote(signCtx, stateData.state.ChainID,
+		stateData.Validators.QuorumType, stateData.Validators.QuorumHash, pb)
+	if err != nil {
+		cs.logger.Error("cannot sign round skip vote", "height", pb.Height, "round", pb.Round, "err", err)
+		return
+	}
+	vote, err := types.RoundSkipVoteFromProto(pb)
+	if err != nil {
+		cs.logger.Error("signed an invalid round skip vote", "vote", vote, "err", err)
+		return
+	}
+	_, certificate, err := cs.roundSkips.add(vote, false)
+	if err != nil {
+		cs.logger.Error("cannot count own round skip vote", "vote", vote, "err", err)
+		return
+	}
+	cs.emitter.Emit(roundSkipVoteEventName, vote)
+	if certificate != nil {
+		if err := cs.sendMessage(ctx, &RoundSkipCertificateMessage{Certificate: certificate}, ""); err != nil {
+			cs.logger.Error("cannot queue round skip certificate", "certificate", certificate, "err", err)
+		}
 	}
 }
 

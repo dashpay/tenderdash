@@ -115,6 +115,11 @@ type RoundState struct {
 	// Consumed once and not persisted, so a restart falls back to the configured wait.
 	ProposeNextBlockImmediately bool `json:"propose_next_block_immediately"`
 
+	// RoundSkip is the certificate for the highest round of this height that
+	// +2/3 of the validators voted to skip because its proposer went silent
+	// while they waited for transactions.
+	RoundSkip *types.RoundSkipCertificate `json:"round_skip"`
+
 	sm.CurrentRoundState `json:"uncommitted_state"`
 }
 

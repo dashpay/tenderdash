@@ -44,6 +44,16 @@ func isPeerFloodableError(err error) bool {
 		errors.Is(err, ErrUnableToVerifyProposal) ||
 		errors.Is(err, ErrPeerStateInvalidVoteIndex) ||
 		errors.Is(err, ErrInvalidNewRoundStepHeight) ||
+		// Proposer heartbeats are relayed only once verified, so neither of
+		// these comes from an honest peer, and both cost the sender nothing.
+		errors.Is(err, types.ErrProposerHeartbeatInvalidSignature) ||
+		errors.Is(err, errProposerHeartbeatWrongProposer) ||
+		// Skip votes are relayed only once verified, and certificates are
+		// checked against the quorum key, so these do not come from an honest
+		// peer either.
+		errors.Is(err, types.ErrRoundSkipVoteInvalidSignature) ||
+		errors.Is(err, types.ErrRoundSkipCertificateInvalidSignature) ||
+		errors.Is(err, errRoundSkipVoteWrongValidator) ||
 		// Every peer commit for the current height that clears ValidateBasic reaches
 		// these two rejections, and an honest peer on a different quorum rotation or
 		// vote-extension configuration reaches them too. Both cost the sender a
@@ -62,6 +72,7 @@ type msgInfoDispatcher struct {
 	blockPartHandler msgHandlerFunc
 	voteHandler      msgHandlerFunc
 	commitHandler    msgHandlerFunc
+	roundSkipHandler msgHandlerFunc
 }
 
 func (c *msgInfoDispatcher) match(m Message) (msgHandlerFunc, error) {
@@ -74,6 +85,8 @@ func (c *msgInfoDispatcher) match(m Message) (msgHandlerFunc, error) {
 		return c.voteHandler, nil
 	case *CommitMessage:
 		return c.commitHandler, nil
+	case *RoundSkipCertificateMessage:
+		return c.roundSkipHandler, nil
 	}
 	return nil, fmt.Errorf("got unknown %T type", m)
 }
@@ -120,11 +133,13 @@ func newMsgInfoDispatcher(
 	blockPartHandler := withMiddleware(blockPartMessageHandler(ctrl), mws...)
 	voteHandler := withMiddleware(voteMessageHandler(ctrl), mws...)
 	commitHandler := withMiddleware(commitMessageHandler(ctrl), mws...)
+	roundSkipHandler := withMiddleware(roundSkipCertificateMessageHandler(ctrl, budget), mws...)
 	return &msgInfoDispatcher{
 		proposalHandler:  proposalHandler,
 		blockPartHandler: blockPartHandler,
 		voteHandler:      voteHandler,
 		commitHandler:    commitHandler,
+		roundSkipHandler: roundSkipHandler,
 	}
 }
 
@@ -137,6 +152,17 @@ func proposalMessageHandler(propSetter cstypes.ProposalSetter, budget types.Veri
 		msg := envelope.Msg.(*ProposalMessage)
 		ctx = ctxWithPeerVerificationBudget(ctx, envelope.PeerID, envelope.fromReplay, budget)
 		return propSetter.Set(ctx, msg.Proposal, envelope.ReceiveTime, &stateData.RoundState)
+	}
+}
+
+// roundSkipCertificateMessageHandler hands a certificate to the state machine
+// with the permit its signature check is drawn against, which only a peer's
+// certificate carries.
+func roundSkipCertificateMessageHandler(ctrl *Controller, budget types.VerificationBudget) msgHandlerFunc {
+	return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
+		msg := envelope.Msg.(*RoundSkipCertificateMessage)
+		ctx = ctxWithPeerVerificationBudget(ctx, envelope.PeerID, envelope.fromReplay, budget)
+		return ctrl.Dispatch(ctx, &AddRoundSkipCertificateEvent{Certificate: msg.Certificate}, stateData)
 	}
 }
 
@@ -352,6 +378,11 @@ func makeLogArgsFromMessage(msg Message) []any {
 		return []any{
 			"commit_height", m.Commit.Height,
 			"commit_round", m.Commit.Round,
+		}
+	case *RoundSkipCertificateMessage:
+		return []any{
+			"skip_height", m.Certificate.Height,
+			"skip_round", m.Certificate.Round,
 		}
 	}
 	panic("unsupported message type")

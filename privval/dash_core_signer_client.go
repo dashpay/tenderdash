@@ -311,6 +311,48 @@ func (sc *DashCoreSignerClient) SignProposal(
 	return nil, nil
 }
 
+// SignProposerHeartbeat signs a proposer heartbeat with this validator's quorum
+// key share through Dash Core. Implements PrivValidator.
+func (sc *DashCoreSignerClient) SignProposerHeartbeat(
+	ctx context.Context,
+	chainID string,
+	quorumType btcjson.LLMQType,
+	quorumHash crypto.QuorumHash,
+	heartbeat *tmproto.ProposerHeartbeat,
+) error {
+	if len(quorumHash) != crypto.DefaultHashSize {
+		return fmt.Errorf("quorum hash must be 32 bytes long if requesting a signature for a proposer heartbeat")
+	}
+	signItem := types.ProposerHeartbeatSignItem(chainID, heartbeat, quorumType, quorumHash)
+	resp, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, signItem)
+	if err != nil {
+		return err
+	}
+	heartbeat.Signature = resp.sign
+	return nil
+}
+
+// SignRoundSkipVote signs this validator's vote to skip a round with its quorum
+// key share through Dash Core. Implements PrivValidator.
+func (sc *DashCoreSignerClient) SignRoundSkipVote(
+	ctx context.Context,
+	chainID string,
+	quorumType btcjson.LLMQType,
+	quorumHash crypto.QuorumHash,
+	vote *tmproto.RoundSkipVote,
+) error {
+	if len(quorumHash) != crypto.DefaultHashSize {
+		return fmt.Errorf("quorum hash must be 32 bytes long if requesting a signature for a round skip vote")
+	}
+	signItem := types.RoundSkipSignItem(chainID, vote.Height, vote.Round, quorumType, quorumHash)
+	resp, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, signItem)
+	if err != nil {
+		return err
+	}
+	vote.Signature = resp.sign
+	return nil
+}
+
 // QuorumSign implements DashPrivValidator
 func (sc *DashCoreSignerClient) QuorumSign(
 	ctx context.Context,

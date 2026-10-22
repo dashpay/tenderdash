@@ -77,6 +77,12 @@ type VersionParams struct {
 	ConsensusVersion int32  `json:"consensus,string"`
 }
 
+// ProposerLivenessEnabled reports whether the proposer of a round that waits for
+// transactions sends heartbeats, which CONSENSUS_VERSION_2 introduced.
+func (v VersionParams) ProposerLivenessEnabled() bool {
+	return v.ConsensusVersion >= int32(tmproto.VersionParams_CONSENSUS_VERSION_2)
+}
+
 // SynchronyParams influence the validity of block timestamps.
 // For more information on the relationship of the synchrony parameters to
 // block validity, see the Proposer-Based Timestamps specification:
@@ -94,6 +100,12 @@ type TimeoutParams struct {
 	ProposeDelta time.Duration `json:"propose_delta,string"`
 	Vote         time.Duration `json:"vote,string"`
 	VoteDelta    time.Duration `json:"vote_delta,string"`
+	// ProposerHeartbeat is how often the proposer of a round that waits for
+	// transactions announces that it is alive.
+	ProposerHeartbeat time.Duration `json:"proposer_heartbeat,string"`
+	// ProposerSilence is how long a validator waits without a heartbeat before it
+	// treats the proposer of the round as silent.
+	ProposerSilence time.Duration `json:"proposer_silence,string"`
 }
 
 // ABCIParams configure ABCI functionality specific to the Application Blockchain
@@ -176,10 +188,12 @@ func (s SynchronyParams) SynchronyParamsOrDefaults() SynchronyParams {
 
 func DefaultTimeoutParams() TimeoutParams {
 	return TimeoutParams{
-		Propose:      3000 * time.Millisecond,
-		ProposeDelta: 500 * time.Millisecond,
-		Vote:         1000 * time.Millisecond,
-		VoteDelta:    500 * time.Millisecond,
+		Propose:           3000 * time.Millisecond,
+		ProposeDelta:      500 * time.Millisecond,
+		Vote:              1000 * time.Millisecond,
+		VoteDelta:         500 * time.Millisecond,
+		ProposerHeartbeat: 1000 * time.Millisecond,
+		ProposerSilence:   5000 * time.Millisecond,
 	}
 }
 
@@ -209,6 +223,14 @@ func (t TimeoutParams) TimeoutParamsOrDefaults() TimeoutParams {
 	if t.VoteDelta == 0 {
 		t.VoteDelta = defaults.VoteDelta
 	}
+	// Chains that started before CONSENSUS_VERSION_2 have no value stored for
+	// these two, and nothing needs one until that version is active.
+	if t.ProposerHeartbeat == 0 {
+		t.ProposerHeartbeat = defaults.ProposerHeartbeat
+	}
+	if t.ProposerSilence == 0 {
+		t.ProposerSilence = defaults.ProposerSilence
+	}
 	return t
 }
 
@@ -223,6 +245,16 @@ func (t TimeoutParams) ProposeTimeout(round int32) time.Duration {
 func (t TimeoutParams) VoteTimeout(round int32) time.Duration {
 	return time.Duration(
 		t.Vote.Nanoseconds()+t.VoteDelta.Nanoseconds()*int64(round),
+	) * time.Nanosecond
+}
+
+// ProposerSilenceTimeout returns how long a validator waits without a heartbeat
+// from the proposer of the round before it treats that proposer as silent. It
+// grows by one heartbeat interval per round, so a network that keeps losing
+// proposers waits a little longer for each next one.
+func (t TimeoutParams) ProposerSilenceTimeout(round int32) time.Duration {
+	return time.Duration(
+		t.ProposerSilence.Nanoseconds()+t.ProposerHeartbeat.Nanoseconds()*int64(round),
 	) * time.Nanosecond
 }
 
@@ -349,6 +381,21 @@ func (params ConsensusParams) ValidateConsensusParams() error {
 		return fmt.Errorf("timeout.VoteDelta must be greater than 0. Got: %d", params.Timeout.VoteDelta)
 	}
 
+	// Zero means the default for these two: chains that started before
+	// CONSENSUS_VERSION_2 have no value stored for them.
+	if params.Timeout.ProposerHeartbeat < 0 {
+		return fmt.Errorf("timeout.ProposerHeartbeat must not be negative. Got: %d", params.Timeout.ProposerHeartbeat)
+	}
+
+	if params.Timeout.ProposerSilence < 0 {
+		return fmt.Errorf("timeout.ProposerSilence must not be negative. Got: %d", params.Timeout.ProposerSilence)
+	}
+
+	if tp := params.Timeout.TimeoutParamsOrDefaults(); tp.ProposerSilence <= tp.ProposerHeartbeat {
+		return fmt.Errorf("timeout.ProposerSilence (%s) must be longer than timeout.ProposerHeartbeat (%s)",
+			tp.ProposerSilence, tp.ProposerHeartbeat)
+	}
+
 	if len(params.Validator.PubKeyTypes) == 0 {
 		return errors.New("len(Validator.PubKeyTypes) must be greater than 0")
 	}
@@ -444,6 +491,12 @@ func (params ConsensusParams) UpdateConsensusParams(params2 *tmproto.ConsensusPa
 		if params2.Timeout.VoteDelta != nil {
 			res.Timeout.VoteDelta = *params2.Timeout.GetVoteDelta()
 		}
+		if params2.Timeout.ProposerHeartbeat != nil {
+			res.Timeout.ProposerHeartbeat = *params2.Timeout.GetProposerHeartbeat()
+		}
+		if params2.Timeout.ProposerSilence != nil {
+			res.Timeout.ProposerSilence = *params2.Timeout.GetProposerSilence()
+		}
 	}
 	if params2.Abci != nil {
 		res.ABCI.RecheckTx = params2.Abci.GetRecheckTx()
@@ -452,7 +505,7 @@ func (params ConsensusParams) UpdateConsensusParams(params2 *tmproto.ConsensusPa
 }
 
 func (params *ConsensusParams) ToProto() tmproto.ConsensusParams {
-	return tmproto.ConsensusParams{
+	pb := tmproto.ConsensusParams{
 		Block: &tmproto.BlockParams{
 			MaxBytes: params.Block.MaxBytes,
 			MaxGas:   params.Block.MaxGas,
@@ -481,6 +534,15 @@ func (params *ConsensusParams) ToProto() tmproto.ConsensusParams {
 			RecheckTx: params.ABCI.RecheckTx,
 		},
 	}
+	// Left out while unset, so params of chains that never set them keep the
+	// encoding they had before these fields existed.
+	if params.Timeout.ProposerHeartbeat != 0 {
+		pb.Timeout.ProposerHeartbeat = &params.Timeout.ProposerHeartbeat
+	}
+	if params.Timeout.ProposerSilence != 0 {
+		pb.Timeout.ProposerSilence = &params.Timeout.ProposerSilence
+	}
+	return pb
 }
 
 // ConsensusParamsFromProto returns a ConsensusParams from a protobuf representation.
@@ -541,6 +603,12 @@ func ConsensusParamsFromProto(pbParams tmproto.ConsensusParams) ConsensusParams 
 		}
 		if pbParams.Timeout.VoteDelta != nil {
 			c.Timeout.VoteDelta = *pbParams.Timeout.GetVoteDelta()
+		}
+		if pbParams.Timeout.ProposerHeartbeat != nil {
+			c.Timeout.ProposerHeartbeat = *pbParams.Timeout.GetProposerHeartbeat()
+		}
+		if pbParams.Timeout.ProposerSilence != nil {
+			c.Timeout.ProposerSilence = *pbParams.Timeout.GetProposerSilence()
 		}
 	}
 

@@ -57,6 +57,16 @@ type PrivValidator interface {
 	SignProposal(
 		ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash,
 		proposal *tmproto.Proposal) (tmbytes.HexBytes, error)
+	// SignProposerHeartbeat signs a heartbeat this validator sends while it is the
+	// proposer of a round that waits for transactions, and sets its signature.
+	SignProposerHeartbeat(
+		ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash,
+		heartbeat *tmproto.ProposerHeartbeat) error
+	// SignRoundSkipVote signs this validator's vote to skip a round whose
+	// proposer went silent, and sets its signature.
+	SignRoundSkipVote(
+		ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash,
+		vote *tmproto.RoundSkipVote) error
 
 	ExtractIntoValidator(ctx context.Context, quorumHash crypto.QuorumHash) *Validator
 }
@@ -332,6 +342,56 @@ func (pv *MockPV) SignProposal(
 	return signID, nil
 }
 
+// SignProposerHeartbeat Implements PrivValidator.
+func (pv *MockPV) SignProposerHeartbeat(
+	_ctx context.Context,
+	chainID string,
+	quorumType btcjson.LLMQType,
+	quorumHash crypto.QuorumHash,
+	heartbeat *tmproto.ProposerHeartbeat,
+) error {
+	pv.mtx.Lock()
+	defer pv.mtx.Unlock()
+
+	quorumKeys, ok := pv.PrivateKeys[quorumHash.String()]
+	if !ok {
+		return fmt.Errorf("mock private validator could not sign proposer heartbeat for quorum hash %v", quorumHash)
+	}
+
+	signItem := ProposerHeartbeatSignItem(chainID, heartbeat, quorumType, quorumHash)
+	sig, err := quorumKeys.PrivKey.SignDigest(signItem.SignHash)
+	if err != nil {
+		return err
+	}
+	heartbeat.Signature = sig
+	return nil
+}
+
+// SignRoundSkipVote Implements PrivValidator.
+func (pv *MockPV) SignRoundSkipVote(
+	_ctx context.Context,
+	chainID string,
+	quorumType btcjson.LLMQType,
+	quorumHash crypto.QuorumHash,
+	vote *tmproto.RoundSkipVote,
+) error {
+	pv.mtx.Lock()
+	defer pv.mtx.Unlock()
+
+	quorumKeys, ok := pv.PrivateKeys[quorumHash.String()]
+	if !ok {
+		return fmt.Errorf("mock private validator could not sign round skip vote for quorum hash %v", quorumHash)
+	}
+
+	signItem := RoundSkipSignItem(chainID, vote.Height, vote.Round, quorumType, quorumHash)
+	sig, err := quorumKeys.PrivKey.SignDigest(signItem.SignHash)
+	if err != nil {
+		return err
+	}
+	vote.Signature = sig
+	return nil
+}
+
 func (pv *MockPV) UpdatePrivateKey(
 	_ctx context.Context,
 	privateKey crypto.PrivKey,
@@ -404,6 +464,26 @@ func (pv *ErroringMockPV) SignProposal(
 	_proposal *tmproto.Proposal,
 ) (tmbytes.HexBytes, error) {
 	return nil, ErroringMockPVErr
+}
+
+// SignProposerHeartbeat Implements PrivValidator.
+func (pv *ErroringMockPV) SignProposerHeartbeat(
+	_ctx context.Context, _chainID string,
+	_quorumType btcjson.LLMQType,
+	_quorumHash crypto.QuorumHash,
+	_heartbeat *tmproto.ProposerHeartbeat,
+) error {
+	return ErroringMockPVErr
+}
+
+// SignRoundSkipVote Implements PrivValidator.
+func (pv *ErroringMockPV) SignRoundSkipVote(
+	_ctx context.Context, _chainID string,
+	_quorumType btcjson.LLMQType,
+	_quorumHash crypto.QuorumHash,
+	_vote *tmproto.RoundSkipVote,
+) error {
+	return ErroringMockPVErr
 }
 
 // NewErroringMockPV returns a MockPV that fails on each signing request. Again, for testing only.

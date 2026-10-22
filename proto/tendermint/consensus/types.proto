@@ -95,6 +95,22 @@ message VoteSetBits {
   tendermint.libs.bits.BitArray votes = 5 [(gogoproto.nullable) = false];
 }
 
+// ProposerHeartbeat relays a heartbeat from the proposer of the current round.
+message ProposerHeartbeat {
+  tendermint.types.ProposerHeartbeat heartbeat = 1 [(gogoproto.nullable) = false];
+}
+
+// RoundSkipVote carries a validator's vote to skip a round.
+message RoundSkipVote {
+  tendermint.types.RoundSkipVote vote = 1 [(gogoproto.nullable) = false];
+}
+
+// RoundSkipCertificate carries the quorum signature of +2/3 of the validators
+// voting to skip a round.
+message RoundSkipCertificate {
+  tendermint.types.RoundSkipCertificate certificate = 1 [(gogoproto.nullable) = false];
+}
+
 message Message {
   oneof sum {
     NewRoundStep  new_round_step  = 1;
@@ -108,5 +124,8 @@ message Message {
     VoteSetBits   vote_set_bits   = 9;
     Commit        commit          = 10;
     HasCommit     has_commit      = 11;
+    ProposerHeartbeat    proposer_heartbeat     = 12;
+    RoundSkipVote        round_skip_vote        = 13;
+    RoundSkipCertificate round_skip_certificate = 14;
   }
 }

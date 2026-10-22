@@ -244,6 +244,30 @@ func (sc *SignerClient) SignProposal(
 	return blockSignID, nil
 }
 
+// SignProposerHeartbeat is not part of the remote signer protocol, so a
+// validator signing through it sends no heartbeats.
+func (sc *SignerClient) SignProposerHeartbeat(
+	_ctx context.Context,
+	_chainID string,
+	_quorumType btcjson.LLMQType,
+	_quorumHash crypto.QuorumHash,
+	_heartbeat *tmproto.ProposerHeartbeat,
+) error {
+	return &RemoteSignerError{Code: 501, Description: "remote signer cannot sign proposer heartbeats"}
+}
+
+// SignRoundSkipVote is not part of the remote signer protocol, so a validator
+// signing through it does not vote to skip rounds.
+func (sc *SignerClient) SignRoundSkipVote(
+	_ctx context.Context,
+	_chainID string,
+	_quorumType btcjson.LLMQType,
+	_quorumHash crypto.QuorumHash,
+	_vote *tmproto.RoundSkipVote,
+) error {
+	return &RemoteSignerError{Code: 501, Description: "remote signer cannot sign round skip votes"}
+}
+
 func (sc *SignerClient) UpdatePrivateKey(
 	_ctx context.Context, _privateKey crypto.PrivKey, _quorumHash crypto.QuorumHash, _thresholdPublicKey crypto.PubKey, _height int64,
 ) {

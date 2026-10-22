@@ -591,6 +591,156 @@ func (_c *PrivValidator_SignProposal_Call) RunAndReturn(run func(ctx context.Con
 	return _c
 }
 
+// SignProposerHeartbeat provides a mock function for the type PrivValidator
+func (_mock *PrivValidator) SignProposerHeartbeat(ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash, heartbeat *types0.ProposerHeartbeat) error {
+	ret := _mock.Called(ctx, chainID, quorumType, quorumHash, heartbeat)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SignProposerHeartbeat")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, btcjson.LLMQType, crypto.QuorumHash, *types0.ProposerHeartbeat) error); ok {
+		r0 = returnFunc(ctx, chainID, quorumType, quorumHash, heartbeat)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// PrivValidator_SignProposerHeartbeat_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SignProposerHeartbeat'
+type PrivValidator_SignProposerHeartbeat_Call struct {
+	*mock.Call
+}
+
+// SignProposerHeartbeat is a helper method to define mock.On call
+//   - ctx context.Context
+//   - chainID string
+//   - quorumType btcjson.LLMQType
+//   - quorumHash crypto.QuorumHash
+//   - heartbeat *types0.ProposerHeartbeat
+func (_e *PrivValidator_Expecter) SignProposerHeartbeat(ctx any, chainID any, quorumType any, quorumHash any, heartbeat any) *PrivValidator_SignProposerHeartbeat_Call {
+	return &PrivValidator_SignProposerHeartbeat_Call{Call: _e.mock.On("SignProposerHeartbeat", ctx, chainID, quorumType, quorumHash, heartbeat)}
+}
+
+func (_c *PrivValidator_SignProposerHeartbeat_Call) Run(run func(ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash, heartbeat *types0.ProposerHeartbeat)) *PrivValidator_SignProposerHeartbeat_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 btcjson.LLMQType
+		if args[2] != nil {
+			arg2 = args[2].(btcjson.LLMQType)
+		}
+		var arg3 crypto.QuorumHash
+		if args[3] != nil {
+			arg3 = args[3].(crypto.QuorumHash)
+		}
+		var arg4 *types0.ProposerHeartbeat
+		if args[4] != nil {
+			arg4 = args[4].(*types0.ProposerHeartbeat)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+		)
+	})
+	return _c
+}
+
+func (_c *PrivValidator_SignProposerHeartbeat_Call) Return(err error) *PrivValidator_SignProposerHeartbeat_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *PrivValidator_SignProposerHeartbeat_Call) RunAndReturn(run func(ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash, heartbeat *types0.ProposerHeartbeat) error) *PrivValidator_SignProposerHeartbeat_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SignRoundSkipVote provides a mock function for the type PrivValidator
+func (_mock *PrivValidator) SignRoundSkipVote(ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash, vote *types0.RoundSkipVote) error {
+	ret := _mock.Called(ctx, chainID, quorumType, quorumHash, vote)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SignRoundSkipVote")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, btcjson.LLMQType, crypto.QuorumHash, *types0.RoundSkipVote) error); ok {
+		r0 = returnFunc(ctx, chainID, quorumType, quorumHash, vote)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// PrivValidator_SignRoundSkipVote_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SignRoundSkipVote'
+type PrivValidator_SignRoundSkipVote_Call struct {
+	*mock.Call
+}
+
+// SignRoundSkipVote is a helper method to define mock.On call
+//   - ctx context.Context
+//   - chainID string
+//   - quorumType btcjson.LLMQType
+//   - quorumHash crypto.QuorumHash
+//   - vote *types0.RoundSkipVote
+func (_e *PrivValidator_Expecter) SignRoundSkipVote(ctx any, chainID any, quorumType any, quorumHash any, vote any) *PrivValidator_SignRoundSkipVote_Call {
+	return &PrivValidator_SignRoundSkipVote_Call{Call: _e.mock.On("SignRoundSkipVote", ctx, chainID, quorumType, quorumHash, vote)}
+}
+
+func (_c *PrivValidator_SignRoundSkipVote_Call) Run(run func(ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash, vote *types0.RoundSkipVote)) *PrivValidator_SignRoundSkipVote_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 btcjson.LLMQType
+		if args[2] != nil {
+			arg2 = args[2].(btcjson.LLMQType)
+		}
+		var arg3 crypto.QuorumHash
+		if args[3] != nil {
+			arg3 = args[3].(crypto.QuorumHash)
+		}
+		var arg4 *types0.RoundSkipVote
+		if args[4] != nil {
+			arg4 = args[4].(*types0.RoundSkipVote)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+		)
+	})
+	return _c
+}
+
+func (_c *PrivValidator_SignRoundSkipVote_Call) Return(err error) *PrivValidator_SignRoundSkipVote_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *PrivValidator_SignRoundSkipVote_Call) RunAndReturn(run func(ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash, vote *types0.RoundSkipVote) error) *PrivValidator_SignRoundSkipVote_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // SignVote provides a mock function for the type PrivValidator
 func (_mock *PrivValidator) SignVote(ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash, vote *types0.Vote, logger log.Logger) error {
 	ret := _mock.Called(ctx, chainID, quorumType, quorumHash, vote, logger)

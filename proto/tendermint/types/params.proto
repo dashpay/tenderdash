@@ -92,6 +92,9 @@ message VersionParams {
     CONSENSUS_VERSION_0 = 0;
     // CONSENSUS_VERSION_1 changes proposer selection algorithm to not double-propose when previous proposer is offline.
     CONSENSUS_VERSION_1 = 1;
+    // CONSENSUS_VERSION_2 adds proposer liveness: the proposer of a round that waits for transactions
+    // sends heartbeats, so validators can tell a live proposer from a silent one.
+    CONSENSUS_VERSION_2 = 2;
   }
 }
 
@@ -152,6 +155,14 @@ message TimeoutParams {
   // removed fields in 0.14
   reserved "commit", "bypass_commit_timeout";
   reserved 5, 6;
+
+  // proposer_heartbeat is how often the proposer of a round announces that it is
+  // alive while it waits for transactions. Used from CONSENSUS_VERSION_2.
+  google.protobuf.Duration proposer_heartbeat = 7 [(gogoproto.stdduration) = true];
+  // proposer_silence is how long a validator waits without a heartbeat before it
+  // treats the proposer of the round as silent. It grows by proposer_heartbeat
+  // with every round. Used from CONSENSUS_VERSION_2.
+  google.protobuf.Duration proposer_silence = 8 [(gogoproto.stdduration) = true];
 }
 
 // ABCIParams configure functionality specific to the Application Blockchain Interface.

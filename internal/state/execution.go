@@ -818,6 +818,13 @@ func (state State) Update(
 }
 
 // SetAppHashSize ...
+// AppReady reports whether the application answers on the consensus
+// connection, as a proposer checks before telling validators it could propose.
+func (blockExec *BlockExecutor) AppReady(ctx context.Context) error {
+	_, err := blockExec.appClient.Echo(ctx, "proposer heartbeat")
+	return err
+}
+
 func (blockExec *BlockExecutor) SetAppHashSize(size int) {
 	blockExec.appHashSize = size
 }

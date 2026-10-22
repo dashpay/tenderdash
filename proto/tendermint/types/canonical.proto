@@ -52,3 +52,22 @@ message CanonicalVoteExtension {
   string                             chain_id  = 4;
   tendermint.types.VoteExtensionType type      = 5;
 }
+
+// CanonicalProposerHeartbeat is the form of a ProposerHeartbeat that the
+// proposer signs.
+message CanonicalProposerHeartbeat {
+  SignedMsgType             type      = 1;  // type alias for byte
+  sfixed64                  height    = 2;  // canonicalization requires fixed size encoding here
+  sfixed64                  round     = 3;  // canonicalization requires fixed size encoding here
+  fixed64                   sequence  = 4;
+  google.protobuf.Timestamp timestamp = 5 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  string                    chain_id  = 6 [(gogoproto.customname) = "ChainID"];
+}
+
+// CanonicalRoundSkip is what every validator voting to skip a round signs.
+message CanonicalRoundSkip {
+  SignedMsgType type     = 1;  // type alias for byte
+  sfixed64      height   = 2;  // canonicalization requires fixed size encoding here
+  sfixed64      round    = 3;  // canonicalization requires fixed size encoding here
+  string        chain_id = 4 [(gogoproto.customname) = "ChainID"];
+}

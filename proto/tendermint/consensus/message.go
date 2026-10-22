@@ -33,6 +33,15 @@ func (m *Message) Wrap(pb proto.Message) error {
 	case *HasCommit:
 		m.Sum = &Message_HasCommit{HasCommit: msg}
 
+	case *ProposerHeartbeat:
+		m.Sum = &Message_ProposerHeartbeat{ProposerHeartbeat: msg}
+
+	case *RoundSkipVote:
+		m.Sum = &Message_RoundSkipVote{RoundSkipVote: msg}
+
+	case *RoundSkipCertificate:
+		m.Sum = &Message_RoundSkipCertificate{RoundSkipCertificate: msg}
+
 	case *VoteSetMaj23:
 		m.Sum = &Message_VoteSetMaj23{VoteSetMaj23: msg}
 
@@ -82,6 +91,15 @@ func (m *Message) Unwrap() (proto.Message, error) {
 
 	case *Message_HasCommit:
 		return m.GetHasCommit(), nil
+
+	case *Message_ProposerHeartbeat:
+		return m.GetProposerHeartbeat(), nil
+
+	case *Message_RoundSkipVote:
+		return m.GetRoundSkipVote(), nil
+
+	case *Message_RoundSkipCertificate:
+		return m.GetRoundSkipCertificate(), nil
 
 	case *Message_Commit:
 		return m.GetCommit(), nil
