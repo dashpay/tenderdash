@@ -165,8 +165,10 @@ A re-proposal keeps the original header (proposer, time) and carries
 `POLRound = ValidRound`. Receivers skip the timeliness check for a block that
 is their own `ValidBlock` (`isValidForPrevote`) and skip the proposer check
 when `POLRound ≥ 0`. When `ValidBlock` is **not** timely a fresh block is
-built but `POLRound` is still `ValidRound`; see
-[Known issues](./consensus-known-issues.md#new-block-proposed-with-polround--validround).
+built and proposed with `POLRound = -1`, so receivers judge it like any new
+proposal (timeliness, proposer check, rule P-Lock-NoPOL). A validator locked
+on another block prevotes nil for it; see
+[Known issues](./consensus-known-issues.md#an-untimely-validblock-is-never-re-proposed).
 
 ## Round skipping and nil rounds
 

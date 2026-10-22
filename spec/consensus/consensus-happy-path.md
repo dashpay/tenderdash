@@ -28,7 +28,7 @@ sequenceDiagram
     V->>V: EnterNewRound(h,0) → EnterPropose(h,0), schedule Propose timeout
     P->>A: PrepareProposal(txs, LocalLastCommit, misbehavior, round=0, ...)
     A-->>P: TxRecords, AppHash, TxResults, validator/param/chain-lock updates
-    P->>P: sign Proposal (POLRound=ValidRound), send Proposal + BlockParts to own queue
+    P->>P: sign Proposal (fresh block, POLRound=-1), send Proposal + BlockParts to own queue
     P-->>V: ProposalMessage, BlockPartMessages (gossip)
     V->>V: Proposaler.Set (verify proposer signature), AddProposalBlockPart
     V->>V: ProposalCompleted → EnterPrevote(h,0)
@@ -154,9 +154,10 @@ tock to `EnterNewRoundEvent{Height}`. `EnterNewRoundAction.Execute`
       next validator set/params are written into the header and
       `CurrentRoundState` (`RoundParamsFromPrepareProposal`,
       `CurrentRoundState.UpdateBlock`).
-2. `makeProposal(h, round, rs.ValidRound, block, parts)` — note that
-   `POLRound = ValidRound` is used **regardless of which branch built the
-   block**. **⇢** [Known issues](./consensus-known-issues.md#new-block-proposed-with-polround--validround).
+2. `makeProposal(h, round, polRound, block, parts)`, where
+   `polRound = ValidRound` when `ValidBlock` is re-proposed and
+   `polRound = -1` when a new block was built. A new block has no polka, so
+   it never claims one.
 3. `signProposal`: `PrivValidator.SignProposal(chainID, QuorumType, QuorumHash, proposal)`
    with a context deadline of `Timeout.Propose`. The proposal signature
    covers `Type, Height, Round, POLRound, BlockID (hash + part-set header),

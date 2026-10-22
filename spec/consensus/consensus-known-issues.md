@@ -9,32 +9,33 @@ diverges from the Tendermint algorithm, or is otherwise surprising. Each
 entry describes and cites; none is fixed here. "Inferred" marks conclusions
 drawn from reading the code without a reproducing test.
 
-## New block proposed with `POLRound = ValidRound`
+## An untimely `ValidBlock` is never re-proposed
 
-`Proposaler.Create` (`internal/consensus/state_proposaler.go`) reuses
-`ValidBlock` only when `checkValidBlock` says it is timely; otherwise it builds
-a fresh block through `createProposalBlock`. In **both** branches it then
-calls `makeProposal(height, round, rs.ValidRound, block, blockParts)`, so a
-fresh block is proposed with `POLRound = ValidRound ≥ 0` whenever a valid
-block exists but is no longer timely (or, at `InitialHeight`, does not carry
-the genesis time).
+`Proposaler.Create` (`internal/consensus/state_proposaler.go`) re-proposes
+`ValidBlock` only when `checkValidBlock` finds it timely for `ValidRound`
+(`ValidBlock.IsTimely(ValidBlockRecvTime, SynchronyParams, ValidRound)`);
+otherwise it builds a fresh block and proposes it with `POLRound = -1`. The
+PBTS algorithm checks timeliness only for proposals without a POL round, so a
+block that already gathered a polka would be re-proposed regardless of its
+timestamp.
 
-Effect on receivers: `isProposalComplete` is satisfied (the POL round does
-have a polka), `checkProposalBlock` is false (`POLRound ≠ -1`), and
-`checkPrevoteMaj23` is false because the polka's block id differs from the
-fresh block's. Every honest validator prevotes nil; the round is wasted. The
-proposer also violates the paper's rule that `v_r` names a polka for the
-proposed value.
+A proposer sees its `ValidBlock` as untimely when it learned the block late.
+`updateValidBlock` dates a block with `tmtime.Now()` when the node learned it
+without a matching proposal, which puts the receive time well after
+`block.Time`. The proposer logs `proposal block is not timely` at ERROR level
+when this happens.
 
-Trigger: the proposer's `ValidBlock` is untimely for `ValidRound`. This
-happens when `updateValidBlock` dates the block with `tmtime.Now()` because
-the node learned it without a matching proposal, which puts the receive time
-well after `block.Time`. The proposer logs `proposal block is not timely` at
-ERROR level when this branch runs. The impact is liveness only: one lost
-round. Reproduced by
-`ProposalerTestSuite.TestCreateFreshBlockOverUntimelyValidBlockHasNoPOLRound`
-and fixed in
-[#1564](https://github.com/dashpay/tenderdash/pull/1564).
+Effect: validators locked on `ValidBlock` prevote nil for the fresh block,
+since a lock is cleared only at a new height (see
+[No unlock within a height](#no-unlock-within-a-height)). If the voting power
+locked on that block exceeds `TotalVotingPower - QuorumVotingThresholdPower`
+and every subsequent proposer sees it as untimely, no block can gather a
+polka and the height stalls (inferred; no reproducing test).
+
+History: before
+[#1564](https://github.com/dashpay/tenderdash/pull/1564) the fresh block was
+proposed with `POLRound = ValidRound`, so every validator prevoted nil and
+the round was always lost.
 
 ## `PrecommitWait` step is never entered
 
