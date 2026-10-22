@@ -15,10 +15,15 @@ implementing function. Commit-related flows are in
 
 `timeoutPropose` (`proposeTimeout(r)`) fires → `EnterPrevote`.
 `isValidForPrevote` fails with `errPrevoteProposalBlockNil` → **nil prevote**,
-no ABCI call (`prevoter.Do`). Validators then reach +2/3-any prevotes →
-`EnterPrevoteWait` → `voteTimeout(r)` → `EnterPrecommit` → nil precommit →
-+2/3-any precommits → `EnterPrecommitWait` → `voteTimeout(r)` →
-`EnterNewRound(r + 1)`.
+no ABCI call (`prevoter.Do`). When every validator prevotes nil, the +2/3
+nil majority dispatches `EnterPrecommit` directly — no `PrevoteWait`, no
+`voteTimeout(r)` (`addVoteDispatchPrevoteMw`: `TwoThirdsMajority()` returns
+the nil block id, and `blockID.IsNil()` satisfies the precommit condition) →
+nil precommit → +2/3 nil precommits → `EnterPrecommitWait` → `voteTimeout(r)`
+→ `EnterNewRound(r + 1)`. `EnterPrevoteWait` is reached only when the
+prevotes hold +2/3-any **without** a majority (some validators did receive
+and prevote the block), in which case `voteTimeout(r)` precedes
+`EnterPrecommit`.
 
 ```mermaid
 sequenceDiagram
@@ -29,9 +34,7 @@ sequenceDiagram
     V->>V: EnterPrevote: no block → prevote nil
     V-->>N: prevote nil
     N-->>V: prevotes nil
-    V->>V: +2/3 any prevotes → EnterPrevoteWait (voteTimeout r)
-    T->>V: tock PrevoteWait(h,r)
-    V->>V: EnterPrecommit: polka nil → precommit nil
+    V->>V: +2/3 nil prevotes → EnterPrecommit: polka nil → precommit nil
     N-->>V: precommits nil
     V->>V: maj23 nil → EnterPrecommitWait (voteTimeout r)
     T->>V: tock PrecommitWait(h,r)
@@ -96,12 +99,17 @@ silently once it is exhausted (`internal/consensus/block_part_budget.go`).
 
 ### Application rejects the block, or the header does not match
 
-`ProcessProposal` returning `REJECT` (`sm.ErrBlockRejected`) or a header
-mismatch / invalid `LastCommit` / invalid chain lock / wrong app-hash size
-(`sm.ErrInvalidBlock`) → nil prevote (`prevoter.handleError`). A failed
-`ProcessProposal` clears `CurrentRoundState`, so no round counts as processed
-until a later call succeeds (`blockExecutor.ensureProcess`). Any **other**
-error (transport, unknown status) **panics** the node. The same block
+`ProcessProposal` returning `REJECT` (`sm.ErrBlockRejected`), or a
+well-formed `ACCEPT` whose contents disagree with the block — header
+mismatch / invalid `LastCommit` / invalid chain lock (`sm.ErrInvalidBlock`)
+— → nil prevote (`prevoter.handleError`). A failed `ProcessProposal` clears
+`CurrentRoundState`, so no round counts as processed until a later call
+succeeds (`blockExecutor.ensureProcess`). Any **other** error **panics**
+the node: transport failure, `UNKNOWN` status, or a malformed response — an
+`AppHash` of the wrong size fails `ResponseProcessProposal.Validate` and
+`tx_results` not matching the transactions fails `validateExecTxResults`,
+both returned by `BlockExecutor.ProcessProposal` as plain errors, not as
+`ErrInvalidBlock`. The same block
 reaching `EnterPrecommit` via a polka would call `mustEnsureProcess`, which
 panics on failure — a node that could not process a block cannot have a
 polka-matching proposal block for it unless the application is
@@ -219,18 +227,27 @@ and `addVoteErrorMw` (`internal/consensus/state_add_vote.go`).
   it reaches the application as `Misbehavior` only if a proposer includes it
   (`evpool.PendingEvidence` in `CreateProposalBlock`).
 - Conflicting **proposals** by the same proposer: the first valid one is
-  kept, the second ignored; no evidence is produced.
+  kept and the second ignored while the first occupies `rs.Proposal`; a
+  current-round polka or a commit for the second block drops the first
+  (`StateData.retargetTo` → `dropStaleProposal`) and the second is then
+  accepted ([invariant 5](./consensus.md#invariants)). No evidence is
+  produced.
 
 ## Vote extensions
 
 - The node asks ABCI `ExtendVote` only when signing a **non-nil precommit**
   (`voteSigner.signVote`). The response must parse
   (`NewVoteExtensionsFromABCIExtended`); otherwise the node panics.
-- Extension types (`types/vote_extension.go`): `DEFAULT` (signed by the
-  validator share, not threshold-recoverable), `THRESHOLD_RECOVER` and
-  `THRESHOLD_RECOVER_RAW` (threshold-recoverable; `RAW` may carry an
-  application-supplied sign request id that binds no height or round). A
-  prevote or nil precommit carrying extensions fails `Vote.ValidateBasic`.
+- Supported extension types (`types/vote_extension.go`):
+  `THRESHOLD_RECOVER` and `THRESHOLD_RECOVER_RAW` (threshold-recoverable;
+  `RAW` may carry an application-supplied sign request id that binds no
+  height or round). `DEFAULT` exists in the enum but is **not supported**:
+  `VoteExtension.Validate` (`proto/tendermint/types/dash.go`) rejects it, so
+  a precommit carrying one fails `Vote.ValidateBasic` at every peer, and
+  `MakeQuorumSigns` excludes non-threshold-recoverable extensions from the
+  sign items (see
+  [Known issues](./consensus-known-issues.md#a-default-vote-extension-from-extendvote-is-not-rejected-before-signing)).
+  A prevote or nil precommit carrying extensions fails `Vote.ValidateBasic`.
 - Each peer precommit's extension signatures are verified after the block
   signature (`types.VerifyVoteSignatures`), then ABCI `VerifyVoteExtension`
   is called with the validator's pro-tx-hash. A rejected vote is not stored

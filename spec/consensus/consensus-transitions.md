@@ -97,7 +97,8 @@ The receive routine handles the tock only if it still matches
     3. Schedule tock `(H, R, Propose)` after `proposeTimeout(R)`.
     4. If `¬isProposer`, or `applyingCommit`, or replay mode, or
        `¬catchup.mayPropose(h)`: do nothing more.
-    5. Else `wal.FlushAndSync()`; `Proposaler.Create(h, R, rs)`
+    5. Else `wal.FlushAndSync()` (a failure is only logged);
+       `Proposaler.Create(h, R, rs)`
        ([happy path §3a](./consensus-happy-path.md#3a-creating-the-proposal-proposer-only)).
        A creation or signing error is logged and the round proceeds as if the
        proposer were silent.
@@ -153,7 +154,13 @@ Properties:
   verified again every time it is resent (bounded by the verification budget).
 - Errors are returned to the message dispatcher; the sender is **not**
   evicted for any of them.
-- Equivocating proposals: the first valid one is kept; later ones are ignored.
+- Equivocating proposals: the first valid one is kept; later ones are ignored
+  while it occupies `rs.Proposal`. The slot is freed within the round only
+  when authenticated votes retarget the round to another block
+  (`StateData.retargetTo` → `dropStaleProposal`: current-round polka,
+  precommit-time polka for a block not held, parked or applied commit); a
+  proposal for that block can then be accepted
+  ([invariant 5](./consensus.md#invariants)).
 
 ### AddProposalBlockPart / ProposalCompleted
 
@@ -366,9 +373,16 @@ Rules, in evaluation order:
 6. **P-Process.** `blockExecutor.ensureProcess(rs, r)`: ABCI
    `ProcessProposal` for round `r` unless `CurrentRoundState` already is the
    result for this block and round. `ErrBlockRejected` (application
-   `REJECT`) or `ErrInvalidBlock` (header fields differ from the application's
-   answer, `LastCommit` invalid, chain lock invalid, app-hash size wrong) →
-   nil prevote; any other error → **panic**. Note that `ProcessProposal` runs
+   `REJECT`) or `ErrInvalidBlock` (a well-formed `ACCEPT` whose contents
+   disagree with the block: header fields differ from the application's
+   answer, `LastCommit` invalid, chain lock invalid —
+   `ValidateBlockWithRoundState`) → nil prevote; any other error →
+   **panic** (`prevoter.handleError`). A malformed application response is
+   in the panic class, not the nil-prevote class: `UNKNOWN` status, an
+   `AppHash` of the wrong size (`ResponseProcessProposal.Validate`), or
+   `tx_results` not matching the transactions (`validateExecTxResults`) are
+   returned by `BlockExecutor.ProcessProposal` as plain errors before the
+   `ErrInvalidBlock` wrapper is reached. Note that `ProcessProposal` runs
    **before** the lock rules, so a locked validator still processes a
    different proposal and then prevotes nil.
 7. **P-Lock-NoPOL** (paper line 22–24). `POLRound == -1`: prevote the block

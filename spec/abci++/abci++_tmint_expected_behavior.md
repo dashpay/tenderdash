@@ -237,6 +237,8 @@ As for the new methods:
   wrap the legacy `DeliverTx` logic in a loop that executes one transaction iteration per
   transaction in `RequestFinalizeBlock.tx`.
 
-Finally, there is no `Commit` method: `FinalizeBlock` returns the `AppHash` and the Application
-persists its state as part of it. Thus, the old `Commit` implementation must be folded into
-`FinalizeBlock`.
+Finally, there is no `Commit` method: the Application persists its state as part of
+`FinalizeBlock`, so the old `Commit` implementation must be folded into `FinalizeBlock`.
+`ResponseFinalizeBlock` carries no `AppHash` (its only fields are `retain_height` and
+`propose_next_block_immediately`); the `AppHash` is returned earlier, in
+`ResponsePrepareProposal`/`ResponseProcessProposal`, and is already part of the decided block.

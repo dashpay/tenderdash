@@ -14,8 +14,16 @@ by rotating an index over the validator set.
 
 - **R1 Determinism.** For a validator set `V`, every honest validator computes
   the same `proposer(h, r)`.
-- **R2 Fairness.** Within a stable validator set every validator proposes
-  equally often over `|V|` consecutive elections (equal power).
+- **R2 Fairness.** Within a stable validator set, the rounds of one height
+  rotate through `V` in order, so no validator proposes twice in a height
+  before every other validator has proposed once. Across heights the
+  guarantee is narrower: in `v1` the rotation continues from one height to
+  the next, so any `|V|` consecutive elections are fair as long as every
+  block is committed in the round it was first proposed; in `v0` only the
+  **round-0** proposers rotate fairly across heights — a validator that
+  proposed in round `r > 0` proposes again in round 0 of the next height
+  (e.g. with `V = A,B,C,D`, a height lost at round 0 by `A` and committed at
+  round 1 by `B` yields the election sequence `A, B, B, C, D`).
 
 Both follow from the construction below.
 

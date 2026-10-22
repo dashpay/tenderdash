@@ -206,8 +206,17 @@ preserves it.
    `StateData.updateValidBlock`; callers only invoke it when
    `ValidRound < Round` (`addVoteUpdateValidBlockMw`, `ProposalCompletedAction`)
    or from the lock branch at the current round.
-5. **One proposal per round.** `Proposaler.Set` ignores any proposal once
-   `rs.Proposal != nil`; the first proposal that verifies wins.
+5. **One proposal slot per round.** `Proposaler.Set` ignores any proposal
+   while `rs.Proposal != nil`, so the first proposal that verifies holds the
+   slot. The slot is freed within the round only by `dropStaleProposal`
+   (`StateData.retargetTo`), when authenticated votes name another block: a
+   current-round polka (`addVoteUpdateValidBlockMw`), a polka at precommit
+   time for a block the node does not hold (`EnterPrecommitAction.Execute`),
+   or a commit (`StateData.adoptCommit`, `proposalUpdater.updateStateData`).
+   A proposal for the retargeted block — and only that block, since `Set`
+   rejects a `BlockID` that differs from the assembled block's — can then be
+   accepted in the same round. A proposal that fails verification never
+   occupies the slot.
 6. **Application result currency.** `CurrentRoundState` describes the
    application's latest successful `ProcessProposal`/`PrepareProposal` for
    `ProposalBlock`; a result for another round or block is never reused
@@ -221,9 +230,12 @@ preserves it.
    held (`verifyCommitBlock` in `internal/consensus/state_try_add_commit.go`,
    called by both `prepareCommitForApply` and `ApplyCommitAction.Execute`).
 9. **WAL before signature.** The WAL is flushed and fsynced before the node
-   signs a proposal or a vote (`EnterProposeAction.Execute`,
-   `voteSigner.signVote`), and `EndHeightMessage` is fsynced after the block is
-   saved and before `FinalizeBlock` (`ApplyCommitAction.Execute`).
+   signs a vote: `voteSigner.signVote` returns on a `FlushAndSync` failure and
+   no vote is signed. On the proposal path the sync is best-effort:
+   `EnterProposeAction.Execute` logs a `FlushAndSync` failure and still calls
+   `Proposaler.Create`, so a proposal may be signed over an unsynced WAL.
+   `EndHeightMessage` is fsynced after the block is saved and before
+   `FinalizeBlock` (`ApplyCommitAction.Execute`).
 10. **Height votes only.** Votes and commits for any height other than
     `rs.Height` are dropped (`addVoteValidateVoteMw`,
     `StateData.readyToApplyCommit`).

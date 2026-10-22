@@ -20,7 +20,9 @@ The consensus WAL (`internal/consensus/wal.go`; file layout in
 for budget reasons leaves no WAL record. Before signing a proposal or a vote
 the WAL is flushed and fsynced (`EnterProposeAction.Execute`,
 `voteSigner.signVote`) so that replay reproduces the same message for the
-private validator's double-sign protection. An empty WAL starts with
+private validator's double-sign protection. A failed sync stops the vote
+(`signVote` returns the error, nothing is signed) but not the proposal:
+`EnterProposeAction.Execute` logs it and proposes anyway. An empty WAL starts with
 `EndHeightMessage{0}` (`BaseWAL.OnStart`).
 
 ## Start-up: ABCI handshake
@@ -75,8 +77,8 @@ Then `receiveRoutine` starts and `ScheduleRound0` arms the first tock.
 
 | Crash point | Recovery |
 | ------------- | ---------- |
-| Before `EndHeightMessage{h}` is written | WAL replay re-delivers the height's messages and timeouts; the node re-reaches the same step |
-| After `SaveBlock` + `EndHeightMessage`, before `FinalizeBlock` completed | handshake case "store = state + 1, app = state": `ApplyBlock` with the real application |
+| Before `SaveBlock` | WAL replay re-delivers the height's messages and timeouts; the node re-reaches the same step |
+| After `SaveBlock`, before `FinalizeBlock` completed (with or without `EndHeightMessage{h}`) | handshake case "store = state + 1, app = state": `ApplyBlock` with the real application. Without the marker, `catchupReplay(h + 1)` then fails with "WAL does not contain #ENDHEIGHT for h"; the error is not a corruption error, so `State.OnStart` logs it and starts without replay |
 | After `FinalizeBlock`, before `stateStore.Save` | handshake case "app = store": mock replay from saved `ABCIResponses` (`BlockExecutor.FinalizeBlock` saves them **before** calling the application) |
 
 ## Block-sync handover

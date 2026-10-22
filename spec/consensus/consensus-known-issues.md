@@ -105,7 +105,33 @@ sets the proposer to **index 1** after a validator-set change ("bug preserved
 to avoid breaking consensus"); the v1 selector uses index 0. See
 [Proposer selection](./proposer-selection.md).
 
+## A `DEFAULT` vote extension from `ExtendVote` is not rejected before signing
+
+`VoteExtension.Validate` (`proto/tendermint/types/dash.go`) rejects the
+`DEFAULT` type, and `MakeQuorumSigns` (`types/quorum_sign_data.go`) builds
+sign items only for threshold-recoverable extensions. The signing path does
+not run `Validate`: `BlockExecutor.ExtendVote` converts the application's
+response with `NewVoteExtensionsFromABCIExtended`, which accepts `DEFAULT`
+(`VoteExtensionFromProto`), and hands the vote to the private validator.
+`FilePV.signVote` then signs the filtered sign items and copies them back
+with `fillProtoVoteExtensionSigns(vote.VoteExtensions, extSigns)`, which
+indexes the shorter signature list by the position in the unfiltered
+extension list — an index-out-of-range panic once the `DEFAULT` extension
+is reached; `DashCoreSignerClient.signVoteExtensions` instead writes
+signature `i` of the filtered list into extension `i` of the unfiltered one,
+misplacing signatures. A vote that did get out would fail `Vote.ValidateBasic`
+at every peer. Effect: an application returning a `DEFAULT` extension takes
+the validator down (file signer) or produces precommits nobody accepts (Core
+signer), rather than being told the type is unsupported. (Inferred; not
+reproduced.)
+
 ## Code/comment drift and dead code
+
+- `BlockExecutor.ProcessProposal` (`internal/state/execution.go`) checks
+  `len(resp.AppHash) != appHashSize` after `NewStateChangeset`, but
+  `ResponseProcessProposal.Validate` already returned for any size other
+  than `crypto.DefaultAppHashSize`; the later check is unreachable unless
+  `SetAppHashSize` changes the size, which no non-test caller does.
 
 - `EnterNewRoundAction`'s doc comment mentions `timeoutNewHeight`,
   `timeoutCommit` and `SkipTimeoutCommit`, none of which exist; round 0
