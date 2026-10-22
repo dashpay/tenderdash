@@ -170,6 +170,66 @@ func TestPoolRuntimeRestartAndExpiry(t *testing.T) {
 	require.NoError(t, pool.Close())
 }
 
+// TestPoolRuntimeFlushesConflictingVotesBeforeDisable reports an equivocation
+// during the last enabled height and checks it survives disabling, a disabled
+// restart and reactivation, while conflicts reported once disabled are dropped.
+func TestPoolRuntimeFlushesConflictingVotesBeforeDisable(t *testing.T) {
+	ctx := t.Context()
+	vals, priv := types.RandValidatorSet(1)
+	state := createState(2, vals)
+	blocks := &mocks.BlockStore{}
+	blocks.On("Base").Return(int64(1))
+	blocks.On("Height").Return(int64(100))
+	blocks.On("LoadBlockMeta", mock.Anything).
+		Return(&types.BlockMeta{Header: types.Header{Time: defaultEvidenceTime}})
+	states := &smmocks.Store{}
+	states.On("LoadValidators", mock.Anything, mock.Anything).Return(vals, nil)
+	dir := t.TempDir()
+	openPool := func() *evidence.Pool {
+		db, err := dbm.NewDB("evidence", dbm.GoLevelDBBackend, dir)
+		require.NoError(t, err)
+		pool := evidence.NewPool(log.NewNopLogger(), db, states, blocks, evidence.NopMetrics(), nil)
+		require.NoError(t, pool.Start(state))
+		return pool
+	}
+	newConflict := func(height int64) *types.DuplicateVoteEvidence {
+		ev, err := types.NewMockDuplicateVoteEvidenceWithValidator(
+			ctx,
+			height,
+			defaultEvidenceTime,
+			priv[0],
+			evidenceChainID,
+			vals.QuorumType,
+			vals.QuorumHash,
+		)
+		require.NoError(t, err)
+		return ev
+	}
+
+	pool := openPool()
+	// Height 3 is the last enabled height; its commit disables evidence.
+	ev := newConflict(3)
+	pool.ReportConflictingVotes(ev.VoteA, ev.VoteB)
+	state.LastBlockHeight = 3
+	state.LastBlockTime = ev.Time()
+	state.LastValidators = vals
+	state.ConsensusParams.Evidence.MaxBytes = 0
+	pool.Update(ctx, state, nil)
+	require.NoError(t, pool.Close())
+
+	pool = openPool()
+	t.Cleanup(func() { require.NoError(t, pool.Close()) })
+	// Height 4 runs disabled; a conflict reported now must not be buffered.
+	late := newConflict(4)
+	pool.ReportConflictingVotes(late.VoteA, late.VoteB)
+	state.LastBlockHeight = 4
+	state.ConsensusParams.Evidence.MaxBytes = 1000
+	pool.Update(ctx, state, nil)
+	pending, _ := pool.PendingEvidence(-1)
+	require.Len(t, pending, 1, "only the conflict from the last enabled height may be pending")
+	require.Equal(t, ev.Hash(), pending[0].Hash())
+}
+
 func TestPoolRuntimeConcurrentTransitionsAndClose(t *testing.T) {
 	vals, priv := types.RandValidatorSet(1)
 	state := createState(2, vals)

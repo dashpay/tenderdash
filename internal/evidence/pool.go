@@ -149,6 +149,11 @@ func (evpool *Pool) Update(ctx context.Context, state sm.State, ev types.Evidenc
 		evpool.markEvidenceAsCommitted(ev, state.LastBlockHeight)
 	}
 	if state.ConsensusParams.Evidence.MaxBytes == 0 {
+		// Conflicts accepted during the last enabled height wait for its
+		// finalized state; persist them before disabling or they are lost.
+		if previous.ConsensusParams.Evidence.MaxBytes > 0 {
+			evpool.processConsensusBuffer(ctx, state)
+		}
 		evpool.updateState(state)
 		evpool.consensusBuffer = nil
 		return
