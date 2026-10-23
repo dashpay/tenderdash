@@ -762,7 +762,7 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 
 	go func() {
 		select {
-		case errCh <- r.receivePeer(ioCtx, peerID, conn, connID):
+		case errCh <- r.receivePeer(ctx, ioCtx, peerID, conn, connID):
 		case <-ioCtx.Done():
 		}
 		wg.Done()
@@ -889,13 +889,14 @@ func (r *Router) completePeerDeliveries(peerID types.NodeID) {
 }
 
 // receivePeer receives inbound messages from a peer, deserializes them and
-// passes them on to the appropriate channel.
-func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Connection, connID uint64) error {
+// passes them on to the appropriate channel. ioCtx ends the connection's I/O;
+// ctx is the router lifecycle, which the competing send worker cannot cancel.
+func (r *Router) receivePeer(ctx, ioCtx context.Context, peerID types.NodeID, conn Connection, connID uint64) error {
 	timeout := time.NewTimer(0)
 	defer timeout.Stop()
 
 	for {
-		chID, bz, err := conn.ReceiveMessage(ctx)
+		chID, bz, err := conn.ReceiveMessage(ioCtx)
 		if err != nil {
 			return err // a transport's invalid-data failure is accounted by routePeer
 		}
@@ -977,7 +978,7 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 				"took", time.Since(start).String(),
 			)
 
-		case <-ctx.Done():
+		case <-ioCtx.Done():
 			r.logger.Debug("receivePeer: ctx is done", "peer", peerID, "channel", chID)
 			return nil
 		}
