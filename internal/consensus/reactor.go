@@ -1391,6 +1391,7 @@ func (r *Reactor) processMsgCh(ctx context.Context, msgCh p2p.Channel, chBundle 
 			if serr := msgCh.SendError(ctx, p2p.PeerError{
 				NodeID: envelope.From,
 				Err:    err,
+				ConnID: envelope.ConnID,
 			}); serr != nil {
 				return
 			}

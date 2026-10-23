@@ -395,6 +395,7 @@ func (r *Router) routeChannel(
 // reportPeerError records a bad-peer event even when eviction is required, so
 // ordinary peers retain their penalty across reconnects. Reserved peers keep
 // the peer manager's scoring exemption and protection from capacity eviction.
+// Eviction is fenced to peerError.ConnID; the score penalty is not.
 func (r *Router) reportPeerError(ctx context.Context, peerError PeerError) {
 	disconnect := r.peerManager.ShouldDisconnectOnError(peerError.NodeID,
 		peerError.Fatal || errors.Is(peerError.Err, ErrInvalidData))
@@ -411,7 +412,7 @@ func (r *Router) reportPeerError(ctx context.Context, peerError PeerError) {
 	})
 
 	if disconnect {
-		r.peerManager.Errored(peerError.NodeID, peerError.Err)
+		r.peerManager.ErroredConn(peerError.NodeID, peerError.ConnID, peerError.Err)
 	}
 }
 
@@ -899,19 +900,20 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 		if err := proto.Unmarshal(bz, &protoEnvelope); err != nil {
 			// Authenticated frames must contain valid protobuf, even with unknown fields.
 			err = fmt.Errorf("%w: undecodable message: %w", ErrInvalidData, err)
-			r.reportPeerError(ctx, PeerError{NodeID: peerID, Err: err})
+			r.reportPeerError(ctx, PeerError{NodeID: peerID, Err: err, ConnID: connID})
 			return err
 		}
 		envelope, err := EnvelopeFromProto(protoEnvelope)
 		if err != nil {
 			if errors.Is(err, ErrTooManyEnvelopeAttributes) || errors.Is(err, ErrEnvelopeAttributesTooLarge) {
 				err = fmt.Errorf("%w: %w", ErrInvalidData, err)
-				r.reportPeerError(ctx, PeerError{NodeID: peerID, Err: err})
+				r.reportPeerError(ctx, PeerError{NodeID: peerID, Err: err, ConnID: connID})
 				return err
 			}
 			// Unknown payloads can reflect version skew; apply ordinary peer-error policy.
 			r.reportPeerError(ctx, PeerError{
 				NodeID: peerID,
+				ConnID: connID,
 				Err:    fmt.Errorf("%w: envelope payload: %w", ErrUnrecognizedMessage, err),
 			})
 			continue

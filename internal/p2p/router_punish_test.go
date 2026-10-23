@@ -25,6 +25,7 @@ type punishFixture struct {
 	router *Router
 	pm     *PeerManager
 	peerID types.NodeID
+	connID uint64 // live connection generation, as routePeer passes to receivePeer
 }
 
 func newPunishFixture(ctx context.Context, t *testing.T, maxConnected uint16) *punishFixture {
@@ -41,6 +42,8 @@ func newPunishFixture(ctx context.Context, t *testing.T, maxConnected uint16) *p
 	require.NoError(t, err)
 	require.True(t, added)
 	require.NoError(t, pm.Accepted(peerID))
+	connID := pm.Ready(ctx, peerID, nil)
+	require.NotZero(t, connID)
 
 	return &punishFixture{
 		router: &Router{
@@ -53,6 +56,7 @@ func newPunishFixture(ctx context.Context, t *testing.T, maxConnected uint16) *p
 		},
 		pm:     pm,
 		peerID: peerID,
+		connID: connID,
 	}
 }
 
@@ -168,7 +172,7 @@ func TestReceivePeer_MalformedBytes_EvictsPeer(t *testing.T) {
 
 	// A lone continuation byte run is not a decodable protobuf field tag.
 	conn := &fakeConn{payloads: [][]byte{{0xff, 0xff, 0xff, 0xff}, {}}}
-	require.ErrorIs(t, f.router.receivePeer(ctx, f.peerID, conn, 1), ErrInvalidData)
+	require.ErrorIs(t, f.router.receivePeer(ctx, f.peerID, conn, f.connID), ErrInvalidData)
 	require.Equal(t, 1, conn.pos, "invalid data must stop the receive loop")
 
 	require.Less(t, f.score(), before, "malformed bytes must cost the sender score")
@@ -186,7 +190,7 @@ func TestReceivePeer_UndecodableEnvelope_ScoresWithoutEviction(t *testing.T) {
 
 	// Zero bytes decode into an empty Envelope, whose Unwrap finds no payload.
 	conn := &fakeConn{payloads: [][]byte{{}}}
-	_ = f.router.receivePeer(ctx, f.peerID, conn, 1)
+	_ = f.router.receivePeer(ctx, f.peerID, conn, f.connID)
 
 	require.Less(t, f.score(), before, "an undecodable envelope must cost the sender score")
 	require.False(t, f.isEvicted(), "an undecodable envelope may be version skew, so do not evict")
@@ -207,7 +211,7 @@ func TestReceivePeer_UnknownChannel_IsNotPunished(t *testing.T) {
 
 	// Channel 1 is deliberately not registered.
 	conn := &fakeConn{payloads: [][]byte{{0xff, 0xff, 0xff, 0xff}}}
-	_ = f.router.receivePeer(ctx, f.peerID, conn, 1)
+	_ = f.router.receivePeer(ctx, f.peerID, conn, f.connID)
 
 	require.Equal(t, before, f.score(), "unknown channel must not change the peer's score")
 	require.False(t, f.isEvicted(), "unknown channel must not evict: it is how version skew looks")
@@ -258,7 +262,7 @@ func TestReceivePeer_ExcessiveAttributes_EvictsAndScores(t *testing.T) {
 			bz, err := envelope.Marshal()
 			require.NoError(t, err)
 			conn := &fakeConn{payloads: [][]byte{bz}}
-			require.ErrorIs(t, f.router.receivePeer(ctx, f.peerID, conn, 1), ErrInvalidData)
+			require.ErrorIs(t, f.router.receivePeer(ctx, f.peerID, conn, f.connID), ErrInvalidData)
 			require.Less(t, f.score(), before)
 			require.True(t, f.isEvicted())
 		})
@@ -278,7 +282,7 @@ func TestReceivePeer_UnknownPayloadDoesNotFloodErrorLog(t *testing.T) {
 			f.router.logger = logger
 			f.pm.SetLogger(logger)
 			conn := &fakeConn{payloads: [][]byte{{}, {}, {}}}
-			require.ErrorIs(t, f.router.receivePeer(ctx, f.peerID, conn, 1), io.EOF)
+			require.ErrorIs(t, f.router.receivePeer(ctx, f.peerID, conn, f.connID), io.EOF)
 			require.Empty(t, output.String(), "peer-controlled unknown payloads must not flood production logs")
 			require.Equal(t, capacity == 1, f.isEvicted())
 		})
@@ -379,9 +383,34 @@ func TestReceivePeer_UnknownPayloadBurstDoesNotWriteDatabase(t *testing.T) {
 
 	const frames = 100
 	conn := &fakeConn{payloads: make([][]byte, frames)}
-	require.ErrorIs(t, f.router.receivePeer(ctx, f.peerID, conn, 1), io.EOF)
+	require.ErrorIs(t, f.router.receivePeer(ctx, f.peerID, conn, f.connID), io.EOF)
 
 	require.EqualValues(t, before-frames, f.score(), "every unknown payload must still cost score")
 	require.Zero(t, db.sets.Load(), "ephemeral score changes must not be persisted")
 	require.False(t, f.isEvicted())
+}
+
+// A report consumed after its connection ended must not evict the NodeID's
+// replacement connection, while the identity still pays the score penalty.
+func TestReportPeerError_StaleConnection_SparesReplacement(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	f := newPunishFixture(ctx, t, 10)
+	oldConn := f.connID
+	stale := PeerError{NodeID: f.peerID, Err: fmt.Errorf("stale: %w", ErrInvalidData), ConnID: oldConn}
+
+	// The report sits in the channel's error buffer while the peer reconnects.
+	f.pm.Disconnected(ctx, f.peerID)
+	require.NoError(t, f.pm.Accepted(f.peerID))
+	newConn := f.pm.Ready(ctx, f.peerID, nil)
+	require.Greater(t, newConn, oldConn)
+	before := f.score()
+
+	f.router.reportPeerError(ctx, stale)
+	require.Less(t, f.score(), before, "the sending identity must still lose score")
+	require.False(t, f.isEvicted(), "a stale report must not evict the replacement connection")
+
+	f.router.reportPeerError(ctx, PeerError{NodeID: f.peerID, Err: stale.Err, ConnID: newConn})
+	require.True(t, f.isEvicted(), "a report from the live connection must still evict")
 }

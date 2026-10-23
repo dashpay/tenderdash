@@ -347,6 +347,7 @@ type PeerManager struct {
 	ready          map[types.NodeID]bool                    // ready peers (Ready → Disconnected)
 	evict          map[types.NodeID]bool                    // peers scheduled for eviction (Connected → EvictNext)
 	evicting       map[types.NodeID]bool                    // peers being evicted (EvictNext → Disconnected)
+	connIDs        map[types.NodeID]uint64                  // live connection generation (Ready → Disconnected)
 	// connIDCounter mints a monotonic generation for each connection as it is
 	// readied, so a reconnect under the same NodeID is told apart from the
 	// connection it replaced (see PeerUpdate.ConnID / Envelope.ConnID).
@@ -387,6 +388,7 @@ func NewPeerManager(_ctx context.Context, selfID types.NodeID, peerDB dbm.DB, op
 		ready:         map[types.NodeID]bool{},
 		evict:         map[types.NodeID]bool{},
 		evicting:      map[types.NodeID]bool{},
+		connIDs:       map[types.NodeID]uint64{},
 		subscriptions: map[*PeerUpdates]*PeerUpdates{},
 	}
 
@@ -1084,6 +1086,7 @@ func (m *PeerManager) Ready(ctx context.Context, peerID types.NodeID, channels C
 		m.ready[peerID] = true
 		m.connIDCounter++
 		connID := m.connIDCounter
+		m.connIDs[peerID] = connID
 		pu := PeerUpdate{
 			NodeID:   peerID,
 			Status:   PeerStatusUp,
@@ -1181,6 +1184,7 @@ func (m *PeerManager) Disconnected(ctx context.Context, peerID types.NodeID) {
 	delete(m.evict, peerID)
 	delete(m.evicting, peerID)
 	delete(m.ready, peerID)
+	delete(m.connIDs, peerID)
 
 	if peer, ok := m.store.Get(peerID); ok {
 		peer.LastDisconnected = time.Now()
@@ -1221,6 +1225,13 @@ func (m *PeerManager) Disconnected(ctx context.Context, peerID types.NodeID) {
 // FIXME: This will cause the peer manager to immediately try to reconnect to
 // the peer, which is probably not always what we want.
 func (m *PeerManager) Errored(peerID types.NodeID, err error) {
+	m.ErroredConn(peerID, 0, err)
+}
+
+// ErroredConn is Errored fenced to one connection generation: a nonzero connID
+// evicts only while it is the peer's live connection, so a report from an ended
+// connection cannot evict its replacement. Zero matches any connection.
+func (m *PeerManager) ErroredConn(peerID types.NodeID, connID uint64, err error) {
 	if isPeerInputError(err) {
 		m.logger.Debug("peer errored", "peer", peerID, "error", err)
 	} else {
@@ -1229,7 +1240,9 @@ func (m *PeerManager) Errored(peerID types.NodeID, err error) {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 
-	if m.isConnected(peerID) {
+	// Disconnected clears evict, so a schedule made for the live generation
+	// cannot outlive that connection.
+	if m.isConnected(peerID) && (connID == 0 || m.connIDs[peerID] == connID) {
 		m.evict[peerID] = true
 	}
 

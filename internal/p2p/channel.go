@@ -260,6 +260,10 @@ type PeerError struct {
 	NodeID types.NodeID
 	Err    error
 	Fatal  bool
+	// ConnID is the generation of the connection that delivered the offending
+	// message (see Envelope.ConnID). When nonzero, eviction applies only while
+	// that connection is live; the score penalty applies to the NodeID either way.
+	ConnID uint64
 }
 
 func (pe PeerError) Error() string { return fmt.Sprintf("peer=%q: %s", pe.NodeID, pe.Err.Error()) }
