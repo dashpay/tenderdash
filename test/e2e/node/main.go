@@ -22,6 +22,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto/ed25519"
 	dashcore "github.com/dashpay/tenderdash/dash/core"
 	"github.com/dashpay/tenderdash/internal/p2p"
+	rpccore "github.com/dashpay/tenderdash/internal/rpc/core"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmnet "github.com/dashpay/tenderdash/libs/net"
 	"github.com/dashpay/tenderdash/light"
@@ -173,7 +174,10 @@ func startApp(ctx context.Context, logger log.Logger, cfg *Config) error {
 	if err != nil {
 		return err
 	}
-	app.SetFinalizeBlockGate(cfg.FinalizeBlockGate)
+	if cfg.FinalizeHold > 0 {
+		// The hold samples node metrics in-process, so it needs the builtin protocol.
+		return errors.New("finalize_hold requires the builtin ABCI protocol")
+	}
 	srv, err := server.NewServer(logger, cfg.Listen, cfg.Protocol, app)
 	if err != nil {
 		return err
@@ -195,8 +199,10 @@ func startNode(ctx context.Context, cfg *Config) error {
 	if err != nil {
 		return err
 	}
+	if err := app.SetFinalizeHold(cfg.FinalizeHold, cfg.Dir); err != nil {
+		return err
+	}
 
-	app.SetFinalizeBlockGate(cfg.FinalizeBlockGate)
 	tmcfg, nodeLogger, err := setupNode()
 	if err != nil {
 		return fmt.Errorf("failed to setup config: %w", err)
@@ -211,6 +217,13 @@ func startNode(ctx context.Context, cfg *Config) error {
 	)
 	if err != nil {
 		return err
+	}
+	if cfg.FinalizeHold > 0 {
+		env, ok := n.(interface{ RPCEnvironment() *rpccore.Environment })
+		if !ok {
+			return errors.New("finalize_hold: node does not expose its block store")
+		}
+		app.SetBlockStoreHeight(env.RPCEnvironment().BlockStore.Height)
 	}
 	return n.Start(ctx)
 }

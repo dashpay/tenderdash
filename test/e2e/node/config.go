@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/BurntSushi/toml"
 
@@ -27,8 +28,9 @@ type Config struct {
 	// ProposeNextBlockImmediately makes every FinalizeBlock response ask Tenderdash
 	// to propose the next height without waiting for transactions.
 	ProposeNextBlockImmediately bool `toml:"propose_next_block_immediately"`
-	// FinalizeBlockGate is an opt-in manual E2E file gate, never a node setting.
-	FinalizeBlockGate string `toml:"finalize_block_gate"`
+	// FinalizeHold holds the first FinalizeBlock call for this long while the
+	// node keeps networking; zero disables it. Requires the builtin protocol.
+	FinalizeHold time.Duration `toml:"finalize_hold"`
 
 	// dash parameters
 	ThesholdPublicKeyUpdate map[string]string `toml:"threshold_public_key_update"`
