@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -71,7 +70,6 @@ type nodeImpl struct {
 	services         []service.Service
 	shutdownOps      closer
 	rpcEnv           *rpccore.Environment
-	prometheusSrv    *http.Server
 	dependencyCancel context.CancelFunc
 }
 
@@ -579,7 +577,7 @@ func (n *nodeImpl) OnStart(ctx context.Context) (err error) {
 	}
 	// Start Internal Services
 	if n.config.RPC.PprofListenAddress != "" {
-		startPProfServer(ctx, &n.BaseService, *n.config.RPC)
+		startPProfServer(ctx, &n.BaseService, n.logger, *n.config.RPC)
 	}
 
 	now := tmtime.Now()
@@ -605,7 +603,7 @@ func (n *nodeImpl) OnStart(ctx context.Context) (err error) {
 	}
 
 	if n.config.Instrumentation.Prometheus && n.config.Instrumentation.PrometheusListenAddr != "" {
-		n.prometheusSrv = startPrometheusServer(ctx, &n.BaseService, *n.config.Instrumentation)
+		startPrometheusServer(ctx, &n.BaseService, n.logger, *n.config.Instrumentation)
 	}
 
 	// Start the transport.
@@ -668,14 +666,6 @@ func (n *nodeImpl) OnStop() {
 		if pvsc, ok := n.privValidator.(service.Service); ok {
 			pvsc.Wait()
 		}
-	}
-
-	if n.prometheusSrv != nil {
-		if err := n.prometheusSrv.Shutdown(context.Background()); err != nil {
-			// Error from closing listeners, or context timeout:
-			n.logger.Error("Prometheus HTTP server Shutdown", "err", err)
-		}
-
 	}
 }
 

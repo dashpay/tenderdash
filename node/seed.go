@@ -3,7 +3,6 @@ package node
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
@@ -32,8 +31,7 @@ type seedNodeImpl struct {
 	nodeKey     types.NodeKey // our node privkey
 
 	// services
-	pexReactor    service.Service // for exchanging peer addresses
-	prometheusSrv *http.Server
+	pexReactor service.Service // for exchanging peer addresses
 
 	shutdownOps closer
 }
@@ -107,7 +105,7 @@ func (n *seedNodeImpl) OnStart(ctx context.Context) (err error) {
 		}
 	}()
 	if n.config.RPC.PprofListenAddress != "" {
-		startPProfServer(ctx, &n.BaseService, *n.config.RPC)
+		startPProfServer(ctx, &n.BaseService, n.logger, *n.config.RPC)
 	}
 
 	now := tmtime.Now()
@@ -124,7 +122,7 @@ func (n *seedNodeImpl) OnStart(ctx context.Context) (err error) {
 	}
 
 	if n.config.Instrumentation.Prometheus && n.config.Instrumentation.PrometheusListenAddr != "" {
-		n.prometheusSrv = startPrometheusServer(ctx, &n.BaseService, *n.config.Instrumentation)
+		startPrometheusServer(ctx, &n.BaseService, n.logger, *n.config.Instrumentation)
 	}
 
 	// Start the transport.
@@ -141,12 +139,6 @@ func (n *seedNodeImpl) OnStop() {
 
 	n.pexReactor.Wait()
 	n.router.Wait()
-	if n.prometheusSrv != nil {
-		if err := n.prometheusSrv.Shutdown(context.Background()); err != nil {
-			n.logger.Error("failed to stop metrics server", "err", err)
-		}
-	}
-
 }
 
 // OnDrain releases resources after network and HTTP workers have finished.
