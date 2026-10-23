@@ -520,3 +520,27 @@ func TestReceivePeer_MalformedBytes_ScoredAfterIOCancel(t *testing.T) {
 	require.ErrorIs(t, f.router.receivePeer(ctx, ioCtx, f.peerID, conn, f.connID), ErrInvalidData)
 	require.Equal(t, before-1, f.score(), "the penalty must not depend on the I/O context")
 }
+
+// Accounting for retained invalid data must not hide an internal failure that
+// won the teardown race: that failure still has to surface at Error.
+func TestRoutePeer_InternalTeardownErrorSurvivesInvalidData(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := newPunishFixture(ctx, t, 10)
+	f.enableRoutePeer()
+	var output bytes.Buffer
+	logger, err := log.NewLogger("info", &output)
+	require.NoError(t, err)
+	f.router.logger = logger
+	before := f.score()
+
+	conn := &invalidTeardownConn{
+		receiveErr: errors.New("internal transport failure"),
+		failure:    fmt.Errorf("%w: malformed frame", ErrInvalidData),
+	}
+	f.router.routePeer(ctx, f.peerID, conn, ChannelIDSet{1: {}})
+
+	require.Equal(t, before-1, f.score(), "the invalid data is still accounted")
+	require.Contains(t, output.String(), `"level":"error"`)
+	require.Contains(t, output.String(), "internal transport failure")
+}

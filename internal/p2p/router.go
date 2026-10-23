@@ -806,7 +806,11 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 	if failed, ok := conn.(invalidDataConnection); ok {
 		if invalid := failed.invalidDataErr(); invalid != nil {
 			r.reportPeerError(ctx, PeerError{NodeID: peerID, Err: invalid, ConnID: connID})
-			err = invalid
+			// Never hide an internal failure that won the teardown race.
+			if err == nil || err == io.EOF ||
+				errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				err = invalid
+			}
 		}
 	}
 
