@@ -396,6 +396,11 @@ Note that, if _p_ has a non-`nil` _validValue_, Tendermint will use it as propos
       `ResponseProcessProposal.status` MUST **exclusively** depend on the parameters passed in
       the call to `RequestProcessProposal`, and the last committed Application state
       (see [Requirements](abci++_app_requirements.md) section).
+    * Tenderdash may call `ProcessProposal` more than once for the same height and round with the
+      same block, for example after the application rejected a commit's vote extensions or when block
+      sync hands over to consensus, and again for a round after processing another round, for example
+      to verify a commit of that round. The Application MUST treat such a call as re-execution that
+      replaces its execution context for the height; `FinalizeBlock` refers to the round processed last.
     * Moreover, application implementors SHOULD always set `ResponseProcessProposal.status` to `ACCEPT`,
       unless they _really_ know what the potential liveness implications of returning `REJECT` are.
 
@@ -443,7 +448,17 @@ When a validator _p_ enters Tendermint consensus round _r_, height _h_, in which
       in a previous call to `ProcessProposal` or `PrepareProposal` for the current height.
     * `ResponseExtendVote.vote_extensions` will only be attached to a non-`nil` Precommit message. If Tendermint is to
       precommit `nil`, it will not call `RequestExtendVote`.
-    * The Application logic that creates the extensions can be non-deterministic.
+    * The Application logic that creates extensions that are not threshold-recoverable can be
+      non-deterministic. Threshold-recoverable extensions (`THRESHOLD_RECOVER` and
+      `THRESHOLD_RECOVER_RAW`) are recovered into the commit, so they MUST be deterministic.
+    * `ExtendVote` MUST be free of side effects, and the threshold-recoverable subset of its response
+      MUST be exactly the vector the Application accepts in a commit-level `VerifyVoteExtension` for
+      the same block, height and round.
+    * Tenderdash may also call `ExtendVote` on any node, a non-validator included, after a
+      commit-level `VerifyVoteExtension` rejection that follows `ProcessProposal` of that block and
+      round, to learn the vector a commit of that block and round must carry; see
+      [VerifyVoteExtension](#verifyvoteextension). An ABCI error or an invalid response from this
+      call is fatal, as on the Precommit path.
 
 #### When does Tendermint call it?
 
@@ -456,7 +471,8 @@ then _p_'s Tendermint locks _v_  and sends a Precommit message in the following 
 
 1. _p_'s Tendermint sets _lockedValue_ and _validValue_ to _v_, and sets _lockedRound_ and _validRound_ to _r_
 2. _p_'s Tendermint calls `RequestExtendVote` with _id(v)_ (`RequestExtendVote.hash`). The call is synchronous.
-3. The Application optionally returns an array of bytes, `ResponseExtendVote.extension`, which is not interpreted by Tendermint.
+3. The Application optionally returns an array of bytes, `ResponseExtendVote.extension`. Tenderdash does not interpret
+   it, except that it compares the threshold-recoverable subset with the extension vectors of commits (see below).
 4. _p_'s Tendermint includes `ResponseExtendVote.extension` in a field of type [CanonicalVoteExtension](#canonicalvoteextension),
    it then populates the other fields in [CanonicalVoteExtension](#canonicalvoteextension), and signs the populated
    data structure.
@@ -469,18 +485,38 @@ In the cases when _p_'s Tendermint is to broadcast `precommit nil` messages (eit
 or _timeoutPrevote_ triggered), _p_'s Tendermint does **not** call `RequestExtendVote` and will not include
 a [CanonicalVoteExtension](#canonicalvoteextension) field in the `precommit nil` message.
 
+Tenderdash also calls `RequestExtendVote` on any process, a non-validator included, when the
+Application rejects a commit in a commit-level `RequestVerifyVoteExtension` that follows
+`ProcessProposal` of the committed block for the commit round, unless it already knows the vector
+for that block and round. Tenderdash neither signs nor broadcasts that response: it compares the
+threshold-recoverable subset with later commits of the block and round.
+
 ### VerifyVoteExtension
+
+Tenderdash calls `VerifyVoteExtension` for two kinds of request, told apart by
+`validator_pro_tx_hash`:
+
+* **Precommit verification** (`validator_pro_tx_hash` set): the vote extensions
+  of one validator's Precommit, exactly as its Application returned them from
+  `ExtendVote`.
+* **Commit verification** (`validator_pro_tx_hash` empty): the extension vector
+  of a commit, sent after `ProcessProposal` of the committed block with the same
+  `hash`, `height` and `round` (the commit round). The vector holds only the
+  threshold-recoverable extensions (`THRESHOLD_RECOVER` and
+  `THRESHOLD_RECOVER_RAW`), in the order `ExtendVote` returned them; extensions
+  of any other type never appear in a commit. It can be empty.
 
 #### Parameters and Types
 
 * **Request**:
 
-    | Name                  | Type                                        | Description                                                                                   | Field Number |
-    |-----------------------|---------------------------------------------|-----------------------------------------------------------------------------------------------|--------------|
-    | hash                  | bytes                                       | The header hash of the propsed block that the vote extensions refers to.                      | 1            |
-    | validator_pro_tx_hash | bytes                                       | [ProTxHash](../core/data_structures.md#protxhash) of the validator that signed the extensions | 2            |
-    | height                | int64                                       | Height of the block  (for sanity check).                                                      | 3            |
-    | vote_extensions       | [ExtendVoteExtension](#extendvoteextension) | Application-specific information signed by Tendermint. Can have 0 length                      | 4            |
+    | Name                  | Type                                                 | Description                                                                                                                  | Field Number |
+    |-----------------------|------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------|--------------|
+    | hash                  | bytes                                                | The header hash of the propsed block that the vote extensions refers to.                                                     | 1            |
+    | validator_pro_tx_hash | bytes                                                | [ProTxHash](../core/data_structures.md#protxhash) of the validator that signed the extensions; empty for commit verification | 2            |
+    | height                | int64                                                | Height of the block  (for sanity check).                                                                                     | 3            |
+    | round                 | int32                                                | Round of the vote; for commit verification, the commit round.                                                                | 4            |
+    | vote_extensions       | repeated [ExtendVoteExtension](#extendvoteextension) | Application-specific information signed by Tendermint. Can have 0 length                                                     | 5            |
 
 * **Response**:
 
@@ -489,33 +525,62 @@ a [CanonicalVoteExtension](#canonicalvoteextension) field in the `precommit nil`
     | status | [VerifyStatus](#verifystatus) | `enum` signaling if the application accepts the vote extension | 1            |
 
 * **Usage**:
-    * `RequestVerifyVoteExtension.vote_extension` can be an empty byte array. The Application's interpretation of it should be
-      that the Application running at the process that sent the vote chose not to extend it.
-      Tendermint will always call `RequestVerifyVoteExtension`, even for 0 length vote extensions.
-    * If `ResponseVerifyVoteExtension.status` is `REJECT`, Tendermint will reject the whole received vote.
-      See the [Requirements](abci++_app_requirements.md) section to understand the potential
-      liveness implications of this.
+    * `RequestVerifyVoteExtension.vote_extensions` can be empty. For a Precommit, the Application's
+      interpretation of it should be that the Application running at the process that sent the vote
+      chose not to extend it. Tenderdash will always call `RequestVerifyVoteExtension`, even for 0
+      length vote extensions.
+    * For a Precommit, if `ResponseVerifyVoteExtension.status` is `REJECT`, Tenderdash will reject
+      the whole received vote. See the [Requirements](abci++_app_requirements.md) section to
+      understand the potential liveness implications of this.
+    * For a commit, the Application MUST compare the vector with the threshold-recoverable subset of
+      the extensions it expects for that block, in order, and return `REJECT` if they differ: a
+      commit whose block signature is valid can still carry a stripped, duplicated or replayed
+      vector. Tenderdash requires `ACCEPT` before it saves the block and commit or calls
+      `FinalizeBlock`. What `REJECT` does depends on the path:
+        * consensus: the commit is discarded without blaming its sender. A commit whose block the node
+          already holds is checked first and never changes the round. A commit for a later round whose
+          block has not arrived moves the node to that round on its threshold signature alone; it is
+          checked when the block arrives, then the commits other peers sent meanwhile. Copies of a
+          commit already waiting are dropped. If the node's own commit is rejected, nothing is
+          persisted and the node waits for a peer's commit. The block is processed again only for a
+          commit of a round other than the one processed last. After a rejection, Tenderdash calls
+          `ExtendVote` for the block and round, and refuses, without processing the block again or
+          calling the Application, a later commit of that round that would need the block processed
+          again, when its vector differs from the one returned or equals it and was rejected.
+          Consensus WAL replay follows these rules;
+        * block sync: the block is not applied; the peer that served it is dropped and the height is
+          requested again;
+        * handshake catch-up (application behind the block store): the commit is already in the block
+          store, so the node fails to start. There is no automatic recovery; the operator has to roll
+          back or re-sync the node.
+    * Any status other than `ACCEPT`, including `UNKNOWN`, counts as `REJECT`. An error from the ABCI
+      call itself, as opposed to a status, is fatal on every path.
     * The implementation of `VerifyVoteExtension` MUST be deterministic. Moreover, the value of
       `ResponseVerifyVoteExtension.status` MUST **exclusively** depend on the parameters passed in
-      the call to `RequestVerifyVoteExtension`, and the last committed Application state
-      (see [Requirements](abci++_app_requirements.md) section).
-    * Moreover, application implementers SHOULD always set `ResponseVerifyVoteExtension.status` to `ACCEPT`,
-      unless they _really_ know what the potential liveness implications of returning `REJECT` are.
+      the call to `RequestVerifyVoteExtension`, the block processed by `ProcessProposal`, and the
+      last committed Application state (see [Requirements](abci++_app_requirements.md) section).
+    * For a Precommit, application implementers SHOULD always set
+      `ResponseVerifyVoteExtension.status` to `ACCEPT`, unless they _really_ know what the potential
+      liveness implications of returning `REJECT` are.
 
-#### When does Tendermint call it?
+#### When does Tenderdash call it?
 
-When a validator _p_ is in Tendermint consensus round _r_, height _h_, state _prevote_ (**TODO** discuss: I think I must remove the state
-from this condition, but not sure), and _p_ receives a Precommit message for round _r_, height _h_ from _q_:
+When a validator _p_ is in Tenderdash consensus height _h_ and receives, from another validator _q_,
+a Precommit message for a block (not `nil`) at height _h_:
 
-1. If the Precommit message does not contain a vote extensions with a valid signature, Tendermint discards the message as invalid.
+1. If the Precommit message does not contain a vote extensions with a valid signature, Tenderdash discards the message as invalid.
    * a 0-length vote extensions is valid as long as its accompanying signature is also valid.
-2. Else, _p_'s Tendermint calls `RequestVerifyVoteExtension`.
+2. Else, _p_'s Tenderdash calls `RequestVerifyVoteExtension`.
 3. The Application returns _accept_ or _reject_ via `ResponseVerifyVoteExtension.status`.
 4. If the Application returns
-   * _accept_, _p_'s Tendermint will keep the received vote, together with its corresponding
+   * _accept_, _p_'s Tenderdash will keep the received vote, together with its corresponding
      vote extension in its internal data structures. It will be used to populate the [ExtendedCommitInfo](#extendedcommitinfo)
      structure in calls to `RequestPrepareProposal`, in rounds of height _h + 1_ where _p_ is the proposer.
-   * _reject_, _p_'s Tendermint will deem the Precommit message invalid and discard it.
+   * _reject_, _p_'s Tenderdash will deem the Precommit message invalid and discard it.
+
+Whenever a process is about to save a block and its commit, in consensus, block sync or replay, it
+first calls `RequestVerifyVoteExtension` for the commit, once `ProcessProposal` has processed the
+block. This includes commits the process assembled from its own +2/3 precommits.
 
 ### FinalizeBlock
 
@@ -568,13 +633,15 @@ When a validator _p_ is in Tendermint consensus height _h_, and _p_ receives
 
 then _p_'s Tendermint decides block _v_ and finalizes consensus for height _h_ in the following way
 
-1. _p_'s Tendermint persists _v_ as decision for height _h_.
-2. _p_'s Tendermint locks the mempool -- no calls to checkTx on new transactions.
-3. _p_'s Tendermint calls `RequestFinalizeBlock` with _id(v)_. The call is synchronous.
-4. _p_'s Application processes block _v_, received in a previous call to `RequestProcessProposal`.
-5. _p_'s Application commits and persists the state resulting from processing the block.
-6. _p_'s Tendermint unlocks the mempool -- newly received transactions can now be checked.
-7. _p_'s starts consensus for a new height _h+1_, round 0
+1. _p_'s Tendermint calls `RequestVerifyVoteExtension` for the commit (empty `validator_pro_tx_hash`)
+   and requires _accept_; see [VerifyVoteExtension](#verifyvoteextension).
+2. _p_'s Tendermint persists _v_ as decision for height _h_.
+3. _p_'s Tendermint locks the mempool -- no calls to checkTx on new transactions.
+4. _p_'s Tendermint calls `RequestFinalizeBlock` with _id(v)_. The call is synchronous.
+5. _p_'s Application processes block _v_, received in the latest call to `RequestProcessProposal`.
+6. _p_'s Application commits and persists the state resulting from processing the block.
+7. _p_'s Tendermint unlocks the mempool -- newly received transactions can now be checked.
+8. _p_'s starts consensus for a new height _h+1_, round 0
 
 ## Data Types existing in ABCI
 
@@ -715,22 +782,23 @@ Most of the data structures used in ABCI are shared [common data structures](../
 
     | Name           | Type                                    | Description                                                                                                                   | Field Number |
     |----------------|-----------------------------------------|-------------------------------------------------------------------------------------------------------------------------------|--------------|
-    | type           | [VoteExtensionType](#voteextensiontype) | Vote extension type can be either DEFAULT or THRESHOLD_RECOVER, the Tenderdash supports only THRESHOLD_RECOVER at this moment | 1            |
+    | type           | [VoteExtensionType](#voteextensiontype) | Vote extension type: DEFAULT, THRESHOLD_RECOVER or THRESHOLD_RECOVER_RAW; DEFAULT is not supported at this moment             | 1            |
     | extension      | bytes                                   | Deterministic or (Non-Deterministic) extension provided by the sending validator's Application.                               | 2            |
 
 * **Usage**:
     * Provides a vote extension for signing
     * Each field is mandatory for filling
-    * Type can be `THRESHOLD_RECOVER` or `DEFAULT`
+    * Type can be `THRESHOLD_RECOVER`, `THRESHOLD_RECOVER_RAW` or `DEFAULT`
     * `DEFAULT` is not supported so far
-    * `THRESHOLD_RECOVER` is a deterministic, that means, each validator in a quorum must provide the same vote extension data
+    * `THRESHOLD_RECOVER` and `THRESHOLD_RECOVER_RAW` are deterministic, that means, each validator in a quorum must provide the same vote extension data
 
 ### VoteExtensionType
 
 ```proto
 enum VoteExtensionType {
-  VOTE_EXTENSION_DEFAULT           = 0;
-  VOTE_EXTENSION_THRESHOLD_RECOVER = 1;
+  DEFAULT               = 0;
+  THRESHOLD_RECOVER     = 1;
+  THRESHOLD_RECOVER_RAW = 2;  // signs the raw extension; allows overriding the sign request ID
 }
 ```
 
@@ -827,10 +895,10 @@ enum VerifyStatus {
 ```
 
 * **Usage**:
-    * Used within the [VerifyVoteExtension](#verifyvoteextension) response.
-        * If `Status` is `UNKNOWN`, a problem happened in the Application. Tendermint will assume the application is faulty and crash.
-        * If `Status` is `ACCEPT`, Tendermint will accept the vote as valid.
-        * If `Status` is `REJECT`, Tendermint will reject the vote as invalid.
+    * Used within the [VerifyVoteExtension](#verifyvoteextension) response, for a Precommit or a commit.
+        * If `Status` is `ACCEPT`, Tendermint will accept the vote, or the commit, as valid.
+        * If `Status` is `REJECT` or `UNKNOWN`, Tendermint will reject the vote, or the commit, as invalid.
+          Only an error from the ABCI call itself is fatal.
 
 
 ### CanonicalVoteExtension

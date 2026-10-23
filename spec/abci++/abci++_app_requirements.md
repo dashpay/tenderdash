@@ -119,7 +119,16 @@ similarly to Requirements 5 and 6 and proposed blocks.
 Requirements 8 and 9 can be violated by a bug inducing non-determinism in
 `VerifyVoteExtension`. In this case liveness can be compromised.
 Extra care should be put in the implementation of `ExtendVote` and `VerifyVoteExtension` and,
-as a general rule, `VerifyVoteExtension` _should_ always accept the vote extensions.
+as a general rule, `VerifyVoteExtension` _should_ always accept the vote extensions of a precommit.
+
+Commit verification, a call with an empty `validator_pro_tx_hash`, is the exception: the Application
+must reject a commit whose extension vector differs from the threshold-recoverable subset of the
+extensions it expects for the block, or an altered vector reaches `FinalizeBlock`. Threshold recovery
+requires the contributing validators to sign identical extension content, so a valid recovered extension
+from correct processes matches that expected vector. Rejecting an altered vector therefore costs no
+liveness; a deterministic bug in the check, however, halts the chain, because no commit
+for the block can pass it. See [VerifyVoteExtension](./abci++_methods.md#verifyvoteextension) for what
+Tenderdash does on each path when a commit is rejected.
 
 * Requirement 10 [_all_, no-side-effects]: $p$'s calls to `RequestPrepareProposal`,
   `RequestProcessProposal`, `RequestExtendVote`, and `RequestVerifyVoteExtension` at height $h$ do
@@ -154,3 +163,12 @@ Likewise, `ExtendVote` can also be non-deterministic:
 
 * $e^r_p$ may depend on $w^r_p$ and $s_{p,h-1}$, but may also depend on other values or operations.
 * $w^r_p = w^r_q \nRightarrow e^r_p = e^r_q$
+
+In Tenderdash this freedom holds for extensions that are not threshold-recoverable, and does not
+extend to threshold-recoverable ones (`THRESHOLD_RECOVER` and `THRESHOLD_RECOVER_RAW`): they are
+recovered into the commit, so every validator must produce the same ones. `ExtendVote` must also be
+free of side effects, and the threshold-recoverable subset of its response must be exactly the vector
+the Application accepts in a commit-level `VerifyVoteExtension` for the same block, height and round:
+after such a `VerifyVoteExtension` rejects a commit, following `ProcessProposal` of that block and
+round, Tenderdash calls `ExtendVote` on any node to learn that vector (see
+[VerifyVoteExtension](abci++_methods.md#verifyvoteextension)).

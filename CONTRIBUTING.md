@@ -206,6 +206,18 @@ LOW findings) is linked from the review summary. The bot may submit an approving
 review when nothing remains unresolved — it is advisory and does not replace
 human review.
 
+Reviews are posted as `claudbot[bot]`. Repository administrators must install
+the `claudbot` GitHub App on `dashpay/tenderdash` with Contents read, Issues
+write, and Pull requests write permissions, then configure the Actions variable
+`CLAUDBOT_CLIENT_ID` and secret `CLAUDBOT_PRIVATE_KEY` (the full PEM private key).
+Keep the secret scoped to this repository. The workflow mints a token scoped to
+this repository immediately before the review, after the test gate; it expires
+after one hour. Missing App configuration fails the review job.
+
+The workflow's `GITHUB_TOKEN` has read-only Contents access; review writes use
+the App token. With Contents read-only, the App cannot resolve review threads;
+fixed threads are listed in the review instead.
+
 #### Merging Pull Requests
 
 It is also our convention that authors merge their own pull requests, when possible. External contributors may not have the necessary permissions to do this, in which case, a member of the core team will merge the pull request once it's been approved.

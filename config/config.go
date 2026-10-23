@@ -160,6 +160,9 @@ func (cfg *Config) ValidateBasic() error {
 	if err := cfg.Consensus.ValidateBasic(); err != nil {
 		errs = multierror.Append(errs, fmt.Errorf("error in [consensus] section: %w", err))
 	}
+	if err := cfg.TxIndex.ValidateBasic(); err != nil {
+		errs = multierror.Append(errs, fmt.Errorf("error in [tx-index] section: %w", err))
+	}
 	if err := cfg.Instrumentation.ValidateBasic(); err != nil {
 		errs = multierror.Append(errs, fmt.Errorf("error in [instrumentation] section: %w", err))
 	}
@@ -901,6 +904,8 @@ type MempoolConfig struct {
 	// Do not remove invalid transactions from the cache (default: false)
 	// Set to true if it's not possible for any invalid transaction to become
 	// valid again in the future.
+	// When true, resubmitting a rejected transaction over RPC returns the
+	// CheckTx result that rejected it, as long as it stays in the cache.
 	KeepInvalidTxsInCache bool `mapstructure:"keep-invalid-txs-in-cache"`
 
 	// Maximum size of a single transaction
@@ -1354,12 +1359,21 @@ type TxIndexConfig struct {
 	// Options:
 	//   1) "null" (default) - no indexer services.
 	//   2) "kv" - a simple indexer backed by key-value storage (see DBBackend)
-	//   3) "psql" - the indexer services backed by PostgreSQL.
 	Indexer []string `mapstructure:"indexer"`
+}
 
-	// The PostgreSQL connection configuration, the connection format:
-	// postgresql://<user>:<password>@<host>:<port>/<db>?<opts>
-	PsqlConn string `mapstructure:"psql-conn"`
+// ValidateBasic checks that every configured indexer is supported.
+func (cfg *TxIndexConfig) ValidateBasic() error {
+	for _, indexer := range cfg.Indexer {
+		switch strings.ToLower(indexer) {
+		case "kv", "null":
+		case "psql":
+			return errors.New(`PostgreSQL event indexing has been removed; set tx-index.indexer to ["kv"] or ["null"]`)
+		default:
+			return fmt.Errorf("unsupported event sink type %q; use \"kv\" or \"null\"", indexer)
+		}
+	}
+	return nil
 }
 
 // DefaultTxIndexConfig returns a default configuration for the transaction indexer.

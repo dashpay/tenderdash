@@ -27,6 +27,10 @@ var (
 	// on the network paths.
 	ErrUnknownVoteExtensionType = errors.New("unknown vote extension type")
 
+	// ErrUnsupportedVoteExtensionType is returned for an application-supplied DEFAULT
+	// extension: no signing path supports it and peers reject it (VoteExtension.Validate).
+	ErrUnsupportedVoteExtensionType = errors.New("unsupported vote extension type")
+
 	// ErrNilVoteExtension is returned for a nil element of a vote-extension slice. A
 	// decoder can produce one for an empty repeated-field entry, so every site that
 	// dereferences such a slice must reject it rather than trust the slice is dense.
@@ -39,12 +43,15 @@ type VoteExtensions []VoteExtensionIf
 // NewVoteExtensionsFromABCIExtended returns vote-extensions container for given ExtendVoteExtension.
 //
 // The input is application-supplied. Returns an error if an extension type is not a
-// defined enum value.
+// defined enum value or is DEFAULT.
 func NewVoteExtensionsFromABCIExtended(exts []*abci.ExtendVoteExtension) (VoteExtensions, error) {
 	voteExtensions := make(VoteExtensions, 0, len(exts))
 
 	for _, ext := range exts {
 		ve := ext.ToVoteExtension()
+		if ve.Type == tmproto.VoteExtensionType_DEFAULT {
+			return nil, fmt.Errorf("%w: %s", ErrUnsupportedVoteExtensionType, ve.Type)
+		}
 		if err := voteExtensions.Add(ve); err != nil {
 			return nil, err
 		}
@@ -195,6 +202,33 @@ func (e VoteExtensions) IsSameWithProto(right tmproto.VoteExtensions) bool {
 		pb := ext.ToProto()
 		other := right[t]
 		if !pb.Equal(other) {
+			return false
+		}
+	}
+	return true
+}
+
+// SameVoteExtensionShape reports whether a and b hold, in the same order, the
+// same extensions as the application sees them: type, extension bytes and sign
+// request ID. Signatures are ignored.
+//
+// An unset and an empty sign request ID are the same: ToExtendProto hands
+// neither to the application, and ThresholdRawVoteExtension.SignItem derives the
+// same request ID from both. Nil entries equal only each other.
+func SameVoteExtensionShape(a, b []*tmproto.VoteExtension) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		x, y := a[i], b[i]
+		if x == nil || y == nil {
+			if x != y {
+				return false
+			}
+			continue
+		}
+		if x.Type != y.Type || !bytes.Equal(x.Extension, y.Extension) ||
+			!bytes.Equal(x.GetSignRequestId(), y.GetSignRequestId()) {
 			return false
 		}
 	}

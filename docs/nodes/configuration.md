@@ -319,6 +319,8 @@ cache-size = 10000
 # Do not remove invalid transactions from the cache (default: false)
 # Set to true if it's not possible for any invalid transaction to become valid
 # again in the future.
+# When true, resubmitting a rejected transaction over RPC returns the CheckTx
+# result that rejected it, as long as it stays in the cache.
 keep-invalid-txs-in-cache = false
 
 # Maximum size of a single transaction.
@@ -446,21 +448,17 @@ peer-query-maj23-sleep-duration = "2s"
 [tx-index]
 
 # The backend database list to back the indexer.
-# If list contains "null" or "", meaning no indexer service will be used.
+# An empty list or a list containing "null" disables indexing.
 #
 # The application will set which txs to index. In some cases a node operator will be able
 # to decide which txs to index based on configuration set in the application.
 #
 # Options:
-#   1) "null"
-#   2) "kv" (default) - the simplest possible indexer, backed by key-value storage (defaults to levelDB; see DBBackend).
-#   3) "psql" - the indexer services backed by PostgreSQL.
-# When "kv" or "psql" is chosen "tx.height" and "tx.hash" will always be indexed.
+#   1) "null" (default) - no indexer services.
+#   2) "kv" - an indexer backed by key-value storage (see DBBackend).
+# When "kv" is chosen "tx.height" and "tx.hash" will always be indexed.
 indexer = ["kv"]
 
-# The PostgreSQL connection configuration, the connection format:
-#   postgresql://<user>:<password>@<host>:<port>/<db>?<opts>
-psql-conn = ""
 
 #######################################################
 ###       Instrumentation Configuration Options     ###
@@ -558,9 +556,9 @@ There are three new parameters, which are enabled if use-legacy is set to false.
 
 ## Indexing Settings
 
-Operators can configure indexing via the `[tx_index]` section. The `indexer`
+Operators can configure indexing via the `[tx-index]` section. The `indexer`
 field takes a series of supported indexers. If `null` is included, indexing will
-be turned off regardless of other values provided.
+be turned off. All configured indexer names must still be supported.
 
 ### Supported Indexers
 
@@ -569,28 +567,20 @@ be turned off regardless of other values provided.
 The `kv` indexer type is an embedded key-value store supported by the main
 underlying Tendermint database. Using the `kv` indexer type allows you to query
 for block and transaction events directly against Tendermint's RPC. However, the
-query syntax is limited and so this indexer type might be deprecated or removed
-entirely in the future.
+query syntax is limited to the supported event-query operators.
 
-#### PostgreSQL
+#### Removed PostgreSQL indexer
 
-The `psql` indexer type allows an operator to enable block and transaction event
-indexing by proxying it to an external PostgreSQL instance allowing for the events
-to be stored in relational models. Since the events are stored in a RDBMS, operators
-can leverage SQL to perform a series of rich and complex queries that are not
-supported by the `kv` indexer type. Since operators can leverage SQL directly,
-searching is not enabled for the `psql` indexer type via Tendermint's RPC -- any
-such query will fail.
+The `psql` event indexer is no longer supported. Selecting it, including alongside
+`kv` or `null`, returns a configuration error. Choose `indexer = ["kv"]` for local
+indexing and RPC searches, or `["null"]` to disable indexing. The obsolete
+`psql-conn` key is ignored, so existing Dashmate configurations with an empty
+value remain compatible.
 
-Note, the SQL schema is stored in `state/indexer/sink/psql/schema.sql` and operators
-must explicitly create the relations prior to starting Tendermint and enabling
-the `psql` indexer type.
-
-Example:
-
-```shell
-psql ... -f state/indexer/sink/psql/schema.sql
-```
+Existing PostgreSQL data is not deleted or migrated, and SQL consumers no longer
+receive new events. To populate KV indexes, explicitly run `tenderdash
+reindex-event` against the retained local blocks and results after selecting `kv`.
+Pruned history cannot be reconstructed by this command.
 
 ## Unsafe Consensus Timeout Overrides
 
