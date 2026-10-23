@@ -300,8 +300,8 @@ func TestServeCancellationUnblocksResponseWrite(t *testing.T) {
 		require.ErrorIs(t, err, http.ErrServerClosed)
 	case <-time.After(time.Second):
 		_ = clientConn.Close()
-		<-done
-		t.Fatal("Serve did not unblock an active response write on cancellation")
+		err := <-done
+		t.Fatalf("Serve did not unblock an active response write on cancellation (returned %v after the client closed)", err)
 	}
 	<-handlerDone
 }
