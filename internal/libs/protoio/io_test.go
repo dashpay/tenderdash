@@ -31,6 +31,7 @@ package protoio_test
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -180,4 +181,29 @@ func TestShort(t *testing.T) {
 	n, err := reader.ReadMsg(msg)
 	require.Error(t, err)
 	require.Equal(t, varintLen+len(bz), n)
+}
+
+// Only frames whose bytes arrived but cannot be decoded are marked malformed;
+// reader failures and the configurable size bound are not.
+func TestReadMsgMalformedClassification(t *testing.T) {
+	overflow := bytes.Repeat([]byte{0xff}, 10)
+	overflow = append(overflow, 0x01)
+	for _, tc := range []struct {
+		name      string
+		input     []byte
+		malformed bool
+	}{
+		{"varint overflow", overflow, true},
+		{"undecodable body", []byte{0x02, 0x0a, 0x05}, true},
+		{"empty stream", nil, false},
+		{"truncated length", []byte{0x80}, false},
+		{"truncated body", []byte{0x05, 0x0a}, false},
+		{"exceeds max size", []byte{0x7f}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := protoio.NewDelimitedReader(bytes.NewReader(tc.input), 16).ReadMsg(&test.NinOptNative{})
+			require.Error(t, err)
+			require.Equal(t, tc.malformed, errors.Is(err, protoio.ErrMalformedMsg), "err: %v", err)
+		})
+	}
 }

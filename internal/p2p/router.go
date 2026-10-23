@@ -881,6 +881,10 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 	for {
 		chID, bz, err := conn.ReceiveMessage(ctx)
 		if err != nil {
+			// Transports mark only provably peer-sent garbage as invalid data.
+			if errors.Is(err, ErrInvalidData) {
+				r.reportPeerError(ctx, PeerError{NodeID: peerID, Err: err, ConnID: connID})
+			}
 			return err
 		}
 
