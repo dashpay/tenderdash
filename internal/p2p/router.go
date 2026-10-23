@@ -1069,9 +1069,12 @@ func (r *Router) evictPeer(peerID types.NodeID, connID uint64) {
 	queue, ok := r.peerQueues[peerID]
 	r.peerMtx.RUnlock()
 
-	// Check liveness after the lookup: while connID is live no other connection
-	// for peerID can exist, so the queue found belongs to it. A replacement that
-	// reconnected in between keeps its queue.
+	// Lookup-then-isLiveConn is safe without a shared lock. connID was live when
+	// selected and generations never revive, so if it is live now it was live at
+	// the lookup. While it is live the peer manager admits no other connection
+	// for peerID (Accepted/Dialed), and routePeer cleanup deletes the queue before
+	// Disconnected, so the queue found can only be connID's. It is then closed,
+	// never re-resolved: a replacement admitted later gets its own queue.
 	if ok && connID != 0 && !r.peerManager.isLiveConn(peerID, connID) {
 		r.logger.Debug("skipping eviction of ended connection", "peer", peerID)
 		return
