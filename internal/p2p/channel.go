@@ -263,6 +263,8 @@ type PeerError struct {
 	// ConnID is the generation of the connection that delivered the offending
 	// message (see Envelope.ConnID). When nonzero, eviction applies only while
 	// that connection is live; the score penalty applies to the NodeID either way.
+	// Reports about a received envelope must set it; zero targets whichever
+	// connection the peer holds, for faults not tied to one envelope.
 	ConnID uint64
 }
 
@@ -505,6 +507,7 @@ func (tci *throttledChannelIterator) Next(ctx context.Context) bool {
 				NodeID: e.From,
 				Err:    ErrRecvRateLimitExceeded,
 				Fatal:  true,
+				ConnID: e.ConnID,
 			}
 			if err := tci.innerChan.SendError(ctx, msg); err != nil {
 				tci.logger.Error("error sending error message", "err", err, "msg", msg)

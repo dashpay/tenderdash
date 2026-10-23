@@ -194,6 +194,7 @@ func (r *Reactor) processPexCh(ctx context.Context, pexCh p2p.Channel) {
 				if serr := pexCh.SendError(ctx, p2p.PeerError{
 					NodeID: envelope.From,
 					Err:    err,
+					ConnID: envelope.ConnID,
 				}); serr != nil {
 					r.logger.Error("cannot send error to PEX channel", "error", serr, "previous_error", err)
 					return
