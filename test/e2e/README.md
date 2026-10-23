@@ -108,6 +108,27 @@ func init() {
 }
 ```
 
+### Block sync with a slow application
+
+A node with `finalize_hold` (see [`pkg/manifest.go`](pkg/manifest.go)) holds its
+first `FinalizeBlock` call for the given duration while its networking keeps
+running; the hold starts once two sources are connected (bounded wait). Meanwhile the application samples the node's metrics in-process every
+second; it writes them to `data/app/finalize_hold.json` in the node directory
+on release, and again once block sync hands over to consensus.
+`TestBlockSync_FinalizeHold` then checks that, for the whole hold, block sync
+stayed active, kept at least two peers, recorded no eviction and buffered block
+responses behind the held block, and that within two minutes of release the
+node sent further block requests, received further responses, stored blocks up
+to `start_at` and handed over to consensus, before keeping up with the network.
+The hold must outlast the 60-second block-sync stall timeout; below it, block
+sync never considers handing over.
+
+CI runs this scenario in [`networks/blocksync-slow-apply.toml`](networks/blocksync-slow-apply.toml):
+
+```sh
+./build/runner -f networks/blocksync-slow-apply.toml
+```
+
 ### Full-node keys
 
 Since Full nodes do not participate in the consensus process, then keeping validators' public keys also is not required.
