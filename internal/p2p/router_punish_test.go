@@ -10,10 +10,10 @@ import (
 	"sync/atomic"
 	"testing"
 
-	dbm "github.com/cometbft/cometbft-db"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/crypto/ed25519"
+	dbm "github.com/dashpay/tenderdash/libs/db"
 	"github.com/dashpay/tenderdash/libs/log"
 	p2pproto "github.com/dashpay/tenderdash/proto/tendermint/p2p"
 	"github.com/dashpay/tenderdash/types"
