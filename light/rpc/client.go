@@ -701,7 +701,8 @@ func (c *Client) SubscribeWS(ctx context.Context, query string) (*coretypes.Resu
 // UnsubscribeWS calls original client's Unsubscribe using remote address as a
 // subscriber.
 func (c *Client) UnsubscribeWS(ctx context.Context, query string) (*coretypes.ResultUnsubscribe, error) {
-	err := c.next.Unsubscribe(context.Background(), rpctypes.GetCallInfo(ctx).RemoteAddr(), query) //nolint:staticcheck
+	// ctx ends with the WebSocket session, which joins this call on shutdown.
+	err := c.next.Unsubscribe(ctx, rpctypes.GetCallInfo(ctx).RemoteAddr(), query) //nolint:staticcheck
 	if err != nil {
 		return nil, err
 	}
@@ -711,7 +712,8 @@ func (c *Client) UnsubscribeWS(ctx context.Context, query string) (*coretypes.Re
 // UnsubscribeAllWS calls original client's UnsubscribeAll using remote address
 // as a subscriber.
 func (c *Client) UnsubscribeAllWS(ctx context.Context) (*coretypes.ResultUnsubscribe, error) {
-	err := c.next.UnsubscribeAll(context.Background(), rpctypes.GetCallInfo(ctx).RemoteAddr()) //nolint:staticcheck
+	// ctx ends with the WebSocket session, which joins this call on shutdown.
+	err := c.next.UnsubscribeAll(ctx, rpctypes.GetCallInfo(ctx).RemoteAddr()) //nolint:staticcheck
 	if err != nil {
 		return nil, err
 	}

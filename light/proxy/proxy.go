@@ -103,8 +103,10 @@ func (p *Proxy) listen(ctx context.Context) (net.Listener, *http.ServeMux, error
 	wmLogger := p.Logger.With("protocol", "websocket")
 	wm := rpcserver.NewWebsocketManager(wmLogger, r,
 		rpcserver.OnDisconnect(func(remoteAddr string) {
-			err := p.Client.UnsubscribeAll(context.Background(), remoteAddr)
-			if err != nil && err != tmpubsub.ErrSubscriptionNotFound {
+			// Serve joins this callback. Bound it by the proxy lifetime: once the
+			// upstream client stops, its send has no receiver.
+			err := p.Client.UnsubscribeAll(ctx, remoteAddr)
+			if err != nil && err != tmpubsub.ErrSubscriptionNotFound && ctx.Err() == nil {
 				wmLogger.Error("Failed to unsubscribe addr from events", "addr", remoteAddr, "err", err)
 			}
 		}),
