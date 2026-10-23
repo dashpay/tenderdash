@@ -90,6 +90,8 @@ func (sl *SignerListenerEndpoint) OnStart(ctx context.Context) error {
 
 // OnStop implements service.Service
 func (sl *SignerListenerEndpoint) OnStop() {
+	// A request can hold instanceMtx across signer I/O; interrupt it first.
+	sl.interruptConnection()
 	sl.instanceMtx.Lock()
 	defer sl.instanceMtx.Unlock()
 	_ = sl.Close()
