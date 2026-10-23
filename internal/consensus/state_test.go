@@ -1940,6 +1940,111 @@ func TestProposeValidBlock(t *testing.T) {
 }
 
 // What we want:
+// P0 holds an untimely valid block B, not locked, when its turn to propose
+// comes. It proposes a new block X instead, without a POL round, and prevotes
+// X. Carrying B's valid round as X's POL round makes every receiver, P0
+// included, prevote nil: the polka at that round is for B, not X.
+func TestProposeNewBlockOverUntimelyValidBlock(t *testing.T) {
+	config := configSetup(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const untimelyHeight = 2 // the initial height checks the genesis time, not timeliness
+	// B's proposal is dated as received an hour after its timestamp.
+	delayProposal := func(cs *State) {
+		cs.msgMiddlewares = append(cs.msgMiddlewares, func(hd msgHandlerFunc) msgHandlerFunc {
+			return func(ctx context.Context, stateData *StateData, msg msgEnvelope) error {
+				if m, ok := msg.Msg.(*ProposalMessage); ok &&
+					m.Proposal.Height == untimelyHeight && m.Proposal.Round == 0 {
+					msg.ReceiveTime = m.Proposal.Timestamp.Add(time.Hour)
+				}
+				return hd(ctx, stateData, msg)
+			}
+		})
+	}
+	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, stateOpts: []StateOption{delayProposal}})
+	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
+	require.EqualValues(t, untimelyHeight-1, height)
+
+	proposalCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryCompleteProposal)
+	newRoundCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryNewRound)
+	newBlockHeaderCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryNewBlockHeader)
+	proTxHash, err := cs1.privValidator.GetProTxHash(ctx)
+	require.NoError(t, err)
+	voteCh := subscribeToVoter(ctx, t, cs1, proTxHash)
+
+	// Height 1: P0 proposes and everyone commits its block.
+	startTestRound(ctx, cs1, height, round)
+	ensureNewRound(t, newRoundCh, height, round)
+	ensureNewProposal(t, proposalCh, height, round)
+	rs := cs1.GetRoundState()
+	blockID := rs.BlockID()
+	ensurePrevoteMatch(t, voteCh, height, round, blockID.Hash)
+	signAddVotes(ctx, t, cs1, tmproto.PrevoteType, config.ChainID(), blockID, vs2, vs3, vs4)
+	ensurePrecommitMatch(t, voteCh, height, round, blockID.Hash)
+	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), blockID, vs2, vs3, vs4)
+	ensureNewBlockHeader(t, newBlockHeaderCh, height, blockID.Hash)
+
+	height++
+	incrementHeight(vs2, vs3, vs4)
+	ensureNewRound(t, newRoundCh, height, round)
+
+	// Height 2, round 0: vs2 proposes B, which P0 misses until after its
+	// precommit, so P0 does not lock B.
+	ensurePrevoteMatch(t, voteCh, height, round, nil)
+	prop, propBlock := decideProposal(ctx, t, cs1, vs2, height, round)
+	propParts, err := propBlock.MakePartSet(types.BlockPartSizeBytes)
+	require.NoError(t, err)
+	validBlockID := propBlock.BlockID(propParts)
+	signAddVotes(ctx, t, cs1, tmproto.PrevoteType, config.ChainID(), validBlockID, vs2, vs3, vs4)
+	ensurePrecommitMatch(t, voteCh, height, round, nil)
+
+	// B completes after the polka: it becomes the valid block, dated untimely.
+	require.NoError(t, cs1.SetProposalAndBlock(ctx, prop, propParts, "some peer"))
+	ensureNewProposal(t, proposalCh, height, round)
+	sp := stateData.state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()
+	require.Eventually(t, func() bool {
+		rs := cs1.GetRoundState()
+		return rs.ValidRound == round && bytes.Equal(rs.ValidBlock.Hash(), validBlockID.Hash)
+	}, ensureTimeout, 10*time.Millisecond, "B must become the valid block")
+	rs = cs1.GetRoundState()
+	require.EqualValues(t, -1, rs.LockedRound, "precondition: P0 must not be locked")
+	require.False(t, rs.ValidBlock.IsTimely(rs.ValidBlockRecvTime, sp, rs.ValidRound),
+		"precondition: the valid block must be untimely")
+
+	// Nil rounds until P0's turn to propose.
+	proposerRound := round + 1
+	for {
+		proposer, err := rs.ProposerSelector.Copy().GetProposer(height, proposerRound)
+		require.NoError(t, err)
+		if bytes.Equal(proposer.ProTxHash, proTxHash) {
+			break
+		}
+		proposerRound++
+	}
+	for ; round < proposerRound; round++ {
+		if round > 0 {
+			ensurePrevoteMatch(t, voteCh, height, round, nil)
+		}
+		signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), types.BlockID{}, vs2, vs3, vs4)
+		if round > 0 {
+			ensurePrecommitMatch(t, voteCh, height, round, nil)
+		}
+		incrementRound(vs2, vs3, vs4)
+		ensureNewRound(t, newRoundCh, height, round+1)
+	}
+
+	ensureNewProposal(t, proposalCh, height, round)
+	rs = cs1.GetRoundState()
+	require.False(t, bytes.Equal(rs.ProposalBlock.Hash(), validBlockID.Hash),
+		"the untimely valid block must not be re-proposed")
+	ensurePrevoteMatch(t, voteCh, height, round, rs.ProposalBlock.Hash())
+	assert.EqualValues(t, -1, rs.Proposal.POLRound)
+}
+
+// What we want:
 // P0 miss to lock B but set valid block to B after receiving delayed prevote.
 func TestSetValidBlockOnDelayedPrevote(t *testing.T) {
 	config := configSetup(t)
@@ -3498,4 +3603,53 @@ func mockProposerApplicationCalls(t *testing.T, m *abcimocks.Application, round 
 			Return(&abci.ResponseFinalizeBlock{}, nil).
 			Once()
 	}
+}
+func TestStateWaitDrainsReceiveRoutine(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cs, _ := makeState(ctx, t, makeStateArgs{config: configSetup(t)})
+	entered, release := make(chan struct{}), make(chan struct{})
+	notified := false
+	cs.stopFn = func(*State) bool {
+		if !notified {
+			close(entered)
+			notified = true
+		}
+		<-release
+		return false
+	}
+	require.NoError(t, cs.Start(ctx))
+	<-entered
+	cs.Stop()
+
+	waited := make(chan struct{})
+	go func() {
+		cs.Wait()
+		close(waited)
+	}()
+	select {
+	case <-waited:
+		t.Error("Wait returned before the consensus receive routine finished")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case <-waited:
+	case <-time.After(time.Second):
+		t.Fatal("Wait did not return after the receive routine finished")
+	}
+}
+
+func TestDirectReceiveRoutineDrainsQueue(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cs, _ := makeState(ctx, t, makeStateArgs{})
+	cs.receiveRoutine(ctx, func(*State) bool { return true })
+	select {
+	case _, ok := <-cs.msgInfoQueue.read():
+		require.False(t, ok)
+	default:
+		t.Fatal("receiveRoutine returned before queue was closed")
+	}
+	require.NoError(t, ctx.Err())
 }

@@ -16,7 +16,44 @@ using (and turns on) the Consensus Reactor.
 
 ## Architecture and algorithm
 
-The Blocksync reactor is organised as a set of concurrent tasks:
+The pseudocode below describes the historical requester-based implementation.
+The current synchronizer in `internal/blocksync` uses a worker pool. Five
+consecutive failed requests remove a peer; a successful response resets that
+failure count. The client request timeout remains 60 seconds.
+
+Scheduling also accounts for useful service while requests are outstanding:
+
+- Active waiting begins after the client admits a request and ends at its first
+  correlated response, timeout, or cancellation. Overlapping requests consume
+  time once, not once per request. Worker queues before admission, completed
+  result buffering, block application, and idle intervals do not consume time.
+- A response earns one second plus its encoded bytes divided by 128 KiB/s only
+  after conversion, basic validation, and the requested-height check. Commit
+  verification and application retain their existing later checks. Saved credit
+  is limited to ten seconds, so an old burst cannot hide sustained poor service.
+- More than ten seconds of service debt reduces future assignments. Existing
+  requests drain; after a thirty-second cooldown, one recovery request is allowed.
+  Due recovery requests receive a turn even when other peers are healthy. Two
+  consecutive recovery responses meeting the size-adjusted allowance restore
+  ordinary pipelining. Slow or failed probes restart the cooldown.
+
+These are soft scheduling allowances, not measured wire bandwidth or a guaranteed
+minimum connection speed. They let prompt tiny blocks earn progress through their
+count and larger blocks through their bytes. There is no partial-byte telemetry:
+a large unanswered response can provisionally reduce preference, and its validated
+bytes can correct that estimate on completion. Local transport and router queues
+between client admission and resolution remain included in the observation.
+
+A scheduling penalty never disconnects a peer or makes its advertised block range
+unavailable. A sole source remains eligible for bounded recovery attempts, which
+prevents a false no-source handoff to consensus. Status refreshes preserve service
+history; a removed and re-added peer starts fresh. The twenty pending requests per
+peer, sixty-four outstanding heights, completed-backlog byte budget, validation,
+and hard failure policy are unchanged. The 60-second request deadline can still
+reject a large response on a slow connection even if its eventual service rate
+would meet the scheduling allowance.
+
+The historical Blocksync reactor is organised as a set of concurrent tasks:
 
 - Receive routine of Blocksync Reactor
 - Task for creating Requesters

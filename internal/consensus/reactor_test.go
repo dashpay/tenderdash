@@ -834,3 +834,17 @@ func TestReactorPeerDownDeletesPeerStateSynchronously(t *testing.T) {
 		"peerDown must delete the peer state before returning, so a fast reconnect cannot reuse it")
 	require.False(t, ps.IsRunning(), "peerDown must stop the peer state before returning")
 }
+
+func TestReactorRejectsConsensusHandoffAfterShutdown(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cs, _ := makeState(ctx, t, makeStateArgs{})
+	rts := setup(ctx, t, 1, []*State{cs}, 32)
+	for _, r := range rts.reactors {
+		r.Stop()
+		r.Wait()
+		r.SwitchToConsensus(ctx, cs.GetStateData().state, false, 0)
+		require.False(t, cs.IsRunning(), "handoff started consensus after reactor shutdown")
+		require.True(t, r.WaitSync(), "rejected handoff changed sync state")
+	}
+}
