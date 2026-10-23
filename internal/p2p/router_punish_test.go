@@ -414,3 +414,50 @@ func TestReportPeerError_StaleConnection_SparesReplacement(t *testing.T) {
 	f.router.reportPeerError(ctx, PeerError{NodeID: f.peerID, Err: stale.Err, ConnID: newConn})
 	require.True(t, f.isEvicted(), "a report from the live connection must still evict")
 }
+
+// enableRoutePeer gives the fixture router the state routePeer needs.
+func (f *punishFixture) enableRoutePeer() {
+	f.router.peerQueues = map[types.NodeID]queue{}
+	f.router.peerChannels = map[types.NodeID]ChannelIDSet{}
+	f.router.queueFactory = newFIFOQueue
+}
+
+func isClosed(q queue) bool {
+	select {
+	case <-q.closed():
+		return true
+	default:
+		return false
+	}
+}
+
+// An eviction selected for one connection must not close the queue of a
+// replacement that reconnected under the same NodeID before the router acted.
+func TestEvictPeer_StaleGeneration_SparesReplacement(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	f := newPunishFixture(ctx, t, 10)
+	f.enableRoutePeer()
+	f.pm.ErroredConn(f.peerID, f.connID, ErrInvalidData)
+	id, connID, err := f.pm.EvictNextConn(ctx)
+	require.NoError(t, err)
+	require.Equal(t, f.peerID, id)
+	require.Equal(t, f.connID, connID)
+
+	// The selected connection ends and the identity reconnects before evictPeer.
+	f.pm.Disconnected(ctx, f.peerID)
+	require.NoError(t, f.pm.Accepted(f.peerID))
+	replacement := newFIFOQueue(1)
+	f.router.peerQueues[f.peerID] = replacement
+
+	f.router.evictPeer(f.peerID, connID)
+	require.False(t, isClosed(replacement), "stale eviction closed a replacement that is not ready yet")
+
+	newConn := f.pm.Ready(ctx, f.peerID, nil)
+	f.router.evictPeer(f.peerID, connID)
+	require.False(t, isClosed(replacement), "stale eviction closed a ready replacement")
+
+	f.router.evictPeer(f.peerID, newConn)
+	require.True(t, isClosed(replacement), "an eviction of the live generation must close its queue")
+}

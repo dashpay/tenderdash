@@ -1034,7 +1034,7 @@ func (r *Router) sendPeer(ctx context.Context, peerID types.NodeID, conn Connect
 // evictPeers evicts connected peers as requested by the peer manager.
 func (r *Router) evictPeers(ctx context.Context) {
 	for {
-		peerID, err := r.peerManager.EvictNext(ctx)
+		peerID, connID, err := r.peerManager.EvictNextConn(ctx)
 
 		switch {
 		case errors.Is(err, context.Canceled):
@@ -1044,17 +1044,31 @@ func (r *Router) evictPeers(ctx context.Context) {
 			return
 		}
 
-		r.logger.Info("evicting peer", "peer", peerID)
+		r.evictPeer(peerID, connID)
+	}
+}
 
-		r.peerMtx.RLock()
-		queue, ok := r.peerQueues[peerID]
-		r.peerMtx.RUnlock()
+// evictPeer closes the send queue of the connection generation connID selected
+// for eviction.
+func (r *Router) evictPeer(peerID types.NodeID, connID uint64) {
+	r.logger.Info("evicting peer", "peer", peerID)
 
-		r.metrics.PeersEvicted.Add(1)
+	r.peerMtx.RLock()
+	queue, ok := r.peerQueues[peerID]
+	r.peerMtx.RUnlock()
 
-		if ok {
-			queue.close()
-		}
+	// Check liveness after the lookup: while connID is live no other connection
+	// for peerID can exist, so the queue found belongs to it. A replacement that
+	// reconnected in between keeps its queue.
+	if ok && connID != 0 && !r.peerManager.isLiveConn(peerID, connID) {
+		r.logger.Debug("skipping eviction of ended connection", "peer", peerID)
+		return
+	}
+
+	r.metrics.PeersEvicted.Add(1)
+
+	if ok {
+		queue.close()
 	}
 }
 

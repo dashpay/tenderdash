@@ -1116,15 +1116,23 @@ func (m *PeerManager) Ready(ctx context.Context, peerID types.NodeID, channels C
 // EvictNext returns the next peer to evict (i.e. disconnect). If no evictable
 // peers are found, the call will block until one becomes available.
 func (m *PeerManager) EvictNext(ctx context.Context) (types.NodeID, error) {
+	id, _, err := m.EvictNextConn(ctx)
+	return id, err
+}
+
+// EvictNextConn is EvictNext that also returns the generation of the connection
+// selected for eviction (zero if it was not yet ready), so the caller can avoid
+// evicting a replacement connection that took its place.
+func (m *PeerManager) EvictNextConn(ctx context.Context) (types.NodeID, uint64, error) {
 	for {
-		id, err := m.TryEvictNext()
+		id, connID, err := m.tryEvictNextConn()
 		if err != nil || id != "" {
-			return id, err
+			return id, connID, err
 		}
 		select {
 		case <-m.evictWaker.Sleep():
 		case <-ctx.Done():
-			return "", ctx.Err()
+			return "", 0, ctx.Err()
 		}
 	}
 }
@@ -1132,6 +1140,18 @@ func (m *PeerManager) EvictNext(ctx context.Context) (types.NodeID, error) {
 // TryEvictNext is equivalent to EvictNext, but immediately returns an empty
 // node ID if no evictable peers are found.
 func (m *PeerManager) TryEvictNext() (types.NodeID, error) {
+	id, _, err := m.tryEvictNextConn()
+	return id, err
+}
+
+// isLiveConn reports whether connID is still peerID's live connection.
+func (m *PeerManager) isLiveConn(peerID types.NodeID, connID uint64) bool {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+	return m.connIDs[peerID] == connID
+}
+
+func (m *PeerManager) tryEvictNextConn() (types.NodeID, uint64, error) {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 
@@ -1141,14 +1161,14 @@ func (m *PeerManager) TryEvictNext() (types.NodeID, error) {
 		delete(m.evict, peerID)
 		if m.isConnected(peerID) && !m.evicting[peerID] {
 			m.evicting[peerID] = true
-			return peerID, nil
+			return peerID, m.connIDs[peerID], nil
 		}
 	}
 
 	// If we're below capacity, we don't need to evict anything.
 	if m.options.MaxConnected == 0 ||
 		len(m.connected)-len(m.evicting) <= int(m.options.MaxConnected) {
-		return "", nil
+		return "", 0, nil
 	}
 
 	// If we're above capacity (shouldn't really happen), just pick the
@@ -1158,11 +1178,11 @@ func (m *PeerManager) TryEvictNext() (types.NodeID, error) {
 		peer := ranked[i]
 		if m.isConnected(peer.ID) && !m.evicting[peer.ID] {
 			m.evicting[peer.ID] = true
-			return peer.ID, nil
+			return peer.ID, m.connIDs[peer.ID], nil
 		}
 	}
 
-	return "", nil
+	return "", 0, nil
 }
 
 // Disconnected unmarks a peer as connected, allowing it to be dialed or
