@@ -491,28 +491,10 @@ func (n *nodeImpl) OnStart(ctx context.Context) (err error) {
 	n.dependencyCancel = dependencyCancel
 	ctx, cancelAttempt := context.WithCancel(ctx)
 	var startedReactors []service.Service
-	routerStarted := false
 	defer func() {
 		if err != nil {
 			cancelAttempt()
-			n.rpcEnv.StopService()
-			if stopErr := n.rpcEnv.StopAsyncBroadcasts(context.Background()); stopErr != nil {
-				n.logger.Error("Failed to stop async broadcasts after startup failure", "err", stopErr)
-			}
-			for _, reactor := range startedReactors {
-				reactor.Wait()
-			}
-			if routerStarted {
-				n.router.Wait()
-			}
-			if mp, ok := n.rpcEnv.Mempool.(*mempool.TxMempool); ok {
-				mp.StopRechecks()
-			}
-			n.rpcEnv.EventBus.Stop()
-			n.rpcEnv.EventBus.Wait()
-			dependencyCancel()
-			n.indexerService.Wait()
-			n.rpcEnv.ProxyApp.Wait()
+			n.joinChildren(startedReactors)
 		}
 	}()
 	if err := n.rpcEnv.ProxyApp.Start(dependencyCtx); err != nil {
@@ -610,7 +592,6 @@ func (n *nodeImpl) OnStart(ctx context.Context) (err error) {
 	if err := n.router.Start(ctx); err != nil {
 		return err
 	}
-	routerStarted = true
 	n.rpcEnv.IsListening = true
 
 	for _, reactor := range n.services {
@@ -639,17 +620,38 @@ func (n *nodeImpl) OnStart(ctx context.Context) (err error) {
 // OnStop stops the Node. It implements service.Service.
 func (n *nodeImpl) OnStop() {
 	n.logger.Info("Stopping Node")
+	reactors := make([]service.Service, 0, len(n.services))
+	for _, reactor := range n.services {
+		if reactor != n.rpcEnv.EventBus {
+			reactors = append(reactors, reactor)
+		}
+	}
+	n.joinChildren(reactors)
+
+	// The private validator is created with the node, not started by OnStart,
+	// so only completed shutdown waits for a service implementation of it.
+	if n.privValidator != nil {
+		if pvsc, ok := n.privValidator.(service.Service); ok {
+			pvsc.Wait()
+		}
+	}
+}
+
+// joinChildren stops and joins the children started by OnStart after their
+// contexts are canceled; both shutdown and failed startup use it. Waiting for a
+// child that never started returns immediately. RPC admission closes first;
+// application connections, the event bus and the indexer go last because
+// reactors may use them until they exit.
+func (n *nodeImpl) joinChildren(reactors []service.Service) {
 	n.rpcEnv.StopService()
 	if err := n.rpcEnv.StopAsyncBroadcasts(context.Background()); err != nil {
 		n.logger.Error("Async broadcasts did not finish during shutdown", "err", err)
 	}
-
-	for _, reactor := range n.services {
-		if reactor == n.rpcEnv.EventBus {
-			continue
-		}
+	for _, reactor := range reactors {
 		reactor.Wait()
 	}
+	n.router.Wait()
+	n.rpcEnv.IsListening = false
 	if mp, ok := n.rpcEnv.Mempool.(*mempool.TxMempool); ok {
 		mp.StopRechecks()
 	}
@@ -658,15 +660,6 @@ func (n *nodeImpl) OnStop() {
 	n.dependencyCancel()
 	n.indexerService.Wait()
 	n.rpcEnv.ProxyApp.Wait()
-
-	n.router.Wait()
-	n.rpcEnv.IsListening = false
-
-	if n.privValidator != nil {
-		if pvsc, ok := n.privValidator.(service.Service); ok {
-			pvsc.Wait()
-		}
-	}
 }
 
 // OnDrain releases storage after child services and node workers have finished.
