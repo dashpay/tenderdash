@@ -18,6 +18,7 @@ var (
 type TimeoutTicker interface {
 	Start(context.Context) error
 	Stop()
+	Wait()
 	IsRunning() bool
 	Chan() <-chan timeoutInfo       // on which to receive a timeout
 	ScheduleTimeout(ti timeoutInfo) // reset the timer
@@ -52,13 +53,16 @@ func NewTimeoutTicker(logger log.Logger) TimeoutTicker {
 
 // OnStart implements service.Service. It starts the timeout routine.
 func (t *timeoutTicker) OnStart(ctx context.Context) error {
-	go t.timeoutRoutine(ctx)
+	t.Go(ctx, t.timeoutRoutine)
 
 	return nil
 }
 
-// OnStop implements service.Service. It stops the timeout routine.
-func (t *timeoutTicker) OnStop() { t.stopTimer() }
+// OnStop needs no extra signal: the service context stops timeout work.
+func (t *timeoutTicker) OnStop() {}
+
+// OnDrain stops the timer after its sole scheduling worker exits.
+func (t *timeoutTicker) OnDrain() { t.stopTimer() }
 
 // Chan returns a channel on which timeouts are sent.
 func (t *timeoutTicker) Chan() <-chan timeoutInfo {
@@ -69,7 +73,10 @@ func (t *timeoutTicker) Chan() <-chan timeoutInfo {
 // The timeoutRoutine is always available to read from tickChan, so this won't block.
 // The scheduling may fail if the timeoutRoutine has already scheduled a timeout for a later height/round/step.
 func (t *timeoutTicker) ScheduleTimeout(ti timeoutInfo) {
-	t.tickChan <- ti
+	select {
+	case t.tickChan <- ti:
+	case <-t.Stopping():
+	}
 }
 
 //-------------------------------------------------------------
@@ -122,12 +129,13 @@ func (t *timeoutTicker) timeoutRoutine(ctx context.Context) {
 			// Determinism comes from playback in the receiveRoutine.
 			// We can eliminate it by merging the timeoutRoutine into receiveRoutine
 			//  and managing the timeouts ourselves with a millisecond ticker
-			go func(toi timeoutInfo) {
+			toi := ti
+			t.Go(ctx, func(ctx context.Context) {
 				select {
 				case t.tockChan <- toi:
 				case <-ctx.Done():
 				}
-			}(ti)
+			})
 		case <-ctx.Done():
 			return
 		}
