@@ -19,7 +19,6 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/dashpay/tenderdash/config"
-	"github.com/dashpay/tenderdash/internal/libs/flowrate"
 	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/internal/p2p/client"
 	clientmocks "github.com/dashpay/tenderdash/internal/p2p/client/mocks"
@@ -68,6 +67,7 @@ func (suite *SynchronizerTestSuite) SetupTest() {
 	suite.client = clientmocks.NewBlockClient(suite.T())
 	suite.store = mocks.NewBlockStore(suite.T())
 	suite.blockExec = mocks.NewExecutor(suite.T())
+	acceptCommitExtensions(suite.blockExec)
 }
 
 func (suite *SynchronizerTestSuite) TestBasic() {
@@ -1048,37 +1048,6 @@ func (suite *SynchronizerTestSuite) TestStatusRefreshUpdatesAdvertisedRange() {
 	suite.Require().EqualValues(70, pool.MaxPeerHeight())
 }
 
-// TestStatusRefreshKeepsSlowPeerEvictable checks that a status response does not
-// hide a peer that is answering too slowly. The check needs both the peer's
-// pending requests and the receive rate measured across them, and a refresh that
-// replaced either would restart the measurement every few seconds, so no peer
-// could ever be measured over a long enough window to be evicted.
-func (suite *SynchronizerTestSuite) TestStatusRefreshKeepsSlowPeerEvictable() {
-	fakeClock := clockwork.NewFakeClock()
-	flowrate.Now = func() time.Time { return fakeClock.Now() }
-	defer func() { flowrate.Now = flowrate.TimeNow }()
-
-	// 10000 bytes over 5 seconds - non-zero, and well below minRecvRate
-	monitor := flowrate.New(time.Now(), time.Second, 10*time.Second)
-	fakeClock.Advance(5 * time.Second)
-	monitor.Update(10000)
-
-	peerID := types.NodeID("peer 1")
-	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
-	pool := NewSynchronizer(1, suite.client, applier)
-	pool.AddPeer(newPeerData(peerID, 1, 100))
-	pool.peerStore.Update(peerID, AddNumPending(1), func(_ types.NodeID, peer *PeerData) {
-		peer.recvMonitor = monitor
-	})
-	suite.Require().Len(pool.peerStore.FindTimedoutPeers(), 1)
-
-	pool.AddPeer(newPeerData(peerID, 1, 200))
-
-	timedout := pool.peerStore.FindTimedoutPeers()
-	suite.Require().Len(timedout, 1, "a status refresh must not hide a peer that is too slow")
-	suite.Require().Equal(peerID, timedout[0].peerID)
-}
-
 func generateBlockResponses(t *testing.T, blocks []*types.Block) []*blocksync.BlockResponse {
 	responses := make([]*blocksync.BlockResponse, 0, len(blocks)-1)
 	for i := 0; i < len(blocks)-1; i++ {
@@ -1306,29 +1275,8 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncKeepsSyncingWhileFarBehind() 
 	suite.Require().False(ended, "block sync gave up while still %d blocks behind", maxCatchupGap+1)
 }
 
-// TestWaitForSyncStopsWhenTheOnlyPeerIsRateRejected covers the slow-peer route to
-// the same lock-out. A peer below minRecvRate holds the block we want but will
-// never be selected again and cannot be evicted while nothing is pending, so
-// treating it as something to wait for costs the full wedge backstop with no
-// attacker involved.
-func (suite *SynchronizerTestSuite) TestWaitForSyncStopsWhenTheOnlyPeerIsRateRejected() {
-	const height = int64(100)
-	peer := newPeerData("slow peer", 1, 1000)
-	peer.recvMonitor = newSlowMonitor(suite.T())
-	h := suite.newWaitForSyncHarness(height, peer)
-	defer h.cancel()
-
-	h.clock.Advance(syncTimeout + time.Second)
-
-	caughtUp, ended := h.result(2 * time.Second)
-	suite.Require().True(ended, "block sync kept waiting on a peer it can no longer ask")
-	suite.Require().False(caughtUp)
-}
-
 func (suite *SynchronizerTestSuite) TestStallSnapshotServableHeight() {
 	const height = int64(10)
-	slowPeer := newPeerData("slow", 1, 30)
-	slowPeer.recvMonitor = newSlowMonitor(suite.T())
 	busyPeer := newPeerData("busy", 1, 30)
 	busyPeer.numPending = maxPendingRequestsPerPeer
 	testCases := []struct {
@@ -1354,12 +1302,6 @@ func (suite *SynchronizerTestSuite) TestStallSnapshotServableHeight() {
 			name:    "no overlapping range",
 			peers:   []PeerData{newPeerData("older", 1, 9), newPeerData("recent", 25, 30)},
 			wantMax: 30,
-		},
-		{
-			name:       "rate rejected peer",
-			peers:      []PeerData{newPeerData("archive", 1, 20), slowPeer},
-			wantMax:    30,
-			wantUsable: 20,
 		},
 		{
 			name:       "busy peer remains servable",
@@ -1481,14 +1423,6 @@ type backlogHarness struct {
 // hold the whole chain.
 func (suite *SynchronizerTestSuite) newBacklogHarness() *backlogHarness {
 	chain := suite.backlogChain()
-
-	// Freeze the clock the receive-rate monitors read. A peer measured below
-	// minRecvRate is never selected again, and the rate here would be measured
-	// over however long the test itself takes, so a slow run would leave job
-	// production waiting forever for a peer to become selectable.
-	frozen := time.Now()
-	flowrate.Now = func() time.Time { return frozen }
-	suite.T().Cleanup(func() { flowrate.Now = flowrate.TimeNow })
 
 	suite.client.
 		On("GetBlock", mock.Anything, mock.Anything, mock.Anything).
@@ -1884,12 +1818,6 @@ func (suite *SynchronizerTestSuite) TestClientTimeoutUnwedgesAFullWindow() {
 	chain := suite.backlogChain()
 	const blocking = int64(1)
 
-	// Peer selection must not depend on how fast the test runs, as in
-	// newBacklogHarness.
-	frozen := time.Now()
-	flowrate.Now = func() time.Time { return frozen }
-	defer func() { flowrate.Now = flowrate.TimeNow }()
-
 	// The peer answers every request by posting a response back, except that it
 	// silently drops the first request for the blocking height.
 	//
@@ -2043,4 +1971,66 @@ func expectApply(exec *mocks.Executor, expect func(*mock.Call)) {
 		Return(func(_ context.Context, state sm.State, _ sm.CurrentRoundState, _ types.BlockID, _ *types.Block, _ *types.Commit, _ types.VerifiedCommit) sm.State {
 			return state
 		}, nil, nil))
+}
+
+// TestSmallBlocksAfterSlowApplyKeepPeersUsable reproduces the below-tip handoff
+// in #1534. Both peers answer a full batch immediately, but local application
+// takes three seconds per small block. Peer health must not depend on that pace.
+func (suite *SynchronizerTestSuite) TestSmallBlocksAfterSlowApplyKeepPeersUsable() {
+	ctx := context.Background()
+	h := suite.newBacklogHarness()
+	fakeClock := clockwork.NewFakeClock()
+	h.pool.clock = fakeClock
+	h.pool.lastAdvance = fakeClock.Now()
+	for _, peer := range h.pool.peerStore.All() {
+		h.pool.peerStore.Delete(peer.peerID)
+	}
+	for _, id := range []types.NodeID{"healthy one", "healthy two"} {
+		h.pool.AddPeer(newPeerData(id, 1, 10000))
+	}
+
+	responses := make([]*BlockResponse, 0, 2*maxPendingRequestsPerPeer)
+	for range cap(responses) {
+		response := h.produce(ctx)
+		suite.Require().NotNil(response)
+		suite.Require().Less(response.Size, 1024, "use real small blocks")
+		responses = append(responses, response)
+	}
+	for _, response := range responses {
+		// The response has already arrived; the delay belongs to our consumer.
+		fakeClock.Advance(3 * time.Second)
+		h.deliver(ctx, response)
+		// A periodic status refresh must retain outstanding request accounting.
+		h.pool.AddPeer(newPeerData(response.PeerID, 1, 10000))
+	}
+	suite.Require().EqualValues(len(responses)+1, h.pool.height)
+	for _, peer := range h.pool.peerStore.All() {
+		suite.Require().Zero(peer.numPending)
+		suite.Require().Zero(peer.numFailures)
+	}
+
+	fakeClock.Advance(syncTimeout + time.Second)
+	height, stalled, servable, tip, _, servableTip := h.pool.stallSnapshot()
+	suite.Equal(keepSyncing, stallVerdictFor(servable, servableTip-height, stalled),
+		"healthy peers must not trigger consensus handoff at height %d below tip %d", height, tip)
+	_, found := h.pool.peerStore.FindPeer(height)
+	suite.True(found, "healthy peers must accept the next block request after the batch drains")
+	if found {
+		response := h.produce(ctx)
+		suite.Require().NotNil(response)
+		suite.Equal(height, response.Block.Height)
+		h.deliver(ctx, response)
+		suite.Equal(height+1, h.pool.height)
+	}
+
+	wait := suite.newWaitForSyncHarness(height, h.pool.peerStore.All()...)
+	defer wait.cancel()
+	wait.clock.Advance(syncTimeout + time.Second)
+	_, ended := wait.result(200 * time.Millisecond)
+	suite.False(ended, "WaitForSync handed healthy peers over to consensus below tip")
+	wait.cancel()
+	if !ended {
+		_, stopped := wait.result(2 * time.Second)
+		suite.True(stopped, "WaitForSync must still stop on cancellation")
+	}
 }

@@ -255,3 +255,26 @@ func getMockEndpoints(
 
 	return listenerEndpoint, dialerEndpoint
 }
+
+// Startup must not hang when its context is canceled before serviceLoop accepts
+// the initial connection request (e.g. Stop racing startup). serviceLoop picks
+// between that request and ctx.Done at random, so repeat to hit the bad order.
+func TestSignerListenerEndpointStartupCanceledBeforeConnectRequest(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for i := 0; i < 100; i++ {
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		require.NoError(t, err)
+		sl := NewSignerListenerEndpoint(log.NewNopLogger(), ln)
+		started := make(chan error, 1)
+		go func() { started <- sl.Start(ctx) }()
+		select {
+		case err := <-started:
+			require.NoError(t, err)
+		case <-time.After(5 * time.Second):
+			t.Fatalf("iteration %d: Start blocked on the initial connection request after cancellation", i)
+		}
+		sl.Wait()
+		require.False(t, sl.IsRunning())
+	}
+}

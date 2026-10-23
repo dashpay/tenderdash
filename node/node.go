@@ -428,22 +428,7 @@ func makeNode(
 		cfg.StateSync.TempDir,
 		nodeMetrics.statesync,
 		eventBus,
-		// the post-sync operation
-		func(ctx context.Context, state sm.State) error {
-			csReactor.SetStateSyncingMetrics(0)
-
-			// TODO: Some form of orchestrator is needed here between the state
-			// advancing reactors to be able to control which one of the three
-			// is running
-			// FIXME Very ugly to have these metrics bleed through here.
-			csReactor.SetBlockSyncingMetrics(1)
-			if err := bcReactor.SwitchToBlockSync(ctx, state); err != nil {
-				logger.Error("failed to switch to block sync", "err", err)
-				return err
-			}
-
-			return nil
-		},
+		newPostStateSyncHook(logger, evPool, csReactor, bcReactor),
 		stateSync,
 		dashCoreRPCClient,
 		csState,

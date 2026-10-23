@@ -88,8 +88,7 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 	}
 
 	// Create a copy of the state for staging and an event cache for txs.
-	// Once the block is persisted, finish application before shutdown releases stores.
-	stateCopy, finalizeResp, err := c.blockExec.finalize(context.WithoutCancel(ctx), stateData, commit)
+	stateCopy, finalizeResp, err := c.blockExec.finalize(ctx, stateData, commit)
 	if err != nil {
 		c.logger.Error("failed to apply block", "err", err)
 		// If something went wrong within ABCI client, it can stop and we can't recover from it.

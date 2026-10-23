@@ -174,9 +174,7 @@ func (wal *BaseWAL) FlushAndSync() error {
 	return wal.group.FlushAndSync()
 }
 
-// Stop the underlying autofile group.
-// Use Wait() to ensure it's finished shutting down
-// before cleaning up files.
+// OnStop stops periodic flush scheduling; Wait joins the final flush and close.
 func (wal *BaseWAL) OnStop() {
 	wal.flushTicker.Stop()
 }

@@ -212,7 +212,7 @@ func PrometheusMetrics(namespace string, labelsAndValues ...string) *Metrics {
 			Namespace: namespace,
 			Subsystem: MetricsSubsystem,
 			Name:      "commit_verify_failures",
-			Help:      "Number of peer commits refused by verification labeled by the class of refusal.",
+			Help:      "Number of commits (from peers, block sync or this node's own precommits) refused by verification labeled by the class of refusal.",
 		}, append(labels, "reason")).With(labelsAndValues...),
 		ProposalVerifyFailures: prometheus.NewCounterFrom(stdprometheus.CounterOpts{
 			Namespace: namespace,

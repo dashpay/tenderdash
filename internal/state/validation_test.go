@@ -471,3 +471,36 @@ func TestValidateBlockEvidence(t *testing.T) {
 		)
 	}
 }
+
+func TestValidateBlockEvidenceDisabled(t *testing.T) {
+	state, stateDB, privVals := makeState(t, 1, 1)
+	state.ConsensusParams.Evidence.MaxBytes = 0
+	proposer := state.Validators.Validators[0].ProTxHash
+	ev, err := types.NewMockDuplicateVoteEvidenceWithValidator(
+		t.Context(),
+		1,
+		state.LastBlockTime,
+		privVals[proposer.String()],
+		state.ChainID,
+		state.Validators.QuorumType,
+		state.Validators.QuorumHash,
+	)
+	require.NoError(t, err)
+	blockExec := sm.NewBlockExecutor(
+		sm.NewStore(stateDB),
+		nil,
+		nil,
+		sm.EmptyEvidencePool{},
+		nil,
+		nil,
+	)
+	commit := types.NewCommit(0, 0, types.BlockID{}, nil, nil)
+	block := state.MakeBlock(1, nil, commit, nil, proposer, 0)
+	require.NoError(t, blockExec.ValidateBlock(t.Context(), state, block, types.VerifiedCommit{}))
+	block = state.MakeBlock(1, nil, commit, []types.Evidence{ev}, proposer, 0)
+	err = blockExec.ValidateBlock(t.Context(), state, block, types.VerifiedCommit{})
+	var overflow *types.ErrEvidenceOverflow
+	require.ErrorAs(t, err, &overflow)
+	require.Zero(t, overflow.Max)
+	require.Positive(t, overflow.Got)
+}

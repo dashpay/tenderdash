@@ -413,7 +413,7 @@ func (r *Reactor) OnStart(ctx context.Context) (err error) {
 // OnStop requests consensus shutdown.
 func (r *Reactor) OnStop() { r.state.Stop() }
 
-// OnDrain joins consensus after channel and peer workers have finished.
+// OnDrain joins consensus after channel, peer and handoff workers have finished.
 func (r *Reactor) OnDrain() {
 	r.state.Stop()
 	r.state.Wait()
@@ -447,7 +447,8 @@ func (r *Reactor) WaitSync() bool {
 // the state, turns off block-sync, and starts the consensus state-machine.
 //
 // targetHeight is the highest committed block height reported during block sync.
-// skipWAL says the node needs no WAL catchup.
+// skipWAL says the node needs no WAL catchup. After admission, the reactor owns
+// the handoff; caller cancellation releases the wait without canceling startup.
 func (r *Reactor) SwitchToConsensus(ctx context.Context, state sm.State, skipWAL bool, targetHeight int64) {
 	if r.ctx == nil || ctx.Err() != nil {
 		return
@@ -459,7 +460,10 @@ func (r *Reactor) SwitchToConsensus(ctx context.Context, state sm.State, skipWAL
 	}) {
 		return
 	}
-	<-done
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
 }
 
 func (r *Reactor) switchToConsensus(ctx context.Context, state sm.State, skipWAL bool, targetHeight int64) {

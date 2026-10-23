@@ -36,6 +36,7 @@ func TestPendingAndCommittedAreOneHash(t *testing.T) {
 		evidenceStore: dbm.NewMemDB(),
 		logger:        log.NewNopLogger(),
 	}
+	pool.state.ConsensusParams = *types.DefaultConsensusParams()
 	proTxHash := crypto.ProTxHash(tmrand.Bytes(crypto.ProTxHashSize))
 	ev := &countingEvidence{Evidence: testEvidence(10, 2, proTxHash, 0x11, 0x22)}
 
@@ -52,6 +53,7 @@ func TestAddEvidenceAsksBothLookupsWithOneHash(t *testing.T) {
 		evidenceStore: dbm.NewMemDB(),
 		logger:        log.NewNopLogger(),
 	}
+	pool.state.ConsensusParams = *types.DefaultConsensusParams()
 	proTxHash := crypto.ProTxHash(tmrand.Bytes(crypto.ProTxHashSize))
 	ev := &countingEvidence{Evidence: testEvidence(10, 2, proTxHash, 0x11, 0x22)}
 	require.NoError(t, pool.evidenceStore.Set(keyCommittedFor(ev.Height(), ev.Evidence.Hash()), []byte{}))

@@ -200,6 +200,9 @@ func (r *Reactor) OnDrain() { r.peerLimit.Close() }
 // or if the given evidence is invalid. This should never be called outside of
 // handleMessage.
 func (r *Reactor) handleEvidenceMessage(ctx context.Context, envelope *p2p.Envelope) error {
+	if !r.evpool.Enabled() {
+		return nil
+	}
 	logger := r.logger.With("peer", envelope.From)
 
 	switch msg := envelope.Message.(type) {
@@ -450,6 +453,9 @@ func (r *Reactor) syncEvidence(ctx context.Context, peerID types.NodeID, myID ui
 		maxBytes := r.evpool.State().ConsensusParams.Evidence.MaxBytes
 		evList, _ := r.evpool.PendingEvidence(maxBytes)
 		for _, ev := range evList {
+			if !r.evpool.Enabled() {
+				break
+			}
 			evProto, err := types.EvidenceToProto(ev)
 			if err != nil {
 				panic(fmt.Errorf("failed to convert evidence: %w", err))
@@ -482,6 +488,9 @@ func (r *Reactor) syncEvidence(ctx context.Context, peerID types.NodeID, myID ui
 
 // broadcastEvidence sends new evidence to all connected peers.
 func (r *Reactor) broadcastEvidence(ctx context.Context, evidence tmproto.Evidence, evidenceCh p2p.Channel) error {
+	if !r.evpool.Enabled() {
+		return nil
+	}
 
 	if err := evidenceCh.Send(ctx, p2p.Envelope{
 		Broadcast: true,

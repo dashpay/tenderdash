@@ -213,15 +213,22 @@ func (r *Reactor) OnStop() {
 	if r.messageHandler != nil {
 		r.messageHandler.stop()
 	}
-	if r.blockSyncFlag.Load() {
+	// Join regardless of blockSyncFlag: poolRoutine clears the flag after a Stop
+	// that returns early while the synchronizer is still draining (e.g. on parent
+	// cancellation). Stop and Wait are no-ops for a synchronizer never started.
+	if r.synchronizer != nil {
 		r.synchronizer.Stop()
+		r.synchronizer.Wait()
 	}
 }
 
-// OnDrain joins the synchronizer before its owner releases block storage.
+// OnDrain joins a synchronizer started by a handoff worker admitted before
+// shutdown: OnStop may run before that worker reaches Synchronizer.Start.
 func (r *Reactor) OnDrain() {
-	r.synchronizer.Stop()
-	r.synchronizer.Wait()
+	if r.synchronizer != nil {
+		r.synchronizer.Stop()
+		r.synchronizer.Wait()
+	}
 }
 
 // processPeerUpdate processes a PeerUpdate.

@@ -1269,7 +1269,9 @@ func (*shutdownPausedService) Start(context.Context) error { return nil }
 func (*shutdownPausedService) IsRunning() bool             { return true }
 func (s *shutdownPausedService) Wait()                     { close(s.entered); <-s.release }
 
-func TestNodeWaitPreservesFinalization(t *testing.T) {
+// Node shutdown may cancel an in-flight commit (see State.Start), but Wait must
+// still join it before later services and stores are released.
+func TestNodeWaitJoinsFinalization(t *testing.T) {
 	for _, manual := range []bool{false, true} {
 		t.Run(fmt.Sprintf("manual=%t", manual), func(t *testing.T) {
 			cfg, err := config.ResetTestRoot(t.TempDir(), strings.ReplaceAll(t.Name(), "/", "-"))
@@ -1310,16 +1312,17 @@ func TestNodeWaitPreservesFinalization(t *testing.T) {
 				t.Fatal("node Wait returned during finalization")
 			case <-time.After(25 * time.Millisecond):
 			}
-			require.NoError(t, app.finalizeCtx.Err())
+			select {
+			case <-gate.entered:
+				t.Fatal("node released later services while finalization was still running")
+			default:
+			}
 			unpauseApp()
 			select {
 			case <-gate.entered:
 			case <-time.After(5 * time.Second):
-				t.Fatal("consensus did not finish finalization")
+				t.Fatal("consensus did not drain after finalization returned")
 			}
-			state, err := n.stateStore.Load()
-			require.NoError(t, err)
-			require.EqualValues(t, 1, state.LastBlockHeight)
 			unpauseShutdown()
 			select {
 			case <-stopped:
