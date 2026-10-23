@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -17,6 +18,37 @@ import (
 	"github.com/dashpay/tenderdash/libs/log"
 	tmos "github.com/dashpay/tenderdash/libs/os"
 )
+
+func TestParseConfigLegacyPostgreSQLSetting(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		indexers    string
+		wantErr     bool
+		wantIndexer string
+	}{
+		{"dashmate", `["kv"]`, false, "kv"},
+		{"disabled", `["null"]`, false, "null"},
+		{"removed", `["psql"]`, true, ""},
+		{"removed with null", `["null", "PSQL"]`, true, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			viper.Reset()
+			t.Cleanup(viper.Reset)
+			viper.SetConfigType("toml")
+			require.NoError(t, viper.ReadConfig(strings.NewReader(
+				"db-backend = \"goleveldb\"\n[tx-index]\nindexer = "+tc.indexers+"\npsql-conn = \"\"\n")))
+			conf := cfg.DefaultConfig().SetRoot(t.TempDir())
+			parsed, err := ParseConfig(conf)
+			if tc.wantErr {
+				require.ErrorContains(t, err, "PostgreSQL event indexing has been removed")
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, "goleveldb", parsed.DBBackend)
+			require.Equal(t, []string{tc.wantIndexer}, parsed.TxIndex.Indexer)
+		})
+	}
+}
 
 // writeConfigVals writes a toml file with the given values.
 // It returns an error if writing was impossible.
