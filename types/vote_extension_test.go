@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
@@ -284,4 +285,14 @@ func TestSameVoteExtensionShape(t *testing.T) {
 		assert.False(t, SameVoteExtensionShape(base, other), name)
 		assert.False(t, SameVoteExtensionShape(other, base), name)
 	}
+}
+
+// DEFAULT is a defined enum value, but no signing or validation path supports it: an
+// application-supplied DEFAULT extension must be rejected before the vote reaches the signer.
+func TestNewVoteExtensionsFromABCIExtended_RejectsDefault(t *testing.T) {
+	_, err := NewVoteExtensionsFromABCIExtended([]*abci.ExtendVoteExtension{
+		{Type: tmproto.VoteExtensionType_THRESHOLD_RECOVER, Extension: []byte("threshold")},
+		{Type: tmproto.VoteExtensionType_DEFAULT, Extension: []byte("default")},
+	})
+	require.ErrorIs(t, err, ErrUnsupportedVoteExtensionType)
 }
