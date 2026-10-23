@@ -538,6 +538,8 @@ func newStateWithConfigAndBlockStore(
 
 	eventBus := eventbus.NewDefault(logger.With("module", "events"))
 	require.NoError(t, eventBus.Start(ctx))
+	// Join the bus before the test ends: its shutdown logs through t.
+	t.Cleanup(func() { eventBus.Stop(); eventBus.Wait() })
 
 	blockExec := sm.NewBlockExecutor(stateStore, proxyAppConnCon, mpool, evpool, blockStore, eventBus)
 	cs, err := NewState(logger.With("module", "consensus"),
