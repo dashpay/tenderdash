@@ -17,7 +17,7 @@ Rules now enforced, and the values that fail:
 | Key | Accepted range | Fails |
 | --- | --- | --- |
 | `flush-throttle-timeout` | duration >= 0 | any negative duration |
-| `max-packet-msg-payload-size` | >= 0 | any negative value |
+| `max-packet-msg-payload-size` | > 0 bytes | `0` and any negative value |
 | `send-rate` | >= 0 bytes/second | any negative value |
 | `recv-rate` | >= 0 bytes/second | any negative value |
 | `max-outgoing-connections` | <= `max-connections` | any larger value |

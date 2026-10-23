@@ -28,6 +28,12 @@ func TestConfigValidateBasicIncludesP2P(t *testing.T) {
 			errContains: "max-packet-msg-payload-size",
 		},
 		{
+			// Zero makes MConnection emit empty, non-final fragments forever.
+			name:        "ZeroMaxPacketMsgPayloadSize",
+			mutate:      func(c *P2PConfig) { c.MaxPacketMsgPayloadSize = 0 },
+			errContains: "max-packet-msg-payload-size",
+		},
+		{
 			name:        "NegativeSendRate",
 			mutate:      func(c *P2PConfig) { c.SendRate = -1 },
 			errContains: "send-rate",

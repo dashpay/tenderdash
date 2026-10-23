@@ -851,8 +851,9 @@ func (cfg *P2PConfig) ValidateBasic() error {
 		return fmt.Errorf("flush-throttle-timeout must be a non-negative duration, got %s",
 			cfg.FlushThrottleTimeout)
 	}
-	if cfg.MaxPacketMsgPayloadSize < 0 {
-		return fmt.Errorf("max-packet-msg-payload-size must be >= 0, got %d",
+	if cfg.MaxPacketMsgPayloadSize <= 0 {
+		// Zero would make MConnection emit empty, non-final fragments forever.
+		return fmt.Errorf("max-packet-msg-payload-size must be > 0, got %d",
 			cfg.MaxPacketMsgPayloadSize)
 	}
 	if cfg.SendRate < 0 {
