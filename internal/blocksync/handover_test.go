@@ -55,6 +55,11 @@ func TestSwitchToBlockSyncStartsAfterSnapshot(t *testing.T) {
 				executor: applier, synchronizer: synchronizer, blockSyncFlag: new(atomic.Bool),
 				eventBus: bus, statusUpdateInterval: time.Hour,
 			}
+			hooks := &handoverStartHook{start: func(ctx context.Context) { reactor.serviceCtx = ctx }}
+			reactor.BaseService = *service.NewBaseService(log.NewNopLogger(), "blocksync-test", hooks)
+			require.NoError(t, reactor.Start(ctx))
+			defer reactor.Wait()
+			defer cancel()
 			state := sm.State{InitialHeight: tc.initialHeight, LastBlockHeight: 100}
 			require.NoError(t, reactor.SwitchToBlockSync(ctx, state))
 			defer synchronizer.Wait()
@@ -156,6 +161,22 @@ func (c *handoverCapture) SwitchToConsensus(_ context.Context, state sm.State, s
 
 type handoverStopHook struct{ fn func() }
 
+func TestSwitchToBlockSyncRejectsAfterStop(t *testing.T) {
+	reactor := &Reactor{blockSyncFlag: new(atomic.Bool)}
+	hooks := &handoverStartHook{start: func(ctx context.Context) { reactor.serviceCtx = ctx }}
+	reactor.BaseService = *service.NewBaseService(log.NewNopLogger(), "blocksync-test", hooks)
+	require.NoError(t, reactor.Start(context.Background()))
+	reactor.Stop()
+	reactor.Wait()
+	require.Error(t, reactor.SwitchToBlockSync(context.Background(), sm.State{}))
+	require.False(t, reactor.blockSyncFlag.Load())
+}
+
+type handoverStartHook struct{ start func(context.Context) }
+
+func (h *handoverStartHook) OnStart(ctx context.Context) error { h.start(ctx); return nil }
+func (*handoverStartHook) OnStop()                             {}
+
 func (*handoverStopHook) OnStart(context.Context) error { return nil }
 func (h *handoverStopHook) OnStop()                     { h.fn() }
 
@@ -184,13 +205,16 @@ func TestReactorWaitJoinsSynchronizerDrain(t *testing.T) {
 			// The synchronizer's own stop wins and holds its drain open.
 			go synchronizer.Stop()
 			<-draining
+			poolDone := make(chan struct{})
 			if handover {
 				// Parent cancellation releases poolRoutine from WaitForSync; its Stop
-				// returns early and it clears the flag before reactor OnStop runs.
+				// returns early, so it must join the draining synchronizer before it
+				// reads the final state and clears the flag.
 				poolCtx, cancelPool := context.WithCancel(ctx)
 				cancelPool()
-				reactor.poolRoutine(poolCtx, false)
-				require.False(t, reactor.blockSyncFlag.Load())
+				go func() { reactor.poolRoutine(poolCtx, false); close(poolDone) }()
+			} else {
+				close(poolDone)
 			}
 			cancel()
 			waited := make(chan struct{})
@@ -200,9 +224,21 @@ func TestReactorWaitJoinsSynchronizerDrain(t *testing.T) {
 				t.Fatal("reactor Wait returned while synchronizer application was still running")
 			case <-time.After(100 * time.Millisecond):
 			}
+			if handover {
+				select {
+				case <-poolDone:
+					t.Fatal("poolRoutine returned while synchronizer application was still running")
+				default:
+				}
+				require.True(t, reactor.blockSyncFlag.Load())
+			}
 			close(releaseApply)
 			<-waited
+			<-poolDone
 			require.True(t, applyReturned.Load())
+			if handover {
+				require.False(t, reactor.blockSyncFlag.Load())
+			}
 			synchronizer.Wait()
 		})
 	}

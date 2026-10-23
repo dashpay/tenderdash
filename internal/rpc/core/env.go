@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/rs/cors"
@@ -28,6 +29,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/state/indexer"
 	"github.com/dashpay/tenderdash/internal/statesync"
 	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/libs/service"
 	"github.com/dashpay/tenderdash/rpc/coretypes"
 	rpcserver "github.com/dashpay/tenderdash/rpc/jsonrpc/server"
 	"github.com/dashpay/tenderdash/types"
@@ -91,6 +93,8 @@ type Environment struct {
 	Config config.RPCConfig
 
 	asyncBroadcasts asyncBroadcasts
+	rpcMu           sync.Mutex
+	rpcService      *rpcService
 
 	// cache of chunked genesis data.
 	genChunks []string
@@ -227,6 +231,62 @@ func ListenRPC(conf *config.RPCConfig) ([]net.Listener, error) {
 // StartService serves RPC on already bound listeners until ctx is canceled.
 // If startup fails, the caller remains responsible for closing the listeners.
 func (env *Environment) StartService(ctx context.Context, conf *config.Config, listeners []net.Listener) error {
+	env.rpcMu.Lock()
+	if env.rpcService != nil {
+		env.rpcMu.Unlock()
+		return errors.New("RPC service already started")
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	owner := &rpcService{env: env, conf: conf, listeners: listeners, cancel: cancel, ready: make(chan struct{})}
+	owner.BaseService = service.NewBaseService(env.Logger, "RPC", owner)
+	env.rpcService = owner
+	env.rpcMu.Unlock()
+	err := owner.Start(ctx)
+	close(owner.ready)
+	if err != nil {
+		cancel()
+		env.rpcMu.Lock()
+		if env.rpcService == owner {
+			env.rpcService = nil
+		}
+		env.rpcMu.Unlock()
+	}
+	return err
+}
+
+// StopService cancels and joins RPC requests, websocket sessions, and event-log
+// forwarding. Call it before releasing the dependencies used by RPC handlers.
+func (env *Environment) StopService() {
+	env.rpcMu.Lock()
+	owner := env.rpcService
+	env.rpcMu.Unlock()
+	if owner == nil {
+		return
+	}
+	owner.cancel()
+	<-owner.ready
+	owner.Stop()
+	owner.Wait()
+	env.rpcMu.Lock()
+	if env.rpcService == owner {
+		env.rpcService = nil
+	}
+	env.rpcMu.Unlock()
+}
+
+type rpcService struct {
+	*service.BaseService
+	env       *Environment
+	conf      *config.Config
+	listeners []net.Listener
+	cancel    context.CancelFunc
+	ready     chan struct{}
+}
+
+func (*rpcService) OnStop() {}
+
+func (owner *rpcService) OnStart(ctx context.Context) error {
+	env, conf, listeners := owner.env, owner.conf, owner.listeners
 	if err := env.InitGenesisChunks(); err != nil {
 		return err
 	}
@@ -267,7 +327,7 @@ func (env *Environment) StartService(ctx context.Context, conf *config.Config, l
 		if err != nil {
 			return fmt.Errorf("event log subscribe: %w", err)
 		}
-		go func() {
+		if !owner.Go(ctx, func(ctx context.Context) {
 			// N.B. Use background for unsubscribe, ctx is already terminated.
 			defer env.EventBus.UnsubscribeAll(context.Background(), subscriberID) //nolint:errcheck
 			for {
@@ -281,7 +341,10 @@ func (env *Environment) StartService(ctx context.Context, conf *config.Config, l
 					_ = lg.Add(etype, msg.Data())
 				}
 			}
-		}()
+		}) {
+			_ = env.EventBus.UnsubscribeAll(context.Background(), subscriberID)
+			return errors.New("RPC service is stopping")
+		}
 
 		env.Logger.Info("Event log subscription enabled")
 	}
@@ -321,7 +384,7 @@ func (env *Environment) StartService(ctx context.Context, conf *config.Config, l
 			rootHandler = corsMiddleware.Handler(mux)
 		}
 		if conf.RPC.IsTLSEnabled() {
-			go func() {
+			if !owner.Go(ctx, func(ctx context.Context) {
 				if err := rpcserver.ServeTLS(
 					ctx,
 					listener,
@@ -333,9 +396,11 @@ func (env *Environment) StartService(ctx context.Context, conf *config.Config, l
 				); err != nil {
 					env.Logger.Error("error serving server with TLS", "err", err)
 				}
-			}()
+			}) {
+				return errors.New("RPC service is stopping")
+			}
 		} else {
-			go func() {
+			if !owner.Go(ctx, func(ctx context.Context) {
 				if err := rpcserver.Serve(
 					ctx,
 					listener,
@@ -345,7 +410,9 @@ func (env *Environment) StartService(ctx context.Context, conf *config.Config, l
 				); err != nil {
 					env.Logger.Error("error serving server", "err", err)
 				}
-			}()
+			}) {
+				return errors.New("RPC service is stopping")
+			}
 		}
 	}
 

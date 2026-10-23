@@ -5,8 +5,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dashpay/dashd-go/btcjson"
@@ -653,12 +655,11 @@ func createBlockReplayer(n *nodeImpl) *consensus.BlockReplayer {
 	)
 }
 
-// startPrometheusServer starts a Prometheus HTTP server, listening for metrics
-// collectors on addr.
-func startPrometheusServer(ctx context.Context, cfg config.InstrumentationConfig) *http.Server {
-	addr := cfg.PrometheusListenAddr
+// startPrometheusServer serves Prometheus metrics on the configured address as
+// work owned by owner.
+func startPrometheusServer(ctx context.Context, owner *service.BaseService, logger log.Logger, cfg config.InstrumentationConfig) {
 	srv := &http.Server{
-		Addr:              addr,
+		Addr:              cfg.PrometheusListenAddr,
 		ReadHeaderTimeout: httpReadHeaderTimeout,
 		Handler: promhttp.InstrumentMetricHandler(
 			prometheus.DefaultRegisterer, promhttp.HandlerFor(
@@ -667,51 +668,67 @@ func startPrometheusServer(ctx context.Context, cfg config.InstrumentationConfig
 			),
 		),
 	}
-
-	signal := make(chan struct{})
-	go func() {
-		select {
-		case <-ctx.Done():
-			sctx, scancel := context.WithTimeout(context.Background(), time.Second)
-			defer scancel()
-			_ = srv.Shutdown(sctx)
-		case <-signal:
-		}
-	}()
-
-	go func() {
-		if err := srv.ListenAndServe(); err != nil {
-			close(signal)
-		}
-	}()
-
-	return srv
+	startHTTPServer(ctx, owner, logger, srv)
 }
 
-// startPProfServer creates a new pprof server
-// FIXME: implement as a Service
-func startPProfServer(ctx context.Context, cfg config.RPCConfig) {
-	signal := make(chan struct{})
+// startPProfServer serves pprof on the configured address as work owned by owner.
+func startPProfServer(ctx context.Context, owner *service.BaseService, logger log.Logger, cfg config.RPCConfig) {
 	srv := &http.Server{
 		Addr:              cfg.PprofListenAddress,
 		ReadHeaderTimeout: httpReadHeaderTimeout,
-		Handler:           nil,
+		Handler:           http.DefaultServeMux,
 	}
-	go func() {
-		select {
-		case <-ctx.Done():
-			sctx, scancel := context.WithTimeout(context.Background(), time.Second)
-			defer scancel()
-			_ = srv.Shutdown(sctx)
-		case <-signal:
-		}
-	}()
+	startHTTPServer(ctx, owner, logger, srv)
+}
 
-	go func() {
-		if err := srv.ListenAndServe(); err != nil {
-			close(signal)
+// startHTTPServer binds srv.Addr and serves it until ctx is canceled. A bind
+// failure is logged; the auxiliary server is skipped as before.
+func startHTTPServer(ctx context.Context, owner *service.BaseService, logger log.Logger, srv *http.Server) {
+	ln, err := net.Listen("tcp", srv.Addr)
+	if err != nil {
+		logger.Error("failed to start HTTP server", "addr", srv.Addr, "err", err)
+		return
+	}
+	serveOwnedHTTP(ctx, owner, srv, ln)
+}
+
+// serveOwnedHTTP serves srv on ln as work of owner. On cancellation it rejects
+// new requests, cancels request contexts and closes connections, so a stalled
+// client cannot block shutdown, then joins the active handlers.
+func serveOwnedHTTP(ctx context.Context, owner *service.BaseService, srv *http.Server, ln net.Listener) {
+	var mu sync.Mutex
+	var handlers sync.WaitGroup
+	stopping := false
+	next := srv.Handler
+	srv.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Serialize admission with the WaitGroup join below.
+		mu.Lock()
+		if stopping {
+			mu.Unlock()
+			http.Error(w, "server is stopping", http.StatusServiceUnavailable)
+			return
 		}
-	}()
+		handlers.Add(1)
+		mu.Unlock()
+		defer handlers.Done()
+		next.ServeHTTP(w, r)
+	})
+	srv.BaseContext = func(net.Listener) context.Context { return ctx }
+	if !owner.Go(ctx, func(ctx context.Context) {
+		<-ctx.Done()
+		mu.Lock()
+		stopping = true
+		mu.Unlock()
+		_ = srv.Close()
+		handlers.Wait()
+	}) {
+		_ = ln.Close()
+		return
+	}
+	// Serve closes ln, including when Close has already run.
+	if !owner.Go(ctx, func(context.Context) { _ = srv.Serve(ln) }) {
+		_ = ln.Close()
+	}
 }
 
 // stateSyncMetricsSetter is the consensus-side surface of the state sync handoff.

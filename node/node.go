@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -62,17 +61,16 @@ type nodeImpl struct {
 	nodeKey     types.NodeKey // our node privkey
 
 	// services
-	eventSinks     []indexer.EventSink
-	initialState   sm.State
-	stateStore     sm.Store
-	blockStore     *store.BlockStore // store the blockchain to disk
-	evPool         *evidence.Pool
-	indexerService *indexer.Service
-	services       []service.Service
-	rpcListeners   []net.Listener // rpc servers
-	shutdownOps    closer
-	rpcEnv         *rpccore.Environment
-	prometheusSrv  *http.Server
+	eventSinks       []indexer.EventSink
+	initialState     sm.State
+	stateStore       sm.Store
+	blockStore       *store.BlockStore // store the blockchain to disk
+	evPool           *evidence.Pool
+	indexerService   *indexer.Service
+	services         []service.Service
+	shutdownOps      closer
+	rpcEnv           *rpccore.Environment
+	dependencyCancel context.CancelFunc
 }
 
 // newDefaultNode returns a Tendermint node with default settings for the
@@ -211,6 +209,9 @@ func makeNode(
 		if err != nil {
 			return nil, combineCloseError(err, makeCloser(closers))
 		}
+		if resource, ok := privValidator.(interface{ Close() error }); ok {
+			closers = append(closers, resource.Close)
+		}
 		if dashPrivval, ok := privValidator.(privval.DashPrivValidator); ok {
 			dashCoreRPCClient = dashPrivval.DashRPCClient()
 		}
@@ -291,11 +292,13 @@ func makeNode(
 			makeCloser(closers))
 	}
 
+	mempoolRateLimit := p2pclient.NewRateLimit(ctx, cfg.Mempool.TxSendRateLimit, false, logger)
+	closers = append(closers, func() error { mempoolRateLimit.Close(); return nil })
 	p2pClient := p2pclient.New(
 		p2p.ChannelDescriptors(cfg),
 		node.router.OpenChannel,
 		p2pclient.WithLogger(logger),
-		p2pclient.WithSendRateLimits(p2pclient.NewRateLimit(ctx, cfg.Mempool.TxSendRateLimit, false, logger), p2p.MempoolChannel),
+		p2pclient.WithSendRateLimits(mempoolRateLimit, p2p.MempoolChannel),
 	)
 
 	evReactor, evPool, edbCloser, err := createEvidenceReactor(logger, cfg, dbProvider,
@@ -460,6 +463,7 @@ func makeNode(
 	}
 
 	node.BaseService = *service.NewBaseService(logger, "Node", node)
+	node.shutdownOps = makeCloser(closers)
 
 	return node, nil
 }
@@ -479,8 +483,26 @@ func (n *nodeImpl) OnStart(ctx context.Context) (err error) {
 		}
 	}()
 
-	if err := n.rpcEnv.ProxyApp.Start(ctx); err != nil {
+	// Application transports and event sinks outlive reactor cancellation so an
+	// in-flight finalization can finish. Node shutdown joins them explicitly.
+	dependencyCtx, dependencyCancel := context.WithCancel(context.WithoutCancel(ctx))
+	stopStartupCancellation := context.AfterFunc(ctx, dependencyCancel)
+	defer stopStartupCancellation()
+	n.dependencyCancel = dependencyCancel
+	ctx, cancelAttempt := context.WithCancel(ctx)
+	var startedReactors []service.Service
+	defer func() {
+		if err != nil {
+			cancelAttempt()
+			n.joinChildren(startedReactors)
+		}
+	}()
+	if err := n.rpcEnv.ProxyApp.Start(dependencyCtx); err != nil {
 		return fmt.Errorf("error starting proxy app connections: %w", err)
+	}
+	stopStartupCancellation()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	var proTxHash tmbytes.HexBytes
@@ -491,16 +513,17 @@ func (n *nodeImpl) OnStart(ctx context.Context) (err error) {
 		}
 	}
 	ctx = dash.ContextWithProTxHash(ctx, proTxHash)
+	dependencyCtx = dash.ContextWithProTxHash(dependencyCtx, proTxHash)
 
 	// EventBus and IndexerService must be started before the handshake because
 	// we might need to index the txs of the replayed block as this might not have happened
 	// when the node stopped last time (i.e. the node stopped or crashed after it saved the block
 	// but before it indexed the txs)
-	if err := n.rpcEnv.EventBus.Start(ctx); err != nil {
+	if err := n.rpcEnv.EventBus.Start(dependencyCtx); err != nil {
 		return err
 	}
 
-	if err := n.indexerService.Start(ctx); err != nil {
+	if err := n.indexerService.Start(dependencyCtx); err != nil {
 		return err
 	}
 
@@ -536,7 +559,7 @@ func (n *nodeImpl) OnStart(ctx context.Context) (err error) {
 	}
 	// Start Internal Services
 	if n.config.RPC.PprofListenAddress != "" {
-		startPProfServer(ctx, *n.config.RPC)
+		startPProfServer(ctx, &n.BaseService, n.logger, *n.config.RPC)
 	}
 
 	now := tmtime.Now()
@@ -562,7 +585,7 @@ func (n *nodeImpl) OnStart(ctx context.Context) (err error) {
 	}
 
 	if n.config.Instrumentation.Prometheus && n.config.Instrumentation.PrometheusListenAddr != "" {
-		n.prometheusSrv = startPrometheusServer(ctx, *n.config.Instrumentation)
+		startPrometheusServer(ctx, &n.BaseService, n.logger, *n.config.Instrumentation)
 	}
 
 	// Start the transport.
@@ -575,6 +598,9 @@ func (n *nodeImpl) OnStart(ctx context.Context) (err error) {
 		if err := reactor.Start(ctx); err != nil {
 			return fmt.Errorf("problem starting service '%T': %w ", reactor, err)
 		}
+		if reactor != n.rpcEnv.EventBus {
+			startedReactors = append(startedReactors, reactor)
+		}
 	}
 
 	n.rpcEnv.NodeInfo = n.nodeInfo
@@ -584,15 +610,9 @@ func (n *nodeImpl) OnStart(ctx context.Context) (err error) {
 	if len(rpcListeners) > 0 {
 		err = n.rpcEnv.StartService(ctx, n.config, rpcListeners)
 		if err != nil {
-			stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
-			defer cancel()
-			if stopErr := n.rpcEnv.StopAsyncBroadcasts(stopCtx); stopErr != nil {
-				n.logger.Error("Failed to stop async broadcasts after RPC startup failure", "err", stopErr)
-			}
 			return err
 		}
 	}
-	n.rpcListeners = rpcListeners
 
 	return nil
 }
@@ -600,45 +620,50 @@ func (n *nodeImpl) OnStart(ctx context.Context) (err error) {
 // OnStop stops the Node. It implements service.Service.
 func (n *nodeImpl) OnStop() {
 	n.logger.Info("Stopping Node")
-	stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
-	if err := n.rpcEnv.StopAsyncBroadcasts(stopCtx); err != nil {
-		n.logger.Error("Async broadcasts did not finish during shutdown", "err", err)
-	}
-	cancel()
-	// stop the listeners / external services first
-	for _, l := range n.rpcListeners {
-		n.logger.Info("Closing rpc listener", "listener", l)
-		if err := l.Close(); err != nil {
-			n.logger.Error("error closing listener", "listener", l, "err", err)
-		}
-	}
-
+	reactors := make([]service.Service, 0, len(n.services))
 	for _, reactor := range n.services {
-		reactor.Wait()
-	}
-
-	for _, es := range n.eventSinks {
-		if err := es.Stop(); err != nil {
-			n.logger.Error("failed to stop event sink", "err", err)
+		if reactor != n.rpcEnv.EventBus {
+			reactors = append(reactors, reactor)
 		}
 	}
+	n.joinChildren(reactors)
 
-	n.router.Wait()
-	n.rpcEnv.IsListening = false
-
+	// The private validator is created with the node, not started by OnStart,
+	// so only completed shutdown waits for a service implementation of it.
 	if n.privValidator != nil {
 		if pvsc, ok := n.privValidator.(service.Service); ok {
 			pvsc.Wait()
 		}
 	}
+}
 
-	if n.prometheusSrv != nil {
-		if err := n.prometheusSrv.Shutdown(context.Background()); err != nil {
-			// Error from closing listeners, or context timeout:
-			n.logger.Error("Prometheus HTTP server Shutdown", "err", err)
-		}
-
+// joinChildren stops and joins the children started by OnStart after their
+// contexts are canceled; both shutdown and failed startup use it. Waiting for a
+// child that never started returns immediately. RPC admission closes first;
+// application connections, the event bus and the indexer go last because
+// reactors may use them until they exit.
+func (n *nodeImpl) joinChildren(reactors []service.Service) {
+	n.rpcEnv.StopService()
+	if err := n.rpcEnv.StopAsyncBroadcasts(context.Background()); err != nil {
+		n.logger.Error("Async broadcasts did not finish during shutdown", "err", err)
 	}
+	for _, reactor := range reactors {
+		reactor.Wait()
+	}
+	n.router.Wait()
+	n.rpcEnv.IsListening = false
+	if mp, ok := n.rpcEnv.Mempool.(*mempool.TxMempool); ok {
+		mp.StopRechecks()
+	}
+	n.rpcEnv.EventBus.Stop()
+	n.rpcEnv.EventBus.Wait()
+	n.dependencyCancel()
+	n.indexerService.Wait()
+	n.rpcEnv.ProxyApp.Wait()
+}
+
+// OnDrain releases storage after child services and node workers have finished.
+func (n *nodeImpl) OnDrain() {
 	if err := n.shutdownOps(); err != nil {
 		if strings.TrimSpace(err.Error()) != "" {
 			n.logger.Error("problem shutting down additional services", "err", err)

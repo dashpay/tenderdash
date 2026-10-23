@@ -96,18 +96,12 @@ func tryCallStop(client abciclient.Client) {
 }
 
 func (app *proxyClient) OnStart(ctx context.Context) error {
-	var err error
-	defer func() {
-		if err != nil {
-			tryCallStop(app.client)
-		}
-	}()
+	if err := app.client.Start(ctx); err != nil {
+		return err
+	}
 
 	// Kill Tendermint if the ABCI application crashes.
-	go func() {
-		if !app.client.IsRunning() {
-			return
-		}
+	if !app.Go(ctx, func(ctx context.Context) {
 		app.client.Wait()
 		if ctx.Err() != nil {
 			return
@@ -123,9 +117,12 @@ func (app *proxyClient) OnStart(ctx context.Context) error {
 			}
 		}
 
-	}()
+	}) {
+		tryCallStop(app.client)
+		app.client.Wait()
+	}
 
-	return app.client.Start(ctx)
+	return nil
 }
 
 func kill() error {
