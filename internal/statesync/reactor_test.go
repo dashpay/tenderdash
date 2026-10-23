@@ -348,6 +348,7 @@ func TestReactor_ChunkRequest_InvalidRequest(t *testing.T) {
 
 	rts.chunkInCh <- p2p.Envelope{
 		From:      types.NodeID("aa"),
+		ConnID:    7,
 		ChannelID: ChunkChannel,
 		Message:   &ssproto.SnapshotsRequest{},
 	}
@@ -357,6 +358,7 @@ func TestReactor_ChunkRequest_InvalidRequest(t *testing.T) {
 	require.Empty(t, rts.chunkOutCh)
 	require.Contains(t, response.Err.Error(), "received unknown message")
 	require.Equal(t, types.NodeID("aa"), response.NodeID)
+	require.Equal(t, uint64(7), response.ConnID, "the report must name the sending connection")
 }
 
 func TestReactor_ChunkRequest(t *testing.T) {

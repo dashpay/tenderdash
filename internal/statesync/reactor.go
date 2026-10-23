@@ -1285,6 +1285,7 @@ func (r *Reactor) processChannels(ctx context.Context, chanTable map[p2p.Channel
 			if serr := ch.SendError(ctx, p2p.PeerError{
 				NodeID: envelope.From,
 				Err:    err,
+				ConnID: envelope.ConnID,
 			}); serr != nil {
 				return
 			}

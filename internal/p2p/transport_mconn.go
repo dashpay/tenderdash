@@ -9,6 +9,7 @@ import (
 	"net"
 	"slices"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
@@ -273,6 +274,10 @@ type mConnConnection struct {
 	closeOnce    sync.Once
 
 	mconn *conn.MConnection // set during Handshake()
+
+	// invalidData is the peer-attributable failure that tore the connection
+	// down, kept so ReceiveMessage reports it even after doneCh closes.
+	invalidData atomic.Pointer[error]
 }
 
 // mConnMessage passes MConnection messages through internal channels.
@@ -440,12 +445,30 @@ func (c *mConnConnection) onReceive(ctx context.Context, chID ChannelID, payload
 	}
 }
 
+// invalidDataErr returns the peer-attributable failure that ended the
+// connection, or nil. It joins MConnection's receive routine, so a failure it
+// recorded is seen however teardown was ordered; call it only after Close.
+func (c *mConnConnection) invalidDataErr() error {
+	if c.mconn != nil {
+		if err := c.mconn.PeerInputError(); err != nil {
+			return fmt.Errorf("%w: %w", ErrInvalidData, err)
+		}
+	}
+	return nil
+}
+
 // onError is a callback for MConnection errors. The error is passed via errorCh
 // to ReceiveMessage (but not SendMessage, for legacy P2P stack behavior).
 func (c *mConnConnection) onError(ctx context.Context, e interface{}) {
 	err, ok := e.(error)
 	if !ok {
 		err = fmt.Errorf("%v", err)
+	}
+	if errors.Is(err, protoio.ErrMalformedMsg) {
+		// MConnection decoded this frame from the authenticated stream, so the
+		// peer sent it. Stored before Close so it survives teardown.
+		err = fmt.Errorf("%w: %w", ErrInvalidData, err)
+		c.invalidData.Store(&err)
 	}
 	// We have to close the connection here, since MConnection will have stopped
 	// the service on any errors.
@@ -513,6 +536,9 @@ func (c *mConnConnection) ReceiveMessage(ctx context.Context) (ChannelID, []byte
 		return 0, nil, err
 	case <-c.doneCh:
 		c.logger.Trace("ReceiveMessage: connection closed - doneCh")
+		if err := c.invalidData.Load(); err != nil {
+			return 0, nil, *err
+		}
 		return 0, nil, io.EOF
 	case <-ctx.Done():
 		c.logger.Trace("ReceiveMessage: connection closed - ctx.Done()")

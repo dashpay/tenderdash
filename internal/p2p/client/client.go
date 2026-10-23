@@ -413,7 +413,7 @@ func (c *Client) iter(ctx context.Context, iter p2p.ChannelIterator, handler Con
 			err := c.resolve(ctx, envelope)
 			if err != nil {
 				c.logger.Error("failed to resolve response message", loggingArgsFromEnvelope(envelope)...)
-				serr := c.Send(ctx, p2p.PeerError{NodeID: envelope.From, Err: err})
+				serr := c.Send(ctx, p2p.PeerError{NodeID: envelope.From, Err: err, ConnID: envelope.ConnID})
 				if serr != nil {
 					return multierror.Append(err, serr)
 				}
@@ -426,7 +426,7 @@ func (c *Client) iter(ctx context.Context, iter p2p.ChannelIterator, handler Con
 		}
 		if err != nil {
 			c.logger.Error("failed to process message", loggingArgsFromEnvelope(envelope)...)
-			serr := c.Send(ctx, p2p.PeerError{NodeID: envelope.From, Err: err})
+			serr := c.Send(ctx, p2p.PeerError{NodeID: envelope.From, Err: err, ConnID: envelope.ConnID})
 			if serr != nil {
 				return multierror.Append(err, serr)
 			}

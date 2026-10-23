@@ -10,8 +10,10 @@ import (
 
 	"github.com/fortytw2/leaktest"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/time/rate"
 
 	"github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/proto/tendermint/blocksync"
 	p2pproto "github.com/dashpay/tenderdash/proto/tendermint/p2p"
 )
@@ -295,4 +297,22 @@ func TestEnvelopeFromProto_AttributeBounds(t *testing.T) {
 			require.Len(t, envelope.Attributes, len(tc.attributes))
 		})
 	}
+}
+
+// A rate-limit report must name the connection that sent the throttled envelope.
+func TestThrottledChannelIteratorReportsConnID(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pipe := make(chan Envelope, 2)
+	pipe <- Envelope{From: "kip", ConnID: 7} // dropped: the limiter has no tokens
+	close(pipe)
+	errCh := make(chan PeerError, 1)
+	ch := NewChannel(1, "test", nil, nil, errCh)
+	iter, err := ThrottledChannelIterator(ctx, rate.NewLimiter(0, 0), NewChannelIterator(pipe), true, ch, log.NewNopLogger())
+	require.NoError(t, err)
+
+	require.False(t, iter.Next(ctx))
+	require.Len(t, errCh, 1)
+	require.Equal(t, uint64(7), (<-errCh).ConnID)
 }

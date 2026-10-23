@@ -46,6 +46,11 @@ import (
 // errors.Is instead of matching on the message text.
 var ErrMsgExceedsMaxSize = errors.New("message exceeds max size")
 
+// ErrMalformedMsg marks a frame whose bytes were read but do not form a valid
+// message: an overflowing or out-of-range length prefix, or a body that fails
+// to unmarshal. Reader I/O failures and ErrMsgExceedsMaxSize are never marked.
+var ErrMalformedMsg = errors.New("malformed message")
+
 // NewDelimitedReader reads varint-delimited Protobuf messages from a reader.
 // Unlike the gogoproto NewDelimitedReader, this does not buffer the reader,
 // which may cause poor performance but is necessary when only reading single
@@ -75,6 +80,10 @@ func (r *varintReader) ReadMsg(msg proto.Message) (int, error) {
 	l, err := binary.ReadUvarint(byteReader)
 	n := byteReader.bytesRead
 	if err != nil {
+		if byteReader.err == nil {
+			// The bytes arrived but encode no valid varint (overflow).
+			err = fmt.Errorf("%w: %w", ErrMalformedMsg, err)
+		}
 		return n, err
 	}
 
@@ -82,7 +91,7 @@ func (r *varintReader) ReadMsg(msg proto.Message) (int, error) {
 	// and that the returned sum of n+length doesn't overflow either.
 	length := int(l)
 	if l >= uint64(^uint(0)>>1) || length < 0 || n+length < 0 {
-		return n, fmt.Errorf("invalid out-of-range message length %v", l)
+		return n, fmt.Errorf("%w: invalid out-of-range message length %v", ErrMalformedMsg, l)
 	}
 	if length > r.maxSize {
 		return n, fmt.Errorf("%w (%v > %v)", ErrMsgExceedsMaxSize, length, r.maxSize)
@@ -97,7 +106,10 @@ func (r *varintReader) ReadMsg(msg proto.Message) (int, error) {
 	if err != nil {
 		return n, err
 	}
-	return n, proto.Unmarshal(buf, msg)
+	if err := proto.Unmarshal(buf, msg); err != nil {
+		return n, fmt.Errorf("%w: %w", ErrMalformedMsg, err)
+	}
+	return n, nil
 }
 
 func (r *varintReader) Close() error {

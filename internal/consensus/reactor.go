@@ -861,7 +861,7 @@ func (r *Reactor) laneCtx(ctx context.Context, ps *PeerState, envelope *p2p.Enve
 	if !ok {
 		return nil, false
 	}
-	return ctxWithPeerLaneSession(ctx, session), true
+	return ctxWithPeerConnID(ctxWithPeerLaneSession(ctx, session), envelope.ConnID), true
 }
 
 // envelopeFromLiveConn reports whether the envelope was produced by the peer's
@@ -1083,7 +1083,12 @@ func (r *Reactor) handleMessage(ctx context.Context, envelope *p2p.Envelope, cha
 
 	msg, err := MsgFromProto(envelope.Message)
 	if err != nil {
-		return err
+		if errors.Is(err, ErrUnrecognizedMessage) {
+			// Unknown types may reflect version skew; retain ordinary error policy.
+			return fmt.Errorf("%w: %w", p2p.ErrUnrecognizedMessage, err)
+		}
+		// A recognized message failed structural validation.
+		return fmt.Errorf("%w: %w", p2p.ErrInvalidData, err)
 	}
 
 	switch envelope.ChannelID {
@@ -1383,9 +1388,14 @@ func (r *Reactor) processMsgCh(ctx context.Context, msgCh p2p.Channel, chBundle 
 			if !r.envelopeFromLiveConn(envelope) {
 				continue
 			}
+			if isPeerFloodableError(err) {
+				// Keep the Debug classification through the peer manager's eviction log.
+				err = fmt.Errorf("%w: %w", p2p.ErrRejectedPeerInput, err)
+			}
 			if serr := msgCh.SendError(ctx, p2p.PeerError{
 				NodeID: envelope.From,
 				Err:    err,
+				ConnID: envelope.ConnID,
 			}); serr != nil {
 				return
 			}
@@ -1473,6 +1483,7 @@ func (r *Reactor) peerErrorRoutine(ctx context.Context, msgCh p2p.Channel) {
 				NodeID: peerErr.PeerID,
 				Err:    peerErr.Err,
 				Fatal:  peerErr.Fatal,
+				ConnID: peerErr.ConnID, // fences eviction to the sending connection
 			}); err != nil {
 				r.logger.Trace("failed to send peer error", "peer", peerErr.PeerID, "err", err)
 			}

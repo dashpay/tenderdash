@@ -348,6 +348,7 @@ type PeerManager struct {
 	ready          map[types.NodeID]bool                    // ready peers (Ready → Disconnected)
 	evict          map[types.NodeID]bool                    // peers scheduled for eviction (Connected → EvictNext)
 	evicting       map[types.NodeID]bool                    // peers being evicted (EvictNext → Disconnected)
+	connIDs        map[types.NodeID]uint64                  // live connection generation (Ready → Disconnected)
 	// connIDCounter mints a monotonic generation for each connection as it is
 	// readied, so a reconnect under the same NodeID is told apart from the
 	// connection it replaced (see PeerUpdate.ConnID / Envelope.ConnID).
@@ -388,6 +389,7 @@ func NewPeerManager(_ctx context.Context, selfID types.NodeID, peerDB dbm.DB, op
 		ready:         map[types.NodeID]bool{},
 		evict:         map[types.NodeID]bool{},
 		evicting:      map[types.NodeID]bool{},
+		connIDs:       map[types.NodeID]uint64{},
 		subscriptions: map[*PeerUpdates]*PeerUpdates{},
 	}
 
@@ -1085,6 +1087,7 @@ func (m *PeerManager) Ready(ctx context.Context, peerID types.NodeID, channels C
 		m.ready[peerID] = true
 		m.connIDCounter++
 		connID := m.connIDCounter
+		m.connIDs[peerID] = connID
 		pu := PeerUpdate{
 			NodeID:   peerID,
 			Status:   PeerStatusUp,
@@ -1113,15 +1116,23 @@ func (m *PeerManager) Ready(ctx context.Context, peerID types.NodeID, channels C
 // EvictNext returns the next peer to evict (i.e. disconnect). If no evictable
 // peers are found, the call will block until one becomes available.
 func (m *PeerManager) EvictNext(ctx context.Context) (types.NodeID, error) {
+	id, _, err := m.EvictNextConn(ctx)
+	return id, err
+}
+
+// EvictNextConn is EvictNext that also returns the generation of the connection
+// selected for eviction (zero if it was not yet ready), so the caller can avoid
+// evicting a replacement connection that took its place.
+func (m *PeerManager) EvictNextConn(ctx context.Context) (types.NodeID, uint64, error) {
 	for {
-		id, err := m.TryEvictNext()
+		id, connID, err := m.tryEvictNextConn()
 		if err != nil || id != "" {
-			return id, err
+			return id, connID, err
 		}
 		select {
 		case <-m.evictWaker.Sleep():
 		case <-ctx.Done():
-			return "", ctx.Err()
+			return "", 0, ctx.Err()
 		}
 	}
 }
@@ -1129,6 +1140,18 @@ func (m *PeerManager) EvictNext(ctx context.Context) (types.NodeID, error) {
 // TryEvictNext is equivalent to EvictNext, but immediately returns an empty
 // node ID if no evictable peers are found.
 func (m *PeerManager) TryEvictNext() (types.NodeID, error) {
+	id, _, err := m.tryEvictNextConn()
+	return id, err
+}
+
+// isLiveConn reports whether connID is still peerID's live connection.
+func (m *PeerManager) isLiveConn(peerID types.NodeID, connID uint64) bool {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+	return m.connIDs[peerID] == connID
+}
+
+func (m *PeerManager) tryEvictNextConn() (types.NodeID, uint64, error) {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 
@@ -1138,14 +1161,14 @@ func (m *PeerManager) TryEvictNext() (types.NodeID, error) {
 		delete(m.evict, peerID)
 		if m.isConnected(peerID) && !m.evicting[peerID] {
 			m.evicting[peerID] = true
-			return peerID, nil
+			return peerID, m.connIDs[peerID], nil
 		}
 	}
 
 	// If we're below capacity, we don't need to evict anything.
 	if m.options.MaxConnected == 0 ||
 		len(m.connected)-len(m.evicting) <= int(m.options.MaxConnected) {
-		return "", nil
+		return "", 0, nil
 	}
 
 	// If we're above capacity (shouldn't really happen), just pick the
@@ -1155,11 +1178,11 @@ func (m *PeerManager) TryEvictNext() (types.NodeID, error) {
 		peer := ranked[i]
 		if m.isConnected(peer.ID) && !m.evicting[peer.ID] {
 			m.evicting[peer.ID] = true
-			return peer.ID, nil
+			return peer.ID, m.connIDs[peer.ID], nil
 		}
 	}
 
-	return "", nil
+	return "", 0, nil
 }
 
 // Disconnected unmarks a peer as connected, allowing it to be dialed or
@@ -1182,6 +1205,7 @@ func (m *PeerManager) Disconnected(ctx context.Context, peerID types.NodeID) {
 	delete(m.evict, peerID)
 	delete(m.evicting, peerID)
 	delete(m.ready, peerID)
+	delete(m.connIDs, peerID)
 
 	if peer, ok := m.store.Get(peerID); ok {
 		peer.LastDisconnected = time.Now()
@@ -1222,11 +1246,24 @@ func (m *PeerManager) Disconnected(ctx context.Context, peerID types.NodeID) {
 // FIXME: This will cause the peer manager to immediately try to reconnect to
 // the peer, which is probably not always what we want.
 func (m *PeerManager) Errored(peerID types.NodeID, err error) {
-	m.logger.Error("peer errored", "peer", peerID, "error", err)
+	m.ErroredConn(peerID, 0, err)
+}
+
+// ErroredConn is Errored fenced to one connection generation: a nonzero connID
+// evicts only while it is the peer's live connection, so a report from an ended
+// connection cannot evict its replacement. Zero matches any connection.
+func (m *PeerManager) ErroredConn(peerID types.NodeID, connID uint64, err error) {
+	if isPeerInputError(err) {
+		m.logger.Debug("peer errored", "peer", peerID, "error", err)
+	} else {
+		m.logger.Error("peer errored", "peer", peerID, "error", err)
+	}
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 
-	if m.isConnected(peerID) {
+	// Disconnected clears evict, so a schedule made for the live generation
+	// cannot outlive that connection.
+	if m.isConnected(peerID) && (connID == 0 || m.connIDs[peerID] == connID) {
 		m.evict[peerID] = true
 	}
 
@@ -1440,7 +1477,8 @@ func (m *PeerManager) processPeerEvent(ctx context.Context, pu PeerUpdate) {
 
 	peer, ok := m.store.Get(pu.NodeID)
 	if !ok {
-		peer = peerInfo{}
+		// Preserve identity, address storage, and reservation metadata on first sight.
+		peer = m.newPeerInfo(pu.NodeID)
 	}
 
 	// A peer holding a reserved slot ranks by the reservation while it holds, but
@@ -1465,6 +1503,12 @@ func (m *PeerManager) processPeerEvent(ctx context.Context, pu PeerUpdate) {
 			return
 		}
 		peer.MutableScore++
+	}
+	// MutableScore is not persisted, so a known peer's score change must not
+	// write the database: peers can trigger these events once per frame.
+	if ok {
+		m.store.SetMutableScore(pu.NodeID, peer.MutableScore)
+		return
 	}
 	if err := m.store.Set(peer); err != nil {
 		m.logger.Error("cannot save peer to database", "peer", peer, "error", err)
@@ -1732,6 +1776,15 @@ func (s *peerStore) Set(peer peerInfo) error {
 	}
 
 	return nil
+}
+
+// SetMutableScore updates a known peer's ephemeral score in memory only, since
+// peerInfo.ToProto omits MutableScore. Unknown peers are ignored.
+func (s *peerStore) SetMutableScore(id types.NodeID, score int64) {
+	if peer, ok := s.peers[id]; ok && peer.MutableScore != score {
+		peer.MutableScore = score
+		s.ranked = nil // score changes invalidate the Ranked() cache
+	}
 }
 
 // Delete deletes a peer, or does nothing if it does not exist.
