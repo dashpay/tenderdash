@@ -1,6 +1,8 @@
 # Validator Signing
 
 Here we specify the rules for validating a proposal and vote before signing.
+When a validator signs each message, and what it signs, is specified by the
+[consensus protocol](./consensus.md).
 First we include some general notes on validating data structures common to both types.
 We then provide specific validation rules for each. Finally, we include validation rules to prevent double-sigining.
 
@@ -27,13 +29,14 @@ All signed messages must correspond to one of these types.
 
 ## Timestamp
 
-Timestamp validation is subtle and there are currently no bounds placed on the
-timestamp included in a proposal or vote. It is expected that validators will honestly
-report their local clock time. The median of all timestamps
-included in a commit is used as the timestamp for the next block height.
-
-Timestamps are expected to be strictly monotonic for a given validator, though
-this is not currently enforced.
+Votes carry no timestamp. A proposal's `Timestamp` must equal the proposed
+block's `Header.Time`, which the proposer takes from its local clock (the
+genesis time for the initial block); validators prevote the block only if the
+proposal is *timely* with respect to its receive time and the chain's
+`SynchronyParams`. The rules are specified in
+[Proposal timestamps and time rules](./consensus-alternative-flows.md#proposal-timestamps-and-time-rules)
+and the prevote decision in
+[Transitions and decision rules](./consensus-transitions.md#prevote-decision-prevoterdo).
 
 ## ChainID
 
@@ -291,8 +294,9 @@ sign another vote with the same type for the same height and round where
 According to the rules of Tendermint consensus, once a validator precommits for
 a block, they become "locked" on that block, which means they can't prevote for
 another block unless they see sufficient justification (ie. a polka from a
-higher round). For more details, see the [consensus
-spec](https://arxiv.org/abs/1807.04938).
+higher round). For the rules as implemented, see
+[Locking](./consensus-alternative-flows.md#locking); for the algorithm, see the
+[consensus paper](https://arxiv.org/abs/1807.04938).
 
 Violating this rule is known as "amnesia". In contrast to equivocation,
 which is easy to detect, amnesia is difficult to detect without access to votes

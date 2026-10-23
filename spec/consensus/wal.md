@@ -1,17 +1,20 @@
 # WAL
 
-Consensus module writes every message to the WAL (write-ahead log).
+Consensus module writes every message to the WAL (write-ahead log). Which
+records are written, with which durability, and how they are replayed is
+specified in [Recovery and synchronisation](./consensus-recovery.md).
 
 It also issues fsync syscall through
 [File#Sync](https://golang.org/pkg/os/#File.Sync) for messages signed by this
-node (to prevent double signing).
+node and for the end-of-height marker (to prevent double signing and to
+delimit heights).
 
-Under the hood, it uses
-[autofile.Group](https://godoc.org/github.com/tendermint/tmlibs/autofile#Group),
-which rotates files when those get too big (> 10MB).
+Under the hood, it uses `autofile.Group` (`internal/libs/autofile`),
+which rotates files when those get too big (> 10MB, `defaultHeadSizeLimit`).
 
-The total maximum size is 1GB. We only need the latest block and the block before it,
-but if the former is dragging on across many rounds, we want all those rounds.
+The total maximum size is 1GB (`defaultTotalSizeLimit`). We only need the
+latest block and the block before it, but if the former is dragging on across
+many rounds, we want all those rounds.
 
 ## Replay
 
@@ -28,5 +31,5 @@ WAL. Then it will go to precommit, and that time it will work because the
 private validator contains the `LastSignBytes` and then we’ll replay the
 precommit from the WAL.
 
-Make sure to read about [WAL corruption](https://github.com/tendermint/tendermint/blob/master/docs/tendermint-core/running-in-production.md#wal-corruption)
+Make sure to read about [WAL corruption](../../docs/nodes/running-in-production.md#wal-corruption)
 and recovery strategies.
