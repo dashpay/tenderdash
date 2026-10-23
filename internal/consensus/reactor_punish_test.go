@@ -158,3 +158,49 @@ func TestHandleMessage_InternalPanicRemainsVisible(t *testing.T) {
 	require.Contains(t, output.String(), `"level":"error"`)
 	require.Contains(t, output.String(), "recovering from processing message panic")
 }
+
+// A floodable rejection that is not invalid data must still reach the peer
+// manager classified as peer input: at capacity the router evicts through
+// PeerManager.ErroredConn, which would otherwise log every rejection at Error.
+func TestProcessMsgCh_FloodableRejectionStaysDebugInPeerManager(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	var output bytes.Buffer
+	logger, err := log.NewLogger("info", &output)
+	require.NoError(t, err)
+	cs, _ := makeState(ctx, t, makeStateArgs{validators: 1})
+	peer := types.NodeID(strings.Repeat("b2", 20))
+	r := &Reactor{
+		logger:         log.NewNopLogger(),
+		state:          cs,
+		Metrics:        NopMetrics(),
+		peers:          map[types.NodeID]*PeerState{peer: NewPeerState(log.NewNopLogger(), peer)},
+		stateRateLimit: client.NewRateLimitWithBurst(ctx, 0, 1, true, log.NewNopLogger()),
+	}
+	inCh := make(chan p2p.Envelope, 1)
+	errCh := make(chan p2p.PeerError, 1)
+	stateCh := p2p.NewChannel(p2p.ConsensusStateChannel, "state", inCh, nil, errCh)
+	go r.processMsgCh(ctx, stateCh, channelBundle{})
+
+	// Initial height with a last-commit round: ErrInvalidNewRoundStepHeight.
+	stateData := cs.GetStateData()
+	inCh <- p2p.Envelope{From: peer, ChannelID: p2p.ConsensusStateChannel, Message: &tmcons.NewRoundStep{
+		Height: stateData.InitialHeight(), Round: 0, Step: 1, LastCommitRound: 0,
+	}}
+	var reported p2p.PeerError
+	select {
+	case reported = <-errCh:
+	case <-time.After(30 * time.Second):
+		t.Fatal("rejected round step was not reported")
+	}
+	require.ErrorIs(t, reported.Err, ErrInvalidNewRoundStepHeight)
+	require.NotErrorIs(t, reported.Err, p2p.ErrInvalidData, "logging classification must not force eviction")
+
+	pm, err := p2p.NewPeerManager(ctx, types.NodeID(strings.Repeat("a1", 20)), dbm.NewMemDB(), p2p.PeerManagerOptions{MaxConnected: 1})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, pm.Close()) })
+	pm.SetLogger(logger)
+	pm.ErroredConn(reported.NodeID, reported.ConnID, reported.Err)
+	require.Empty(t, output.String(), "a peer-triggerable rejection must not log at Error")
+}

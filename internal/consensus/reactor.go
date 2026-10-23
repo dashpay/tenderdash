@@ -1388,6 +1388,10 @@ func (r *Reactor) processMsgCh(ctx context.Context, msgCh p2p.Channel, chBundle 
 			if !r.envelopeFromLiveConn(envelope) {
 				continue
 			}
+			if isPeerFloodableError(err) {
+				// Keep the Debug classification through the peer manager's eviction log.
+				err = fmt.Errorf("%w: %w", p2p.ErrRejectedPeerInput, err)
+			}
 			if serr := msgCh.SendError(ctx, p2p.PeerError{
 				NodeID: envelope.From,
 				Err:    err,

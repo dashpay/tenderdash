@@ -19,8 +19,14 @@ var ErrInvalidData = errors.New("peer sent invalid data")
 // skew. They follow ordinary scoring and eviction policy, but log at Debug.
 var ErrUnrecognizedMessage = errors.New("unrecognized peer message")
 
+// ErrRejectedPeerInput marks a peer message a reactor rejected for a reason any
+// peer can trigger at will. It changes logging only (Debug), never scoring or
+// eviction policy.
+var ErrRejectedPeerInput = errors.New("rejected peer input")
+
 func isPeerInputError(err error) bool {
-	return errors.Is(err, ErrInvalidData) || errors.Is(err, ErrUnrecognizedMessage)
+	return errors.Is(err, ErrInvalidData) || errors.Is(err, ErrUnrecognizedMessage) ||
+		errors.Is(err, ErrRejectedPeerInput)
 }
 
 // ErrFilterTimeout indicates that a filter operation timed out.
