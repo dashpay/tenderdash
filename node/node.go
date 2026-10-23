@@ -42,8 +42,6 @@ import (
 	"github.com/dashpay/tenderdash/types"
 
 	_ "net/http/pprof" //nolint: gosec // securely exposed on separate, optional port
-
-	_ "github.com/lib/pq" // provide the psql db driver
 )
 
 // nodeImpl is the highest level interface to a full Tendermint node.

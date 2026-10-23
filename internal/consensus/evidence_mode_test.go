@@ -3,7 +3,6 @@ package consensus
 import (
 	"testing"
 
-	dbm "github.com/cometbft/cometbft-db"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
@@ -14,6 +13,7 @@ import (
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/store"
 	"github.com/dashpay/tenderdash/internal/test/factory"
+	dbm "github.com/dashpay/tenderdash/libs/db"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )

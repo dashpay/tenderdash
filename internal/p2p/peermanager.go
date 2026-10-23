@@ -10,12 +10,13 @@ import (
 	"sort"
 	"time"
 
-	dbm "github.com/cometbft/cometbft-db"
 	"github.com/cosmos/gogoproto/jsonpb"
 	"github.com/cosmos/gogoproto/proto"
 	"github.com/google/orderedcode"
 	"github.com/rs/zerolog"
 	sync "github.com/sasha-s/go-deadlock"
+
+	dbm "github.com/dashpay/tenderdash/libs/db"
 
 	tmsync "github.com/dashpay/tenderdash/internal/libs/sync"
 	"github.com/dashpay/tenderdash/libs/log"

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	dbm "github.com/cometbft/cometbft-db"
+	dbm "github.com/dashpay/tenderdash/libs/db"
 
 	"github.com/dashpay/tenderdash/libs/log"
 	tmos "github.com/dashpay/tenderdash/libs/os"

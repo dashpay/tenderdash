@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"testing"
 
-	dbm "github.com/cometbft/cometbft-db"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/internal/evidence"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/store"
+	dbm "github.com/dashpay/tenderdash/libs/db"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )
