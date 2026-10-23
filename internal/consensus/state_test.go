@@ -3132,7 +3132,7 @@ func TestStateOutputsBlockPartsStats(t *testing.T) {
 	stateData.ProposalBlockParts = types.NewPartSetFromHeader(parts.Header())
 	err = stateData.Save()
 	require.NoError(t, err)
-	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{msg, peerID, tmtime.Now()})
+	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{Msg: msg, PeerID: peerID, ReceiveTime: tmtime.Now()})
 	require.NoError(t, err)
 
 	statsMessage := <-cs.statsMsgQueue.ch
@@ -3142,22 +3142,22 @@ func TestStateOutputsBlockPartsStats(t *testing.T) {
 	stateData = cs.GetStateData()
 
 	// sending the same part from different peer
-	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{msg, "peer2", tmtime.Now()})
+	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{Msg: msg, PeerID: "peer2", ReceiveTime: tmtime.Now()})
 	require.NoError(t, err)
 
 	// sending the part with the same height, but different round
 	msg.Round = 1
-	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{msg, peerID, tmtime.Now()})
+	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{Msg: msg, PeerID: peerID, ReceiveTime: tmtime.Now()})
 	require.NoError(t, err)
 
 	// sending the part from the smaller height
 	msg.Height = 0
-	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{msg, peerID, tmtime.Now()})
+	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{Msg: msg, PeerID: peerID, ReceiveTime: tmtime.Now()})
 	require.NoError(t, err)
 
 	// sending the part from the bigger height
 	msg.Height = 3
-	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{msg, peerID, tmtime.Now()})
+	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{Msg: msg, PeerID: peerID, ReceiveTime: tmtime.Now()})
 	require.NoError(t, err)
 
 	select {
@@ -3186,7 +3186,7 @@ func TestStateOutputVoteStats(t *testing.T) {
 	)
 
 	voteMessage := &VoteMessage{vote}
-	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{voteMessage, peerID, tmtime.Now()})
+	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{Msg: voteMessage, PeerID: peerID, ReceiveTime: tmtime.Now()})
 	require.NoError(t, err)
 
 	statsMessage := <-cs.statsMsgQueue.ch
@@ -3194,7 +3194,7 @@ func TestStateOutputVoteStats(t *testing.T) {
 	require.Equal(t, peerID, statsMessage.PeerID, "")
 
 	// sending the same part from different peer
-	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{&VoteMessage{vote}, "peer2", tmtime.Now()})
+	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{Msg: &VoteMessage{vote}, PeerID: "peer2", ReceiveTime: tmtime.Now()})
 	require.NoError(t, err)
 
 	// sending the vote for the bigger height
@@ -3203,7 +3203,7 @@ func TestStateOutputVoteStats(t *testing.T) {
 		stateData.state.Validators.QuorumType, stateData.state.Validators.QuorumHash,
 	)
 
-	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{&VoteMessage{vote}, peerID, tmtime.Now()})
+	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{Msg: &VoteMessage{vote}, PeerID: peerID, ReceiveTime: tmtime.Now()})
 	require.NoError(t, err)
 
 	select {

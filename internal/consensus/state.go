@@ -62,11 +62,15 @@ type msgInfo struct {
 	Msg         Message
 	PeerID      types.NodeID
 	ReceiveTime time.Time
+	// ConnID is the generation of the sender's connection that delivered Msg
+	// (see p2p.Envelope.ConnID), or zero. It is not persisted to the WAL.
+	ConnID uint64 `json:"-"`
 }
 
 // peerErrorMsg signals to the reactor that a peer should be disconnected due to an error
 type peerErrorMsg struct {
 	PeerID types.NodeID
+	ConnID uint64 // originating connection generation, see msgInfo.ConnID
 	Err    error
 	Fatal  bool
 }

@@ -197,6 +197,7 @@ func commitMessageHandler(ctrl *Controller) msgHandlerFunc {
 		return ctrl.Dispatch(ctx, &TryAddCommitEvent{
 			Commit:     msg.Commit,
 			PeerID:     envelope.PeerID,
+			ConnID:     envelope.ConnID,
 			FromReplay: envelope.fromReplay,
 		}, stateData)
 	}

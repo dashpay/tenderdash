@@ -861,7 +861,7 @@ func (r *Reactor) laneCtx(ctx context.Context, ps *PeerState, envelope *p2p.Enve
 	if !ok {
 		return nil, false
 	}
-	return ctxWithPeerLaneSession(ctx, session), true
+	return ctxWithPeerConnID(ctxWithPeerLaneSession(ctx, session), envelope.ConnID), true
 }
 
 // envelopeFromLiveConn reports whether the envelope was produced by the peer's
@@ -1479,6 +1479,7 @@ func (r *Reactor) peerErrorRoutine(ctx context.Context, msgCh p2p.Channel) {
 				NodeID: peerErr.PeerID,
 				Err:    peerErr.Err,
 				Fatal:  peerErr.Fatal,
+				ConnID: peerErr.ConnID, // fences eviction to the sending connection
 			}); err != nil {
 				r.logger.Trace("failed to send peer error", "peer", peerErr.PeerID, "err", err)
 			}
