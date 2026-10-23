@@ -446,10 +446,13 @@ func (c *mConnConnection) onReceive(ctx context.Context, chID ChannelID, payload
 }
 
 // invalidDataErr returns the peer-attributable failure that ended the
-// connection, or nil.
+// connection, or nil. It joins MConnection's receive routine, so a failure it
+// recorded is seen however teardown was ordered; call it only after Close.
 func (c *mConnConnection) invalidDataErr() error {
-	if err := c.invalidData.Load(); err != nil {
-		return *err
+	if c.mconn != nil {
+		if err := c.mconn.PeerInputError(); err != nil {
+			return fmt.Errorf("%w: %w", ErrInvalidData, err)
+		}
 	}
 	return nil
 }
