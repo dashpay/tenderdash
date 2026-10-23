@@ -21,6 +21,9 @@ type routedClient struct {
 	logger        log.Logger
 	routing       Routing
 	defaultClient ClientInfo
+	// owned lists the clients started by the current attempt. Lifecycle hooks
+	// never overlap, and the drain worker starts after OnStart sets it.
+	owned []Client
 }
 
 var _ Client = (*routedClient)(nil)
@@ -129,43 +132,50 @@ func NewRoutedClient(logger log.Logger, defaultClient Client, routing Routing) (
 	return cli, nil
 }
 
+// OnStart starts the clients that are not running yet and owns only those:
+// clients the caller already started keep their own lifetime.
 func (cli *routedClient) OnStart(ctx context.Context) error {
+	cli.owned = nil
 	var errs error
-	for _, clients := range cli.routing {
-		for _, client := range clients {
-			if !client.IsRunning() {
-				if err := client.Start(ctx); err != nil {
-					errs = multierror.Append(errs, err)
-				}
-			}
+	for _, client := range cli.clients() {
+		if client.IsRunning() {
+			continue
 		}
-	}
-
-	if !cli.defaultClient.IsRunning() {
-		if err := cli.defaultClient.Start(ctx); err != nil {
+		if err := client.Start(ctx); err != nil {
 			errs = multierror.Append(errs, err)
+			continue
 		}
+		cli.owned = append(cli.owned, client)
+	}
+	// A failed attempt gets no OnStop; release what it started before returning.
+	if errs != nil {
+		cli.stopOwned()
+		return errs
 	}
 
 	if !cli.Go(ctx, func(ctx context.Context) {
 		<-ctx.Done()
-		for _, client := range cli.clients() {
+		for _, client := range cli.owned {
 			client.Wait()
 		}
 	}) {
-		cli.OnStop()
-		for _, client := range cli.clients() {
-			client.Wait()
-		}
+		cli.stopOwned()
 	}
-	return errs
+	return nil
 }
 
 func (cli *routedClient) OnStop() {
-	for _, client := range cli.clients() {
+	for _, client := range cli.owned {
 		if stopper, ok := client.(interface{ Stop() }); ok {
 			stopper.Stop()
 		}
+	}
+}
+
+func (cli *routedClient) stopOwned() {
+	cli.OnStop()
+	for _, client := range cli.owned {
+		client.Wait()
 	}
 }
 
