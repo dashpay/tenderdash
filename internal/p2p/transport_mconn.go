@@ -445,6 +445,15 @@ func (c *mConnConnection) onReceive(ctx context.Context, chID ChannelID, payload
 	}
 }
 
+// invalidDataErr returns the peer-attributable failure that ended the
+// connection, or nil.
+func (c *mConnConnection) invalidDataErr() error {
+	if err := c.invalidData.Load(); err != nil {
+		return *err
+	}
+	return nil
+}
+
 // onError is a callback for MConnection errors. The error is passed via errorCh
 // to ReceiveMessage (but not SendMessage, for legacy P2P stack behavior).
 func (c *mConnConnection) onError(ctx context.Context, e interface{}) {

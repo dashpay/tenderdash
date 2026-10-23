@@ -65,31 +65,32 @@ func newMConnWithRawRemote(ctx context.Context, t *testing.T) (*mConnConnection,
 }
 
 // A frame that arrives intact on the authenticated stream but does not decode
-// is the sender's doing: it must cost the peer score and its connection, the
-// same as malformed bytes the router decodes itself.
-func TestReceivePeer_MConnMalformedFrame_ScoresAndEvicts(t *testing.T) {
+// is the sender's doing: it must end the connection and cost the peer score,
+// the same as malformed bytes the router decodes itself.
+func TestRoutePeer_MConnMalformedFrame_ScoresAndDisconnects(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
 	f := newPunishFixture(ctx, t, 10)
+	f.enableRoutePeer()
 	mc, remote := newMConnWithRawRemote(ctx, t)
 	before := f.score()
 
 	// Length prefix 2, then a Packet whose PacketPing field is truncated.
 	go func() { _, _ = remote.Write([]byte{0x02, 0x0a, 0x05}) }()
 
-	require.ErrorIs(t, f.router.receivePeer(ctx, f.peerID, mc, f.connID), ErrInvalidData)
-	require.Less(t, f.score(), before, "a malformed authenticated frame must cost score")
-	require.True(t, f.isEvicted(), "a malformed authenticated frame must evict the sender")
+	f.router.routePeer(ctx, f.peerID, mc, ChannelIDSet{1: {}}) // returns once the connection ended
+	require.Equal(t, before-1, f.score(), "a malformed authenticated frame must cost exactly one penalty")
 }
 
 // A connection that drops mid-frame proves nothing about the peer, so the
 // transport must not report it as invalid data.
-func TestReceivePeer_MConnIOFailure_IsNotPunished(t *testing.T) {
+func TestRoutePeer_MConnIOFailure_IsNotPunished(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
 	f := newPunishFixture(ctx, t, 10)
+	f.enableRoutePeer()
 	mc, remote := newMConnWithRawRemote(ctx, t)
 	before := f.score()
 
@@ -98,9 +99,7 @@ func TestReceivePeer_MConnIOFailure_IsNotPunished(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, remote.Close())
 
-	err = f.router.receivePeer(ctx, f.peerID, mc, f.connID)
-	require.Error(t, err)
-	require.NotErrorIs(t, err, ErrInvalidData)
+	f.router.routePeer(ctx, f.peerID, mc, ChannelIDSet{1: {}})
+	require.NoError(t, mc.invalidDataErr())
 	require.Equal(t, before, f.score(), "an I/O failure must not cost score")
-	require.False(t, f.isEvicted(), "an I/O failure must not schedule eviction")
 }

@@ -392,6 +392,12 @@ func (r *Router) routeChannel(
 	}
 }
 
+// invalidDataConnection is a Connection that retains the peer-attributable
+// failure, if any, that ended it. Transports mark only provably peer-sent data.
+type invalidDataConnection interface {
+	invalidDataErr() error
+}
+
 // reportPeerError records a bad-peer event even when eviction is required, so
 // ordinary peers retain their penalty across reconnects. Reserved peers keep
 // the peer manager's scoring exemption and protection from capacity eviction.
@@ -794,6 +800,16 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 	wg.Wait()
 	r.logger.Trace("routePeer: all goroutines finished", "peer", peerID, "err", err)
 
+	// Terminal invalid-data accounting belongs to the connection, not to the I/O
+	// worker that happened to observe teardown first: run it once, after both
+	// workers finished, with the router context they cannot cancel.
+	if failed, ok := conn.(invalidDataConnection); ok {
+		if invalid := failed.invalidDataErr(); invalid != nil {
+			r.reportPeerError(ctx, PeerError{NodeID: peerID, Err: invalid, ConnID: connID})
+			err = invalid
+		}
+	}
+
 	// Drain the error channel; these should typically not be interesting
 FOR:
 	for {
@@ -881,11 +897,7 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 	for {
 		chID, bz, err := conn.ReceiveMessage(ctx)
 		if err != nil {
-			// Transports mark only provably peer-sent garbage as invalid data.
-			if errors.Is(err, ErrInvalidData) {
-				r.reportPeerError(ctx, PeerError{NodeID: peerID, Err: err, ConnID: connID})
-			}
-			return err
+			return err // a transport's invalid-data failure is accounted by routePeer
 		}
 
 		r.channelMtx.RLock()

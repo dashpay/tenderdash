@@ -461,3 +461,45 @@ func TestEvictPeer_StaleGeneration_SparesReplacement(t *testing.T) {
 	f.router.evictPeer(f.peerID, newConn)
 	require.True(t, isClosed(replacement), "an eviction of the live generation must close its queue")
 }
+
+// invalidTeardownConn ends at once, retaining the invalid-data failure that
+// caused the teardown, as mConnConnection does.
+type invalidTeardownConn struct {
+	fakeConn
+	receiveErr error
+	failure    error
+}
+
+func (c *invalidTeardownConn) ReceiveMessage(context.Context) (ChannelID, []byte, error) {
+	return 0, nil, c.receiveErr
+}
+
+func (c *invalidTeardownConn) invalidDataErr() error { return c.failure }
+
+func (*invalidTeardownConn) Close() error { return nil }
+
+// The penalty for a connection that ended on invalid data must not depend on
+// which I/O worker observed the teardown first, and must apply exactly once.
+func TestRoutePeer_TransportInvalidData_ScoredOnceRegardlessOfTeardownOrder(t *testing.T) {
+	failure := fmt.Errorf("%w: malformed frame", ErrInvalidData)
+	for _, tc := range []struct {
+		name       string
+		receiveErr error
+	}{
+		{"receive saw EOF", io.EOF},
+		{"receive saw the failure", failure},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			f := newPunishFixture(ctx, t, 10)
+			f.enableRoutePeer()
+			before := f.score()
+
+			f.router.routePeer(ctx, f.peerID, &invalidTeardownConn{receiveErr: tc.receiveErr, failure: failure},
+				ChannelIDSet{1: {}})
+
+			require.Equal(t, before-1, f.score(), "invalid data must cost exactly one penalty")
+		})
+	}
+}
