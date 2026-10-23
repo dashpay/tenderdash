@@ -154,7 +154,7 @@ func addVoteUpdateValidBlockMw(ep *EventPublisher) AddVoteMiddlewareFunc {
 				return added, err
 			}
 			logger := log.FromCtxOrNop(ctx)
-			if stateData.ProposalBlock.HashesTo(blockID.Hash) {
+			if stateData.ProposalBlock.BlockID(stateData.ProposalBlockParts).Equals(blockID) {
 				logger.Debug("updating valid block because of POL",
 					"valid_round", stateData.ValidRound,
 					"pol_round", vote.Round)
