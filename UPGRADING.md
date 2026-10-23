@@ -20,6 +20,13 @@ Plain goroutines and their existing joins remain the implementation's responsibi
 implementations must provide `Go(func(context.Context)) bool` so the server owns
 subscription workers.
 
+`rpc/jsonrpc/server.Serve` and `ServeTLS` always close the listener before
+returning, including when TLS setup fails. Cancellation now reaches request
+contexts, rejects new requests with 503, closes active connections instead of a
+one-second graceful shutdown, and returns only after every handler, including
+hijacked WebSocket sessions, has finished. They no longer log a startup line;
+one "RPC server stopped" line is logged on return.
+
 A stop requested during startup cancels work immediately but defers `OnStop`
 until successful startup returns. Failed startup must roll back its resources;
 BaseService joins registered work without calling shutdown hooks. Retry requires

@@ -96,7 +96,7 @@ in-tree hook/callback audit covers these groups:
 | EventBus, pubsub Server and indexer Service | Event processing is cancellation-driven; the indexer closes its sinks in OnDrain. No guarantee of a live cleanup callback context. |
 | ABCI local, socket, gRPC and routed clients; proxy; socket/gRPC servers | Stop hooks close transports, drain requests or stop children without requiring a live work context. |
 | SignerServer, signer listener/dialer endpoints | Hooks close endpoints/listeners; dial/retry work observes cancellation. |
-| ValidatorConnExecutor and light RPC Client | Unsubscribe uses a separate bounded cleanup context; client hooks invoke owned closers. |
+| ValidatorConnExecutor and light RPC Client | Unsubscribe uses a separate bounded cleanup context. The light client scopes WebSocket subscriptions to its service and the caller session, and joins (or stops) the wrapped client in OnDrain. |
 | Node and seed node | Parent cancellation stops children; the node joins reactors before canceling its dependency context and closing owned stores. |
 
 Subscribers must stop with their owner, without relying on a final router
