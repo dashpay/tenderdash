@@ -39,10 +39,11 @@ const (
 // TestBlockSync_FinalizeHold checks that block sync survives a slow local
 // application. A node with finalize_hold starts late, without state sync, and
 // its application blocks inside the first FinalizeBlock for longer than the
-// block-sync stall timeout while networking keeps running.
+// block-sync stall timeout while networking keeps running. The measured hold
+// starts once FinalizeHoldMinPeers sources are connected (bounded wait).
 //
 // While held, the node must keep buffering block responses, stay in block sync
-// (no premature consensus handoff), keep its peers and record no eviction; the
+// (no premature consensus handoff), keep its sources and record no eviction; the
 // block store must stay at the held block. Within maxHoldRecovery of release it
 // must send further block requests and receive further responses beyond those
 // of the hold window, store blocks up to start_at and hand over to consensus,
@@ -59,14 +60,20 @@ func TestBlockSync_FinalizeHold(t *testing.T) {
 			"finalize_hold must outlast the block-sync stall timeout")
 
 		path := filepath.Join(node.Testnet.Dir, node.Name, "data", "app", e2eapp.FinalizeHoldRecordFile)
-		record, err := e2eapp.LoadFinalizeHoldRecord(path)
+		// The application adds the handoff asynchronously after release, and
+		// nothing in the runner waits for it: reread until it is there or the
+		// recovery allowance has run out.
+		record, err := e2eapp.WaitFinalizeHoldHandoff(ctx, path, maxHoldRecovery)
 		require.NoError(t, err, "application was never held")
+		require.Empty(t, record.ReadinessError, "hold never started")
 		require.Equal(t, node.Testnet.InitialHeight, record.Height, "hold must catch the first block")
-		require.GreaterOrEqual(t, record.ReleasedAt.Sub(record.EnteredAt), node.FinalizeHold)
+		// The measured window alone must last the full hold, so that it crosses
+		// the stall timeout regardless of the readiness wait before it.
+		require.GreaterOrEqual(t, record.ReleasedAt.Sub(record.ReadyAt), node.FinalizeHold)
 
 		samples := record.Samples
 		require.NotEmpty(t, samples)
-		require.WithinDuration(t, record.EnteredAt, samples[0].Time, maxHoldSampleGap)
+		require.WithinDuration(t, record.ReadyAt, samples[0].Time, maxHoldSampleGap)
 		require.WithinDuration(t, record.ReleasedAt, samples[len(samples)-1].Time, maxHoldSampleGap)
 		for i, s := range samples {
 			require.Empty(t, s.Error, "sample %d", i)
@@ -74,7 +81,7 @@ func TestBlockSync_FinalizeHold(t *testing.T) {
 				require.LessOrEqual(t, s.Time.Sub(samples[i-1].Time), maxHoldSampleGap, "sample %d", i)
 			}
 			require.Equal(t, float64(1), s.BlockSyncing, "sample %d: handed over to consensus while held", i)
-			require.GreaterOrEqual(t, s.PeersConnected, float64(2), "sample %d: lost peers while held", i)
+			require.GreaterOrEqual(t, s.PeersConnected, float64(e2eapp.FinalizeHoldMinPeers), "sample %d: lost peers while held", i)
 			require.Zero(t, s.PeersEvicted, "sample %d: evicted a peer while held", i)
 			require.Equal(t, record.Height, s.StoreHeight, "sample %d: block store moved while held", i)
 		}

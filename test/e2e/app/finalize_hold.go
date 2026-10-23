@@ -22,9 +22,20 @@ import (
 // Its presence also disarms the hold, so a restarted node is never held twice.
 const FinalizeHoldRecordFile = "finalize_hold.json"
 
+// FinalizeHoldMinPeers is how many connected sources the node must have before
+// the measured hold starts, and keep throughout it. Peers are dialed
+// asynchronously and block sync starts with a single source, so the first
+// FinalizeBlock can come before the others connect.
+const FinalizeHoldMinPeers = 2
+
 const (
 	// finalizeHoldSampleInterval matches how often block sync re-evaluates a stall.
 	finalizeHoldSampleInterval = time.Second
+	// finalizeHoldReadyTimeout bounds the wait for FinalizeHoldMinPeers sources
+	// before the measured hold.
+	finalizeHoldReadyTimeout = 30 * time.Second
+	// finalizeHoldPollInterval is how often WaitFinalizeHoldHandoff rereads the record.
+	finalizeHoldPollInterval = 500 * time.Millisecond
 	// finalizeHoldHandoffWatch bounds how long the node is watched after release
 	// for its block-sync handoff to consensus.
 	finalizeHoldHandoffWatch = 10 * time.Minute
@@ -55,15 +66,46 @@ type BlockSyncMetrics struct {
 
 // FinalizeHoldRecord describes one held FinalizeBlock call.
 type FinalizeHoldRecord struct {
-	Height     int64         `json:"height"`
-	Hold       time.Duration `json:"hold"`
-	EnteredAt  time.Time     `json:"entered_at"`
-	ReleasedAt time.Time     `json:"released_at"`
-	// Samples cover the hold, from entry to release.
+	Height int64         `json:"height"`
+	Hold   time.Duration `json:"hold"`
+	// EnteredAt is when FinalizeBlock was entered; the node then waits up to
+	// finalizeHoldReadyTimeout for FinalizeHoldMinPeers sources.
+	EnteredAt time.Time `json:"entered_at"`
+	// ReadyAt starts the measured hold, which lasts Hold until ReleasedAt.
+	ReadyAt    time.Time `json:"ready_at"`
+	ReleasedAt time.Time `json:"released_at"`
+	// ReadinessError is set, and the application released unheld, when the
+	// sources did not connect in time; such a record proves nothing.
+	ReadinessError string `json:"readiness_error,omitempty"`
+	// Samples cover the measured hold, from ReadyAt to ReleasedAt.
 	Samples []BlockSyncMetrics `json:"samples"`
 	// Handoff is the first sample after release in which block sync had handed
 	// over to consensus; nil until then, or if it never happened while watched.
 	Handoff *BlockSyncMetrics `json:"handoff,omitempty"`
+}
+
+// WaitFinalizeHoldHandoff rereads the record at path until it holds a handoff,
+// which the application adds asynchronously after release, or until recovery
+// past ReleasedAt (plus two sampling intervals for the sample and its write)
+// has elapsed. It then returns the latest record, with or without a handoff.
+func WaitFinalizeHoldHandoff(ctx context.Context, path string, recovery time.Duration) (FinalizeHoldRecord, error) {
+	for {
+		record, err := LoadFinalizeHoldRecord(path)
+		if err != nil {
+			return record, err
+		}
+		deadline := record.ReleasedAt.Add(recovery + 2*finalizeHoldSampleInterval)
+		if record.Handoff != nil || record.ReleasedAt.IsZero() || time.Now().After(deadline) {
+			return record, nil
+		}
+		timer := time.NewTimer(finalizeHoldPollInterval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return record, ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 // LoadFinalizeHoldRecord reads a record written by a held application.
@@ -135,11 +177,13 @@ type finalizeHold struct {
 	duration time.Duration
 	interval time.Duration
 	watch    time.Duration
-	record   string
-	logger   log.Logger
-	gatherer prometheus.Gatherer
-	armed    atomic.Bool
-	height   atomic.Pointer[func() int64]
+	// readyTimeout bounds the wait for FinalizeHoldMinPeers sources.
+	readyTimeout time.Duration
+	record       string
+	logger       log.Logger
+	gatherer     prometheus.Gatherer
+	armed        atomic.Bool
+	height       atomic.Pointer[func() int64]
 }
 
 // SetFinalizeHold arms a one-shot hold of the first FinalizeBlock call. The
@@ -150,12 +194,13 @@ func (app *Application) SetFinalizeHold(duration time.Duration, dir string) erro
 		return nil
 	}
 	hold := &finalizeHold{
-		duration: duration,
-		interval: finalizeHoldSampleInterval,
-		watch:    finalizeHoldHandoffWatch,
-		record:   filepath.Join(dir, FinalizeHoldRecordFile),
-		logger:   app.logger,
-		gatherer: prometheus.DefaultGatherer,
+		duration:     duration,
+		interval:     finalizeHoldSampleInterval,
+		watch:        finalizeHoldHandoffWatch,
+		readyTimeout: finalizeHoldReadyTimeout,
+		record:       filepath.Join(dir, FinalizeHoldRecordFile),
+		logger:       app.logger,
+		gatherer:     prometheus.DefaultGatherer,
 	}
 	if hold.logger == nil {
 		hold.logger = log.NewNopLogger()
@@ -185,8 +230,16 @@ func (h *finalizeHold) wait(ctx context.Context, height int64) error {
 	if h == nil || !h.armed.CompareAndSwap(true, false) {
 		return nil
 	}
-	h.logger.Info("holding FinalizeBlock", "height", height, "hold", h.duration)
 	record := FinalizeHoldRecord{Height: height, Hold: h.duration, EnteredAt: time.Now()}
+	if err := h.awaitSources(ctx, &record); err != nil {
+		return err
+	}
+	if record.ReadinessError != "" {
+		h.logger.Error("not holding FinalizeBlock", "height", height, "err", record.ReadinessError)
+		return writeFinalizeHoldRecord(h.record, record)
+	}
+	h.logger.Info("holding FinalizeBlock", "height", height, "hold", h.duration)
+	record.ReadyAt = time.Now()
 	record.Samples = append(record.Samples, h.sample())
 	release := time.NewTimer(h.duration)
 	defer release.Stop()
@@ -211,6 +264,31 @@ func (h *finalizeHold) wait(ctx context.Context, height int64) error {
 	// The watcher owns record from here on; FinalizeBlock must not wait for it.
 	go h.watchHandoff(record)
 	return nil
+}
+
+// awaitSources waits, up to h.readyTimeout, for FinalizeHoldMinPeers connected
+// sources, so the measured hold starts from a fully connected node. On timeout
+// it sets record.ReadinessError; it only returns an error when ctx ends.
+func (h *finalizeHold) awaitSources(ctx context.Context, record *FinalizeHoldRecord) error {
+	deadline := time.NewTimer(h.readyTimeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(h.interval)
+	defer ticker.Stop()
+	for {
+		m := h.sample()
+		if m.Error == "" && m.PeersConnected >= FinalizeHoldMinPeers {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-deadline.C:
+			record.ReadinessError = fmt.Sprintf("fewer than %d connected sources after %v (last sample: peers=%v, error=%q)",
+				FinalizeHoldMinPeers, h.readyTimeout, m.PeersConnected, m.Error)
+			return nil
+		case <-ticker.C:
+		}
+	}
 }
 
 // watchHandoff records the first sample showing that block sync handed over to

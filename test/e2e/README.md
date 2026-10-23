@@ -112,7 +112,7 @@ func init() {
 
 A node with `finalize_hold` (see [`pkg/manifest.go`](pkg/manifest.go)) holds its
 first `FinalizeBlock` call for the given duration while its networking keeps
-running. Meanwhile the application samples the node's metrics in-process every
+running; the hold starts once two sources are connected (bounded wait). Meanwhile the application samples the node's metrics in-process every
 second; it writes them to `data/app/finalize_hold.json` in the node directory
 on release, and again once block sync hands over to consensus.
 `TestBlockSync_FinalizeHold` then checks that, for the whole hold, block sync
