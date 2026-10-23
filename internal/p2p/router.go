@@ -259,6 +259,15 @@ type ChannelCreator func(context.Context, *ChannelDescriptor) (Channel, error)
 // wrapper message. The caller may provide a size to make the channel buffered,
 // which internally makes the inbound, outbound, and error channel buffered.
 func (r *Router) OpenChannel(ctx context.Context, chDesc *ChannelDescriptor) (Channel, error) {
+	var abandoned queue
+	// Registered before the unlock, so it runs after channelMtx is released:
+	// closing a queue joins its delivery callbacks.
+	defer func() {
+		if abandoned != nil {
+			abandoned.close()
+			<-abandoned.closed()
+		}
+	}()
 	r.channelMtx.Lock()
 	defer r.channelMtx.Unlock()
 	if r.ctx == nil || r.ctx.Err() != nil {
@@ -301,8 +310,7 @@ func (r *Router) OpenChannel(ctx context.Context, chDesc *ChannelDescriptor) (Ch
 		stopCancel()
 		cancel()
 		delete(r.channelQueues, id)
-		queue.close()
-		<-queue.closed()
+		abandoned = queue
 		return nil, errors.New("router is stopping")
 	}
 
