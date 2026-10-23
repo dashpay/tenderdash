@@ -5,13 +5,13 @@ import (
 	"testing"
 	"time"
 
-	dbm "github.com/cometbft/cometbft-db"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/internal/eventbus"
 	"github.com/dashpay/tenderdash/internal/pubsub"
 	"github.com/dashpay/tenderdash/internal/state/indexer"
 	"github.com/dashpay/tenderdash/internal/state/indexer/sink/kv"
+	dbm "github.com/dashpay/tenderdash/libs/db"
 	"github.com/dashpay/tenderdash/libs/log"
 )
 

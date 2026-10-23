@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	dbm "github.com/cometbft/cometbft-db"
 	"github.com/stretchr/testify/require"
 
 	tmsync "github.com/dashpay/tenderdash/internal/libs/sync"
 	"github.com/dashpay/tenderdash/internal/p2p/conn"
+	dbm "github.com/dashpay/tenderdash/libs/db"
 	"github.com/dashpay/tenderdash/libs/log"
 	p2pproto "github.com/dashpay/tenderdash/proto/tendermint/p2p"
 	"github.com/dashpay/tenderdash/types"
