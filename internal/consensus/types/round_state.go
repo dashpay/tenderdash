@@ -120,6 +120,9 @@ type RoundState struct {
 	// while they waited for transactions.
 	RoundSkip *types.RoundSkipCertificate `json:"round_skip"`
 
+	// ProcessedBlockID identifies the successful ProcessProposal behind CurrentRoundState.
+	ProcessedBlockID types.BlockID `json:"-"`
+
 	sm.CurrentRoundState `json:"uncommitted_state"`
 }
 

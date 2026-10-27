@@ -9,10 +9,11 @@ import (
 	"testing"
 	"time"
 
-	dbm "github.com/cometbft/cometbft-db"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
+	dbm "github.com/dashpay/tenderdash/libs/db"
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
 	abciclientmocks "github.com/dashpay/tenderdash/abci/client/mocks"
@@ -23,6 +24,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto/encoding"
 	"github.com/dashpay/tenderdash/dash"
 	"github.com/dashpay/tenderdash/internal/eventbus"
+	"github.com/dashpay/tenderdash/internal/evidence"
 	mpmocks "github.com/dashpay/tenderdash/internal/mempool/mocks"
 	"github.com/dashpay/tenderdash/internal/proxy"
 	"github.com/dashpay/tenderdash/internal/pubsub"
@@ -1667,4 +1669,102 @@ func TestApplyBlockSkipsVerifiedLastCommit(t *testing.T) {
 		require.ErrorContains(t, f.applyNext(t, forgedCommit(f.commit), verified), badCommitSignature)
 		require.Equal(t, 0.0, f.skipped.Value())
 	})
+}
+func TestEvidenceModeChangesOnlyOnCommit(t *testing.T) {
+	for _, limits := range [][2]int64{{0, 1000}, {1000, 0}} {
+		t.Run(fmt.Sprintf("%d_to_%d", limits[0], limits[1]), func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			logger := log.NewNopLogger()
+			app := abcimocks.NewApplication(t)
+			client := abciclient.NewLocalClient(logger, app)
+			proxyApp := proxy.New(client, logger, proxy.NopMetrics())
+			require.NoError(t, proxyApp.Start(ctx))
+			state, db, _ := makeState(t, 1, 1)
+			state.ConsensusParams.Evidence.MaxBytes = limits[0]
+			stateStore := sm.NewStore(db)
+			blocks := store.NewBlockStore(dbm.NewMemDB())
+			evpool := evidence.NewPool(
+				logger,
+				dbm.NewMemDB(),
+				stateStore,
+				blocks,
+				evidence.NopMetrics(),
+				nil,
+			)
+			require.NoError(t, evpool.Start(state))
+			defer evpool.Close()
+			mp := &mpmocks.Mempool{}
+			mp.On("ReapMaxBytesMaxGas", mock.Anything, mock.Anything).Return(types.Txs{})
+			mp.On("Lock").Return()
+			mp.On("Unlock").Return()
+			mp.On("FlushAppConn", mock.Anything).Return(nil)
+			mp.On("Update", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				Return(nil)
+			events := eventbus.NewDefault(logger)
+			require.NoError(t, events.Start(ctx))
+			executor := sm.NewBlockExecutor(stateStore, proxyApp, mp, evpool, blocks, events)
+			params := state.ConsensusParams.ToProto()
+			params.Evidence.MaxBytes = limits[1]
+			updates := &tmtypes.ConsensusParams{Evidence: params.Evidence}
+			app.On("PrepareProposal", mock.Anything, mock.Anything).
+				Return(&abci.ResponsePrepareProposal{
+					AppHash: make(
+						[]byte,
+						crypto.DefaultAppHashSize,
+					), ConsensusParamUpdates: updates, AppVersion: 1,
+				}, nil).
+				Once()
+			proposer := state.Validators.Validators[0].ProTxHash
+			ctx = dash.ContextWithProTxHash(ctx, proposer)
+			block, _, err := executor.CreateProposalBlock(
+				ctx,
+				1,
+				0,
+				state,
+				types.NewCommit(0, 0, types.BlockID{}, nil, nil),
+				proposer,
+				1,
+			)
+			require.NoError(t, err)
+			require.Equal(t, limits[0], evpool.State().ConsensusParams.Evidence.MaxBytes)
+			app.On("ProcessProposal", mock.Anything, mock.Anything).
+				Return(&abci.ResponseProcessProposal{
+					AppHash: block.AppHash, Status: abci.ResponseProcessProposal_ACCEPT, ConsensusParamUpdates: updates,
+				}, nil).
+				Once()
+			candidate, err := executor.ProcessProposal(
+				ctx,
+				block,
+				0,
+				state,
+				true,
+				types.VerifiedCommit{},
+			)
+			require.NoError(t, err)
+			require.Equal(
+				t,
+				limits[0],
+				evpool.State().ConsensusParams.Evidence.MaxBytes,
+				"speculative updates cannot change admission",
+			)
+			require.Equal(t, int64(2), candidate.LastHeightConsensusParamsChanged)
+			app.On("FinalizeBlock", mock.Anything, mock.Anything).
+				Return(&abci.ResponseFinalizeBlock{}, nil).
+				Once()
+			next, _, err := executor.FinalizeBlock(
+				ctx,
+				state,
+				candidate,
+				block.BlockID(nil),
+				block,
+				new(types.Commit),
+				types.VerifiedCommit{},
+			)
+			require.NoError(t, err)
+			require.Equal(t, limits[1], next.ConsensusParams.Evidence.MaxBytes)
+			require.Equal(t, next.LastBlockHeight, evpool.State().LastBlockHeight)
+			require.Equal(t, limits[1] > 0, evpool.Enabled())
+		})
+	}
 }

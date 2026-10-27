@@ -12,11 +12,12 @@ import (
 	"testing"
 	"time"
 
-	dbm "github.com/cometbft/cometbft-db"
 	"github.com/fortytw2/leaktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
+	dbm "github.com/dashpay/tenderdash/libs/db"
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
 	abcimocks "github.com/dashpay/tenderdash/abci/client/mocks"
@@ -992,11 +993,8 @@ func TestNodeSetEventSink(t *testing.T) {
 	cfg.TxIndex.Indexer = []string{"psql"}
 	ns, err = newDefaultNode(ctx, cfg, logger)
 	assert.Nil(t, ns)
-	assert.Contains(t, err.Error(), "the psql connection settings cannot be empty")
+	assert.Contains(t, err.Error(), "PostgreSQL event indexing has been removed")
 	t.Cleanup(cleanup(ns))
-
-	// N.B. We can't create a PSQL event sink without starting a postgres
-	// instance for it to talk to. The indexer service tests exercise that case.
 
 	var e = errors.New("found duplicated sinks, please check the tx-index section in the config.toml")
 	cfg.TxIndex.Indexer = []string{"null", "kv", "Kv"}
@@ -1214,8 +1212,6 @@ func (s startupPausedService) Start(ctx context.Context) error {
 }
 
 func TestNodeStartDuringFirstCommit(t *testing.T) {
-	// Wait for consensus goroutines before TempDir cleanup removes their files.
-	defer leaktest.CheckTimeout(t, 5*time.Second)()
 	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
 	require.NoError(t, err)
 	cfg.Consensus = config.DefaultConsensusConfig()

@@ -11,12 +11,13 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	dbm "github.com/cometbft/cometbft-db"
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/fortytw2/leaktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
+	dbm "github.com/dashpay/tenderdash/libs/db"
 
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
@@ -893,4 +894,51 @@ func TestReactorNoRebroadcastOnNonInvalidEvidenceError(t *testing.T) {
 	// ...and crucially it was NOT re-broadcast. Any recorded send is the old
 	// fall-through-to-broadcastEvidence regression.
 	require.Zero(t, rc.sendCount(), "unverifiable evidence must not be re-broadcast")
+}
+
+func TestReactorRuntimeEvidenceExistingPeers(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	quorum := crypto.RandQuorumHash()
+	validator := types.NewMockPVForQuorum(quorum)
+	stores := []sm.Store{
+		initializeValidatorState(ctx, t, validator, 20, btcjson.LLMQType_5_60, quorum),
+		initializeValidatorState(ctx, t, validator, 20, btcjson.LLMQType_5_60, quorum),
+	}
+	for _, store := range stores {
+		state, err := store.Load()
+		require.NoError(t, err)
+		state.ConsensusParams.Evidence.MaxBytes = 0
+		require.NoError(t, store.Save(state))
+	}
+	network := setup(ctx, t, stores)
+	network.start(ctx, t)
+	source := network.pools[network.nodes[0].NodeID]
+	target := network.pools[network.nodes[1].NodeID]
+	for cycle := 0; cycle < 2; cycle++ {
+		ev, err := types.NewMockDuplicateVoteEvidenceWithValidator(ctx, int64(cycle+1), defaultEvidenceTime, validator, evidenceChainID, btcjson.LLMQType_5_60, quorum)
+		require.NoError(t, err)
+		require.ErrorIs(t, source.AddEvidence(ctx, ev), types.ErrEvidenceDisabled)
+		for _, pool := range network.pools {
+			state := pool.State()
+			state.LastBlockHeight++
+			state.ConsensusParams.Evidence.MaxBytes = 10000
+			pool.Update(ctx, state, nil)
+		}
+		require.NoError(t, source.AddEvidence(ctx, ev))
+		require.Eventually(t, func() bool {
+			pending, _ := target.PendingEvidence(10000)
+			return len(pending) == cycle+1
+		}, 5*time.Second, 10*time.Millisecond)
+		for _, pool := range network.pools {
+			state := pool.State()
+			state.LastBlockHeight++
+			state.ConsensusParams.Evidence.MaxBytes = 0
+			pool.Update(ctx, state, nil)
+			pending, _ := pool.PendingEvidence(-1)
+			require.Empty(t, pending)
+		}
+		require.Equal(t, p2p.PeerStatusUp, network.nodes[0].PeerManager.Status(network.nodes[1].NodeID))
+	}
+	cancel()
 }

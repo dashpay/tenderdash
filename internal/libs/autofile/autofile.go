@@ -56,6 +56,7 @@ type AutoFile struct {
 
 	closeTicker *time.Ticker // signals periodic close
 	cancel      func()       // cancels the lifecycle context
+	done        chan struct{}
 
 	mtx    sync.Mutex // guards the fields below
 	closed bool       // true when the the autofile is no longer usable
@@ -78,9 +79,11 @@ func OpenAutoFile(ctx context.Context, path string) (*AutoFile, error) {
 		Path:        path,
 		closeTicker: time.NewTicker(autoFileClosePeriod),
 		cancel:      cancel,
+		done:        make(chan struct{}),
 	}
 	if err := af.openFile(); err != nil {
-		af.Close()
+		cancel()
+		af.closeTicker.Stop()
 		return nil, err
 	}
 
@@ -89,18 +92,21 @@ func OpenAutoFile(ctx context.Context, path string) (*AutoFile, error) {
 	hupc := make(chan os.Signal, 1)
 	signal.Notify(hupc, syscall.SIGHUP)
 	go func() {
-		defer close(hupc)
+		defer close(af.done)
+		defer signal.Stop(hupc)
+		defer af.closeTicker.Stop()
 		for {
 			select {
 			case <-hupc:
 				_ = af.closeFile()
+			case <-af.closeTicker.C:
+				_ = af.closeFile()
 			case <-ctx.Done():
+				_ = af.withLock(func() error { af.closed = true; return af.unsyncCloseFile() })
 				return
 			}
 		}
 	}()
-
-	go af.closeFileRoutine(ctx)
 
 	return af, nil
 }
@@ -108,23 +114,13 @@ func OpenAutoFile(ctx context.Context, path string) (*AutoFile, error) {
 // Close shuts down the service goroutine and marks af as invalid.  Operations
 // on af after Close will report an error.
 func (af *AutoFile) Close() error {
-	return af.withLock(func() error {
-		af.cancel()      // signal the close service to stop
-		af.closed = true // mark the file as invalid
+	err := af.withLock(func() error {
+		af.cancel()
+		af.closed = true
 		return af.unsyncCloseFile()
 	})
-}
-
-func (af *AutoFile) closeFileRoutine(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			_ = af.Close()
-			return
-		case <-af.closeTicker.C:
-			_ = af.closeFile()
-		}
-	}
+	<-af.done
+	return err
 }
 
 func (af *AutoFile) closeFile() (err error) {

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	"github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	tmrequire "github.com/dashpay/tenderdash/internal/test/require"
@@ -105,6 +106,12 @@ func TestIsValidForPrevote(t *testing.T) {
 			stateData := StateData{
 				state:      tc.state,
 				RoundState: tc.rs,
+			}
+			selector, err := selectproposer.NewHeightRoundProposerSelector(valSet.Copy(), tc.rs.Height, tc.rs.Round, nil, nil)
+			require.NoError(t, err)
+			stateData.ProposerSelector = selector
+			if stateData.ProposalBlock != nil {
+				stateData.ProposalBlock.ProposerProTxHash = valSet.Proposer().ProTxHash
 			}
 			tmrequire.Error(t, tc.wantErr, stateData.isValidForPrevote())
 		})

@@ -646,6 +646,7 @@ func TestParkedCommitsAreTriedRoundByRound(t *testing.T) {
 				crs, err := f.checker.ProcessProposal(ctx, f.block, 1, f.stateData.state, true, types.VerifiedCommit{})
 				require.NoError(t, err)
 				f.stateData.CurrentRoundState = crs
+				f.stateData.ProcessedBlockID = f.block.BlockID(f.parts)
 				f.checker.calls, f.checker.processedRounds = nil, []int32{}
 			}
 			require.NoError(t, f.completeBlock(ctx, false))

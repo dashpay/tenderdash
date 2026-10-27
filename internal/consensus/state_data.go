@@ -384,8 +384,8 @@ func (s *StateData) proposalIsTimely() error {
 func (s *StateData) updateValidBlock() bool {
 	s.ValidRound = s.Round
 	// we only update valid block if it's not set already; otherwise we might overwrite the recv time
-	blockHash := s.ProposalBlock.Hash()
-	if !s.ValidBlock.HashesTo(blockHash) {
+	blockID := s.ProposalBlock.BlockID(s.ProposalBlockParts)
+	if !s.ValidBlock.BlockID(s.ValidBlockParts).Equals(blockID) {
 		s.ValidBlock = s.ProposalBlock
 		// Only a proposal for this block dates it; one for another block measures
 		// the arrival of something else and is dropped as stale moments later. With
@@ -393,7 +393,7 @@ func (s *StateData) updateValidBlock() bool {
 		// and the zero time is not an option, since propose reads this back and the
 		// zero time is not timely.
 		s.ValidBlockRecvTime = tmtime.Now()
-		if s.Proposal != nil && s.Proposal.BlockID.Hash.Equal(blockHash) && !s.ProposalReceiveTime.IsZero() {
+		if s.Proposal != nil && s.Proposal.BlockID.Equals(blockID) && !s.ProposalReceiveTime.IsZero() {
 			s.ValidBlockRecvTime = s.ProposalReceiveTime
 		}
 		s.ValidBlockParts = s.ProposalBlockParts
@@ -699,6 +699,17 @@ func (s *StateData) isValidForPrevote() error {
 	// Validate proposal core chain lock
 	if err := sm.ValidateBlockChainLock(s.state, s.ProposalBlock); err != nil {
 		return errPrevoteInvalidChainLock
+	}
+	// Reproposals retain the original header; their POL is checked before voting.
+	if s.Proposal.POLRound == -1 {
+		proposer, err := s.ProposerSelector.GetProposer(s.Height, s.Round)
+		if err != nil {
+			return fmt.Errorf("get proposal proposer: %w", err)
+		}
+		if !bytes.Equal(s.ProposalBlock.ProposerProTxHash, proposer.ProTxHash) {
+			return fmt.Errorf("proposal-block proposer %X does not match round proposer %X",
+				s.ProposalBlock.ProposerProTxHash, proposer.ProTxHash)
+		}
 	}
 	return nil
 }
