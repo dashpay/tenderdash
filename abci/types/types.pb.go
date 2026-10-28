@@ -1226,23 +1226,23 @@ func (m *RequestApplySnapshotChunk) GetSender() string {
 //   - the sum of `GasWanted` field of transactions $\in C$ is greater than or equal to
 //     `consensusParams.block.max_gas`
 //   - _p_'s Tenderdash creates a block header.
-//     2. _p_'s Tenderdash calls `RequestPrepareProposal` with the newly generated block.
+//  2. _p_'s Tenderdash calls `RequestPrepareProposal` with the newly generated block.
 //     The call is synchronous: Tenderdash's execution will block until the Application returns from the call.
-//     3. The Application checks the block (hashes, transactions, commit info, misbehavior). Besides,
-//   - in same-block execution mode, the Application can (and should) provide `ResponsePrepareProposal.app_hash`,
+//  3. The Application checks the block (hashes, transactions, commit info, misbehavior). Besides,
+//     - in same-block execution mode, the Application can (and should) provide `ResponsePrepareProposal.app_hash`,
 //     `ResponsePrepareProposal.validator_updates`, or
 //     `ResponsePrepareProposal.consensus_param_updates`.
-//   - the Application can manipulate transactions
-//   - leave transactions untouched - `TxAction = UNMODIFIED`
-//   - add new transactions directly to the proposal - `TxAction = ADDED`
-//   - remove transactions (invalid) from the proposal and from the mempool - `TxAction = REMOVED`
-//   - remove transactions from the proposal but not from the mempool (effectively _delaying_ them) - the
+//     - the Application can manipulate transactions
+//     - leave transactions untouched - `TxAction = UNMODIFIED`
+//     - add new transactions directly to the proposal - `TxAction = ADDED`
+//     - remove transactions (invalid) from the proposal and from the mempool - `TxAction = REMOVED`
+//     - remove transactions from the proposal but not from the mempool (effectively _delaying_ them) - the
 //     Application removes the transaction from the list
-//   - modify transactions (e.g. aggregate them) - `TxAction = ADDED` followed by `TxAction = REMOVED`. As explained above, this compromises client traceability, unless it is implemented at the Application level.
-//   - reorder transactions - the Application reorders transactions in the list
-//     4. If the block is modified, the Application includes the modified block in the return parameters (see the rules in section _Usage_).
+//     - modify transactions (e.g. aggregate them) - `TxAction = ADDED` followed by `TxAction = REMOVED`. As explained above, this compromises client traceability, unless it is implemented at the Application level.
+//     - reorder transactions - the Application reorders transactions in the list
+//  4. If the block is modified, the Application includes the modified block in the return parameters (see the rules in section _Usage_).
 //     The Application returns from the call.
-//     5. _p_'s Tenderdash uses the (possibly) modified block as _p_'s proposal in round _r_, height _h_.
+//  5. _p_'s Tenderdash uses the (possibly) modified block as _p_'s proposal in round _r_, height _h_.
 //
 // Note that, if _p_ has a non-`nil` _validValue_, Tenderdash will use it as proposal and will not call `RequestPrepareProposal`.
 type RequestPrepareProposal struct {

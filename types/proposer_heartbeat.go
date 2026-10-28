@@ -141,8 +141,10 @@ func ProposerHeartbeatSignBytes(chainID string, hb *tmproto.ProposerHeartbeat) [
 func ProposerHeartbeatRequestID(height int64, round int32, sequence uint64) []byte {
 	reqID := make([]byte, 0, len(proposerHeartbeatRequestIDPrefix)+8+4+8)
 	reqID = append(reqID, proposerHeartbeatRequestIDPrefix...)
-	reqID = binary.LittleEndian.AppendUint64(reqID, uint64(height))
-	reqID = binary.LittleEndian.AppendUint32(reqID, uint32(round))
+	// The ID takes the bits of height and round as they are, like
+	// heightRoundRequestID, so a negative value cannot collide with a valid one.
+	reqID = binary.LittleEndian.AppendUint64(reqID, uint64(height)) //nolint:gosec // bit reinterpretation is intended
+	reqID = binary.LittleEndian.AppendUint32(reqID, uint32(round))  //nolint:gosec // bit reinterpretation is intended
 	reqID = binary.LittleEndian.AppendUint64(reqID, sequence)
 	return crypto.Checksum(reqID)
 }
