@@ -120,6 +120,11 @@ type RoundState struct {
 	// while they waited for transactions.
 	RoundSkip *types.RoundSkipCertificate `json:"round_skip"`
 
+	// TxsReported is set once the mempool reported transactions at this
+	// height. It does so once per height, so a round entered after that does
+	// not wait for transactions: no report would end the wait.
+	TxsReported bool `json:"txs_reported"`
+
 	// ProcessedBlockID identifies the successful ProcessProposal behind CurrentRoundState.
 	ProcessedBlockID types.BlockID `json:"-"`
 

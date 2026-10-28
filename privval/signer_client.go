@@ -253,7 +253,7 @@ func (sc *SignerClient) SignProposerHeartbeat(
 	_quorumHash crypto.QuorumHash,
 	_heartbeat *tmproto.ProposerHeartbeat,
 ) error {
-	return &RemoteSignerError{Code: 501, Description: "remote signer cannot sign proposer heartbeats"}
+	return &RemoteSignerError{Code: remoteSignerNotImplemented, Description: "remote signer cannot sign proposer heartbeats"}
 }
 
 // SignRoundSkipVote is not part of the remote signer protocol, so a validator
@@ -265,7 +265,7 @@ func (sc *SignerClient) SignRoundSkipVote(
 	_quorumHash crypto.QuorumHash,
 	_vote *tmproto.RoundSkipVote,
 ) error {
-	return &RemoteSignerError{Code: 501, Description: "remote signer cannot sign round skip votes"}
+	return &RemoteSignerError{Code: remoteSignerNotImplemented, Description: "remote signer cannot sign round skip votes"}
 }
 
 func (sc *SignerClient) UpdatePrivateKey(

@@ -2,6 +2,7 @@ package types
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"sort"
 	"testing"
 	"time"
@@ -520,5 +521,48 @@ func TestProposerLivenessTimeouts(t *testing.T) {
 		decoded := ConsensusParamsFromProto(params.ToProto())
 		assert.Equal(t, 2*time.Second, decoded.Timeout.ProposerHeartbeat)
 		assert.Equal(t, 9*time.Second, decoded.Timeout.ProposerSilence)
+	})
+}
+
+func TestConsensusParamsHashProposerLivenessTimeouts(t *testing.T) {
+	withVersion := func(version tmproto.VersionParams_ConsensusVersion, heartbeat, silence time.Duration) ConsensusParams {
+		params := *DefaultConsensusParams()
+		params.Version.ConsensusVersion = int32(version)
+		params.Timeout.ProposerHeartbeat = heartbeat
+		params.Timeout.ProposerSilence = silence
+		return params
+	}
+
+	t.Run("should hash params before CONSENSUS_VERSION_2 exactly as before", func(t *testing.T) {
+		for _, version := range []tmproto.VersionParams_ConsensusVersion{
+			tmproto.VersionParams_CONSENSUS_VERSION_0, tmproto.VersionParams_CONSENSUS_VERSION_1,
+		} {
+			params := withVersion(version, 3*time.Second, 20*time.Second)
+			legacy, err := (&tmproto.HashedParams{
+				BlockMaxBytes:    params.Block.MaxBytes,
+				BlockMaxGas:      params.Block.MaxGas,
+				ConsensusVersion: params.Version.ConsensusVersion,
+			}).Marshal()
+			require.NoError(t, err)
+			sum := sha256.Sum256(legacy)
+			assert.Equal(t, sum[:], []byte(params.HashConsensusParams()), "version %v", version)
+		}
+	})
+
+	t.Run("should cover the timeouts from CONSENSUS_VERSION_2", func(t *testing.T) {
+		v2 := tmproto.VersionParams_CONSENSUS_VERSION_2
+		base := withVersion(v2, 2*time.Second, 10*time.Second).HashConsensusParams()
+		assert.NotEqual(t, base, withVersion(v2, 3*time.Second, 10*time.Second).HashConsensusParams())
+		assert.NotEqual(t, base, withVersion(v2, 2*time.Second, 11*time.Second).HashConsensusParams())
+	})
+
+	t.Run("should hash unset timeouts as the defaults they stand for", func(t *testing.T) {
+		v2 := tmproto.VersionParams_CONSENSUS_VERSION_2
+		assert.Equal(t,
+			withVersion(v2, 0, 0).HashConsensusParams(),
+			withVersion(v2, time.Second, 5*time.Second).HashConsensusParams())
+		assert.Equal(t,
+			withVersion(v2, 10*time.Second, 0).HashConsensusParams(),
+			withVersion(v2, 10*time.Second, 50*time.Second).HashConsensusParams())
 	})
 }

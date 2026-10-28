@@ -854,8 +854,9 @@ func (r *Reactor) handleStateMessage(
 		certMsg := msgI.(*RoundSkipCertificateMessage)
 		stateData := r.state.GetStateData()
 		// The state machine verifies and applies it, and broadcasts it if it
-		// moved the node on; one for a round already passed is dropped here.
-		if certMsg.Certificate.Height != stateData.Height || certMsg.Certificate.Round < stateData.Round {
+		// moved the node on. One it would not apply is dropped here, before it
+		// is written to the WAL on its way there.
+		if !roundSkipCertificateWanted(&stateData, certMsg.Certificate) {
 			return nil
 		}
 		laneCtx, ok := r.laneCtx(ctx, ps, envelope)

@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/libs/eventemitter"
 	"github.com/dashpay/tenderdash/libs/log"
@@ -19,6 +20,19 @@ import (
 // before every block after the first, and returns its state, the heartbeats it
 // sends and its new blocks.
 func startWaitingValidator(
+	ctx context.Context,
+	t *testing.T,
+	consensusVersion tmproto.VersionParams_ConsensusVersion,
+) (*State, <-chan *types.ProposerHeartbeat, <-chan *types.Block) {
+	t.Helper()
+	cs, heartbeats, blocks := newWaitingValidator(ctx, t, consensusVersion)
+	stateData := cs.GetStateData()
+	startTestRound(ctx, cs, stateData.Height, stateData.Round)
+	return cs, heartbeats, blocks
+}
+
+// newWaitingValidator builds what startWaitingValidator starts.
+func newWaitingValidator(
 	ctx context.Context,
 	t *testing.T,
 	consensusVersion tmproto.VersionParams_ConsensusVersion,
@@ -60,8 +74,6 @@ func startWaitingValidator(
 		}
 	}()
 
-	stateData := cs.GetStateData()
-	startTestRound(ctx, cs, stateData.Height, stateData.Round)
 	return cs, heartbeats, blocks
 }
 
@@ -119,6 +131,28 @@ func TestStateProposerHeartbeats(t *testing.T) {
 			case <-deadline:
 				t.Fatal("no heartbeat while waiting at height 3")
 			}
+		}
+	})
+
+	t.Run("should announce itself as soon as it starts in a waiting round", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		cs, heartbeats, _ := newWaitingValidator(ctx, t, tmproto.VersionParams_CONSENSUS_VERSION_2)
+
+		// As after a restart, the node is in a waiting round before its receive
+		// routine starts, and nothing else will happen until a transaction
+		// arrives.
+		stateData := cs.GetStateData()
+		stateData.updateRoundStep(stateData.Round, cstypes.RoundStepNewRound)
+		require.NoError(t, stateData.Save())
+		require.True(t, waitingRound(&stateData))
+		startConsensusState(ctx, cs, 0)
+
+		select {
+		case hb := <-heartbeats:
+			assert.Equal(t, stateData.Height, hb.Height)
+		case <-time.After(5 * time.Second):
+			t.Fatal("no heartbeat from a node that started in a waiting round")
 		}
 	})
 

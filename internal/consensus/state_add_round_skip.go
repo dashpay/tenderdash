@@ -33,27 +33,35 @@ type AddRoundSkipCertificateAction struct {
 	metrics        *Metrics
 }
 
-// Execute verifies and applies the certificate.
-func (c *AddRoundSkipCertificateAction) Execute(ctx context.Context, stateEvent StateEvent) error {
-	stateData := stateEvent.StateData
-	certificate := stateEvent.Data.(*AddRoundSkipCertificateEvent).Certificate
-
+// roundSkipCertificateWanted reports whether certificate would move the node on,
+// before anything is spent on it: the reactor drops one that would not before
+// it reaches the WAL, and the action checks again on the state it applies to.
+func roundSkipCertificateWanted(stateData *StateData, certificate *types.RoundSkipCertificate) bool {
+	// Before CONSENSUS_VERSION_2 no round is skipped.
 	if !stateData.state.ConsensusParams.Version.ProposerLivenessEnabled() {
-		return nil
+		return false
 	}
 	// A certificate for a round this node has left, or already holds one for,
 	// changes nothing.
 	if certificate.Height != stateData.Height || certificate.Round < stateData.Round {
-		return nil
+		return false
+	}
+	if stateData.RoundSkip != nil && stateData.RoundSkip.Round >= certificate.Round {
+		return false
 	}
 	// Nor does one for a node that is committing the height: skip votes lock
 	// nothing, so +2/3 precommits for a late proposal can exist next to a
 	// certificate for its round, and moving rounds would drop the block being
 	// assembled for the commit.
-	if stateData.Step >= cstypes.RoundStepApplyCommit {
-		return nil
-	}
-	if stateData.RoundSkip != nil && stateData.RoundSkip.Round >= certificate.Round {
+	return stateData.Step < cstypes.RoundStepApplyCommit
+}
+
+// Execute verifies and applies the certificate.
+func (c *AddRoundSkipCertificateAction) Execute(ctx context.Context, stateEvent StateEvent) error {
+	stateData := stateEvent.StateData
+	certificate := stateEvent.Data.(*AddRoundSkipCertificateEvent).Certificate
+
+	if !roundSkipCertificateWanted(stateData, certificate) {
 		return nil
 	}
 	if budget := verificationBudgetFromCtx(ctx); budget != nil && !budget.Allow(baseMessageCost) {

@@ -200,6 +200,21 @@ func (v *roundSkipVotes) collect() []*types.RoundSkipVote {
 	return collected
 }
 
+// voteOf returns the skip vote the validator with proTxHash cast for height and
+// round, if it was counted.
+func (c *roundSkipCollector) voteOf(height int64, round int32, proTxHash types.ProTxHash) *types.RoundSkipVote {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+	if c.height != height {
+		return nil
+	}
+	votes := c.rounds[round]
+	if votes == nil {
+		return nil
+	}
+	return votes.votes[proTxHash.String()]
+}
+
 // sameQuorum reports whether a and b are the validator set of one quorum.
 func sameQuorum(a, b *types.ValidatorSet) bool {
 	if a == nil || b == nil {

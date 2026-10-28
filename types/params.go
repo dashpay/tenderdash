@@ -444,6 +444,16 @@ func (params ConsensusParams) HashConsensusParams() tmbytes.HexBytes {
 		BlockMaxGas:      params.Block.MaxGas,
 		ConsensusVersion: params.Version.ConsensusVersion,
 	}
+	// From CONSENSUS_VERSION_2 the proposer liveness timeouts steer what a
+	// validator sends to the others, so they are hashed, and a node that takes
+	// its params from a peer (state sync) gets them authenticated. The values
+	// in effect are hashed, not the stored ones, so a zero meaning the default
+	// hashes like the default, as /consensus_params reports it.
+	if params.Version.ProposerLivenessEnabled() {
+		timeouts := params.Timeout.TimeoutParamsOrDefaults()
+		hp.ProposerHeartbeatNs = timeouts.ProposerHeartbeat.Nanoseconds()
+		hp.ProposerSilenceNs = timeouts.ProposerSilence.Nanoseconds()
+	}
 
 	bz, err := hp.Marshal()
 	if err != nil {

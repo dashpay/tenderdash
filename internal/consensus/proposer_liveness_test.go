@@ -3,12 +3,17 @@ package consensus
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/dashpay/dashd-go/btcjson"
+	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/libs/eventemitter"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
@@ -25,7 +30,7 @@ type livenessFixture struct {
 	liveness *proposerLiveness
 }
 
-func newLivenessFixture(t *testing.T, ready func(context.Context) error) *livenessFixture {
+func newLivenessFixture(t *testing.T, ready func(context.Context, int64) error) *livenessFixture {
 	t.Helper()
 	valSet, pvs := types.RandValidatorSet(4)
 	privVals := make(map[string]types.PrivValidator, len(pvs))
@@ -370,7 +375,7 @@ func TestProposerLivenessAnnounce(t *testing.T) {
 	})
 
 	t.Run("should send nothing while the application cannot propose", func(t *testing.T) {
-		f := newLivenessFixture(t, func(context.Context) error { return errors.New("application down") })
+		f := newLivenessFixture(t, func(context.Context, int64) error { return errors.New("application down") })
 		sent := collect(f)
 		proposer := f.valSet.Validators[0]
 		f.liveness.announce(context.Background(), f.target(proposer, 100*time.Millisecond), f.privValidator(t, proposer))
@@ -426,4 +431,101 @@ func TestProposerLivenessSeenHeartbeats(t *testing.T) {
 		assert.NotContains(t, l.seen, heartbeatID{sequence: 0})
 		assert.Contains(t, l.seen, heartbeatID{sequence: uint64(maxSeenHeartbeats)})
 	})
+}
+
+// unsupportedHeartbeatSigner refuses every heartbeat as a request it cannot
+// sign at all, as remote signers do.
+type unsupportedHeartbeatSigner struct {
+	types.PrivValidator
+	attempts atomic.Int32
+}
+
+func (pv *unsupportedHeartbeatSigner) SignProposerHeartbeat(
+	context.Context, string, btcjson.LLMQType, crypto.QuorumHash, *tmproto.ProposerHeartbeat,
+) error {
+	pv.attempts.Add(1)
+	return fmt.Errorf("remote signer: %w", types.ErrSigningNotSupported)
+}
+
+func TestProposerLivenessUnsupportedSigner(t *testing.T) {
+	t.Run("should stop asking a signer that cannot sign heartbeats", func(t *testing.T) {
+		f := newLivenessFixture(t, nil)
+		sent := make(chan *types.ProposerHeartbeat, 10)
+		f.emitter.AddListener(proposerHeartbeatEventName, func(data eventemitter.EventData) error {
+			sent <- data.(*types.ProposerHeartbeat)
+			return nil
+		})
+		proposer := f.valSet.Validators[0]
+		signer := &unsupportedHeartbeatSigner{PrivValidator: f.privVals[proposer.ProTxHash.String()]}
+		pv := privValidator{PrivValidator: signer, ProTxHash: proposer.ProTxHash}
+
+		target := f.target(proposer, 100*time.Millisecond)
+		f.liveness.announce(context.Background(), target, pv)
+		time.Sleep(10 * target.interval)
+		assert.Equal(t, int32(1), signer.attempts.Load(), "a signer that cannot sign heartbeats is asked once")
+
+		// Nor in the next round it proposes.
+		target.round = 1
+		f.liveness.announce(context.Background(), target, pv)
+		defer f.liveness.stop()
+		time.Sleep(5 * target.interval)
+		assert.Equal(t, int32(1), signer.attempts.Load())
+		assert.Empty(t, sent)
+
+		select {
+		case <-f.liveness.silent():
+			t.Fatal("a proposer reported its own round silent")
+		default:
+		}
+	})
+}
+
+func TestProposerLivenessRearm(t *testing.T) {
+	t.Run("should report the proposer silent again after a silence it could not act on", func(t *testing.T) {
+		f := newLivenessFixture(t, nil)
+		f.liveness.watch(f.target(f.valSet.Validators[0], 50*time.Millisecond))
+		defer f.liveness.stop()
+
+		first := <-f.liveness.silent()
+		f.liveness.rearm(first)
+		select {
+		case again := <-f.liveness.silent():
+			assert.Equal(t, first.Round, again.Round)
+		case <-time.After(2 * time.Second):
+			t.Fatal("silence not reported again after rearm")
+		}
+	})
+
+	t.Run("should not rearm a watch a heartbeat re-armed since", func(t *testing.T) {
+		f := newLivenessFixture(t, nil)
+		proposer := f.valSet.Validators[0]
+		silence := 50 * time.Millisecond
+		f.liveness.watch(f.target(proposer, silence))
+		defer f.liveness.stop()
+
+		stale := <-f.liveness.silent()
+		relay, err := f.liveness.heard(f.heartbeat(t, proposer, proposer, 1, tmtime.Now()))
+		require.NoError(t, err)
+		require.True(t, relay)
+		f.liveness.mtx.Lock()
+		arm := f.liveness.arm
+		f.liveness.mtx.Unlock()
+
+		f.liveness.rearm(stale)
+		f.liveness.mtx.Lock()
+		assert.Equal(t, arm, f.liveness.arm, "a stale report must not restart the timer")
+		f.liveness.mtx.Unlock()
+	})
+}
+
+func TestProposerReady(t *testing.T) {
+	clock := clockwork.NewFakeClock()
+	cs := &State{catchup: &catchupTracker{}}
+	require.NoError(t, cs.proposerReady(context.Background(), 5))
+
+	// After a block-sync handover to height 9, the propose step holds back
+	// until the node is past it, and the heartbeat must not claim otherwise.
+	cs.catchup.arm(9, clock)
+	assert.ErrorIs(t, cs.proposerReady(context.Background(), 5), errProposerCatchingUp)
+	assert.NoError(t, cs.proposerReady(context.Background(), 10))
 }

@@ -322,6 +322,7 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockSto
 	s.TriggeredTimeoutPrecommit = false
 	s.ProposeNextBlockImmediately = false
 	s.RoundSkip = nil
+	s.TxsReported = false
 
 	s.state = state
 
@@ -639,12 +640,18 @@ func (s *StateData) replaceProposalBlockOnLockedBlock(blockID types.BlockID) {
 // transactions as round 0 does. It does once nothing at this height is locked
 // or has a polka: the skipped rounds produced no proposal, and the next
 // proposer waits for something to propose like the silent one did.
+//
+// It does not once the mempool has reported transactions at this height. The
+// mempool reports them once per height, so a node that heard the report
+// before the certificate arrived would wait for one that never comes, with
+// the transactions already in its mempool.
 func (s *StateData) waitsAfterRoundSkip(round int32) bool {
 	return round > 0 &&
 		s.RoundSkip != nil &&
 		s.RoundSkip.Round == round-1 &&
 		s.LockedRound == -1 &&
-		s.ValidRound == -1
+		s.ValidRound == -1 &&
+		!s.TxsReported
 }
 
 func (s *StateData) proposeTimeout(round int32) time.Duration {

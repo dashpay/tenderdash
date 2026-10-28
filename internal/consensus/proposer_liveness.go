@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dashpay/dashd-go/btcjson"
@@ -70,10 +71,13 @@ type proposerLiveness struct {
 	logger  log.Logger
 	metrics *Metrics
 	emitter *eventemitter.EventEmitter
-	// ready reports whether this node could propose right now. A proposer that
-	// could not sends no heartbeat, so a node whose application is down is not
-	// waited on.
-	ready func(context.Context) error
+	// ready reports whether this node could propose at a height right now. A
+	// proposer that could not sends no heartbeat, so a node whose application
+	// is down, or that is still catching up, is not waited on.
+	ready func(ctx context.Context, height int64) error
+	// signerUnsupported is set once this node's signer refused a heartbeat as
+	// a request it cannot sign at all. No heartbeat is attempted after that.
+	signerUnsupported atomic.Bool
 	// budget is the node-wide verification budget a peer's heartbeat draws on
 	// before its signature is checked.
 	budget types.VerificationBudget
@@ -120,7 +124,7 @@ func newProposerLiveness(
 	logger log.Logger,
 	metrics *Metrics,
 	emitter *eventemitter.EventEmitter,
-	ready func(context.Context) error,
+	ready func(ctx context.Context, height int64) error,
 	budget types.VerificationBudget,
 ) *proposerLiveness {
 	return &proposerLiveness{
@@ -138,6 +142,18 @@ func newProposerLiveness(
 // it against the round it is in.
 func (l *proposerLiveness) silent() <-chan proposerSilence {
 	return l.silentCh
+}
+
+// rearm starts the silence timer again for the watch that raised silence, if
+// nothing has re-armed it since. A validator that could not act on a silence,
+// such as one whose signer failed for a moment, is told again after another
+// silence timeout instead of never.
+func (l *proposerLiveness) rearm(silence proposerSilence) {
+	l.mtx.Lock()
+	defer l.mtx.Unlock()
+	if silence.arm == l.arm && !l.announcing && l.target.is(silence.Height, silence.Round) {
+		l.armLocked()
+	}
 }
 
 // current reports whether silence is still the latest word on its proposer:
@@ -220,6 +236,11 @@ func (l *proposerLiveness) announce(ctx context.Context, target livenessTarget, 
 
 	l.resetLocked(&target)
 	l.announcing = true
+	// A signer that cannot sign heartbeats at all is not asked again every
+	// interval; the round is handed on once validators stop hearing from it.
+	if l.signerUnsupported.Load() {
+		return
+	}
 	sendCtx, cancel := context.WithCancel(ctx)
 	l.cancel = cancel
 	go l.sendHeartbeats(sendCtx, l.generation, target, pv)
@@ -404,7 +425,9 @@ func (l *proposerLiveness) sendHeartbeats(ctx context.Context, generation uint64
 	defer ticker.Stop()
 
 	for {
-		l.sendHeartbeat(ctx, generation, target, pv)
+		if !l.sendHeartbeat(ctx, generation, target, pv) {
+			return
+		}
 		select {
 		case <-ctx.Done():
 			return
@@ -413,15 +436,23 @@ func (l *proposerLiveness) sendHeartbeats(ctx context.Context, generation uint64
 	}
 }
 
-func (l *proposerLiveness) sendHeartbeat(ctx context.Context, generation uint64, target livenessTarget, pv privValidator) {
+// sendHeartbeat signs and emits one heartbeat for target, if this node could
+// propose now. It reports whether more should follow: not once the signer
+// turns out unable to sign heartbeats at all.
+func (l *proposerLiveness) sendHeartbeat(
+	ctx context.Context,
+	generation uint64,
+	target livenessTarget,
+	pv privValidator,
+) bool {
 	ctx, cancel := context.WithTimeout(ctx, target.interval)
 	defer cancel()
 
 	if l.ready != nil {
-		if err := l.ready(ctx); err != nil {
+		if err := l.ready(ctx, target.height); err != nil {
 			l.logger.Debug("not sending a proposer heartbeat: this node cannot propose right now",
 				"height", target.height, "round", target.round, "err", err)
-			return
+			return true
 		}
 	}
 
@@ -429,7 +460,7 @@ func (l *proposerLiveness) sendHeartbeat(ctx context.Context, generation uint64,
 	l.mtx.Lock()
 	if generation != l.generation {
 		l.mtx.Unlock()
-		return
+		return false
 	}
 	l.lastSeq = heartbeatSequence(l.lastSeq, now)
 	sequence := l.lastSeq
@@ -443,15 +474,22 @@ func (l *proposerLiveness) sendHeartbeat(ctx context.Context, generation uint64,
 		Timestamp:         now,
 	}
 	if err := pv.SignProposerHeartbeat(ctx, target.chainID, target.quorumType, target.quorumHash, pb); err != nil {
+		if errors.Is(err, types.ErrSigningNotSupported) {
+			if !l.signerUnsupported.Swap(true) {
+				l.logger.Info("this node's signer cannot sign proposer heartbeats, so it sends none; "+
+					"validators hand on its rounds that wait for transactions", "err", err)
+			}
+			return false
+		}
 		if ctx.Err() == nil {
 			l.logger.Error("cannot sign proposer heartbeat", "height", target.height, "round", target.round, "err", err)
 		}
-		return
+		return true
 	}
 	hb, err := types.ProposerHeartbeatFromProto(pb)
 	if err != nil {
 		l.logger.Error("signed an invalid proposer heartbeat", "heartbeat", hb, "err", err)
-		return
+		return true
 	}
 	// Peers relay it back; it is not news to this node.
 	l.mtx.Lock()
@@ -461,4 +499,5 @@ func (l *proposerLiveness) sendHeartbeat(ctx context.Context, generation uint64,
 	l.mtx.Unlock()
 	l.metrics.ProposerHeartbeatsSent.Add(1)
 	l.emitter.Emit(proposerHeartbeatEventName, hb)
+	return true
 }

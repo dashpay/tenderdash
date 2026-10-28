@@ -105,6 +105,11 @@ message HashedParams {
   int64 block_max_bytes   = 1;
   int64 block_max_gas     = 2;
   int32 consensus_version = 3;
+  // proposer_heartbeat_ns and proposer_silence_ns are the proposer liveness
+  // timeouts in effect, in nanoseconds. Set from CONSENSUS_VERSION_2, so the
+  // hash of earlier versions' params is unchanged.
+  int64 proposer_heartbeat_ns = 4;
+  int64 proposer_silence_ns   = 5;
 }
 
 // SynchronyParams configure the bounds under which a proposed block's timestamp is considered valid.

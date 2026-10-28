@@ -444,6 +444,11 @@ type ErroringMockPV struct {
 
 var ErroringMockPVErr = errors.New("erroringMockPV always returns an error")
 
+// ErrSigningNotSupported is what a PrivValidator that cannot sign a kind of
+// message at all returns, or matches with errors.Is, for example a remote signer
+// asked for a proposer heartbeat. Asking again does not help.
+var ErrSigningNotSupported = errors.New("the signer does not support signing this message")
+
 // GetPubKey Implements PrivValidator.
 func (pv *ErroringMockPV) GetPubKey(_ctx context.Context, _quorumHash crypto.QuorumHash) (crypto.PubKey, error) {
 	return nil, ErroringMockPVErr
