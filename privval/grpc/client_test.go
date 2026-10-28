@@ -16,6 +16,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
+	"github.com/dashpay/tenderdash/privval"
 	tmgrpc "github.com/dashpay/tenderdash/privval/grpc"
 	privvalproto "github.com/dashpay/tenderdash/proto/tendermint/privval"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -181,4 +182,23 @@ func TestSignerClient_SignProposal(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, pbWant.Signature, pbHave.Signature)
+}
+
+// Heartbeats and skip votes are not part of the remote signer protocol. The
+// refusal carries code 501 like the socket signer's, which retrying clients
+// treat as final rather than retrying until they time out.
+func TestSignerClientRefusesLivenessSigningAsFinal(t *testing.T) {
+	var sc tmgrpc.SignerClient
+	quorumHash := crypto.RandQuorumHash()
+
+	err := sc.SignProposerHeartbeat(context.Background(), "chain", btcjson.LLMQType_5_60, quorumHash,
+		&tmproto.ProposerHeartbeat{})
+	var remoteErr *privval.RemoteSignerError
+	require.ErrorAs(t, err, &remoteErr)
+	assert.Equal(t, 501, remoteErr.Code)
+
+	err = sc.SignRoundSkipVote(context.Background(), "chain", btcjson.LLMQType_5_60, quorumHash,
+		&tmproto.RoundSkipVote{})
+	require.ErrorAs(t, err, &remoteErr)
+	assert.Equal(t, 501, remoteErr.Code)
 }

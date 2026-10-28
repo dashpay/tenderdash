@@ -3,9 +3,12 @@ package consensus
 import (
 	"context"
 
+	"github.com/cosmos/gogoproto/proto"
+
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmcons "github.com/dashpay/tenderdash/proto/tendermint/consensus"
 )
 
 func queryMaj23GossipHandler(ps *PeerState, gossiper Gossiper) gossipHandlerFunc {
@@ -17,6 +20,39 @@ func queryMaj23GossipHandler(ps *PeerState, gossiper Gossiper) gossipHandlerFunc
 		rs := stateData.RoundState
 		prs := ps.GetRoundState()
 		gossiper.GossipVoteSetMaj23(ctx, rs, prs)
+	}
+}
+
+// roundSkipGossipHandler sends this node's round skip certificate to a peer
+// still in the round it skips, or an earlier one of the height.
+//
+// Certificates are broadcast once, when a node applies one, and nothing else
+// moves a node past a round whose proposer went silent while everyone waited:
+// there are no prevotes to follow into the next round, and the next proposal
+// is sent only to peers already in its round. A peer that missed the broadcast
+// would wait in the old round until the height ended. Once it applies the
+// certificate it announces its new round and stops being sent it.
+func roundSkipGossipHandler(
+	ps *PeerState,
+	logger log.Logger,
+	send func(ctx context.Context, msg proto.Message) error,
+) gossipHandlerFunc {
+	return func(ctx context.Context, stateData StateData) {
+		certificate := stateData.RoundSkip
+		if certificate == nil {
+			return
+		}
+		prs := ps.GetRoundState()
+		// A peer committing the height has no use for it.
+		if prs.Height != certificate.Height || prs.Round > certificate.Round ||
+			prs.Step >= cstypes.RoundStepApplyCommit {
+			return
+		}
+		err := send(ctx, &tmcons.RoundSkipCertificate{Certificate: *certificate.ToProto()})
+		if err != nil {
+			logger.Debug("cannot send round skip certificate to a peer behind",
+				"height", certificate.Height, "round", certificate.Round, "peer_round", prs.Round, "err", err)
+		}
 	}
 }
 

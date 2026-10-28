@@ -21,7 +21,18 @@ var (
 	// ErrRoundSkipCertificateInvalidSignature is returned when a certificate's
 	// quorum signature does not verify against the quorum's public key.
 	ErrRoundSkipCertificateInvalidSignature = errors.New("invalid round skip certificate signature")
+	// ErrRoundSkipCertificateWrongQuorum is returned when a certificate names a
+	// quorum other than the validator set's.
+	ErrRoundSkipCertificateWrongQuorum = errors.New("round skip certificate signed by another quorum")
 )
+
+// RoundSkipThresholdPower returns the voting power whose skip votes make a
+// certificate: the power the quorum needs to agree on anything, which a chain
+// may lower with VotingPowerThreshold, but never less than the power of the
+// shares its threshold signature is recovered from.
+func RoundSkipThresholdPower(valSet *ValidatorSet) int64 {
+	return max(valSet.QuorumVotingThresholdPower(), valSet.QuorumTypeThresholdVotingPower())
+}
 
 // roundSkipRequestIDPrefix separates skip vote signatures from other signatures
 // made with the same quorum key share.
@@ -162,8 +173,8 @@ func (c *RoundSkipCertificate) Verify(chainID string, valSet *ValidatorSet) erro
 		return errors.New("no quorum public key to verify the round skip certificate with")
 	}
 	if !bytes.Equal(c.QuorumHash, valSet.QuorumHash) {
-		return fmt.Errorf("round skip certificate signed by quorum %s, expected %s",
-			c.QuorumHash.ShortString(), valSet.QuorumHash.ShortString())
+		return fmt.Errorf("%w: %s, expected %s",
+			ErrRoundSkipCertificateWrongQuorum, c.QuorumHash.ShortString(), valSet.QuorumHash.ShortString())
 	}
 	signItem := RoundSkipSignItem(chainID, c.Height, c.Round, valSet.QuorumType, valSet.QuorumHash)
 	if !valSet.ThresholdPublicKey.VerifySignatureDigest(signItem.SignHash, c.ThresholdSignature) {
@@ -209,8 +220,7 @@ func RoundSkipCertificateFromProto(pb *tmproto.RoundSkipCertificate) (*RoundSkip
 
 // RecoverRoundSkipCertificate recovers the quorum signature of valSet from the
 // skip votes of its members, which must be for one height and round and must
-// already be verified. It fails unless the votes hold the quorum's threshold
-// voting power.
+// already be verified. It fails unless the votes hold RoundSkipThresholdPower.
 func RecoverRoundSkipCertificate(chainID string, valSet *ValidatorSet, votes []*RoundSkipVote) (*RoundSkipCertificate, error) {
 	if len(votes) == 0 {
 		return nil, errors.New("no round skip votes to recover a certificate from")
@@ -237,7 +247,7 @@ func RecoverRoundSkipCertificate(chainID string, valSet *ValidatorSet, votes []*
 		signatures = append(signatures, vote.Signature)
 		proTxHashes = append(proTxHashes, vote.ValidatorProTxHash)
 	}
-	if threshold := valSet.QuorumVotingThresholdPower(); power < threshold {
+	if threshold := RoundSkipThresholdPower(valSet); power < threshold {
 		return nil, fmt.Errorf("round skip votes hold %d voting power, %d needed", power, threshold)
 	}
 

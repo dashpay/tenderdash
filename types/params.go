@@ -188,14 +188,25 @@ func (s SynchronyParams) SynchronyParamsOrDefaults() SynchronyParams {
 
 func DefaultTimeoutParams() TimeoutParams {
 	return TimeoutParams{
-		Propose:           3000 * time.Millisecond,
-		ProposeDelta:      500 * time.Millisecond,
-		Vote:              1000 * time.Millisecond,
-		VoteDelta:         500 * time.Millisecond,
-		ProposerHeartbeat: 1000 * time.Millisecond,
-		ProposerSilence:   5000 * time.Millisecond,
+		Propose:      3000 * time.Millisecond,
+		ProposeDelta: 500 * time.Millisecond,
+		Vote:         1000 * time.Millisecond,
+		VoteDelta:    500 * time.Millisecond,
+		// ProposerHeartbeat and ProposerSilence are left unset: their defaults
+		// are derived in TimeoutParamsOrDefaults, from whichever of the two a
+		// chain sets later.
 	}
 }
+
+const (
+	// defaultProposerHeartbeat and defaultProposerSilence are the proposer
+	// liveness timeouts of a chain that sets neither.
+	defaultProposerHeartbeat = 1000 * time.Millisecond
+	defaultProposerSilence   = 5000 * time.Millisecond
+	// proposerSilenceHeartbeats is how many heartbeat intervals the proposer
+	// silence timeout spans when a chain sets only one of the two.
+	proposerSilenceHeartbeats = 5
+)
 
 func DefaultABCIParams() ABCIParams {
 	return ABCIParams{
@@ -223,13 +234,18 @@ func (t TimeoutParams) TimeoutParamsOrDefaults() TimeoutParams {
 	if t.VoteDelta == 0 {
 		t.VoteDelta = defaults.VoteDelta
 	}
-	// Chains that started before CONSENSUS_VERSION_2 have no value stored for
-	// these two, and nothing needs one until that version is active.
-	if t.ProposerHeartbeat == 0 {
-		t.ProposerHeartbeat = defaults.ProposerHeartbeat
-	}
-	if t.ProposerSilence == 0 {
-		t.ProposerSilence = defaults.ProposerSilence
+	// Nothing stores these two unless a chain sets them, and nothing needs
+	// them before CONSENSUS_VERSION_2. A chain that sets only one gets the
+	// other from it, so an update naming just one of them keeps the silence
+	// longer than the heartbeat interval.
+	switch {
+	case t.ProposerHeartbeat == 0 && t.ProposerSilence == 0:
+		t.ProposerHeartbeat = defaultProposerHeartbeat
+		t.ProposerSilence = defaultProposerSilence
+	case t.ProposerHeartbeat == 0:
+		t.ProposerHeartbeat = min(defaultProposerHeartbeat, t.ProposerSilence/proposerSilenceHeartbeats)
+	case t.ProposerSilence == 0:
+		t.ProposerSilence = max(defaultProposerSilence, t.ProposerHeartbeat*proposerSilenceHeartbeats)
 	}
 	return t
 }
@@ -391,7 +407,12 @@ func (params ConsensusParams) ValidateConsensusParams() error {
 		return fmt.Errorf("timeout.ProposerSilence must not be negative. Got: %d", params.Timeout.ProposerSilence)
 	}
 
-	if tp := params.Timeout.TimeoutParamsOrDefaults(); tp.ProposerSilence <= tp.ProposerHeartbeat {
+	tp := params.Timeout.TimeoutParamsOrDefaults()
+	if tp.ProposerHeartbeat <= 0 {
+		return fmt.Errorf("timeout.ProposerSilence (%s) is too short to derive a heartbeat interval from",
+			tp.ProposerSilence)
+	}
+	if tp.ProposerSilence <= tp.ProposerHeartbeat {
 		return fmt.Errorf("timeout.ProposerSilence (%s) must be longer than timeout.ProposerHeartbeat (%s)",
 			tp.ProposerSilence, tp.ProposerHeartbeat)
 	}

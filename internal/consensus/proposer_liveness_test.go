@@ -39,7 +39,7 @@ func newLivenessFixture(t *testing.T, ready func(context.Context) error) *livene
 		valSet:   valSet,
 		privVals: privVals,
 		emitter:  emitter,
-		liveness: newProposerLiveness(log.NewNopLogger(), NopMetrics(), emitter, ready),
+		liveness: newProposerLiveness(log.NewNopLogger(), NopMetrics(), emitter, ready, nil),
 	}
 }
 
@@ -125,6 +125,47 @@ func TestProposerLivenessWatch(t *testing.T) {
 		}
 	})
 
+	t.Run("should not report silence from a timer a heartbeat re-armed", func(t *testing.T) {
+		f := newLivenessFixture(t, nil)
+		silence := 50 * time.Millisecond
+		f.liveness.watch(f.target(f.valSet.Validators[0], silence))
+		defer f.liveness.stop()
+
+		// Hold the lock past the deadline, so the timer fires and its callback
+		// waits for the lock, then re-arm as an accepted heartbeat does.
+		f.liveness.mtx.Lock()
+		time.Sleep(2 * silence)
+		f.liveness.lastSeq = 1
+		f.liveness.armLocked()
+		f.liveness.mtx.Unlock()
+
+		select {
+		case <-f.liveness.silent():
+			t.Fatal("a timer re-armed by a heartbeat reported silence")
+		case <-time.After(silence / 2):
+		}
+	})
+
+	t.Run("should treat a report as stale once a heartbeat arrives", func(t *testing.T) {
+		f := newLivenessFixture(t, nil)
+		proposer := f.valSet.Validators[0]
+		f.liveness.watch(f.target(proposer, 50*time.Millisecond))
+		defer f.liveness.stop()
+
+		var report proposerSilence
+		select {
+		case report = <-f.liveness.silent():
+		case <-time.After(2 * time.Second):
+			t.Fatal("proposer not reported silent")
+		}
+		assert.True(t, f.liveness.current(report))
+
+		relay, err := f.liveness.heard(f.heartbeat(t, proposer, proposer, 1, tmtime.Now()))
+		require.NoError(t, err)
+		require.True(t, relay)
+		assert.False(t, f.liveness.current(report), "a report raised before the heartbeat must be stale")
+	})
+
 	t.Run("should not report silence after the watch stops", func(t *testing.T) {
 		f := newLivenessFixture(t, nil)
 		f.liveness.watch(f.target(f.valSet.Validators[0], 50*time.Millisecond))
@@ -192,6 +233,24 @@ func TestProposerLivenessHeard(t *testing.T) {
 		assert.False(t, relay)
 	})
 
+	t.Run("should drop a heartbeat the verification budget cannot afford", func(t *testing.T) {
+		g := newLivenessFixture(t, nil)
+		budget := &tokenBudget{}
+		g.liveness.budget = budget
+		g.liveness.watch(g.target(g.valSet.Validators[0], time.Minute))
+		defer g.liveness.stop()
+
+		forged := g.heartbeat(t, g.valSet.Validators[1], g.valSet.Validators[0], 1, tmtime.Now())
+		relay, err := g.liveness.heard(forged)
+		require.NoError(t, err, "a heartbeat that was not verified cannot be refused as forged")
+		assert.False(t, relay)
+
+		budget.tokens = baseMessageCost
+		_, err = g.liveness.heard(forged)
+		assert.ErrorIs(t, err, types.ErrProposerHeartbeatInvalidSignature)
+		assert.Equal(t, baseMessageCost, budget.charged)
+	})
+
 	t.Run("should ignore heartbeats while nothing is watched", func(t *testing.T) {
 		g := newLivenessFixture(t, nil)
 		relay, err := g.liveness.heard(g.heartbeat(t, g.valSet.Validators[0], g.valSet.Validators[0], 1, tmtime.Now()))
@@ -243,6 +302,47 @@ func TestProposerLivenessAnnounce(t *testing.T) {
 		}
 	})
 
+	t.Run("should be heard again at once after the proposer restarts", func(t *testing.T) {
+		f := newLivenessFixture(t, nil)
+		proposer := f.valSet.Validators[0]
+		target := f.target(proposer, 250*time.Millisecond)
+		f.liveness.watch(target)
+		defer f.liveness.stop()
+
+		// announceFrom runs a proposer process until it has sent n heartbeats,
+		// and hands each to the watcher.
+		announceFrom := func(n int) uint64 {
+			emitter := eventemitter.New()
+			sender := newProposerLiveness(log.NewNopLogger(), NopMetrics(), emitter, nil, nil)
+			sent := make(chan *types.ProposerHeartbeat, 100)
+			emitter.AddListener(proposerHeartbeatEventName, func(data eventemitter.EventData) error {
+				sent <- data.(*types.ProposerHeartbeat)
+				return nil
+			})
+			sender.announce(context.Background(), target, f.privValidator(t, proposer))
+			defer sender.stop()
+
+			var last uint64
+			for i := 0; i < n; i++ {
+				select {
+				case hb := <-sent:
+					relay, err := f.liveness.heard(hb)
+					require.NoError(t, err)
+					assert.True(t, relay, "heartbeat %d of a proposer process was dropped", i+1)
+					last = hb.Sequence
+				case <-time.After(2 * time.Second):
+					t.Fatalf("heartbeat %d not sent", i+1)
+				}
+			}
+			return last
+		}
+
+		before := announceFrom(3)
+		// The restarted process starts with no memory of what it sent.
+		after := announceFrom(1)
+		assert.Greater(t, after, before)
+	})
+
 	t.Run("should not report its own round silent", func(t *testing.T) {
 		f := newLivenessFixture(t, nil)
 		proposer := f.valSet.Validators[0]
@@ -268,5 +368,22 @@ func TestProposerLivenessAnnounce(t *testing.T) {
 			t.Fatalf("heartbeat %d sent while the application was down", hb.Sequence)
 		case <-time.After(300 * time.Millisecond):
 		}
+	})
+}
+
+func TestHeartbeatSequence(t *testing.T) {
+	now := time.UnixMilli(1_700_000_000_000)
+
+	t.Run("should count from the signing time", func(t *testing.T) {
+		assert.Equal(t, uint64(1_700_000_000_000), heartbeatSequence(0, now))
+	})
+
+	t.Run("should still grow when the clock has not moved on", func(t *testing.T) {
+		assert.Equal(t, uint64(1_700_000_000_001), heartbeatSequence(1_700_000_000_000, now))
+		assert.Equal(t, uint64(1_700_000_000_051), heartbeatSequence(1_700_000_000_050, now))
+	})
+
+	t.Run("should grow from the last one with a clock before 1970", func(t *testing.T) {
+		assert.Equal(t, uint64(8), heartbeatSequence(7, time.UnixMilli(-5)))
 	})
 }

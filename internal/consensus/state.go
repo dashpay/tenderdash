@@ -317,8 +317,8 @@ func NewState(
 	if cs.blockExec != nil {
 		appReady = cs.blockExec.AppReady
 	}
-	cs.liveness = newProposerLiveness(cs.logger, cs.metrics, cs.emitter, appReady)
-	cs.roundSkips = newRoundSkipCollector(cs.logger)
+	cs.liveness = newProposerLiveness(cs.logger, cs.metrics, cs.emitter, appReady, cs.verificationBudget)
+	cs.roundSkips = newRoundSkipCollector(cs.logger, cs.verificationBudget)
 
 	cs.stateDataStore = NewStateDataStore(cs.metrics, logger, cfg, cs.emitter)
 	wal := &wrapWAL{getter: func() WALWriteFlusher { return cs.wal }}
@@ -906,8 +906,9 @@ func (cs *State) handleTxsAvailable(ctx context.Context, stateData *StateData) {
 // node waits in has stopped sending heartbeats.
 func (cs *State) handleProposerSilence(ctx context.Context, stateData *StateData, silence proposerSilence) {
 	// The report was raised on another goroutine and may describe a round the
-	// node has already left.
-	if silence.Height != stateData.Height || silence.Round != stateData.Round || !waitingRound(stateData) {
+	// node has already left, or a proposer whose heartbeat arrived since.
+	if silence.Height != stateData.Height || silence.Round != stateData.Round || !waitingRound(stateData) ||
+		!cs.liveness.current(silence) {
 		return
 	}
 	if !stateData.isValidator(cs.privValidator.ProTxHash) {

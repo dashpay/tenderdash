@@ -31,6 +31,9 @@ type proposerSilence struct {
 	Height   int64
 	Round    int32
 	Proposer types.ProTxHash
+	// arm identifies the silence timer that raised the report, so a heartbeat
+	// that re-armed the watch since can be told apart (see current).
+	arm uint64
 }
 
 // livenessTarget is the round whose proposer the node watches or, when the node
@@ -71,13 +74,20 @@ type proposerLiveness struct {
 	// could not sends no heartbeat, so a node whose application is down is not
 	// waited on.
 	ready func(context.Context) error
+	// budget is the node-wide verification budget a peer's heartbeat draws on
+	// before its signature is checked.
+	budget types.VerificationBudget
 
 	mtx        sync.Mutex
 	target     *livenessTarget
 	announcing bool
-	// generation changes with every new target, so a timer or sender left from
-	// an earlier one can tell it is stale.
+	// generation changes with every new target, so a sender left from an
+	// earlier one can tell it is stale.
 	generation uint64
+	// arm changes every time the silence timer is armed or stopped, so a timer
+	// callback that already fired, or a report it raised, can tell a heartbeat
+	// re-armed the watch since.
+	arm uint64
 	// lastSeq is the highest heartbeat sequence accepted, or sent, for target.
 	lastSeq  uint64
 	timer    *time.Timer
@@ -90,12 +100,14 @@ func newProposerLiveness(
 	metrics *Metrics,
 	emitter *eventemitter.EventEmitter,
 	ready func(context.Context) error,
+	budget types.VerificationBudget,
 ) *proposerLiveness {
 	return &proposerLiveness{
 		logger:   logger,
 		metrics:  metrics,
 		emitter:  emitter,
 		ready:    ready,
+		budget:   budget,
 		silentCh: make(chan proposerSilence, 1),
 	}
 }
@@ -105,6 +117,16 @@ func newProposerLiveness(
 // it against the round it is in.
 func (l *proposerLiveness) silent() <-chan proposerSilence {
 	return l.silentCh
+}
+
+// current reports whether silence is still the latest word on its proposer:
+// the timer that raised it has not been re-armed by a heartbeat, or stopped,
+// since. A report read after a heartbeat arrived is stale even though it names
+// the round the node is in.
+func (l *proposerLiveness) current(silence proposerSilence) bool {
+	l.mtx.Lock()
+	defer l.mtx.Unlock()
+	return silence.arm == l.arm && !l.announcing && l.target.is(silence.Height, silence.Round)
 }
 
 // waitingRound reports whether the node is waiting for transactions in a round
@@ -203,6 +225,7 @@ func (l *proposerLiveness) resetLocked(target *livenessTarget) {
 		l.timer = nil
 	}
 	l.generation++
+	l.arm++
 	l.target = target
 	l.announcing = false
 	l.lastSeq = 0
@@ -213,13 +236,16 @@ func (l *proposerLiveness) armLocked() {
 	if l.timer != nil {
 		l.timer.Stop()
 	}
-	generation := l.generation
-	l.timer = time.AfterFunc(l.target.silence, func() { l.fire(generation) })
+	// Stop does not hold back a callback that already fired and waits for the
+	// lock, so the callback checks that its arm is still the current one.
+	l.arm++
+	arm := l.arm
+	l.timer = time.AfterFunc(l.target.silence, func() { l.fire(arm) })
 }
 
-func (l *proposerLiveness) fire(generation uint64) {
+func (l *proposerLiveness) fire(arm uint64) {
 	l.mtx.Lock()
-	if generation != l.generation || l.target == nil || l.announcing {
+	if arm != l.arm || l.target == nil || l.announcing {
 		l.mtx.Unlock()
 		return
 	}
@@ -227,6 +253,7 @@ func (l *proposerLiveness) fire(generation uint64) {
 		Height:   l.target.height,
 		Round:    l.target.round,
 		Proposer: l.target.proposer.ProTxHash,
+		arm:      arm,
 	}
 	l.mtx.Unlock()
 
@@ -282,6 +309,12 @@ func (l *proposerLiveness) heard(hb *types.ProposerHeartbeat) (bool, error) {
 	if target.proposer.PubKey == nil {
 		return false, nil
 	}
+	// The check below is a signature verification like a vote's, so it draws
+	// on the node-wide budget. One this node cannot afford now is dropped: the
+	// next heartbeat comes within the interval, from this peer or another.
+	if l.budget != nil && !l.budget.Allow(baseMessageCost) {
+		return false, nil
+	}
 	if err := hb.Verify(target.chainID, target.quorumType, target.quorumHash, target.proposer.PubKey); err != nil {
 		return false, err
 	}
@@ -297,6 +330,23 @@ func (l *proposerLiveness) heard(hb *types.ProposerHeartbeat) (bool, error) {
 	}
 	l.metrics.ProposerHeartbeatsReceived.Add(1)
 	return true, nil
+}
+
+// heartbeatSequence returns the sequence of a heartbeat signed at now, after
+// one with sequence last: the signing time in milliseconds, or one more than
+// last if the clock has not moved past it.
+//
+// Counting from the clock rather than from 1 is what lets a proposer that
+// restarts within its round be heard again at once. Its watchers keep the
+// sequence of the last heartbeat they accepted from before the restart, and a
+// count started again from 1 would sit below it, so they would drop every new
+// heartbeat as a copy and vote to skip a proposer that is back.
+func heartbeatSequence(last uint64, now time.Time) uint64 {
+	ms := now.UnixMilli()
+	if ms <= 0 {
+		return last + 1
+	}
+	return max(last+1, uint64(ms))
 }
 
 func (l *proposerLiveness) sendHeartbeats(ctx context.Context, generation uint64, target livenessTarget, pv privValidator) {
@@ -325,12 +375,13 @@ func (l *proposerLiveness) sendHeartbeat(ctx context.Context, generation uint64,
 		}
 	}
 
+	now := tmtime.Now()
 	l.mtx.Lock()
 	if generation != l.generation {
 		l.mtx.Unlock()
 		return
 	}
-	l.lastSeq++
+	l.lastSeq = heartbeatSequence(l.lastSeq, now)
 	sequence := l.lastSeq
 	l.mtx.Unlock()
 
@@ -339,7 +390,7 @@ func (l *proposerLiveness) sendHeartbeat(ctx context.Context, generation uint64,
 		Round:             target.round,
 		Sequence:          sequence,
 		ProposerProTxHash: pv.ProTxHash,
-		Timestamp:         tmtime.Now(),
+		Timestamp:         now,
 	}
 	if err := pv.SignProposerHeartbeat(ctx, target.chainID, target.quorumType, target.quorumHash, pb); err != nil {
 		if ctx.Err() == nil {

@@ -31,6 +31,15 @@ func TestIsPeerFloodableError(t *testing.T) {
 	assert.True(t, isPeerFloodableError(types.ErrVoteUnexpectedStep))
 	assert.True(t, isPeerFloodableError(floodWrapped), "must see through the ErrInvalidVoteSignature wrapping")
 
+	// Proposer liveness messages a peer can forge for nothing.
+	assert.True(t, isPeerFloodableError(types.ErrProposerHeartbeatInvalidSignature))
+	assert.True(t, isPeerFloodableError(errProposerHeartbeatWrongProposer))
+	assert.True(t, isPeerFloodableError(types.ErrRoundSkipVoteInvalidSignature))
+	assert.True(t, isPeerFloodableError(errRoundSkipVoteWrongValidator))
+	assert.True(t, isPeerFloodableError(types.ErrRoundSkipCertificateInvalidSignature))
+	assert.True(t, isPeerFloodableError(fmt.Errorf("%w: AB12, expected CD34", types.ErrRoundSkipCertificateWrongQuorum)),
+		"a certificate naming another quorum is refused before any signature is read")
+
 	assert.False(t, isPeerFloodableError(ErrPrivValidatorNotSet),
 		"an internal fault must not be treated as floodable")
 	assert.False(t, isPeerFloodableError(errors.New("some other internal error")))

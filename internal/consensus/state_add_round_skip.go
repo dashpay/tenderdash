@@ -3,6 +3,7 @@ package consensus
 import (
 	"context"
 
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -43,6 +44,13 @@ func (c *AddRoundSkipCertificateAction) Execute(ctx context.Context, stateEvent 
 	// A certificate for a round this node has left, or already holds one for,
 	// changes nothing.
 	if certificate.Height != stateData.Height || certificate.Round < stateData.Round {
+		return nil
+	}
+	// Nor does one for a node that is committing the height: skip votes lock
+	// nothing, so +2/3 precommits for a late proposal can exist next to a
+	// certificate for its round, and moving rounds would drop the block being
+	// assembled for the commit.
+	if stateData.Step >= cstypes.RoundStepApplyCommit {
 		return nil
 	}
 	if stateData.RoundSkip != nil && stateData.RoundSkip.Round >= certificate.Round {

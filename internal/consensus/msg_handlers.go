@@ -54,6 +54,9 @@ func isPeerFloodableError(err error) bool {
 		errors.Is(err, types.ErrRoundSkipVoteInvalidSignature) ||
 		errors.Is(err, types.ErrRoundSkipCertificateInvalidSignature) ||
 		errors.Is(err, errRoundSkipVoteWrongValidator) ||
+		// A certificate naming another quorum is refused before any signature
+		// is read, as a commit for another quorum is below.
+		errors.Is(err, types.ErrRoundSkipCertificateWrongQuorum) ||
 		// Every peer commit for the current height that clears ValidateBasic reaches
 		// these two rejections, and an honest peer on a different quorum rotation or
 		// vote-extension configuration reaches them too. Both cost the sender a

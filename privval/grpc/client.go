@@ -13,6 +13,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto/encoding"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/privval"
 	privvalproto "github.com/dashpay/tenderdash/proto/tendermint/privval"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
@@ -173,12 +174,13 @@ func (sc *SignerClient) SignProposal(
 }
 
 // SignProposerHeartbeat is not part of the remote signer protocol, so a
-// validator signing through it sends no heartbeats.
+// validator signing through it sends no heartbeats. Like the socket signer it
+// returns code 501, which retrying clients treat as final.
 func (sc *SignerClient) SignProposerHeartbeat(
 	_ctx context.Context, _chainID string, _quorumType btcjson.LLMQType, _quorumHash crypto.QuorumHash,
 	_heartbeat *tmproto.ProposerHeartbeat,
 ) error {
-	return errors.New("remote signer cannot sign proposer heartbeats")
+	return &privval.RemoteSignerError{Code: 501, Description: "remote signer cannot sign proposer heartbeats"}
 }
 
 // SignRoundSkipVote is not part of the remote signer protocol, so a validator
@@ -187,7 +189,7 @@ func (sc *SignerClient) SignRoundSkipVote(
 	_ctx context.Context, _chainID string, _quorumType btcjson.LLMQType, _quorumHash crypto.QuorumHash,
 	_vote *tmproto.RoundSkipVote,
 ) error {
-	return errors.New("remote signer cannot sign round skip votes")
+	return &privval.RemoteSignerError{Code: 501, Description: "remote signer cannot sign round skip votes"}
 }
 
 func (sc *SignerClient) UpdatePrivateKey(

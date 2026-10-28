@@ -69,6 +69,13 @@ func newPeerGossipWorker(
 				queryMaj23GossipHandler(ps, &gossiper),
 				state.config.PeerQueryMaj23SleepDuration,
 			),
+			// A certificate is resent at the majority-claim cadence: a peer
+			// behind waits for nothing else, and one that applied it stops
+			// being sent it as soon as it announces its new round.
+			newGossipHandler(
+				roundSkipGossipHandler(ps, logger, msgSender.send),
+				state.config.PeerQueryMaj23SleepDuration,
+			),
 		},
 	}
 }

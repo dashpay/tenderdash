@@ -38,8 +38,14 @@ var errRoundSkipVoteWrongValidator = errors.New("round skip vote names a validat
 // the state machine as a message, like one received from a peer.
 type roundSkipCollector struct {
 	logger log.Logger
+	// budget is the node-wide verification budget a peer's skip vote draws on
+	// before its signature is checked.
+	budget types.VerificationBudget
 
-	mtx     sync.Mutex
+	mtx sync.Mutex
+	// enabled is whether the chain is at a consensus version that skips rounds.
+	// Before that, no honest validator signs a skip vote, so none is collected.
+	enabled bool
 	height  int64
 	round   int32
 	chainID string
@@ -55,9 +61,10 @@ type roundSkipVotes struct {
 	recovered bool
 }
 
-func newRoundSkipCollector(logger log.Logger) *roundSkipCollector {
+func newRoundSkipCollector(logger log.Logger, budget types.VerificationBudget) *roundSkipCollector {
 	return &roundSkipCollector{
 		logger: logger,
+		budget: budget,
 		rounds: make(map[int32]*roundSkipVotes),
 	}
 }
@@ -68,6 +75,7 @@ func (c *roundSkipCollector) track(stateData *StateData) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
+	c.enabled = stateData.state.ConsensusParams.Version.ProposerLivenessEnabled()
 	if c.height != stateData.Height || !sameQuorum(c.valSet, stateData.Validators) {
 		c.height = stateData.Height
 		c.chainID = stateData.state.ChainID
@@ -90,10 +98,13 @@ func (c *roundSkipCollector) track(stateData *StateData) {
 // round. It returns an error only for a vote no honest peer would have sent.
 func (c *roundSkipCollector) add(vote *types.RoundSkipVote, verify bool) (bool, *types.RoundSkipCertificate, error) {
 	c.mtx.Lock()
-	height, round, chainID, valSet := c.height, c.round, c.chainID, c.valSet
+	enabled, height, round, chainID, valSet := c.enabled, c.height, c.round, c.chainID, c.valSet
 	known := c.knownLocked(vote)
 	c.mtx.Unlock()
 
+	if !enabled {
+		return false, nil, nil
+	}
 	// Validators of one height are not all in the same round at once, so a
 	// vote for a round this node has left, or is too far from, says nothing
 	// wrong about its sender.
@@ -113,6 +124,12 @@ func (c *roundSkipCollector) add(vote *types.RoundSkipVote, verify bool) (bool, 
 		if val.PubKey == nil {
 			return false, nil, nil
 		}
+		// A signature verification like a vote's draws on the node-wide
+		// budget. A vote this node cannot afford now is dropped: every
+		// validator that counts it relays it, so another copy follows.
+		if c.budget != nil && !c.budget.Allow(baseMessageCost) {
+			return false, nil, nil
+		}
 		if err := vote.Verify(chainID, valSet.QuorumType, valSet.QuorumHash, val.PubKey); err != nil {
 			return false, nil, err
 		}
@@ -130,10 +147,12 @@ func (c *roundSkipCollector) add(vote *types.RoundSkipVote, verify bool) (bool, 
 	}
 	votes.votes[vote.ValidatorProTxHash.String()] = vote
 	votes.power += val.VotingPower
-	if votes.recovered || votes.power < valSet.QuorumVotingThresholdPower() {
+	if votes.recovered || votes.power < types.RoundSkipThresholdPower(valSet) {
 		c.mtx.Unlock()
 		return true, nil, nil
 	}
+	// Set before recovering, so a vote counted meanwhile does not start a
+	// second recovery, and cleared again if this one fails.
 	votes.recovered = true
 	collected := make([]*types.RoundSkipVote, 0, len(votes.votes))
 	for _, v := range votes.votes {
@@ -143,7 +162,10 @@ func (c *roundSkipCollector) add(vote *types.RoundSkipVote, verify bool) (bool, 
 
 	certificate, err := types.RecoverRoundSkipCertificate(chainID, valSet, collected)
 	if err != nil {
-		// Every share was verified, so this is a fault here rather than a peer's.
+		// The next vote for the round tries again with one more share.
+		c.mtx.Lock()
+		votes.recovered = false
+		c.mtx.Unlock()
 		c.logger.Error("cannot recover round skip certificate", "height", vote.Height, "round", vote.Round, "err", err)
 		return true, nil, nil
 	}

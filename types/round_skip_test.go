@@ -143,7 +143,38 @@ func TestRoundSkipCertificateVerify(t *testing.T) {
 
 	t.Run("should refuse a certificate signed by another quorum", func(t *testing.T) {
 		otherSet, _ := RandValidatorSet(4)
-		assert.Error(t, certificate.Verify(roundSkipTestChainID, otherSet))
+		assert.ErrorIs(t, certificate.Verify(roundSkipTestChainID, otherSet), ErrRoundSkipCertificateWrongQuorum)
+	})
+}
+
+func TestRoundSkipThresholdPower(t *testing.T) {
+	valSet, privVals := RandValidatorSet(4)
+	shares := valSet.QuorumTypeThresholdCount()
+	require.Greater(t, shares, 1)
+
+	t.Run("should need the quorum's voting threshold by default", func(t *testing.T) {
+		assert.Equal(t, valSet.QuorumVotingThresholdPower(), RoundSkipThresholdPower(valSet))
+	})
+
+	t.Run("should never need less than the shares the signature is recovered from", func(t *testing.T) {
+		lowered := valSet.Copy()
+		lowered.VotingPowerThreshold = uint64(shares-1) * uint64(DefaultDashVotingPower)
+		assert.Equal(t, lowered.QuorumTypeThresholdVotingPower(), RoundSkipThresholdPower(lowered))
+
+		_, err := RecoverRoundSkipCertificate(roundSkipTestChainID, lowered,
+			roundSkipVotes(t, lowered, privVals, shares-1, 2))
+		assert.Error(t, err, "recovery from fewer shares than the signature needs")
+
+		certificate, err := RecoverRoundSkipCertificate(roundSkipTestChainID, lowered,
+			roundSkipVotes(t, lowered, privVals, shares, 2))
+		require.NoError(t, err)
+		assert.NoError(t, certificate.Verify(roundSkipTestChainID, lowered))
+	})
+
+	t.Run("should need a raised threshold in full", func(t *testing.T) {
+		raised := valSet.Copy()
+		raised.VotingPowerThreshold = uint64(valSet.TotalVotingPower())
+		assert.Equal(t, valSet.TotalVotingPower(), RoundSkipThresholdPower(raised))
 	})
 }
 

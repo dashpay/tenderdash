@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cosmos/gogoproto/proto"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -17,6 +18,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
+	tmcons "github.com/dashpay/tenderdash/proto/tendermint/consensus"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -489,6 +491,69 @@ func TestShouldVoteBeGossiped(t *testing.T) {
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			require.Equal(t, tc.want, shouldVoteBeGossiped(tc.rs, tc.prs, tc.isValidator))
+		})
+	}
+}
+
+func TestRoundSkipGossipHandler(t *testing.T) {
+	ctx := context.Background()
+	certificate := &types.RoundSkipCertificate{
+		Height:             5,
+		Round:              2,
+		QuorumHash:         crypto.RandQuorumHash(),
+		ThresholdSignature: tmrand.Bytes(types.SignatureSize),
+	}
+	held := StateData{RoundState: cstypes.RoundState{Height: 5, Round: 3, RoundSkip: certificate}}
+
+	testCases := map[string]struct {
+		stateData StateData
+		peer      cstypes.PeerRoundState
+		wantSent  bool
+	}{
+		"should send it to a peer still in the round it skips": {
+			stateData: held,
+			peer:      cstypes.PeerRoundState{Height: 5, Round: 2, Step: cstypes.RoundStepNewRound},
+			wantSent:  true,
+		},
+		"should send it to a peer in an earlier round": {
+			stateData: held,
+			peer:      cstypes.PeerRoundState{Height: 5, Round: 0, Step: cstypes.RoundStepPropose},
+			wantSent:  true,
+		},
+		"should not send it to a peer that moved on": {
+			stateData: held,
+			peer:      cstypes.PeerRoundState{Height: 5, Round: 3, Step: cstypes.RoundStepNewRound},
+		},
+		"should not send it to a peer committing the height": {
+			stateData: held,
+			peer:      cstypes.PeerRoundState{Height: 5, Round: 2, Step: cstypes.RoundStepApplyCommit},
+		},
+		"should not send it to a peer at another height": {
+			stateData: held,
+			peer:      cstypes.PeerRoundState{Height: 4, Round: 2, Step: cstypes.RoundStepNewRound},
+		},
+		"should send nothing without a certificate": {
+			stateData: StateData{RoundState: cstypes.RoundState{Height: 5, Round: 2}},
+			peer:      cstypes.PeerRoundState{Height: 5, Round: 1, Step: cstypes.RoundStepNewRound},
+		},
+	}
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			var sent []proto.Message
+			send := func(_ context.Context, msg proto.Message) error {
+				sent = append(sent, msg)
+				return nil
+			}
+			ps := &PeerState{PRS: tc.peer}
+			roundSkipGossipHandler(ps, log.NewNopLogger(), send)(ctx, tc.stateData)
+			if !tc.wantSent {
+				require.Empty(t, sent)
+				return
+			}
+			require.Len(t, sent, 1)
+			msg, ok := sent[0].(*tmcons.RoundSkipCertificate)
+			require.True(t, ok, "sent %T", sent[0])
+			require.Equal(t, *certificate.ToProto(), msg.Certificate)
 		})
 	}
 }
