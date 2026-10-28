@@ -154,22 +154,50 @@ func (c *roundSkipCollector) add(vote *types.RoundSkipVote, verify bool) (bool, 
 	// Set before recovering, so a vote counted meanwhile does not start a
 	// second recovery, and cleared again if this one fails.
 	votes.recovered = true
-	collected := make([]*types.RoundSkipVote, 0, len(votes.votes))
-	for _, v := range votes.votes {
-		collected = append(collected, v)
-	}
+	collected := votes.collect()
 	c.mtx.Unlock()
 
-	certificate, err := types.RecoverRoundSkipCertificate(chainID, valSet, collected)
-	if err != nil {
-		// The next vote for the round tries again with one more share.
-		c.mtx.Lock()
-		votes.recovered = false
-		c.mtx.Unlock()
+	for {
+		certificate, err := types.RecoverRoundSkipCertificate(chainID, valSet, collected)
+		if err == nil {
+			return true, certificate, nil
+		}
 		c.logger.Error("cannot recover round skip certificate", "height", vote.Height, "round", vote.Round, "err", err)
-		return true, nil, nil
+
+		c.mtx.Lock()
+		next, retry := c.afterFailedRecoveryLocked(vote.Round, votes, collected)
+		c.mtx.Unlock()
+		if !retry {
+			return true, nil, nil
+		}
+		collected = next
 	}
-	return true, certificate, nil
+}
+
+// afterFailedRecoveryLocked decides what a recovery from collected that failed
+// does next. Votes counted while it ran did not try a recovery of their own,
+// so if there are any it tries again with them. Otherwise it leaves the round
+// to the next vote, which tries again with one more share.
+func (c *roundSkipCollector) afterFailedRecoveryLocked(
+	round int32,
+	votes *roundSkipVotes,
+	collected []*types.RoundSkipVote,
+) ([]*types.RoundSkipVote, bool) {
+	if len(votes.votes) == len(collected) || c.rounds[round] != votes {
+		votes.recovered = false
+		return nil, false
+	}
+	return votes.collect(), true
+}
+
+// collect returns the votes counted so far. The caller holds the collector's
+// lock.
+func (v *roundSkipVotes) collect() []*types.RoundSkipVote {
+	collected := make([]*types.RoundSkipVote, 0, len(v.votes))
+	for _, vote := range v.votes {
+		collected = append(collected, vote)
+	}
+	return collected
 }
 
 // sameQuorum reports whether a and b are the validator set of one quorum.

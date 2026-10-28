@@ -88,12 +88,33 @@ type proposerLiveness struct {
 	// callback that already fired, or a report it raised, can tell a heartbeat
 	// re-armed the watch since.
 	arm uint64
-	// lastSeq is the highest heartbeat sequence accepted, or sent, for target.
-	lastSeq  uint64
+	// lastSeq is the sequence of the last heartbeat this node sent for target.
+	lastSeq uint64
+	// seen holds the heartbeats for target accepted, or sent, within the
+	// silence timeout, by their signing time. A copy of one is relayed by
+	// every peer and counts only once; anything older fails the age check.
+	seen     map[heartbeatID]time.Time
 	timer    *time.Timer
 	cancel   context.CancelFunc
 	silentCh chan proposerSilence
 }
+
+// heartbeatID tells one heartbeat of a round from another. The proposer signs
+// both fields, and no two heartbeats it signs share them, whether or not it
+// restarted or its clock went back in between.
+type heartbeatID struct {
+	sequence  uint64
+	timestamp int64
+}
+
+func heartbeatIDOf(hb *types.ProposerHeartbeat) heartbeatID {
+	return heartbeatID{sequence: hb.Sequence, timestamp: hb.Timestamp.UnixNano()}
+}
+
+// maxSeenHeartbeats bounds seen. An honest proposer sends silence/interval
+// heartbeats within the silence timeout; the bound only matters against a
+// proposer that signs far more, which can keep itself alive anyway.
+const maxSeenHeartbeats = 256
 
 func newProposerLiveness(
 	logger log.Logger,
@@ -229,6 +250,31 @@ func (l *proposerLiveness) resetLocked(target *livenessTarget) {
 	l.target = target
 	l.announcing = false
 	l.lastSeq = 0
+	l.seen = nil
+}
+
+// rememberLocked records a heartbeat as seen, and forgets those signed longer
+// than the silence timeout before now, which the age check refuses anyway.
+func (l *proposerLiveness) rememberLocked(id heartbeatID, signed time.Time, now time.Time, silence time.Duration) {
+	if l.seen == nil {
+		l.seen = make(map[heartbeatID]time.Time)
+	}
+	for seenID, at := range l.seen {
+		if now.Sub(at) > silence {
+			delete(l.seen, seenID)
+		}
+	}
+	if len(l.seen) >= maxSeenHeartbeats {
+		var oldestID heartbeatID
+		var oldest time.Time
+		for seenID, at := range l.seen {
+			if oldest.IsZero() || at.Before(oldest) {
+				oldestID, oldest = seenID, at
+			}
+		}
+		delete(l.seen, oldestID)
+	}
+	l.seen[id] = signed
 }
 
 // armLocked (re)starts the silence timer for the current target.
@@ -278,12 +324,18 @@ func (l *proposerLiveness) fire(arm uint64) {
 //
 // It runs on the reactor's goroutine. The cheap checks come first, so the only
 // heartbeats verified are those that would refresh the watch: from the proposer
-// of the round being waited in, newer than any seen.
+// of the round being waited in, signed recently, and not seen before.
+//
+// Heartbeats are not ordered. Any recent one not seen before is news that the
+// proposer is there, whatever its sequence: a proposer that restarts, or whose
+// clock goes back, signs heartbeats whose sequence can be lower than one sent
+// before, and is still there.
 func (l *proposerLiveness) heard(hb *types.ProposerHeartbeat) (bool, error) {
+	id := heartbeatIDOf(hb)
 	l.mtx.Lock()
 	target := l.target
 	generation := l.generation
-	lastSeq := l.lastSeq
+	_, seen := l.seen[id]
 	l.mtx.Unlock()
 
 	// A heartbeat for another round is no use to a node that is not waiting in
@@ -296,12 +348,13 @@ func (l *proposerLiveness) heard(hb *types.ProposerHeartbeat) (bool, error) {
 		return false, errProposerHeartbeatWrongProposer
 	}
 	// Copies arrive from every peer that relays one; only the first counts.
-	if hb.Sequence <= lastSeq {
+	if seen {
 		return false, nil
 	}
 	// A heartbeat signed long ago says nothing about the proposer now, whoever
 	// relays it.
-	if age := tmtime.Now().Sub(hb.Timestamp); age > target.silence || age < -target.silence {
+	now := tmtime.Now()
+	if age := now.Sub(hb.Timestamp); age > target.silence || age < -target.silence {
 		return false, nil
 	}
 	// A node outside the validator set does not hold the members' key shares
@@ -321,10 +374,10 @@ func (l *proposerLiveness) heard(hb *types.ProposerHeartbeat) (bool, error) {
 
 	l.mtx.Lock()
 	defer l.mtx.Unlock()
-	if generation != l.generation || hb.Sequence <= l.lastSeq {
+	if _, seen := l.seen[id]; generation != l.generation || seen {
 		return false, nil
 	}
-	l.lastSeq = hb.Sequence
+	l.rememberLocked(id, hb.Timestamp, now, target.silence)
 	if !l.announcing {
 		l.armLocked()
 	}
@@ -334,13 +387,10 @@ func (l *proposerLiveness) heard(hb *types.ProposerHeartbeat) (bool, error) {
 
 // heartbeatSequence returns the sequence of a heartbeat signed at now, after
 // one with sequence last: the signing time in milliseconds, or one more than
-// last if the clock has not moved past it.
-//
-// Counting from the clock rather than from 1 is what lets a proposer that
-// restarts within its round be heard again at once. Its watchers keep the
-// sequence of the last heartbeat they accepted from before the restart, and a
-// count started again from 1 would sit below it, so they would drop every new
-// heartbeat as a copy and vote to skip a proposer that is back.
+// last if the clock has not moved past it. Within one run of the proposer the
+// sequence only grows, so each heartbeat is a signing request of its own;
+// counting from the clock keeps a restarted proposer clear of the sequences it
+// used before.
 func heartbeatSequence(last uint64, now time.Time) uint64 {
 	ms := now.UnixMilli()
 	if ms <= 0 {
@@ -403,6 +453,12 @@ func (l *proposerLiveness) sendHeartbeat(ctx context.Context, generation uint64,
 		l.logger.Error("signed an invalid proposer heartbeat", "heartbeat", hb, "err", err)
 		return
 	}
+	// Peers relay it back; it is not news to this node.
+	l.mtx.Lock()
+	if generation == l.generation {
+		l.rememberLocked(heartbeatIDOf(hb), hb.Timestamp, now, target.silence)
+	}
+	l.mtx.Unlock()
 	l.metrics.ProposerHeartbeatsSent.Add(1)
 	l.emitter.Emit(proposerHeartbeatEventName, hb)
 }

@@ -189,8 +189,9 @@ message ProposerHeartbeat {
   int64 height = 1;
   int32 round  = 2;
   // sequence grows with every heartbeat the proposer sends for this height and
-  // round, so a copy relayed late cannot pass for a fresh one. It counts from
-  // the signing time in milliseconds, so it keeps growing across a restart.
+  // round, counting from the signing time in milliseconds, so every heartbeat
+  // is a signing request of its own. With timestamp it identifies a heartbeat,
+  // so each copy relayed counts once.
   uint64 sequence             = 3;
   bytes  proposer_pro_tx_hash = 4;
   google.protobuf.Timestamp timestamp = 5

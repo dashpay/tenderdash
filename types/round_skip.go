@@ -140,6 +140,15 @@ func RoundSkipVoteFromProto(pb *tmproto.RoundSkipVote) (*RoundSkipVote, error) {
 
 // RoundSkipCertificate proves that validators holding +2/3 of the voting power
 // voted to skip a round. Any node that holds one may move past that round.
+//
+// Like a commit's threshold signature, the certificate proves that the shares
+// its quorum signature needs were combined, and no more: it names no signers.
+// A chain that raises VotingPowerThreshold above that share count gets the
+// raised threshold from the honest validators that collect the votes
+// (RoundSkipThresholdPower), as it does for commits, but not from the
+// certificate. That is enough here: moving to a later round cannot get two
+// blocks committed, and validators holding that many shares can already keep
+// a round from producing a block.
 type RoundSkipCertificate struct {
 	Height             int64             `json:"height,string"`
 	Round              int32             `json:"round"`

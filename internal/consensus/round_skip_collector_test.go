@@ -212,6 +212,34 @@ func TestRoundSkipCollector(t *testing.T) {
 		assert.False(t, recovered, "a failed recovery must leave the round open to the next vote")
 	})
 
+	t.Run("should retry with votes counted while a recovery ran", func(t *testing.T) {
+		f := newCollectorFixture(t, 9, 0)
+		for i := 0; i < 2; i++ {
+			_, _, err := f.collector.add(f.vote(t, int32(i), 9, 0), true)
+			require.NoError(t, err)
+		}
+		f.collector.mtx.Lock()
+		votes := f.collector.rounds[0]
+		// A recovery starts from the votes so far, and one more vote is
+		// counted while it runs.
+		votes.recovered = true
+		collected := votes.collect()
+		f.collector.mtx.Unlock()
+		_, _, err := f.collector.add(f.vote(t, 2, 9, 0), true)
+		require.NoError(t, err)
+
+		f.collector.mtx.Lock()
+		defer f.collector.mtx.Unlock()
+		next, retry := f.collector.afterFailedRecoveryLocked(0, votes, collected)
+		assert.True(t, retry, "a vote counted during a failed recovery must be tried")
+		assert.Len(t, next, len(collected)+1)
+		assert.True(t, votes.recovered, "the retry still holds the round")
+
+		_, retry = f.collector.afterFailedRecoveryLocked(0, votes, next)
+		assert.False(t, retry, "with nothing new, the round is left to the next vote")
+		assert.False(t, votes.recovered)
+	})
+
 	t.Run("should forget the votes of a height it has left", func(t *testing.T) {
 		f := newCollectorFixture(t, 9, 0)
 		vote := f.vote(t, 0, 9, 0)

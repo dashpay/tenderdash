@@ -892,8 +892,9 @@ type ProposerHeartbeat struct {
 	Height int64 `protobuf:"varint,1,opt,name=height,proto3" json:"height,omitempty"`
 	Round  int32 `protobuf:"varint,2,opt,name=round,proto3" json:"round,omitempty"`
 	// sequence grows with every heartbeat the proposer sends for this height and
-	// round, so a copy relayed late cannot pass for a fresh one. It counts from
-	// the signing time in milliseconds, so it keeps growing across a restart.
+	// round, counting from the signing time in milliseconds, so every heartbeat
+	// is a signing request of its own. With timestamp it identifies a heartbeat,
+	// so each copy relayed counts once.
 	Sequence          uint64    `protobuf:"varint,3,opt,name=sequence,proto3" json:"sequence,omitempty"`
 	ProposerProTxHash []byte    `protobuf:"bytes,4,opt,name=proposer_pro_tx_hash,json=proposerProTxHash,proto3" json:"proposer_pro_tx_hash,omitempty"`
 	Timestamp         time.Time `protobuf:"bytes,5,opt,name=timestamp,proto3,stdtime" json:"timestamp"`

@@ -197,14 +197,27 @@ func TestProposerLivenessHeard(t *testing.T) {
 		assert.False(t, relay)
 	})
 
-	t.Run("should drop a heartbeat older than the last one", func(t *testing.T) {
+	t.Run("should hear a fresh heartbeat with a lower sequence", func(t *testing.T) {
+		// A proposer restarted within the same millisecond, or whose clock went
+		// back, signs sequences below those it sent before.
 		relay, err := f.liveness.heard(f.heartbeat(t, proposer, proposer, 5, tmtime.Now()))
 		require.NoError(t, err)
 		assert.True(t, relay)
 
 		relay, err = f.liveness.heard(f.heartbeat(t, proposer, proposer, 4, tmtime.Now()))
 		require.NoError(t, err)
-		assert.False(t, relay)
+		assert.True(t, relay, "a recent heartbeat not seen before is news whatever its sequence")
+	})
+
+	t.Run("should hear a heartbeat that repeats a sequence at another time", func(t *testing.T) {
+		signed := tmtime.Now()
+		relay, err := f.liveness.heard(f.heartbeat(t, proposer, proposer, 7, signed))
+		require.NoError(t, err)
+		assert.True(t, relay)
+
+		relay, err = f.liveness.heard(f.heartbeat(t, proposer, proposer, 7, signed.Add(time.Millisecond)))
+		require.NoError(t, err)
+		assert.True(t, relay, "a restarted proposer can sign a sequence again")
 	})
 
 	t.Run("should refuse a heartbeat from a validator that is not the proposer", func(t *testing.T) {
@@ -385,5 +398,32 @@ func TestHeartbeatSequence(t *testing.T) {
 
 	t.Run("should grow from the last one with a clock before 1970", func(t *testing.T) {
 		assert.Equal(t, uint64(8), heartbeatSequence(7, time.UnixMilli(-5)))
+	})
+}
+
+func TestProposerLivenessSeenHeartbeats(t *testing.T) {
+	t.Run("should forget heartbeats older than the silence timeout", func(t *testing.T) {
+		l := newProposerLiveness(log.NewNopLogger(), NopMetrics(), eventemitter.New(), nil, nil)
+		now := tmtime.Now()
+		silence := 5 * time.Second
+		l.rememberLocked(heartbeatID{sequence: 1}, now.Add(-2*silence), now, silence)
+		l.rememberLocked(heartbeatID{sequence: 2}, now.Add(-silence/2), now, silence)
+		l.rememberLocked(heartbeatID{sequence: 3}, now, now, silence)
+
+		assert.NotContains(t, l.seen, heartbeatID{sequence: 1})
+		assert.Contains(t, l.seen, heartbeatID{sequence: 2})
+		assert.Contains(t, l.seen, heartbeatID{sequence: 3})
+	})
+
+	t.Run("should keep at most maxSeenHeartbeats, dropping the oldest", func(t *testing.T) {
+		l := newProposerLiveness(log.NewNopLogger(), NopMetrics(), eventemitter.New(), nil, nil)
+		now := tmtime.Now()
+		for i := 0; i <= maxSeenHeartbeats; i++ {
+			signed := now.Add(time.Duration(i) * time.Millisecond)
+			l.rememberLocked(heartbeatID{sequence: uint64(i)}, signed, now, time.Minute)
+		}
+		assert.Len(t, l.seen, maxSeenHeartbeats)
+		assert.NotContains(t, l.seen, heartbeatID{sequence: 0})
+		assert.Contains(t, l.seen, heartbeatID{sequence: uint64(maxSeenHeartbeats)})
 	})
 }
