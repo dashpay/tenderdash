@@ -350,18 +350,9 @@ func (pv *MockPV) SignProposerHeartbeat(
 	quorumHash crypto.QuorumHash,
 	heartbeat *tmproto.ProposerHeartbeat,
 ) error {
-	pv.mtx.Lock()
-	defer pv.mtx.Unlock()
-
-	quorumKeys, ok := pv.PrivateKeys[quorumHash.String()]
-	if !ok {
-		return fmt.Errorf("mock private validator could not sign proposer heartbeat for quorum hash %v", quorumHash)
-	}
-
-	signItem := ProposerHeartbeatSignItem(chainID, heartbeat, quorumType, quorumHash)
-	sig, err := quorumKeys.PrivKey.SignDigest(signItem.SignHash)
+	sig, err := pv.signWithQuorumKey(quorumHash, ProposerHeartbeatSignItem(chainID, heartbeat, quorumType, quorumHash))
 	if err != nil {
-		return err
+		return fmt.Errorf("mock private validator could not sign proposer heartbeat: %w", err)
 	}
 	heartbeat.Signature = sig
 	return nil
@@ -375,21 +366,24 @@ func (pv *MockPV) SignRoundSkipVote(
 	quorumHash crypto.QuorumHash,
 	vote *tmproto.RoundSkipVote,
 ) error {
+	sig, err := pv.signWithQuorumKey(quorumHash, RoundSkipSignItem(chainID, vote.Height, vote.Round, quorumType, quorumHash))
+	if err != nil {
+		return fmt.Errorf("mock private validator could not sign round skip vote: %w", err)
+	}
+	vote.Signature = sig
+	return nil
+}
+
+// signWithQuorumKey signs signItem with the key share for quorumHash.
+func (pv *MockPV) signWithQuorumKey(quorumHash crypto.QuorumHash, signItem SignItem) ([]byte, error) {
 	pv.mtx.Lock()
 	defer pv.mtx.Unlock()
 
 	quorumKeys, ok := pv.PrivateKeys[quorumHash.String()]
 	if !ok {
-		return fmt.Errorf("mock private validator could not sign round skip vote for quorum hash %v", quorumHash)
+		return nil, fmt.Errorf("no key for quorum hash %v", quorumHash)
 	}
-
-	signItem := RoundSkipSignItem(chainID, vote.Height, vote.Round, quorumType, quorumHash)
-	sig, err := quorumKeys.PrivKey.SignDigest(signItem.SignHash)
-	if err != nil {
-		return err
-	}
-	vote.Signature = sig
-	return nil
+	return quorumKeys.PrivKey.SignDigest(signItem.SignHash)
 }
 
 func (pv *MockPV) UpdatePrivateKey(

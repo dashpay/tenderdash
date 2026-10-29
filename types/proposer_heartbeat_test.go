@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+	"encoding/binary"
 	"testing"
 	"time"
 
@@ -35,15 +36,7 @@ func signedTestHeartbeat(t *testing.T, valSet *ValidatorSet, pv PrivValidator, s
 func TestProposerHeartbeatSignature(t *testing.T) {
 	valSet, privVals := RandValidatorSet(4)
 	proposer := valSet.Validators[0]
-	var proposerPV PrivValidator
-	for _, pv := range privVals {
-		proTxHash, err := pv.GetProTxHash(context.Background())
-		require.NoError(t, err)
-		if proTxHash.Equal(proposer.ProTxHash) {
-			proposerPV = pv
-		}
-	}
-	require.NotNil(t, proposerPV)
+	proposerPV := privVals[0]
 
 	verify := func(hb *ProposerHeartbeat, chainID string, pubKey crypto.PubKey) error {
 		return hb.Verify(chainID, valSet.QuorumType, valSet.QuorumHash, pubKey)
@@ -138,4 +131,14 @@ func TestProposerHeartbeatValidateBasic(t *testing.T) {
 		var hb *ProposerHeartbeat
 		assert.Error(t, hb.ValidateBasic())
 	})
+}
+
+// The heartbeat request ID is the "dphb" prefix, little-endian height, round and
+// sequence, checksummed. Dash Core signs under it, so its bytes must not change.
+func TestProposerHeartbeatRequestIDLayout(t *testing.T) {
+	expected := []byte("dphb")
+	expected = binary.LittleEndian.AppendUint64(expected, 5)
+	expected = binary.LittleEndian.AppendUint32(expected, 2)
+	expected = binary.LittleEndian.AppendUint64(expected, 9)
+	assert.Equal(t, crypto.Checksum(expected), ProposerHeartbeatRequestID(5, 2, 9))
 }

@@ -113,17 +113,17 @@ message RoundSkipCertificate {
 
 message Message {
   oneof sum {
-    NewRoundStep  new_round_step  = 1;
-    NewValidBlock new_valid_block = 2;
-    Proposal      proposal        = 3;
-    ProposalPOL   proposal_pol    = 4;
-    BlockPart     block_part      = 5;
-    Vote          vote            = 6;
-    HasVote       has_vote        = 7;
-    VoteSetMaj23  vote_set_maj23  = 8;
-    VoteSetBits   vote_set_bits   = 9;
-    Commit        commit          = 10;
-    HasCommit     has_commit      = 11;
+    NewRoundStep         new_round_step         = 1;
+    NewValidBlock        new_valid_block        = 2;
+    Proposal             proposal               = 3;
+    ProposalPOL          proposal_pol           = 4;
+    BlockPart            block_part             = 5;
+    Vote                 vote                   = 6;
+    HasVote              has_vote               = 7;
+    VoteSetMaj23         vote_set_maj23         = 8;
+    VoteSetBits          vote_set_bits          = 9;
+    Commit               commit                 = 10;
+    HasCommit            has_commit             = 11;
     ProposerHeartbeat    proposer_heartbeat     = 12;
     RoundSkipVote        round_skip_vote        = 13;
     RoundSkipCertificate round_skip_certificate = 14;

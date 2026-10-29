@@ -13,15 +13,11 @@ import (
 
 const roundSkipTestChainID = "round-skip-test-chain"
 
-// roundSkipVotes returns the skip votes of the first n validators of valSet.
+// roundSkipVotes returns the skip votes of the first n validators of valSet,
+// which privVals[i] signs for valSet.Validators[i], as RandValidatorSet returns
+// them.
 func roundSkipVotes(t *testing.T, valSet *ValidatorSet, privVals []PrivValidator, n int, round int32) []*RoundSkipVote {
 	t.Helper()
-	byProTxHash := make(map[string]PrivValidator, len(privVals))
-	for _, pv := range privVals {
-		proTxHash, err := pv.GetProTxHash(context.Background())
-		require.NoError(t, err)
-		byProTxHash[proTxHash.String()] = pv
-	}
 	votes := make([]*RoundSkipVote, 0, n)
 	for i, val := range valSet.Validators[:n] {
 		pb := &tmproto.RoundSkipVote{
@@ -30,7 +26,7 @@ func roundSkipVotes(t *testing.T, valSet *ValidatorSet, privVals []PrivValidator
 			ValidatorProTxHash: val.ProTxHash,
 			ValidatorIndex:     int32(i),
 		}
-		require.NoError(t, byProTxHash[val.ProTxHash.String()].SignRoundSkipVote(
+		require.NoError(t, privVals[i].SignRoundSkipVote(
 			context.Background(), roundSkipTestChainID, valSet.QuorumType, valSet.QuorumHash, pb))
 		vote, err := RoundSkipVoteFromProto(pb)
 		require.NoError(t, err)
@@ -145,6 +141,21 @@ func TestRoundSkipCertificateVerify(t *testing.T) {
 		otherSet, _ := RandValidatorSet(4)
 		assert.ErrorIs(t, certificate.Verify(roundSkipTestChainID, otherSet), ErrRoundSkipCertificateWrongQuorum)
 	})
+}
+
+func TestRoundSkipsProvable(t *testing.T) {
+	valSet, _ := RandValidatorSet(4)
+	assert.True(t, RoundSkipsProvable(valSet), "by default the quorum needs what its signature proves")
+
+	lowered := valSet.Copy()
+	lowered.VotingPowerThreshold = uint64(DefaultDashVotingPower)
+	assert.True(t, RoundSkipsProvable(lowered), "a lowered threshold is met by the shares the signature needs")
+
+	raised := valSet.Copy()
+	raised.VotingPowerThreshold = uint64(valSet.TotalVotingPower())
+	assert.False(t, RoundSkipsProvable(raised), "a certificate cannot prove a raised threshold")
+
+	assert.False(t, RoundSkipsProvable(nil))
 }
 
 func TestRoundSkipThresholdPower(t *testing.T) {

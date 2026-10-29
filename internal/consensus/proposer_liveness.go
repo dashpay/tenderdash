@@ -1,6 +1,7 @@
 package consensus
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"sync"
@@ -56,6 +57,28 @@ func (t *livenessTarget) is(height int64, round int32) bool {
 	return t != nil && t.height == height && t.round == round
 }
 
+// relayRounds is what a node needs to check a heartbeat for a round of its
+// height that it is not waiting in, so it can pass the heartbeat on to the
+// validators that are: validators move between rounds at different times, and
+// connections between them are not a full mesh.
+type relayRounds struct {
+	height     int64
+	chainID    string
+	quorumType btcjson.LLMQType
+	quorumHash crypto.QuorumHash
+	timeouts   types.TimeoutParams
+	// proposers holds the proposer of each round within
+	// maxRoundSkipRoundsAhead of the node's.
+	proposers map[int32]*types.Validator
+}
+
+func (r *relayRounds) proposerOf(height int64, round int32) *types.Validator {
+	if r == nil || r.height != height {
+		return nil
+	}
+	return r.proposers[round]
+}
+
 // proposerLiveness keeps track of whether the proposer of the round the node is
 // waiting in is still there.
 //
@@ -94,7 +117,9 @@ type proposerLiveness struct {
 	arm uint64
 	// lastSeq is the sequence of the last heartbeat this node sent for target.
 	lastSeq uint64
-	// seen holds the heartbeats for target accepted, or sent, within the
+	// relay holds the rounds near the node's whose heartbeats it passes on.
+	relay *relayRounds
+	// seen holds the heartbeats of the height accepted, or sent, within the
 	// silence timeout, by their signing time. A copy of one is relayed by
 	// every peer and counts only once; anything older fails the age check.
 	seen     map[heartbeatID]time.Time
@@ -103,16 +128,18 @@ type proposerLiveness struct {
 	silentCh chan proposerSilence
 }
 
-// heartbeatID tells one heartbeat of a round from another. The proposer signs
-// both fields, and no two heartbeats it signs share them, whether or not it
-// restarted or its clock went back in between.
+// heartbeatID tells one heartbeat from another. The proposer signs all four
+// fields, and no two heartbeats it signs for a round share sequence and
+// timestamp, whether or not it restarted or its clock went back in between.
 type heartbeatID struct {
+	height    int64
+	round     int32
 	sequence  uint64
 	timestamp int64
 }
 
 func heartbeatIDOf(hb *types.ProposerHeartbeat) heartbeatID {
-	return heartbeatID{sequence: hb.Sequence, timestamp: hb.Timestamp.UnixNano()}
+	return heartbeatID{height: hb.Height, round: hb.Round, sequence: hb.Sequence, timestamp: hb.Timestamp.UnixNano()}
 }
 
 // maxSeenHeartbeats bounds seen. An honest proposer sends silence/interval
@@ -166,13 +193,68 @@ func (l *proposerLiveness) current(silence proposerSilence) bool {
 	return silence.arm == l.arm && !l.announcing && l.target.is(silence.Height, silence.Round)
 }
 
+// roundSkipping reports whether the chain skips the rounds of silent proposers:
+// from CONSENSUS_VERSION_2, and only where a round skip certificate can prove
+// the voting power the validator set needs (see types.RoundSkipsProvable).
+func roundSkipping(stateData *StateData) bool {
+	return stateData.state.ConsensusParams.Version.ProposerLivenessEnabled() &&
+		types.RoundSkipsProvable(stateData.Validators)
+}
+
 // waitingRound reports whether the node is waiting for transactions in a round
 // whose proposer's liveness it tracks.
 func waitingRound(stateData *StateData) bool {
-	return stateData.state.ConsensusParams.Version.ProposerLivenessEnabled() &&
+	return roundSkipping(stateData) &&
 		stateData.Step == cstypes.RoundStepNewRound &&
 		stateData.Proposal == nil &&
 		stateData.Commit == nil
+}
+
+// followRounds records the proposers of the rounds near the node's, whose
+// heartbeats it checks and relays even when it does not wait in their round.
+// It runs on the consensus goroutine, like reconcile.
+func (l *proposerLiveness) followRounds(stateData *StateData) {
+	if !roundSkipping(stateData) || stateData.ProposerSelector == nil {
+		l.mtx.Lock()
+		l.relay = nil
+		l.mtx.Unlock()
+		return
+	}
+	l.mtx.Lock()
+	relay := l.relay
+	l.mtx.Unlock()
+	if relay != nil && relay.height == stateData.Height && relay.proposers[stateData.Round] != nil &&
+		bytes.Equal(relay.quorumHash, stateData.Validators.QuorumHash) {
+		return
+	}
+
+	// Looking up another round moves the selector, so a copy does it.
+	selector := stateData.ProposerSelector.Copy()
+	relay = &relayRounds{
+		height:     stateData.Height,
+		chainID:    stateData.state.ChainID,
+		quorumType: stateData.Validators.QuorumType,
+		quorumHash: stateData.Validators.QuorumHash,
+		timeouts:   stateData.state.ConsensusParams.Timeout.TimeoutParamsOrDefaults(),
+		proposers:  make(map[int32]*types.Validator),
+	}
+	first := max(stateData.Round-maxRoundSkipRoundsAhead, 0)
+	for round := first; round <= stateData.Round+maxRoundSkipRoundsAhead; round++ {
+		proposer, err := selector.GetProposer(stateData.Height, round)
+		if err != nil {
+			l.logger.Error("cannot determine the proposer of a nearby round", "height", stateData.Height,
+				"round", round, "err", err)
+			continue
+		}
+		relay.proposers[round] = proposer.Copy()
+	}
+
+	l.mtx.Lock()
+	defer l.mtx.Unlock()
+	if l.relay == nil || l.relay.height != relay.height {
+		l.seen = nil
+	}
+	l.relay = relay
 }
 
 // reconcile starts or stops the heartbeat sender and the proposer watch to match
@@ -271,7 +353,6 @@ func (l *proposerLiveness) resetLocked(target *livenessTarget) {
 	l.target = target
 	l.announcing = false
 	l.lastSeq = 0
-	l.seen = nil
 }
 
 // rememberLocked records a heartbeat as seen, and forgets those signed longer
@@ -344,8 +425,10 @@ func (l *proposerLiveness) fire(arm uint64) {
 // for one no honest peer would have sent.
 //
 // It runs on the reactor's goroutine. The cheap checks come first, so the only
-// heartbeats verified are those that would refresh the watch: from the proposer
-// of the round being waited in, signed recently, and not seen before.
+// heartbeats verified are those from the proposer of their round, signed
+// recently, and not seen before. A heartbeat for the round the node waits in
+// refreshes its watch; one for a nearby round of its height is only relayed,
+// for the validators still, or already, waiting there.
 //
 // Heartbeats are not ordered. Any recent one not seen before is news that the
 // proposer is there, whatever its sequence: a proposer that restarts, or whose
@@ -354,18 +437,32 @@ func (l *proposerLiveness) fire(arm uint64) {
 func (l *proposerLiveness) heard(hb *types.ProposerHeartbeat) (bool, error) {
 	id := heartbeatIDOf(hb)
 	l.mtx.Lock()
-	target := l.target
-	generation := l.generation
+	target, generation, relay := l.target, l.generation, l.relay
 	_, seen := l.seen[id]
 	l.mtx.Unlock()
 
-	// A heartbeat for another round is no use to a node that is not waiting in
-	// it, and says nothing wrong about the sender: rounds move at different
-	// times on different nodes.
-	if !target.is(hb.Height, hb.Round) {
+	var (
+		proposer   *types.Validator
+		chainID    string
+		quorumType btcjson.LLMQType
+		quorumHash crypto.QuorumHash
+		silence    time.Duration
+	)
+	watched := target.is(hb.Height, hb.Round)
+	switch {
+	case watched:
+		proposer, chainID, quorumType, quorumHash, silence =
+			target.proposer, target.chainID, target.quorumType, target.quorumHash, target.silence
+	case relay.proposerOf(hb.Height, hb.Round) != nil:
+		proposer, chainID, quorumType, quorumHash = relay.proposerOf(hb.Height, hb.Round),
+			relay.chainID, relay.quorumType, relay.quorumHash
+		silence = relay.timeouts.ProposerSilenceTimeout(hb.Round)
+	default:
+		// A heartbeat for a round too far from this node's says nothing wrong
+		// about its sender: rounds move at different times on different nodes.
 		return false, nil
 	}
-	if !target.proposer.ProTxHash.Equal(hb.ProposerProTxHash) {
+	if !proposer.ProTxHash.Equal(hb.ProposerProTxHash) {
 		return false, errProposerHeartbeatWrongProposer
 	}
 	// Copies arrive from every peer that relays one; only the first counts.
@@ -375,12 +472,12 @@ func (l *proposerLiveness) heard(hb *types.ProposerHeartbeat) (bool, error) {
 	// A heartbeat signed long ago says nothing about the proposer now, whoever
 	// relays it.
 	now := tmtime.Now()
-	if age := now.Sub(hb.Timestamp); age > target.silence || age < -target.silence {
+	if age := now.Sub(hb.Timestamp); age > silence || age < -silence {
 		return false, nil
 	}
 	// A node outside the validator set does not hold the members' key shares
 	// and cannot check the signature, so it neither tracks nor relays.
-	if target.proposer.PubKey == nil {
+	if proposer.PubKey == nil {
 		return false, nil
 	}
 	// The check below is a signature verification like a vote's, so it draws
@@ -389,20 +486,22 @@ func (l *proposerLiveness) heard(hb *types.ProposerHeartbeat) (bool, error) {
 	if l.budget != nil && !l.budget.Allow(baseMessageCost) {
 		return false, nil
 	}
-	if err := hb.Verify(target.chainID, target.quorumType, target.quorumHash, target.proposer.PubKey); err != nil {
+	if err := hb.Verify(chainID, quorumType, quorumHash, proposer.PubKey); err != nil {
 		return false, err
 	}
 
 	l.mtx.Lock()
 	defer l.mtx.Unlock()
-	if _, seen := l.seen[id]; generation != l.generation || seen {
+	if _, seen := l.seen[id]; seen {
 		return false, nil
 	}
-	l.rememberLocked(id, hb.Timestamp, now, target.silence)
-	if !l.announcing {
-		l.armLocked()
+	l.rememberLocked(id, hb.Timestamp, now, silence)
+	if watched && generation == l.generation {
+		if !l.announcing {
+			l.armLocked()
+		}
+		l.metrics.ProposerHeartbeatsReceived.Add(1)
 	}
-	l.metrics.ProposerHeartbeatsReceived.Add(1)
 	return true, nil
 }
 

@@ -611,15 +611,8 @@ func (pv *FilePV) SignProposerHeartbeat(
 	quorumHash crypto.QuorumHash,
 	heartbeat *tmproto.ProposerHeartbeat,
 ) error {
-	pv.mtx.RLock()
-	defer pv.mtx.RUnlock()
-
-	privKey, err := pv.getPrivateKey(ctx, quorumHash)
-	if err != nil {
-		return fmt.Errorf("error signing proposer heartbeat: %w", err)
-	}
 	signItem := types.ProposerHeartbeatSignItem(chainID, heartbeat, quorumType, quorumHash)
-	sig, err := privKey.SignDigest(signItem.SignHash)
+	sig, err := pv.signWithQuorumKey(ctx, quorumHash, signItem)
 	if err != nil {
 		return fmt.Errorf("error signing proposer heartbeat: %w", err)
 	}
@@ -639,20 +632,30 @@ func (pv *FilePV) SignRoundSkipVote(
 	quorumHash crypto.QuorumHash,
 	vote *tmproto.RoundSkipVote,
 ) error {
-	pv.mtx.RLock()
-	defer pv.mtx.RUnlock()
-
-	privKey, err := pv.getPrivateKey(ctx, quorumHash)
-	if err != nil {
-		return fmt.Errorf("error signing round skip vote: %w", err)
-	}
 	signItem := types.RoundSkipSignItem(chainID, vote.Height, vote.Round, quorumType, quorumHash)
-	sig, err := privKey.SignDigest(signItem.SignHash)
+	sig, err := pv.signWithQuorumKey(ctx, quorumHash, signItem)
 	if err != nil {
 		return fmt.Errorf("error signing round skip vote: %w", err)
 	}
 	vote.Signature = sig
 	return nil
+}
+
+// signWithQuorumKey signs signItem with this validator's key share for
+// quorumHash. Nothing is recorded in LastSignState.
+func (pv *FilePV) signWithQuorumKey(
+	ctx context.Context,
+	quorumHash crypto.QuorumHash,
+	signItem types.SignItem,
+) ([]byte, error) {
+	pv.mtx.RLock()
+	defer pv.mtx.RUnlock()
+
+	privKey, err := pv.getPrivateKey(ctx, quorumHash)
+	if err != nil {
+		return nil, err
+	}
+	return privKey.SignDigest(signItem.SignHash)
 }
 
 // Save persists the FilePV to disk.

@@ -12,6 +12,9 @@ import (
 // voted to skip a round.
 type AddRoundSkipCertificateEvent struct {
 	Certificate *types.RoundSkipCertificate
+	// Verified is set for a certificate this node recovered itself, whose
+	// signature was checked when it was recovered.
+	Verified bool
 }
 
 // GetType returns AddRoundSkipCertificateType event-type
@@ -37,16 +40,15 @@ type AddRoundSkipCertificateAction struct {
 // before anything is spent on it: the reactor drops one that would not before
 // it reaches the WAL, and the action checks again on the state it applies to.
 func roundSkipCertificateWanted(stateData *StateData, certificate *types.RoundSkipCertificate) bool {
-	// Before CONSENSUS_VERSION_2 no round is skipped.
-	if !stateData.state.ConsensusParams.Version.ProposerLivenessEnabled() {
+	// Before CONSENSUS_VERSION_2, or where a certificate cannot prove what
+	// the validator set needs, no round is skipped.
+	if !roundSkipping(stateData) {
 		return false
 	}
-	// A certificate for a round this node has left, or already holds one for,
-	// changes nothing.
+	// A certificate for a round this node has left changes nothing. That
+	// includes every round it holds a certificate for: applying one moves the
+	// node past its round.
 	if certificate.Height != stateData.Height || certificate.Round < stateData.Round {
-		return false
-	}
-	if stateData.RoundSkip != nil && stateData.RoundSkip.Round >= certificate.Round {
 		return false
 	}
 	// Nor does one for a node that is committing the height: skip votes lock
@@ -59,22 +61,23 @@ func roundSkipCertificateWanted(stateData *StateData, certificate *types.RoundSk
 // Execute verifies and applies the certificate.
 func (c *AddRoundSkipCertificateAction) Execute(ctx context.Context, stateEvent StateEvent) error {
 	stateData := stateEvent.StateData
-	certificate := stateEvent.Data.(*AddRoundSkipCertificateEvent).Certificate
+	event := stateEvent.Data.(*AddRoundSkipCertificateEvent)
+	certificate := event.Certificate
 
 	if !roundSkipCertificateWanted(stateData, certificate) {
 		return nil
 	}
-	if budget := verificationBudgetFromCtx(ctx); budget != nil && !budget.Allow(baseMessageCost) {
-		return types.ErrVerificationBudgetExhausted
-	}
-	if err := certificate.Verify(stateData.state.ChainID, stateData.Validators); err != nil {
-		return err
+	if !event.Verified {
+		if budget := verificationBudgetFromCtx(ctx); budget != nil && !budget.Allow(baseMessageCost) {
+			return types.ErrVerificationBudgetExhausted
+		}
+		if err := certificate.Verify(stateData.state.ChainID, stateData.Validators); err != nil {
+			return err
+		}
 	}
 
+	// Saved by entering the next round below.
 	stateData.RoundSkip = certificate
-	if err := stateData.Save(); err != nil {
-		return err
-	}
 	c.metrics.RoundSkips.Add(1)
 	c.logger.Info("skipping round: +2/3 of the validators stopped hearing from its proposer",
 		"height", certificate.Height,
@@ -82,17 +85,8 @@ func (c *AddRoundSkipCertificateAction) Execute(ctx context.Context, stateEvent 
 		"next_round", certificate.Round+1)
 	c.eventPublisher.emitter.Emit(roundSkipCertificateEventName, certificate)
 
-	err := stateEvent.Ctrl.Dispatch(ctx, &EnterNewRoundEvent{
+	return stateEvent.Ctrl.Dispatch(ctx, &EnterNewRoundEvent{
 		Height: certificate.Height,
 		Round:  certificate.Round + 1,
 	}, stateData)
-	if err != nil {
-		return err
-	}
-	// A round that waits for transactions announces nothing on entry, and
-	// peers send a proposal only to a node they know is in its round. Without
-	// this, the next proposer's proposal would reach this node only once it
-	// stepped into the propose step on its own.
-	c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
-	return nil
 }

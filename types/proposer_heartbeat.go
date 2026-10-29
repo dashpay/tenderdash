@@ -1,7 +1,6 @@
 package types
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"time"
@@ -139,14 +138,7 @@ func ProposerHeartbeatSignBytes(chainID string, hb *tmproto.ProposerHeartbeat) [
 // heartbeat. It includes the sequence, so every heartbeat is its own signing
 // request rather than a second message signed under an ID already used.
 func ProposerHeartbeatRequestID(height int64, round int32, sequence uint64) []byte {
-	reqID := make([]byte, 0, len(proposerHeartbeatRequestIDPrefix)+8+4+8)
-	reqID = append(reqID, proposerHeartbeatRequestIDPrefix...)
-	// The ID takes the bits of height and round as they are, like
-	// heightRoundRequestID, so a negative value cannot collide with a valid one.
-	reqID = binary.LittleEndian.AppendUint64(reqID, uint64(height)) //nolint:gosec // bit reinterpretation is intended
-	reqID = binary.LittleEndian.AppendUint32(reqID, uint32(round))  //nolint:gosec // bit reinterpretation is intended
-	reqID = binary.LittleEndian.AppendUint64(reqID, sequence)
-	return crypto.Checksum(reqID)
+	return heightRoundRequestID(proposerHeartbeatRequestIDPrefix, height, round, sequence)
 }
 
 // ProposerHeartbeatSignItem returns what the proposer signs with its quorum key

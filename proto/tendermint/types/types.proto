@@ -192,9 +192,9 @@ message ProposerHeartbeat {
   // round, counting from the signing time in milliseconds, so every heartbeat
   // is a signing request of its own. With timestamp it identifies a heartbeat,
   // so each copy relayed counts once.
-  uint64 sequence             = 3;
-  bytes  proposer_pro_tx_hash = 4;
-  google.protobuf.Timestamp timestamp = 5
+  uint64                    sequence             = 3;
+  bytes                     proposer_pro_tx_hash = 4;
+  google.protobuf.Timestamp timestamp            = 5
       [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
   bytes signature = 6;
 }

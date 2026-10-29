@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	tmpubsub "github.com/dashpay/tenderdash/internal/pubsub"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/libs/eventemitter"
 	"github.com/dashpay/tenderdash/libs/log"
@@ -18,12 +19,12 @@ import (
 
 // startWaitingValidator starts a one-validator chain that waits for transactions
 // before every block after the first, and returns its state, the heartbeats it
-// sends and its new blocks.
+// sends and its new-block events.
 func startWaitingValidator(
 	ctx context.Context,
 	t *testing.T,
 	consensusVersion tmproto.VersionParams_ConsensusVersion,
-) (*State, <-chan *types.ProposerHeartbeat, <-chan *types.Block) {
+) (*State, <-chan *types.ProposerHeartbeat, <-chan tmpubsub.Message) {
 	t.Helper()
 	cs, heartbeats, blocks := newWaitingValidator(ctx, t, consensusVersion)
 	stateData := cs.GetStateData()
@@ -36,7 +37,7 @@ func newWaitingValidator(
 	ctx context.Context,
 	t *testing.T,
 	consensusVersion tmproto.VersionParams_ConsensusVersion,
-) (*State, <-chan *types.ProposerHeartbeat, <-chan *types.Block) {
+) (*State, <-chan *types.ProposerHeartbeat, <-chan tmpubsub.Message) {
 	t.Helper()
 	baseConfig := configSetup(t)
 	config, err := ResetConfig(t, "consensus_proposer_liveness_test")
@@ -61,31 +62,12 @@ func newWaitingValidator(
 		heartbeats <- data.(*types.ProposerHeartbeat)
 		return nil
 	})
-	blocks := make(chan *types.Block, 10)
-	blockSub := subscribe(ctx, t, cs.eventBus, types.EventQueryNewBlock)
-	go func() {
-		for {
-			select {
-			case msg := <-blockSub:
-				blocks <- msg.Data().(types.EventDataNewBlock).Block
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
-	return cs, heartbeats, blocks
+	return cs, heartbeats, subscribe(ctx, t, cs.eventBus, types.EventQueryNewBlock)
 }
 
-func awaitBlock(t *testing.T, blocks <-chan *types.Block) *types.Block {
+func awaitBlock(t *testing.T, blocks <-chan tmpubsub.Message) *types.Block {
 	t.Helper()
-	select {
-	case block := <-blocks:
-		return block
-	case <-time.After(10 * time.Second):
-		t.Fatal("no block committed")
-		return nil
-	}
+	return ensureMessageBeforeTimeout(t, blocks, 10*time.Second).Data().(types.EventDataNewBlock).Block
 }
 
 func TestStateProposerHeartbeats(t *testing.T) {

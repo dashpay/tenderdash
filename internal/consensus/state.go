@@ -831,6 +831,7 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 func (cs *State) followLiveness(ctx context.Context) {
 	stateData := cs.stateDataStore.Get()
 	cs.roundSkips.track(&stateData)
+	cs.liveness.followRounds(&stateData)
 	cs.liveness.reconcile(ctx, &stateData, cs.privValidator)
 }
 

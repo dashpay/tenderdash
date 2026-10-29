@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	sm "github.com/dashpay/tenderdash/internal/state"
@@ -12,9 +13,10 @@ import (
 )
 
 func TestRoundSkipCertificateWanted(t *testing.T) {
+	valSet, _ := types.RandValidatorSet(4)
 	stateDataAt := func(version tmproto.VersionParams_ConsensusVersion, round int32, step cstypes.RoundStepType) *StateData {
 		return &StateData{
-			RoundState: cstypes.RoundState{Height: 7, Round: round, Step: step},
+			RoundState: cstypes.RoundState{Height: 7, Round: round, Step: step, Validators: valSet},
 			state: sm.State{ConsensusParams: types.ConsensusParams{
 				Version: types.VersionParams{ConsensusVersion: int32(version)},
 			}},
@@ -63,10 +65,12 @@ func TestRoundSkipCertificateWanted(t *testing.T) {
 		})
 	}
 
-	t.Run("should not want one for a round it already holds a certificate for", func(t *testing.T) {
+	t.Run("should not want one where the threshold is raised beyond what it proves", func(t *testing.T) {
+		raised := valSet.Copy()
+		raised.VotingPowerThreshold = uint64(raised.TotalVotingPower())
+		require.Greater(t, raised.QuorumVotingThresholdPower(), raised.QuorumTypeThresholdVotingPower())
 		stateData := stateDataAt(v2, 2, cstypes.RoundStepNewRound)
-		stateData.RoundSkip = certificate(7, 3)
-		assert.False(t, roundSkipCertificateWanted(stateData, certificate(7, 3)))
-		assert.True(t, roundSkipCertificateWanted(stateData, certificate(7, 4)))
+		stateData.Validators = raised
+		assert.False(t, roundSkipCertificateWanted(stateData, certificate(7, 2)))
 	})
 }

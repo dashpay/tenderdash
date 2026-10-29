@@ -475,7 +475,10 @@ func VoteBlockRequestIDProto(vote *tmproto.Vote) []byte {
 	return heightRoundRequestID("dpbvote", vote.Height, vote.Round)
 }
 
-func heightRoundRequestID(prefix string, height int64, round int32) []byte {
+// heightRoundRequestID returns the quorum signing request ID of prefix,
+// height and round, followed by any extra values, each as a little-endian
+// uint64.
+func heightRoundRequestID(prefix string, height int64, round int32, extra ...uint64) []byte {
 	reqID := []byte(prefix)
 	heightBytes := make([]byte, 8)
 	binary.LittleEndian.PutUint64(heightBytes, uint64(height))
@@ -483,5 +486,8 @@ func heightRoundRequestID(prefix string, height int64, round int32) []byte {
 	binary.LittleEndian.PutUint32(roundBytes, uint32(round))
 	reqID = append(reqID, heightBytes...)
 	reqID = append(reqID, roundBytes...)
+	for _, value := range extra {
+		reqID = binary.LittleEndian.AppendUint64(reqID, value)
+	}
 	return crypto.Checksum(reqID)
 }

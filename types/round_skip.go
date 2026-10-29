@@ -26,6 +26,16 @@ var (
 	ErrRoundSkipCertificateWrongQuorum = errors.New("round skip certificate signed by another quorum")
 )
 
+// RoundSkipsProvable reports whether a round skip certificate can prove what
+// valSet needs to skip a round. Its quorum signature proves that the shares it
+// was recovered from were combined, and names no signers, so a chain that
+// raises VotingPowerThreshold above the power of those shares cannot skip
+// rounds by certificate, and does not: its validators neither vote to skip
+// rounds nor accept certificates.
+func RoundSkipsProvable(valSet *ValidatorSet) bool {
+	return valSet != nil && valSet.QuorumVotingThresholdPower() <= valSet.QuorumTypeThresholdVotingPower()
+}
+
 // RoundSkipThresholdPower returns the voting power whose skip votes make a
 // certificate: the power the quorum needs to agree on anything, which a chain
 // may lower with VotingPowerThreshold, but never less than the power of the
@@ -143,12 +153,9 @@ func RoundSkipVoteFromProto(pb *tmproto.RoundSkipVote) (*RoundSkipVote, error) {
 //
 // Like a commit's threshold signature, the certificate proves that the shares
 // its quorum signature needs were combined, and no more: it names no signers.
-// A chain that raises VotingPowerThreshold above that share count gets the
-// raised threshold from the honest validators that collect the votes
-// (RoundSkipThresholdPower), as it does for commits, but not from the
-// certificate. That is enough here: moving to a later round cannot get two
-// blocks committed, and validators holding that many shares can already keep
-// a round from producing a block.
+// Rounds are therefore skipped only where that is all the validator set needs
+// (RoundSkipsProvable); a chain that raises VotingPowerThreshold above the
+// power of those shares does not skip rounds.
 type RoundSkipCertificate struct {
 	Height             int64             `json:"height,string"`
 	Round              int32             `json:"round"`

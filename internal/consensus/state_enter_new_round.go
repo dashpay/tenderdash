@@ -111,6 +111,12 @@ func (c *EnterNewRoundAction) Execute(ctx context.Context, stateEvent StateEvent
 		waitForTxs = false
 	}
 	if waitForTxs {
+		// Only a round entered through a skip certificate waits after round 0.
+		// It announces itself, as entering the propose step would: peers send
+		// a proposal only to a node they know is in its round.
+		if round > 0 && stateData.Commit == nil {
+			c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
+		}
 		if c.config.CreateEmptyBlocksInterval > 0 {
 			wait := c.config.CreateEmptyBlocksInterval
 			if round > 0 {

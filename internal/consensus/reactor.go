@@ -114,10 +114,13 @@ const (
 
 	// livenessTokenCost is what one ProposerHeartbeat, RoundSkipVote or
 	// RoundSkipCertificate charges. Each that is new to this node costs a
-	// signature verification. An honest peer relays about one heartbeat a
-	// second, and a skip vote per validator only in a round whose proposer went
-	// silent, so a weight that bounds a forging sender to fifty verifications a
-	// second leaves the honest rate far inside the allowance.
+	// signature verification, so the weight bounds a forging sender to fifty
+	// verifications a second. An honest peer relays about one heartbeat a
+	// second, well inside that. The exception is a round whose proposer went
+	// silent: every peer relays every validator's skip vote at about the same
+	// time, N * 100 tokens, which takes the whole per-peer burst at about 100
+	// validators and exceeds it above. The excess is dropped; each vote also
+	// arrives through the node's other peers, so certificates still form.
 	livenessTokenCost = 100
 
 	// maj23ClaimsPerTick is how many majority claims a peer's gossip loop offers
@@ -586,8 +589,8 @@ func (r *Reactor) subscribeToBroadcastEvents(ctx context.Context, stateCh p2p.Ch
 		proposerHeartbeatEventName,
 		func(data eventemitter.EventData) error {
 			hb := data.(*types.ProposerHeartbeat)
-			err := r.broadcast(ctx, stateCh, &tmcons.ProposerHeartbeat{Heartbeat: *hb.ToProto()})
-			r.logResult(err, r.logger, "broadcasting proposer heartbeat", "height", hb.Height, "round", hb.Round)
+			err := r.sendHeartbeat(ctx, stateCh, hb, &tmcons.ProposerHeartbeat{Heartbeat: *hb.ToProto()}, "")
+			r.logResult(err, r.logger, "sending proposer heartbeat", "height", hb.Height, "round", hb.Round)
 			return err
 		},
 	)
@@ -634,6 +637,50 @@ func (r *Reactor) broadcast(ctx context.Context, channel p2p.Channel, msg proto.
 			Message:   msg,
 		})
 	}
+}
+
+// sendHeartbeat sends a proposer heartbeat to the peers that can use it:
+// validators in the heartbeat's height and round, other than from, the peer it
+// came from. A peer outside the validator set cannot verify it, and one in
+// another round drops it.
+func (r *Reactor) sendHeartbeat(
+	ctx context.Context,
+	stateCh p2p.Channel,
+	hb *types.ProposerHeartbeat,
+	msg proto.Message,
+	from types.NodeID,
+) error {
+	validators := r.state.GetStateData().Validators
+	if validators == nil {
+		return nil
+	}
+	r.mtx.RLock()
+	peers := make([]*PeerState, 0, len(r.peers))
+	for id, ps := range r.peers {
+		if id != from {
+			peers = append(peers, ps)
+		}
+	}
+	r.mtx.RUnlock()
+
+	var lastErr error
+	for _, ps := range peers {
+		if !validators.HasProTxHash(ps.GetProTxHash()) {
+			continue
+		}
+		if prs := ps.GetRoundState(); prs.Height != hb.Height || prs.Round != hb.Round {
+			continue
+		}
+		select {
+		case <-ctx.Done():
+			return errReactorClosed
+		default:
+		}
+		if err := stateCh.Send(ctx, p2p.Envelope{To: ps.peerID, Message: msg}); err != nil {
+			lastErr = err
+		}
+	}
+	return lastErr
 }
 
 // logResult creates a log that depends on value of err
@@ -827,10 +874,9 @@ func (r *Reactor) handleStateMessage(
 			return err
 		}
 		// Each node relays a heartbeat the first time it verifies one, so it
-		// reaches validators that are not connected to the proposer. The sender
-		// gets it back too, and drops it as one it has seen.
+		// reaches validators that are not connected to the proposer.
 		if relay {
-			err := r.broadcast(ctx, stateCh, msg)
+			err := r.sendHeartbeat(ctx, stateCh, hb, msg, envelope.From)
 			r.logResult(err, r.logger, "relaying proposer heartbeat", "height", hb.Height, "round", hb.Round)
 		}
 

@@ -14,6 +14,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/crypto"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	"github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
+	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/eventemitter"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
@@ -24,21 +27,16 @@ import (
 const livenessTestChainID = "liveness-test-chain"
 
 type livenessFixture struct {
-	valSet   *types.ValidatorSet
-	privVals map[string]types.PrivValidator
+	valSet *types.ValidatorSet
+	// privVals[i] signs for valSet.Validators[i].
+	privVals []types.PrivValidator
 	emitter  *eventemitter.EventEmitter
 	liveness *proposerLiveness
 }
 
 func newLivenessFixture(t *testing.T, ready func(context.Context, int64) error) *livenessFixture {
 	t.Helper()
-	valSet, pvs := types.RandValidatorSet(4)
-	privVals := make(map[string]types.PrivValidator, len(pvs))
-	for _, pv := range pvs {
-		proTxHash, err := pv.GetProTxHash(context.Background())
-		require.NoError(t, err)
-		privVals[proTxHash.String()] = pv
-	}
+	valSet, privVals := types.RandValidatorSet(4)
 	emitter := eventemitter.New()
 	return &livenessFixture{
 		valSet:   valSet,
@@ -63,9 +61,9 @@ func (f *livenessFixture) target(proposer *types.Validator, silence time.Duratio
 
 func (f *livenessFixture) privValidator(t *testing.T, val *types.Validator) privValidator {
 	t.Helper()
-	pv, ok := f.privVals[val.ProTxHash.String()]
-	require.True(t, ok)
-	return privValidator{PrivValidator: pv, ProTxHash: val.ProTxHash}
+	index, _ := f.valSet.GetByProTxHash(val.ProTxHash)
+	require.GreaterOrEqual(t, index, int32(0))
+	return privValidator{PrivValidator: f.privVals[index], ProTxHash: val.ProTxHash}
 }
 
 // heartbeat returns a heartbeat for the fixture's round, signed by signer in
@@ -456,7 +454,7 @@ func TestProposerLivenessUnsupportedSigner(t *testing.T) {
 			return nil
 		})
 		proposer := f.valSet.Validators[0]
-		signer := &unsupportedHeartbeatSigner{PrivValidator: f.privVals[proposer.ProTxHash.String()]}
+		signer := &unsupportedHeartbeatSigner{PrivValidator: f.privVals[0]}
 		pv := privValidator{PrivValidator: signer, ProTxHash: proposer.ProTxHash}
 
 		target := f.target(proposer, 100*time.Millisecond)
@@ -528,4 +526,98 @@ func TestProposerReady(t *testing.T) {
 	cs.catchup.arm(9, clock)
 	assert.ErrorIs(t, cs.proposerReady(context.Background(), 5), errProposerCatchingUp)
 	assert.NoError(t, cs.proposerReady(context.Background(), 10))
+}
+
+func TestProposerLivenessRelaysNearbyRounds(t *testing.T) {
+	f := newLivenessFixture(t, nil)
+	watched := f.valSet.Validators[0]
+	nextProposer := f.valSet.Validators[1]
+	f.liveness.watch(f.target(watched, time.Minute))
+	defer f.liveness.stop()
+	f.liveness.relay = &relayRounds{
+		height:     7,
+		chainID:    livenessTestChainID,
+		quorumType: f.valSet.QuorumType,
+		quorumHash: f.valSet.QuorumHash,
+		timeouts:   types.TimeoutParams{}.TimeoutParamsOrDefaults(),
+		proposers:  map[int32]*types.Validator{0: watched, 1: nextProposer},
+	}
+	heartbeatInRound := func(signer, named *types.Validator, round int32) *types.ProposerHeartbeat {
+		pb := &tmproto.ProposerHeartbeat{
+			Height:            7,
+			Round:             round,
+			Sequence:          1,
+			ProposerProTxHash: named.ProTxHash,
+			Timestamp:         tmtime.Now(),
+		}
+		require.NoError(t, f.privValidator(t, signer).SignProposerHeartbeat(
+			context.Background(), livenessTestChainID, f.valSet.QuorumType, f.valSet.QuorumHash, pb))
+		hb, err := types.ProposerHeartbeatFromProto(pb)
+		require.NoError(t, err)
+		return hb
+	}
+
+	t.Run("should relay a nearby round's heartbeat without touching its own watch", func(t *testing.T) {
+		f.liveness.mtx.Lock()
+		arm := f.liveness.arm
+		f.liveness.mtx.Unlock()
+
+		hb := heartbeatInRound(nextProposer, nextProposer, 1)
+		relay, err := f.liveness.heard(hb)
+		require.NoError(t, err)
+		assert.True(t, relay, "validators still waiting in round 1 must hear it")
+
+		f.liveness.mtx.Lock()
+		assert.Equal(t, arm, f.liveness.arm, "a heartbeat for another round must not re-arm the watch")
+		f.liveness.mtx.Unlock()
+
+		relay, err = f.liveness.heard(hb)
+		require.NoError(t, err)
+		assert.False(t, relay, "relayed once")
+	})
+
+	t.Run("should refuse a nearby round's heartbeat in the name of another validator", func(t *testing.T) {
+		_, err := f.liveness.heard(heartbeatInRound(watched, watched, 1))
+		assert.ErrorIs(t, err, errProposerHeartbeatWrongProposer)
+	})
+
+	t.Run("should ignore a heartbeat for a round too far from its own", func(t *testing.T) {
+		relay, err := f.liveness.heard(heartbeatInRound(nextProposer, nextProposer, 9))
+		require.NoError(t, err)
+		assert.False(t, relay)
+	})
+}
+
+func TestProposerLivenessFollowRounds(t *testing.T) {
+	valSet, _ := types.RandValidatorSet(4)
+	selector, err := selectproposer.NewHeightRoundProposerSelector(valSet.Copy(), 7, 2, nil, nil)
+	require.NoError(t, err)
+	current, err := selector.GetProposer(7, 2)
+	require.NoError(t, err)
+	stateData := &StateData{
+		RoundState: cstypes.RoundState{Height: 7, Round: 2, Validators: valSet, ProposerSelector: selector},
+		state: sm.State{
+			ChainID: livenessTestChainID,
+			ConsensusParams: types.ConsensusParams{
+				Version: types.VersionParams{ConsensusVersion: int32(tmproto.VersionParams_CONSENSUS_VERSION_2)},
+			},
+		},
+	}
+
+	// What the node's own selector names for each round.
+	expected := selector.Copy()
+
+	l := newProposerLiveness(log.NewNopLogger(), NopMetrics(), eventemitter.New(), nil, nil)
+	l.followRounds(stateData)
+
+	require.Len(t, l.relay.proposers, int(2+maxRoundSkipRoundsAhead+1), "rounds 0 to the current one and a few ahead")
+	for round := int32(0); round <= 2+maxRoundSkipRoundsAhead; round++ {
+		proposer, err := expected.GetProposer(7, round)
+		require.NoError(t, err)
+		assert.Equal(t, proposer.ProTxHash, l.relay.proposers[round].ProTxHash, "round %d", round)
+	}
+
+	again, err := selector.GetProposer(7, 2)
+	require.NoError(t, err)
+	assert.Equal(t, current.ProTxHash, again.ProTxHash, "the consensus selector is left where it was")
 }

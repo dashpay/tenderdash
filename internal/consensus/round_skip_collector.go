@@ -43,8 +43,8 @@ type roundSkipCollector struct {
 	budget types.VerificationBudget
 
 	mtx sync.Mutex
-	// enabled is whether the chain is at a consensus version that skips rounds.
-	// Before that, no honest validator signs a skip vote, so none is collected.
+	// enabled is whether the chain skips rounds (roundSkipping). Where it does
+	// not, no honest validator signs a skip vote, so none is collected.
 	enabled bool
 	height  int64
 	round   int32
@@ -56,9 +56,12 @@ type roundSkipCollector struct {
 type roundSkipVotes struct {
 	votes map[string]*types.RoundSkipVote
 	power int64
-	// recovered is set once a certificate was recovered from these votes, after
-	// which more votes for the round add nothing.
+	// recovered is set while a certificate is being recovered from these
+	// votes, and stays set once one was.
 	recovered bool
+	// certified is set once a certificate was recovered, after which more
+	// votes for the round add nothing and are not even verified.
+	certified bool
 }
 
 func newRoundSkipCollector(logger log.Logger, budget types.VerificationBudget) *roundSkipCollector {
@@ -75,7 +78,7 @@ func (c *roundSkipCollector) track(stateData *StateData) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
-	c.enabled = stateData.state.ConsensusParams.Version.ProposerLivenessEnabled()
+	c.enabled = roundSkipping(stateData)
 	if c.height != stateData.Height || !sameQuorum(c.valSet, stateData.Validators) {
 		c.height = stateData.Height
 		c.chainID = stateData.state.ChainID
@@ -99,7 +102,7 @@ func (c *roundSkipCollector) track(stateData *StateData) {
 func (c *roundSkipCollector) add(vote *types.RoundSkipVote, verify bool) (bool, *types.RoundSkipCertificate, error) {
 	c.mtx.Lock()
 	enabled, height, round, chainID, valSet := c.enabled, c.height, c.round, c.chainID, c.valSet
-	known := c.knownLocked(vote)
+	known := c.knownLocked(vote) || c.certifiedLocked(vote.Round)
 	c.mtx.Unlock()
 
 	if !enabled {
@@ -160,6 +163,9 @@ func (c *roundSkipCollector) add(vote *types.RoundSkipVote, verify bool) (bool, 
 	for {
 		certificate, err := types.RecoverRoundSkipCertificate(chainID, valSet, collected)
 		if err == nil {
+			c.mtx.Lock()
+			votes.certified = true
+			c.mtx.Unlock()
 			return true, certificate, nil
 		}
 		c.logger.Error("cannot recover round skip certificate", "height", vote.Height, "round", vote.Round, "err", err)
@@ -221,6 +227,12 @@ func sameQuorum(a, b *types.ValidatorSet) bool {
 		return a == b
 	}
 	return bytes.Equal(a.QuorumHash, b.QuorumHash)
+}
+
+// certifiedLocked reports whether a certificate was recovered for round.
+func (c *roundSkipCollector) certifiedLocked(round int32) bool {
+	votes := c.rounds[round]
+	return votes != nil && votes.certified
 }
 
 func (c *roundSkipCollector) knownLocked(vote *types.RoundSkipVote) bool {

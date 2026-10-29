@@ -17,20 +17,15 @@ import (
 const collectorTestChainID = "collector-test-chain"
 
 type collectorFixture struct {
-	valSet    *types.ValidatorSet
-	privVals  map[string]types.PrivValidator
+	valSet *types.ValidatorSet
+	// privVals[i] signs for valSet.Validators[i].
+	privVals  []types.PrivValidator
 	collector *roundSkipCollector
 }
 
 func newCollectorFixture(t *testing.T, height int64, round int32) *collectorFixture {
 	t.Helper()
-	valSet, pvs := types.RandValidatorSet(4)
-	privVals := make(map[string]types.PrivValidator, len(pvs))
-	for _, pv := range pvs {
-		proTxHash, err := pv.GetProTxHash(context.Background())
-		require.NoError(t, err)
-		privVals[proTxHash.String()] = pv
-	}
+	valSet, privVals := types.RandValidatorSet(4)
 	f := &collectorFixture{
 		valSet:    valSet,
 		privVals:  privVals,
@@ -64,7 +59,7 @@ func (f *collectorFixture) vote(t *testing.T, index int32, height int64, round i
 		ValidatorProTxHash: val.ProTxHash,
 		ValidatorIndex:     index,
 	}
-	require.NoError(t, f.privVals[val.ProTxHash.String()].SignRoundSkipVote(
+	require.NoError(t, f.privVals[index].SignRoundSkipVote(
 		context.Background(), collectorTestChainID, f.valSet.QuorumType, f.valSet.QuorumHash, pb))
 	vote, err := types.RoundSkipVoteFromProto(pb)
 	require.NoError(t, err)
@@ -89,9 +84,13 @@ func TestRoundSkipCollector(t *testing.T) {
 		assert.Equal(t, int32(1), certificate.Round)
 		assert.NoError(t, certificate.Verify(collectorTestChainID, f.valSet))
 
-		added, certificate, err = f.collector.add(f.vote(t, int32(threshold), 9, 1), true)
+		// A vote that comes after the certificate adds nothing, so it is
+		// neither verified nor relayed: even a forged one passes unnoticed.
+		late := f.vote(t, int32(threshold), 9, 1)
+		late.Signature = f.vote(t, 0, 9, 1).Signature
+		added, certificate, err = f.collector.add(late, true)
 		require.NoError(t, err)
-		assert.True(t, added, "a vote past +2/3 is still new and relayed")
+		assert.False(t, added, "a vote past the certificate is not relayed")
 		assert.Nil(t, certificate, "the certificate is recovered only once")
 	})
 
@@ -152,6 +151,18 @@ func TestRoundSkipCollector(t *testing.T) {
 		require.NoError(t, err, "a vote on such a chain is not even verified")
 		assert.False(t, added)
 		assert.Nil(t, certificate)
+	})
+
+	t.Run("should collect nothing where the threshold is raised beyond what a certificate proves", func(t *testing.T) {
+		f := newCollectorFixture(t, 9, 0)
+		f.valSet.VotingPowerThreshold = uint64(f.valSet.TotalVotingPower())
+		f.track(9, 0)
+		for i := range f.valSet.Validators {
+			added, certificate, err := f.collector.add(f.vote(t, int32(i), 9, 0), true)
+			require.NoError(t, err)
+			assert.False(t, added)
+			assert.Nil(t, certificate)
+		}
 	})
 
 	t.Run("should drop a vote the verification budget cannot afford", func(t *testing.T) {
