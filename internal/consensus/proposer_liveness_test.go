@@ -76,9 +76,23 @@ func (f *livenessFixture) heartbeat(
 	at time.Time,
 ) *types.ProposerHeartbeat {
 	t.Helper()
+	return f.heartbeatIn(t, 0, signer, named, sequence, at)
+}
+
+// heartbeatIn returns a heartbeat for round of the fixture's height, signed by
+// signer in the name of named.
+func (f *livenessFixture) heartbeatIn(
+	t *testing.T,
+	round int32,
+	signer *types.Validator,
+	named *types.Validator,
+	sequence uint64,
+	at time.Time,
+) *types.ProposerHeartbeat {
+	t.Helper()
 	pb := &tmproto.ProposerHeartbeat{
 		Height:            7,
-		Round:             0,
+		Round:             round,
 		Sequence:          sequence,
 		ProposerProTxHash: named.ProTxHash,
 		Timestamp:         at,
@@ -183,13 +197,18 @@ func TestProposerLivenessWatch(t *testing.T) {
 }
 
 func TestProposerLivenessHeard(t *testing.T) {
-	f := newLivenessFixture(t, nil)
-	proposer := f.valSet.Validators[0]
-	other := f.valSet.Validators[1]
-	f.liveness.watch(f.target(proposer, time.Minute))
-	defer f.liveness.stop()
+	// Each case watches afresh: a round's heartbeats are paced (see
+	// TestProposerLivenessHeartbeatPace).
+	watching := func(t *testing.T) (f *livenessFixture, proposer, other *types.Validator) {
+		f = newLivenessFixture(t, nil)
+		proposer, other = f.valSet.Validators[0], f.valSet.Validators[1]
+		f.liveness.watch(f.target(proposer, time.Minute))
+		t.Cleanup(f.liveness.stop)
+		return f, proposer, other
+	}
 
 	t.Run("should relay only the first copy of a heartbeat", func(t *testing.T) {
+		f, proposer, _ := watching(t)
 		hb := f.heartbeat(t, proposer, proposer, 1, tmtime.Now())
 		relay, err := f.liveness.heard(hb)
 		require.NoError(t, err)
@@ -201,6 +220,7 @@ func TestProposerLivenessHeard(t *testing.T) {
 	})
 
 	t.Run("should hear a fresh heartbeat with a lower sequence", func(t *testing.T) {
+		f, proposer, _ := watching(t)
 		// A proposer restarted within the same millisecond, or whose clock went
 		// back, signs sequences below those it sent before.
 		relay, err := f.liveness.heard(f.heartbeat(t, proposer, proposer, 5, tmtime.Now()))
@@ -213,6 +233,7 @@ func TestProposerLivenessHeard(t *testing.T) {
 	})
 
 	t.Run("should hear a heartbeat that repeats a sequence at another time", func(t *testing.T) {
+		f, proposer, _ := watching(t)
 		signed := tmtime.Now()
 		relay, err := f.liveness.heard(f.heartbeat(t, proposer, proposer, 7, signed))
 		require.NoError(t, err)
@@ -224,24 +245,28 @@ func TestProposerLivenessHeard(t *testing.T) {
 	})
 
 	t.Run("should refuse a heartbeat from a validator that is not the proposer", func(t *testing.T) {
+		f, _, other := watching(t)
 		relay, err := f.liveness.heard(f.heartbeat(t, other, other, 10, tmtime.Now()))
 		assert.ErrorIs(t, err, errProposerHeartbeatWrongProposer)
 		assert.False(t, relay)
 	})
 
 	t.Run("should refuse a heartbeat forged in the proposer's name", func(t *testing.T) {
+		f, proposer, other := watching(t)
 		relay, err := f.liveness.heard(f.heartbeat(t, other, proposer, 11, tmtime.Now()))
 		assert.ErrorIs(t, err, types.ErrProposerHeartbeatInvalidSignature)
 		assert.False(t, relay)
 	})
 
 	t.Run("should ignore a heartbeat signed too long ago", func(t *testing.T) {
+		f, proposer, _ := watching(t)
 		relay, err := f.liveness.heard(f.heartbeat(t, proposer, proposer, 12, tmtime.Now().Add(-2*time.Minute)))
 		require.NoError(t, err)
 		assert.False(t, relay)
 	})
 
 	t.Run("should ignore a heartbeat for another round", func(t *testing.T) {
+		f, proposer, _ := watching(t)
 		hb := f.heartbeat(t, proposer, proposer, 13, tmtime.Now())
 		hb.Round = 1
 		relay, err := f.liveness.heard(hb)
@@ -273,6 +298,120 @@ func TestProposerLivenessHeard(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, relay)
 	})
+}
+
+// A proposer can sign as many distinct heartbeats as it likes, and every
+// validator relays each one it accepts, so a round's heartbeats are paced:
+// one past the pace is dropped before it is verified, and is not relayed.
+func TestProposerLivenessHeartbeatPace(t *testing.T) {
+	watching := func(t *testing.T, silence time.Duration) (*livenessFixture, *tokenBudget) {
+		f := newLivenessFixture(t, nil)
+		budget := &tokenBudget{tokens: 100 * baseMessageCost}
+		f.liveness.budget = budget
+		f.liveness.watch(f.target(f.valSet.Validators[0], silence))
+		t.Cleanup(f.liveness.stop)
+		return f, budget
+	}
+
+	t.Run("should drop a heartbeat past the pace without verifying it", func(t *testing.T) {
+		// A minute's silence paces heartbeats six seconds apart, far longer
+		// than the test runs.
+		f, budget := watching(t, time.Minute)
+		proposer := f.valSet.Validators[0]
+		for seq := uint64(1); seq <= heartbeatPaceBurst; seq++ {
+			relay, err := f.liveness.heard(f.heartbeat(t, proposer, proposer, seq, tmtime.Now()))
+			require.NoError(t, err)
+			require.True(t, relay, "heartbeat %d", seq)
+		}
+
+		hb := f.heartbeat(t, proposer, proposer, heartbeatPaceBurst+1, tmtime.Now())
+		wanted, err := f.liveness.wanted(hb)
+		require.NoError(t, err)
+		assert.False(t, wanted, "not worth a place in the sender's lane")
+		relay, err := f.liveness.heard(hb)
+		require.NoError(t, err)
+		assert.False(t, relay)
+		assert.Equal(t, heartbeatPaceBurst*baseMessageCost, budget.charged, "only the paced heartbeats were verified")
+	})
+
+	t.Run("should not count a forged heartbeat against the pace", func(t *testing.T) {
+		f, _ := watching(t, time.Minute)
+		proposer, other := f.valSet.Validators[0], f.valSet.Validators[1]
+		for seq := uint64(1); seq <= heartbeatPaceBurst+1; seq++ {
+			_, err := f.liveness.heard(f.heartbeat(t, other, proposer, seq, tmtime.Now()))
+			require.ErrorIs(t, err, types.ErrProposerHeartbeatInvalidSignature)
+		}
+		relay, err := f.liveness.heard(f.heartbeat(t, proposer, proposer, 10, tmtime.Now()))
+		require.NoError(t, err)
+		assert.True(t, relay, "forgeries must not use up the proposer's pace")
+	})
+
+	t.Run("should pace each round on its own", func(t *testing.T) {
+		f, _ := watching(t, time.Minute)
+		proposer, next := f.valSet.Validators[0], f.valSet.Validators[1]
+		f.liveness.relay = &relayRounds{
+			height:     7,
+			chainID:    livenessTestChainID,
+			quorumType: f.valSet.QuorumType,
+			quorumHash: f.valSet.QuorumHash,
+			timeouts:   types.TimeoutParams{ProposerHeartbeat: 12 * time.Second, ProposerSilence: time.Minute},
+			proposers:  map[int32]*types.Validator{0: proposer, 1: next},
+		}
+		for seq := uint64(1); seq <= heartbeatPaceBurst; seq++ {
+			_, err := f.liveness.heard(f.heartbeat(t, proposer, proposer, seq, tmtime.Now()))
+			require.NoError(t, err)
+		}
+		relay, err := f.liveness.heard(f.heartbeatIn(t, 1, next, next, 1, tmtime.Now()))
+		require.NoError(t, err)
+		assert.True(t, relay, "round 0's pace says nothing about round 1")
+	})
+
+	t.Run("should accept heartbeats again as the pace allows", func(t *testing.T) {
+		// Two seconds' silence paces heartbeats 200ms apart.
+		f, _ := watching(t, 2*time.Second)
+		proposer := f.valSet.Validators[0]
+		for seq := uint64(1); seq <= heartbeatPaceBurst; seq++ {
+			_, err := f.liveness.heard(f.heartbeat(t, proposer, proposer, seq, tmtime.Now()))
+			require.NoError(t, err)
+		}
+		time.Sleep(300 * time.Millisecond)
+		relay, err := f.liveness.heard(f.heartbeat(t, proposer, proposer, 10, tmtime.Now()))
+		require.NoError(t, err)
+		assert.True(t, relay)
+	})
+}
+
+// The reactor screens a peer's heartbeat before queuing it for the consensus
+// goroutine. The screen refuses what it can without a signature check, and
+// spends nothing on the rest: the check is the consensus goroutine's, made in
+// turn with the sender's other messages.
+func TestProposerLivenessWanted(t *testing.T) {
+	f := newLivenessFixture(t, nil)
+	budget := &tokenBudget{tokens: 100 * baseMessageCost}
+	f.liveness.budget = budget
+	proposer, other := f.valSet.Validators[0], f.valSet.Validators[1]
+	f.liveness.watch(f.target(proposer, time.Minute))
+	defer f.liveness.stop()
+
+	wanted, err := f.liveness.wanted(f.heartbeat(t, other, proposer, 1, tmtime.Now()))
+	require.NoError(t, err)
+	assert.True(t, wanted, "a forgery is only found out by the signature check")
+
+	_, err = f.liveness.wanted(f.heartbeat(t, other, other, 2, tmtime.Now()))
+	assert.ErrorIs(t, err, errProposerHeartbeatWrongProposer)
+
+	wanted, err = f.liveness.wanted(f.heartbeat(t, proposer, proposer, 3, tmtime.Now().Add(-2*time.Minute)))
+	require.NoError(t, err)
+	assert.False(t, wanted, "signed too long ago")
+
+	hb := f.heartbeat(t, proposer, proposer, 4, tmtime.Now())
+	_, err = f.liveness.heard(hb)
+	require.NoError(t, err)
+	wanted, err = f.liveness.wanted(hb)
+	require.NoError(t, err)
+	assert.False(t, wanted, "seen before")
+
+	assert.Equal(t, baseMessageCost, budget.charged, "the screen verifies nothing")
 }
 
 func TestProposerLivenessAnnounce(t *testing.T) {

@@ -16,6 +16,10 @@ const (
 	// roundSkipCertificateEventName is emitted with each certificate this node
 	// applies, for the reactor to broadcast.
 	roundSkipCertificateEventName = "roundSkipCertificate"
+	// livenessRelayEventName is emitted with a livenessRelay for each proposer
+	// heartbeat or round skip vote from a peer that was news to this node, for
+	// the reactor to pass on to its other peers.
+	livenessRelayEventName = "livenessRelay"
 
 	// maxRoundSkipRoundsAhead is how many rounds past its own a node collects
 	// skip votes for. Validators of one height can be a round or two apart, and
@@ -23,6 +27,15 @@ const (
 	// cares to name.
 	maxRoundSkipRoundsAhead = 4
 )
+
+// livenessRelay is a proposer heartbeat or round skip vote from a peer, for the
+// reactor to relay.
+type livenessRelay struct {
+	// msg is a *ProposerHeartbeatMessage or a *RoundSkipVoteMessage.
+	msg Message
+	// from is the peer it came from.
+	from types.NodeID
+}
 
 // errRoundSkipVoteWrongValidator is returned for a skip vote whose validator
 // index and pro tx hash name different validators.
@@ -32,9 +45,10 @@ var errRoundSkipVoteWrongValidator = errors.New("round skip vote names a validat
 // the certificate for a round once validators holding +2/3 of the voting power
 // have voted to skip it.
 //
-// It runs on the reactor's goroutine for votes from peers and on the consensus
-// goroutine for this validator's own vote and for following the height and
-// round (track). It holds no consensus state: a certificate it recovers goes to
+// It runs on the consensus goroutine, which counts votes from peers as the peer
+// scheduler hands them over, this validator's own vote, and follows the height
+// and round (track). The reactor only screens votes from peers before queuing
+// them (wanted). It holds no consensus state: a certificate it recovers goes to
 // the state machine as a message, like one received from a peer.
 type roundSkipCollector struct {
 	logger log.Logger
@@ -100,33 +114,12 @@ func (c *roundSkipCollector) track(stateData *StateData) {
 // be relayed, and returns the certificate if the vote completed +2/3 for its
 // round. It returns an error only for a vote no honest peer would have sent.
 func (c *roundSkipCollector) add(vote *types.RoundSkipVote, verify bool) (bool, *types.RoundSkipCertificate, error) {
-	c.mtx.Lock()
-	enabled, height, round, chainID, valSet := c.enabled, c.height, c.round, c.chainID, c.valSet
-	known := c.knownLocked(vote) || c.certifiedLocked(vote.Round)
-	c.mtx.Unlock()
-
-	if !enabled {
-		return false, nil, nil
+	check, worth, err := c.screen(vote, verify)
+	if !worth {
+		return false, nil, err
 	}
-	// Validators of one height are not all in the same round at once, so a
-	// vote for a round this node has left, or is too far from, says nothing
-	// wrong about its sender.
-	if valSet == nil || vote.Height != height || vote.Round < round || vote.Round > round+maxRoundSkipRoundsAhead {
-		return false, nil, nil
-	}
-	if known {
-		return false, nil, nil
-	}
-	val := valSet.GetByIndex(vote.ValidatorIndex)
-	if val == nil || !val.ProTxHash.Equal(vote.ValidatorProTxHash) {
-		return false, nil, errRoundSkipVoteWrongValidator
-	}
+	height, chainID, valSet, val := check.height, check.chainID, check.valSet, check.val
 	if verify {
-		// A node outside the validator set does not hold the members' key
-		// shares and cannot check the vote, so it neither counts nor relays it.
-		if val.PubKey == nil {
-			return false, nil, nil
-		}
 		// A signature verification like a vote's draws on the node-wide
 		// budget. A vote this node cannot afford now is dropped: every
 		// validator that counts it relays it, so another copy follows.
@@ -178,6 +171,59 @@ func (c *roundSkipCollector) add(vote *types.RoundSkipVote, verify bool) (bool, 
 		}
 		collected = next
 	}
+}
+
+// skipVoteCheck is what screen found out about a skip vote: the height and
+// validator set the node collects votes for, and the validator that cast it.
+type skipVoteCheck struct {
+	height  int64
+	chainID string
+	valSet  *types.ValidatorSet
+	val     *types.Validator
+}
+
+// screen runs the checks on a skip vote that need no signature verification.
+// It reports whether the vote is worth counting, and returns an error only for
+// one no honest peer would have sent. With verify set, as for a vote from a
+// peer, that includes whether this node can check the vote at all.
+func (c *roundSkipCollector) screen(vote *types.RoundSkipVote, verify bool) (skipVoteCheck, bool, error) {
+	c.mtx.Lock()
+	check := skipVoteCheck{height: c.height, chainID: c.chainID, valSet: c.valSet}
+	enabled, round := c.enabled, c.round
+	known := c.knownLocked(vote) || c.certifiedLocked(vote.Round)
+	c.mtx.Unlock()
+
+	if !enabled {
+		return check, false, nil
+	}
+	// Validators of one height are not all in the same round at once, so a
+	// vote for a round this node has left, or is too far from, says nothing
+	// wrong about its sender.
+	if check.valSet == nil || vote.Height != check.height ||
+		vote.Round < round || vote.Round > round+maxRoundSkipRoundsAhead {
+		return check, false, nil
+	}
+	if known {
+		return check, false, nil
+	}
+	check.val = check.valSet.GetByIndex(vote.ValidatorIndex)
+	if check.val == nil || !check.val.ProTxHash.Equal(vote.ValidatorProTxHash) {
+		return check, false, errRoundSkipVoteWrongValidator
+	}
+	// A node outside the validator set does not hold the members' key shares
+	// and cannot check the vote, so it neither counts nor relays it.
+	if verify && check.val.PubKey == nil {
+		return check, false, nil
+	}
+	return check, true, nil
+}
+
+// wanted reports whether a skip vote from a peer is worth verifying (see
+// screen). The reactor asks before queuing one for the consensus goroutine, so
+// a vote that cannot count takes no place in its sender's lane.
+func (c *roundSkipCollector) wanted(vote *types.RoundSkipVote) (bool, error) {
+	_, worth, err := c.screen(vote, true)
+	return worth, err
 }
 
 // afterFailedRecoveryLocked decides what a recovery from collected that failed

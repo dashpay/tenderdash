@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/dashpay/dashd-go/btcjson"
+	"golang.org/x/time/rate"
 
 	"github.com/dashpay/tenderdash/crypto"
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
@@ -94,9 +95,10 @@ func (r *relayRounds) proposerOf(height int64, round int32) *types.Validator {
 // heartbeat every interval, or watches that proposer's heartbeats and reports
 // the proposer as silent once none has arrived for the round's silence timeout.
 //
-// The consensus goroutine decides what to do (reconcile) and acts on a silence;
-// the reactor feeds in heartbeats from peers (heard). Neither touches consensus
-// state from here: a heartbeat only resets a timer.
+// The consensus goroutine decides what to do (reconcile), acts on a silence,
+// and takes in heartbeats from peers (heard) as the peer scheduler hands them
+// over; the reactor only screens them before queuing (wanted). A heartbeat
+// touches no consensus state: it only resets a timer.
 type proposerLiveness struct {
 	logger  log.Logger
 	metrics *Metrics
@@ -109,7 +111,8 @@ type proposerLiveness struct {
 	// a request it cannot sign at all. No heartbeat is attempted after that.
 	signerUnsupported atomic.Bool
 	// budget is the node-wide verification budget a peer's heartbeat draws on
-	// before its signature is checked.
+	// before its signature is checked. The peer scheduler made room in it for
+	// the heartbeat before handing it over.
 	budget types.VerificationBudget
 
 	mtx        sync.Mutex
@@ -129,7 +132,10 @@ type proposerLiveness struct {
 	// seen holds the heartbeats of the height accepted, or sent, within the
 	// silence timeout, by their signing time. A copy of one is relayed by
 	// every peer and counts only once; anything older fails the age check.
-	seen     map[heartbeatID]time.Time
+	seen map[heartbeatID]time.Time
+	// paces holds, for each round of the height, the pace of the heartbeats
+	// accepted for it (see heartbeatPaceBurst).
+	paces    map[int32]*rate.Limiter
 	timer    *time.Timer
 	cancel   context.CancelFunc
 	silentCh chan proposerSilence
@@ -262,6 +268,7 @@ func (l *proposerLiveness) followRounds(stateData *StateData) {
 	defer l.mtx.Unlock()
 	if l.relay == nil || l.relay.height != relay.height {
 		l.seen = nil
+		l.paces = nil
 	}
 	l.relay = relay
 }
@@ -429,65 +436,102 @@ func (l *proposerLiveness) fire(arm uint64) {
 	}
 }
 
-// heard takes a heartbeat from a peer. It reports whether the heartbeat is new
-// and genuine and should be relayed to other peers, and returns an error only
-// for one no honest peer would have sent.
+// heartbeatCheck is what screen found out about a heartbeat: the round it is
+// for, and what heard verifies it against.
+type heartbeatCheck struct {
+	proposer   *types.Validator
+	chainID    string
+	quorumType btcjson.LLMQType
+	quorumHash crypto.QuorumHash
+	interval   time.Duration
+	silence    time.Duration
+	// watched is set for a heartbeat for the round the node waits in, as
+	// opposed to a nearby round whose heartbeats it only relays.
+	watched bool
+	// generation is that of the watch when screen ran, so heard can tell the
+	// watch moved on while it verified.
+	generation uint64
+	now        time.Time
+}
+
+// screen runs the checks on a heartbeat from a peer that need no signature
+// verification. It reports whether the heartbeat is worth verifying, and
+// returns an error only for one no honest peer would have sent.
 //
-// It runs on the reactor's goroutine. The cheap checks come first, so the only
-// heartbeats verified are those from the proposer of their round, signed
-// recently, and not seen before. A heartbeat for the round the node waits in
-// refreshes its watch; one for a nearby round of its height is only relayed,
-// for the validators still, or already, waiting there.
-//
-// Heartbeats are not ordered. Any recent one not seen before is news that the
-// proposer is there, whatever its sequence: a proposer that restarts, or whose
-// clock goes back, signs heartbeats whose sequence can be lower than one sent
-// before, and is still there.
-func (l *proposerLiveness) heard(hb *types.ProposerHeartbeat) (bool, error) {
+// The only heartbeats worth verifying are from the proposer of their round,
+// signed recently, not seen before, and within the round's pace (see
+// heartbeatPaceBurst). Heartbeats are not ordered otherwise. Any recent one not
+// seen before is news that the proposer is there, whatever its sequence: a
+// proposer that restarts, or whose clock goes back, signs heartbeats whose
+// sequence can be lower than one sent before, and is still there.
+func (l *proposerLiveness) screen(hb *types.ProposerHeartbeat) (heartbeatCheck, bool, error) {
 	id := heartbeatIDOf(hb)
 	l.mtx.Lock()
 	target, generation, relay := l.target, l.generation, l.relay
 	_, seen := l.seen[id]
+	pace := l.paces[hb.Round]
 	l.mtx.Unlock()
 
-	var (
-		proposer   *types.Validator
-		chainID    string
-		quorumType btcjson.LLMQType
-		quorumHash crypto.QuorumHash
-		silence    time.Duration
-	)
-	watched := target.is(hb.Height, hb.Round)
+	check := heartbeatCheck{generation: generation, now: tmtime.Now()}
+	check.watched = target.is(hb.Height, hb.Round)
 	switch {
-	case watched:
-		proposer, chainID, quorumType, quorumHash, silence =
-			target.proposer, target.chainID, target.quorumType, target.quorumHash, target.silence
+	case check.watched:
+		check.proposer, check.chainID, check.quorumType, check.quorumHash =
+			target.proposer, target.chainID, target.quorumType, target.quorumHash
+		check.interval, check.silence = target.interval, target.silence
 	case relay.proposerOf(hb.Height, hb.Round) != nil:
-		proposer, chainID, quorumType, quorumHash = relay.proposerOf(hb.Height, hb.Round),
-			relay.chainID, relay.quorumType, relay.quorumHash
-		silence = relay.timeouts.ProposerSilenceTimeout(hb.Round)
+		check.proposer, check.chainID, check.quorumType, check.quorumHash =
+			relay.proposerOf(hb.Height, hb.Round), relay.chainID, relay.quorumType, relay.quorumHash
+		check.interval, check.silence = relay.timeouts.ProposerHeartbeat, relay.timeouts.ProposerSilenceTimeout(hb.Round)
 	default:
 		// A heartbeat for a round too far from this node's says nothing wrong
 		// about its sender: rounds move at different times on different nodes.
-		return false, nil
+		return check, false, nil
 	}
-	if !proposer.ProTxHash.Equal(hb.ProposerProTxHash) {
-		return false, errProposerHeartbeatWrongProposer
+	if !check.proposer.ProTxHash.Equal(hb.ProposerProTxHash) {
+		return check, false, errProposerHeartbeatWrongProposer
 	}
 	// Copies arrive from every peer that relays one; only the first counts.
 	if seen {
-		return false, nil
+		return check, false, nil
 	}
 	// A heartbeat signed long ago says nothing about the proposer now, whoever
 	// relays it.
-	now := tmtime.Now()
-	if age := now.Sub(hb.Timestamp); age > silence || age < -silence {
-		return false, nil
+	if age := check.now.Sub(hb.Timestamp); age > check.silence || age < -check.silence {
+		return check, false, nil
 	}
 	// A node outside the validator set does not hold the members' key shares
 	// and cannot check the signature, so it neither tracks nor relays.
-	if proposer.PubKey == nil {
-		return false, nil
+	if check.proposer.PubKey == nil {
+		return check, false, nil
+	}
+	if pace != nil && pace.Tokens() < 1 {
+		return check, false, nil
+	}
+	return check, true, nil
+}
+
+// wanted reports whether a heartbeat from a peer is worth verifying (see
+// screen). The reactor asks before queuing one for the consensus goroutine, so
+// a heartbeat that cannot be news takes no place in its sender's lane.
+func (l *proposerLiveness) wanted(hb *types.ProposerHeartbeat) (bool, error) {
+	_, worth, err := l.screen(hb)
+	return worth, err
+}
+
+// heard takes a heartbeat from a peer. It reports whether the heartbeat is new
+// and genuine and should be relayed to other peers, and returns an error only
+// for one no honest peer would have sent.
+//
+// It runs on the consensus goroutine, which the peer scheduler hands a peer's
+// heartbeat to in turn with that peer's other messages, once the verification
+// budget has room for its signature check. A heartbeat for the round the node
+// waits in refreshes its watch; one for a nearby round of its height is only
+// relayed, for the validators still, or already, waiting there.
+func (l *proposerLiveness) heard(hb *types.ProposerHeartbeat) (bool, error) {
+	check, worth, err := l.screen(hb)
+	if !worth {
+		return false, err
 	}
 	// The check below is a signature verification like a vote's, so it draws
 	// on the node-wide budget. One this node cannot afford now is dropped: the
@@ -495,23 +539,48 @@ func (l *proposerLiveness) heard(hb *types.ProposerHeartbeat) (bool, error) {
 	if l.budget != nil && !l.budget.Allow(baseMessageCost) {
 		return false, nil
 	}
-	if err := hb.Verify(chainID, quorumType, quorumHash, proposer.PubKey); err != nil {
+	if err := hb.Verify(check.chainID, check.quorumType, check.quorumHash, check.proposer.PubKey); err != nil {
 		return false, err
 	}
 
+	id := heartbeatIDOf(hb)
 	l.mtx.Lock()
 	defer l.mtx.Unlock()
 	if _, seen := l.seen[id]; seen {
 		return false, nil
 	}
-	l.rememberLocked(id, hb.Timestamp, now, silence)
-	if watched && generation == l.generation {
+	l.rememberLocked(id, hb.Timestamp, check.now, check.silence)
+	l.paceLocked(hb.Round, check.interval).Allow()
+	if check.watched && check.generation == l.generation {
 		if !l.announcing {
 			l.armLocked()
 		}
 		l.metrics.ProposerHeartbeatsReceived.Add(1)
 	}
 	return true, nil
+}
+
+// heartbeatPaceBurst bounds, with a pace of one every half interval, how many
+// heartbeats of one round this node verifies and relays: twice what an honest
+// proposer sends, with room for two that arrive together. The proposer of a
+// round can sign as many distinct heartbeats as it likes, and every node that
+// accepts one relays it, so without a pace one proposer could make every
+// validator spend its verification budget on heartbeats.
+const heartbeatPaceBurst = 2
+
+// paceLocked returns the pace of heartbeats accepted for round, at the
+// height this node follows (seen and paces are cleared together when it
+// changes).
+func (l *proposerLiveness) paceLocked(round int32, interval time.Duration) *rate.Limiter {
+	if l.paces == nil {
+		l.paces = make(map[int32]*rate.Limiter)
+	}
+	pace := l.paces[round]
+	if pace == nil {
+		pace = rate.NewLimiter(rate.Every(interval/2), heartbeatPaceBurst)
+		l.paces[round] = pace
+	}
+	return pace
 }
 
 // heartbeatSequence returns the sequence of a heartbeat signed at now, after

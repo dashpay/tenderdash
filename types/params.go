@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/dashpay/tenderdash/crypto/bls12381"
@@ -268,10 +269,19 @@ func (t TimeoutParams) VoteTimeout(round int32) time.Duration {
 // from the proposer of the round before it treats that proposer as silent. It
 // grows by one heartbeat interval per round, so a network that keeps losing
 // proposers waits a little longer for each next one.
+//
+// Validation bounds neither duration from above, so the growth stops at the
+// longest duration there is rather than wrapping round to a negative one: a
+// negative silence would report every proposer silent at once.
 func (t TimeoutParams) ProposerSilenceTimeout(round int32) time.Duration {
-	return time.Duration(
-		t.ProposerSilence.Nanoseconds()+t.ProposerHeartbeat.Nanoseconds()*int64(round),
-	) * time.Nanosecond
+	silence, step := t.ProposerSilence, t.ProposerHeartbeat
+	if round <= 0 || step <= 0 {
+		return silence
+	}
+	if step > (math.MaxInt64-silence)/time.Duration(round) {
+		return math.MaxInt64
+	}
+	return silence + step*time.Duration(round)
 }
 
 func (val *ValidatorParams) IsValidPubkeyType(pubkeyType string) bool {

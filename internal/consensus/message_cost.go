@@ -92,7 +92,7 @@ func peerMessageCost(msg proto.Message) (int, error) {
 		return baseMessageCost, nil
 	case *tmcons.ProposerHeartbeat:
 		// One verification of the heartbeat signature, staged only for a
-		// heartbeat newer than any seen for the round being waited in.
+		// recent heartbeat not seen before, within its round's pace.
 		return baseMessageCost, nil
 	case *tmcons.RoundSkipVote:
 		// One verification of the vote's signature share. Recovering a
@@ -116,9 +116,9 @@ func peerMessageCost(msg proto.Message) (int, error) {
 }
 
 // budgetedMessageCost returns the verification work a message dispatched to the
-// consensus state can force. Votes, commits and proposals are charged against
-// the verification budget; block parts draw on it not at all, and so need no
-// room made for them.
+// consensus state can force. Votes, commits, proposals and the liveness
+// messages are charged against the verification budget; block parts draw on it
+// not at all, and so need no room made for them.
 func budgetedMessageCost(msg Message) (int, error) {
 	switch m := msg.(type) {
 	case *ProposalMessage:
@@ -142,6 +142,18 @@ func budgetedMessageCost(msg Message) (int, error) {
 			return 0, nil
 		}
 		// One verification of the quorum signature.
+		return baseMessageCost, nil
+	case *ProposerHeartbeatMessage:
+		if m.Heartbeat == nil {
+			return 0, nil
+		}
+		// One verification of the proposer's signature share.
+		return baseMessageCost, nil
+	case *RoundSkipVoteMessage:
+		if m.Vote == nil {
+			return 0, nil
+		}
+		// One verification of the validator's signature share.
 		return baseMessageCost, nil
 	}
 	return 0, nil

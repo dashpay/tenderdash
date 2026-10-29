@@ -49,14 +49,15 @@ func signRoundSkipVote(
 	return vote
 }
 
-// deliverRoundSkipVote does with a peer's skip vote what the reactor does.
+// deliverRoundSkipVote does with a peer's skip vote what the reactor does: it
+// queues the vote for the consensus goroutine, which counts it and applies the
+// certificate the vote completes.
 func deliverRoundSkipVote(ctx context.Context, t *testing.T, cs *State, vote *types.RoundSkipVote) {
 	t.Helper()
-	_, certificate, err := cs.roundSkips.add(vote, true)
+	wanted, err := cs.roundSkips.wanted(vote)
 	require.NoError(t, err)
-	if certificate != nil {
-		require.NoError(t, cs.sendMessage(ctx, &RoundSkipCertificateMessage{Certificate: certificate}, "peer"))
-	}
+	require.True(t, wanted)
+	require.NoError(t, cs.sendMessage(ctx, &RoundSkipVoteMessage{Vote: vote}, "peer"))
 }
 
 // roundSkipTest is a four-validator CONSENSUS_VERSION_2 consensus state whose
@@ -262,6 +263,88 @@ func TestStateRoundSkipVoteNotSignedTwice(t *testing.T) {
 	again := test.ownSkipVote(t, 0)
 	assert.Same(t, first, again, "the vote cast before is broadcast again")
 	assert.Equal(t, int32(1), signer.skipVotes.Load(), "the vote is not signed twice")
+}
+
+// A broadcast skip vote can be lost on its way to peers, so while the round
+// stays silent the vote goes out again every silence timeout: the same vote,
+// not signed again.
+func TestStateRoundSkipVoteSentAgainWhileSilent(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	signer := &countingSkipVoteSigner{}
+	test := newRoundSkipTest(ctx, t, "consensus_round_skip_vote_resent_test", func(pv types.PrivValidator) types.PrivValidator {
+		signer.PrivValidator = pv
+		return signer
+	})
+
+	first := test.ownSkipVote(t, 0)
+	for i := 0; i < 2; i++ {
+		again := test.ownSkipVote(t, 0)
+		assert.Same(t, first, again, "resend %d", i+1)
+	}
+	assert.Equal(t, int32(1), signer.skipVotes.Load(), "the vote is not signed again")
+
+	// The certificate moves the node on, and ends the resending with the
+	// round.
+	test.completeSkip(ctx, t, 0, 1)
+	vote := test.ownSkipVote(t, 1)
+	assert.Equal(t, int32(1), vote.Round)
+}
+
+// A peer's heartbeats and skip votes reach the consensus goroutine through the
+// peer scheduler, and each that is news goes back to the reactor to be relayed,
+// naming the peer it came from.
+func TestStateLivenessMessagesFromPeers(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	test := newRoundSkipTest(ctx, t, "consensus_liveness_from_peers_test", nil)
+	relays := make(chan livenessRelay, 10)
+	test.cs.emitter.AddListener(livenessRelayEventName, func(data eventemitter.EventData) error {
+		relays <- data.(livenessRelay)
+		return nil
+	})
+	nextRelay := func() livenessRelay {
+		t.Helper()
+		select {
+		case relay := <-relays:
+			return relay
+		case <-time.After(5 * time.Second):
+			t.Fatal("nothing relayed")
+			return livenessRelay{}
+		}
+	}
+
+	// The proposer of round 0, stub 1, sends a heartbeat.
+	stateData := test.cs.GetStateData()
+	proTxHash, err := test.vss[1].GetProTxHash(ctx)
+	require.NoError(t, err)
+	pb := &tmproto.ProposerHeartbeat{
+		Height:            2,
+		Round:             0,
+		Sequence:          1,
+		ProposerProTxHash: proTxHash,
+		Timestamp:         tmtime.Now(),
+	}
+	require.NoError(t, test.vss[1].SignProposerHeartbeat(ctx, stateData.state.ChainID,
+		stateData.Validators.QuorumType, stateData.Validators.QuorumHash, pb))
+	hb, err := types.ProposerHeartbeatFromProto(pb)
+	require.NoError(t, err)
+	require.NoError(t, test.cs.sendMessage(ctx, &ProposerHeartbeatMessage{Heartbeat: hb}, "peer-a"))
+
+	relay := nextRelay()
+	assert.Equal(t, types.NodeID("peer-a"), relay.from)
+	require.IsType(t, &ProposerHeartbeatMessage{}, relay.msg)
+	assert.Same(t, hb, relay.msg.(*ProposerHeartbeatMessage).Heartbeat)
+
+	// Stub 2 votes to skip round 0.
+	vote := signRoundSkipVote(ctx, t, test.cs, test.vss[2], 2, 0)
+	require.NoError(t, test.cs.sendMessage(ctx, &RoundSkipVoteMessage{Vote: vote}, "peer-b"))
+
+	relay = nextRelay()
+	assert.Equal(t, types.NodeID("peer-b"), relay.from)
+	require.IsType(t, &RoundSkipVoteMessage{}, relay.msg)
+	assert.Same(t, vote, relay.msg.(*RoundSkipVoteMessage).Vote)
+	assert.NotNil(t, test.cs.roundSkips.voteOf(2, 0, vote.ValidatorProTxHash), "the vote was counted")
 }
 
 // A skip vote whose signing fails is tried again after another silence

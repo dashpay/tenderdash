@@ -66,6 +66,46 @@ func (f *collectorFixture) vote(t *testing.T, index int32, height int64, round i
 	return vote
 }
 
+// The reactor screens a peer's skip vote before queuing it for the consensus
+// goroutine. The screen refuses what it can without a signature check, and
+// spends nothing on the rest.
+func TestRoundSkipCollectorWanted(t *testing.T) {
+	f := newCollectorFixture(t, 9, 1)
+	budget := &tokenBudget{tokens: 100 * baseMessageCost}
+	f.collector.budget = budget
+
+	forged := f.vote(t, 1, 9, 1)
+	forged.Signature = f.vote(t, 0, 9, 1).Signature
+	wanted, err := f.collector.wanted(forged)
+	require.NoError(t, err)
+	assert.True(t, wanted, "a forgery is only found out by the signature check")
+
+	wrongIndex := f.vote(t, 0, 9, 1)
+	wrongIndex.ValidatorIndex = 1
+	_, err = f.collector.wanted(wrongIndex)
+	assert.ErrorIs(t, err, errRoundSkipVoteWrongValidator)
+
+	for name, vote := range map[string]*types.RoundSkipVote{
+		"another height":     f.vote(t, 0, 10, 1),
+		"a round left":       f.vote(t, 0, 9, 0),
+		"a round too far on": f.vote(t, 0, 9, 1+maxRoundSkipRoundsAhead+1),
+	} {
+		wanted, err := f.collector.wanted(vote)
+		require.NoError(t, err, name)
+		assert.False(t, wanted, name)
+	}
+
+	counted := f.vote(t, 2, 9, 1)
+	added, _, err := f.collector.add(counted, true)
+	require.NoError(t, err)
+	require.True(t, added)
+	wanted, err = f.collector.wanted(counted)
+	require.NoError(t, err)
+	assert.False(t, wanted, "counted before")
+
+	assert.Equal(t, baseMessageCost, budget.charged, "the screen verifies nothing")
+}
+
 func TestRoundSkipCollector(t *testing.T) {
 	t.Run("should return the certificate once, with the vote that completes +2/3", func(t *testing.T) {
 		f := newCollectorFixture(t, 9, 1)

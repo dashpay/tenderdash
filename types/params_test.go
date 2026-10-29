@@ -3,6 +3,7 @@ package types
 import (
 	"bytes"
 	"crypto/sha256"
+	"math"
 	"sort"
 	"testing"
 	"time"
@@ -521,6 +522,25 @@ func TestProposerLivenessTimeouts(t *testing.T) {
 		decoded := ConsensusParamsFromProto(params.ToProto())
 		assert.Equal(t, 2*time.Second, decoded.Timeout.ProposerHeartbeat)
 		assert.Equal(t, 9*time.Second, decoded.Timeout.ProposerSilence)
+	})
+
+	t.Run("should grow the silence by one heartbeat a round", func(t *testing.T) {
+		tp := TimeoutParams{ProposerHeartbeat: time.Second, ProposerSilence: 5 * time.Second}
+		assert.Equal(t, 5*time.Second, tp.ProposerSilenceTimeout(0))
+		assert.Equal(t, 8*time.Second, tp.ProposerSilenceTimeout(3))
+	})
+
+	t.Run("should stop growing the silence at the longest duration rather than wrap", func(t *testing.T) {
+		params := *DefaultConsensusParams()
+		params.Timeout.ProposerHeartbeat = 5_000_000_000_000_000_000
+		params.Timeout.ProposerSilence = 6_000_000_000_000_000_000
+		require.NoError(t, params.ValidateConsensusParams(), "validation bounds neither from above")
+
+		tp := params.Timeout.TimeoutParamsOrDefaults()
+		assert.Equal(t, params.Timeout.ProposerSilence, tp.ProposerSilenceTimeout(0))
+		for _, round := range []int32{1, 2, math.MaxInt32} {
+			assert.Equal(t, time.Duration(math.MaxInt64), tp.ProposerSilenceTimeout(round), "round %d", round)
+		}
 	})
 }
 

@@ -350,7 +350,8 @@ func NewState(
 	// cannot cover must cost nothing at all, in particular no WAL record.
 	cs.msgMiddlewares = append(cs.msgMiddlewares,
 		verificationBudgetMiddleware(cs.verificationBudget, cs.metrics, cs.logger))
-	cs.msgDispatcher = newMsgInfoDispatcher(cs.ctrl, propler, wal, cs.logger, cs.verificationBudget, cs.msgMiddlewares...)
+	cs.msgDispatcher = newMsgInfoDispatcher(cs.ctrl, propler, wal, cs.logger, cs.verificationBudget,
+		cs.handleLivenessMessage, cs.msgMiddlewares...)
 
 	// this is not ideal, but it lets the consensus tests start
 	// node-fragments gracefully while letting the nodes
@@ -943,11 +944,15 @@ func (cs *State) handleProposerSilence(ctx context.Context, stateData *StateData
 	if !stateData.isValidator(cs.privValidator.ProTxHash) {
 		return
 	}
-	cs.metrics.ProposerSilences.Add(1)
-	cs.logger.Info("proposer of the round is silent, voting to skip the round",
-		"height", silence.Height,
-		"round", silence.Round,
-		"proposer", silence.Proposer.ShortString())
+	// A silence reported after this validator voted is the vote's resend timer
+	// (see voteToSkipRound), not another silent round.
+	if cs.roundSkips.voteOf(silence.Height, silence.Round, cs.privValidator.ProTxHash) == nil {
+		cs.metrics.ProposerSilences.Add(1)
+		cs.logger.Info("proposer of the round is silent, voting to skip the round",
+			"height", silence.Height,
+			"round", silence.Round,
+			"proposer", silence.Proposer.ShortString())
+	}
 	cs.voteToSkipRound(ctx, stateData, silence)
 }
 
@@ -960,11 +965,13 @@ func (cs *State) voteToSkipRound(ctx context.Context, stateData *StateData, sile
 	if pv.IsZero() || val == nil {
 		return
 	}
-	// The proposer went silent again after a heartbeat that followed this
-	// validator's vote. The vote stands, as every validator signs the same
-	// bytes for the round; it is broadcast again, not signed again.
+	// The proposer is still silent a silence timeout after this validator's
+	// vote, or went silent again after a heartbeat that followed it. The vote
+	// stands, as every validator signs the same bytes for the round; it is
+	// broadcast again, not signed again.
 	if vote := cs.roundSkips.voteOf(stateData.Height, stateData.Round, pv.ProTxHash); vote != nil {
 		cs.emitter.Emit(roundSkipVoteEventName, vote)
+		cs.liveness.rearm(silence)
 		return
 	}
 	pb := &tmproto.RoundSkipVote{
@@ -1001,11 +1008,50 @@ func (cs *State) voteToSkipRound(ctx context.Context, stateData *StateData, sile
 		return
 	}
 	cs.emitter.Emit(roundSkipVoteEventName, vote)
+	// The vote is broadcast once, and a broadcast can be dropped on its way to
+	// peers. While the round stays silent it goes out again every silence
+	// timeout, so the certificate still forms; peers count each validator's
+	// vote once. Moving on from the round ends the watch, and with it the timer.
+	cs.liveness.rearm(silence)
 	if certificate != nil {
 		if err := cs.sendMessage(ctx, &RoundSkipCertificateMessage{Certificate: certificate}, ""); err != nil {
 			cs.logger.Error("cannot queue round skip certificate", "certificate", certificate, "err", err)
 		}
 	}
+}
+
+// handleLivenessMessage takes a proposer heartbeat or round skip vote from a
+// peer, which the peer scheduler handed over with room in the verification
+// budget for its signature check. One that is news is passed on to the reactor
+// to relay, and a vote that completes +2/3 for its round sends the certificate
+// it recovered to the state machine.
+func (cs *State) handleLivenessMessage(ctx context.Context, msg Message, peerID types.NodeID) error {
+	switch m := msg.(type) {
+	case *ProposerHeartbeatMessage:
+		relay, err := cs.liveness.heard(m.Heartbeat)
+		if err != nil {
+			return err
+		}
+		// Each node relays a heartbeat the first time it verifies one, so it
+		// reaches validators that are not connected to the proposer.
+		if relay {
+			cs.emitter.Emit(livenessRelayEventName, livenessRelay{msg: m, from: peerID})
+		}
+	case *RoundSkipVoteMessage:
+		added, certificate, err := cs.roundSkips.add(m.Vote, true)
+		if err != nil {
+			return err
+		}
+		// Relayed the first time it is counted, as heartbeats are, so every
+		// validator can recover the certificate whoever it is connected to.
+		if added {
+			cs.emitter.Emit(livenessRelayEventName, livenessRelay{msg: m, from: peerID})
+		}
+		if certificate != nil {
+			return cs.sendMessage(ctx, &RoundSkipCertificateMessage{Certificate: certificate}, "")
+		}
+	}
+	return nil
 }
 
 //-----------------------------------------------------------------------------

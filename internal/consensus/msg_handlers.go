@@ -76,7 +76,11 @@ type msgInfoDispatcher struct {
 	voteHandler      msgHandlerFunc
 	commitHandler    msgHandlerFunc
 	roundSkipHandler msgHandlerFunc
+	livenessHandler  msgHandlerFunc
 }
+
+// livenessMessageFunc takes a proposer heartbeat or round skip vote from a peer.
+type livenessMessageFunc func(ctx context.Context, msg Message, peerID types.NodeID) error
 
 func (c *msgInfoDispatcher) match(m Message) (msgHandlerFunc, error) {
 	switch m.(type) {
@@ -90,6 +94,8 @@ func (c *msgInfoDispatcher) match(m Message) (msgHandlerFunc, error) {
 		return c.commitHandler, nil
 	case *RoundSkipCertificateMessage:
 		return c.roundSkipHandler, nil
+	case *ProposerHeartbeatMessage, *RoundSkipVoteMessage:
+		return c.livenessHandler, nil
 	}
 	return nil, fmt.Errorf("got unknown %T type", m)
 }
@@ -122,6 +128,7 @@ func newMsgInfoDispatcher(
 	wal WALWriteFlusher,
 	logger log.Logger,
 	budget types.VerificationBudget,
+	liveness livenessMessageFunc,
 	middleware ...msgMiddlewareFunc,
 ) *msgInfoDispatcher {
 
@@ -137,12 +144,28 @@ func newMsgInfoDispatcher(
 	voteHandler := withMiddleware(voteMessageHandler(ctrl), mws...)
 	commitHandler := withMiddleware(commitMessageHandler(ctrl), mws...)
 	roundSkipHandler := withMiddleware(roundSkipCertificateMessageHandler(ctrl, budget), mws...)
+	livenessHandler := withMiddleware(livenessMessageHandler(liveness), mws...)
 	return &msgInfoDispatcher{
 		proposalHandler:  proposalHandler,
 		blockPartHandler: blockPartHandler,
 		voteHandler:      voteHandler,
 		commitHandler:    commitHandler,
 		roundSkipHandler: roundSkipHandler,
+		livenessHandler:  livenessHandler,
+	}
+}
+
+// livenessMessageHandler hands a proposer heartbeat or round skip vote from a
+// peer to liveness tracking. The peer scheduler made room in the verification
+// budget for its signature check before handing it over, in turn with the
+// sender's other messages, so a sender of many cannot crowd out the votes and
+// proposals of others.
+func livenessMessageHandler(liveness livenessMessageFunc) msgHandlerFunc {
+	return func(ctx context.Context, _ *StateData, envelope msgEnvelope) error {
+		if liveness == nil {
+			return nil
+		}
+		return liveness(ctx, envelope.Msg, envelope.PeerID)
 	}
 }
 
@@ -289,7 +312,7 @@ func walMiddleware(wal WALWriteFlusher, logger log.Logger) msgMiddlewareFunc {
 			// A certificate this node recovered carries no signature of its
 			// own, so it needs no fsync: one lost in a crash is resent by peers.
 			_, recovered := mi.Msg.(*RoundSkipCertificateMessage)
-			if !envelope.fromReplay {
+			if !envelope.fromReplay && !livenessMessage(mi.Msg) {
 				if mi.PeerID != "" || recovered {
 					err := wal.Write(mi)
 					if err != nil {
@@ -308,6 +331,19 @@ func walMiddleware(wal WALWriteFlusher, logger log.Logger) msgMiddlewareFunc {
 			return hd(ctx, stateData, envelope)
 		}
 	}
+}
+
+// livenessMessage reports whether msg is a proposer heartbeat or round skip
+// vote. Neither goes to the WAL: neither changes consensus state that replay
+// would have to rebuild. A heartbeat only resets a timer and is stale by the
+// time anything could replay it, and a skip vote is sent again for as long as
+// its round stays silent; the certificate the votes recover is written.
+func livenessMessage(msg Message) bool {
+	switch msg.(type) {
+	case *ProposerHeartbeatMessage, *RoundSkipVoteMessage:
+		return true
+	}
+	return false
 }
 
 func loggingMiddleware(logger log.Logger) msgMiddlewareFunc {
@@ -391,6 +427,18 @@ func makeLogArgsFromMessage(msg Message) []any {
 		return []any{
 			"skip_height", m.Certificate.Height,
 			"skip_round", m.Certificate.Round,
+		}
+	case *ProposerHeartbeatMessage:
+		return []any{
+			"heartbeat_height", m.Heartbeat.Height,
+			"heartbeat_round", m.Heartbeat.Round,
+			"heartbeat_sequence", m.Heartbeat.Sequence,
+		}
+	case *RoundSkipVoteMessage:
+		return []any{
+			"skip_vote_height", m.Vote.Height,
+			"skip_vote_round", m.Vote.Round,
+			"val_proTxHash", m.Vote.ValidatorProTxHash.ShortString(),
 		}
 	}
 	panic("unsupported message type")
