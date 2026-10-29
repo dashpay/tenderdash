@@ -769,6 +769,63 @@ func TestProposerLivenessFollowRounds(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, l.relay.proposers[3+maxRoundSkipRoundsAhead], "the new last round of the window")
 	assert.Equal(t, proposer.ProTxHash, l.relay.proposers[3+maxRoundSkipRoundsAhead].ProTxHash)
+
+	// Paces are kept only for the rounds of the window, however many rounds
+	// the height runs to.
+	l.mtx.Lock()
+	for round := int32(0); round <= 3+maxRoundSkipRoundsAhead; round++ {
+		l.paceLocked(round, time.Second)
+	}
+	l.mtx.Unlock()
+	stateData.Round = 3 + 2*maxRoundSkipRoundsAhead
+	l.followRounds(stateData)
+	l.mtx.Lock()
+	defer l.mtx.Unlock()
+	for round := range l.paces {
+		assert.GreaterOrEqual(t, round, l.relay.first, "pace kept for round %d, which the window left", round)
+	}
+	assert.NotEmpty(t, l.paces, "the rounds still in the window keep theirs")
+}
+
+// The node can leave the round while its signer works on a heartbeat. The
+// heartbeat is then dropped: validators still waiting in that round would take
+// it as word that the node is about to propose there.
+func TestProposerLivenessDropsHeartbeatForARoundLeftWhileSigning(t *testing.T) {
+	f := newLivenessFixture(t, nil)
+	proposer := f.valSet.Validators[0]
+	var emitted atomic.Int32
+	f.emitter.AddListener(proposerHeartbeatEventName, func(eventemitter.EventData) error {
+		emitted.Add(1)
+		return nil
+	})
+	target := f.target(proposer, time.Minute)
+	f.liveness.watch(target)
+	f.liveness.mtx.Lock()
+	generation := f.liveness.generation
+	f.liveness.mtx.Unlock()
+
+	pv := f.privValidator(t, proposer)
+	pv.PrivValidator = &hookedHeartbeatSigner{PrivValidator: pv.PrivValidator, signing: f.liveness.stop}
+	more := f.liveness.sendHeartbeat(context.Background(), generation, target, pv)
+	assert.False(t, more, "the sender for the round left stops")
+	assert.Zero(t, emitted.Load(), "no heartbeat goes out for the round left")
+}
+
+// hookedHeartbeatSigner calls signing as it starts on each heartbeat.
+type hookedHeartbeatSigner struct {
+	types.PrivValidator
+	signing func()
+}
+
+func (pv *hookedHeartbeatSigner) SignProposerHeartbeat(
+	ctx context.Context,
+	chainID string,
+	quorumType btcjson.LLMQType,
+	quorumHash crypto.QuorumHash,
+	hb *tmproto.ProposerHeartbeat,
+) error {
+	pv.signing()
+	return pv.PrivValidator.SignProposerHeartbeat(ctx, chainID, quorumType, quorumHash, hb)
 }
 
 func TestWantsHeartbeat(t *testing.T) {

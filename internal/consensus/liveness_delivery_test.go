@@ -67,92 +67,157 @@ func TestLivenessMessagesDispatch(t *testing.T) {
 	assert.Zero(t, wal.writes, "neither changes state that WAL replay would have to rebuild")
 }
 
-// The reactor verifies no heartbeat or skip vote itself: that is the consensus
-// goroutine's, in turn with the sender's other messages. It refuses what it can
-// without a signature check, and queues the rest in the sender's lane.
-func TestReactorQueuesLivenessMessagesInTheSendersLane(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
+// livenessReactorFixture is a reactor reading a peer's state channel, over a
+// CONSENSUS_VERSION_2 state that is not running, so what the reactor queues for
+// the consensus goroutine stays in the peer's lane. The node watches the
+// proposer vss[1] in the round it is in.
+type livenessReactorFixture struct {
+	cs        *State
+	vss       []*validatorStub
+	stateData StateData
+	r         *Reactor
+	inCh      chan p2p.Envelope
+	errCh     chan p2p.PeerError
+	// budget is empty: a signature check on the reactor's goroutine would be
+	// refused, and the message dropped instead of queued.
+	budget *tokenBudget
+}
 
-	const peerID = types.NodeID("sender")
+const livenessTestPeer = types.NodeID("sender")
+
+func newLivenessReactorFixture(ctx context.Context, t *testing.T) *livenessReactorFixture {
+	t.Helper()
 	cs, vss := makeState(ctx, t, makeStateArgs{
 		validators: 4,
 		consensusParams: factory.ConsensusParams(func(c *types.ConsensusParams) {
 			c.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_2)
 		}),
 	})
-	// An empty budget: a signature check on the reactor's goroutine would be
-	// refused, and the message dropped instead of queued.
-	budget := &tokenBudget{}
-	cs.liveness.budget = budget
-	cs.roundSkips.budget = budget
+	f := &livenessReactorFixture{cs: cs, vss: vss, budget: &tokenBudget{}}
+	cs.liveness.budget = f.budget
+	cs.roundSkips.budget = f.budget
+	f.stateData = cs.GetStateData()
+	cs.roundSkips.track(&f.stateData)
 
-	stateData := cs.GetStateData()
-	cs.roundSkips.track(&stateData)
 	proTxHash, err := vss[1].GetProTxHash(ctx)
 	require.NoError(t, err)
-	_, proposer := stateData.Validators.GetByProTxHash(proTxHash)
+	_, proposer := f.stateData.Validators.GetByProTxHash(proTxHash)
 	require.NotNil(t, proposer)
 	cs.liveness.watch(livenessTarget{
-		height:     stateData.Height,
-		round:      stateData.Round,
+		height:     f.stateData.Height,
+		round:      f.stateData.Round,
 		proposer:   proposer.Copy(),
-		chainID:    stateData.state.ChainID,
-		quorumType: stateData.Validators.QuorumType,
-		quorumHash: stateData.Validators.QuorumHash,
+		chainID:    f.stateData.state.ChainID,
+		quorumType: f.stateData.Validators.QuorumType,
+		quorumHash: f.stateData.Validators.QuorumHash,
 		interval:   time.Second,
 		silence:    time.Minute,
 	})
-	defer cs.liveness.stop()
-
-	heartbeat := func(signer *validatorStub, named types.ProTxHash) *tmcons.ProposerHeartbeat {
-		pb := &tmproto.ProposerHeartbeat{
-			Height:            stateData.Height,
-			Round:             stateData.Round,
-			Sequence:          1,
-			ProposerProTxHash: named,
-			Timestamp:         tmtime.Now(),
-		}
-		require.NoError(t, signer.SignProposerHeartbeat(ctx, stateData.state.ChainID,
-			stateData.Validators.QuorumType, stateData.Validators.QuorumHash, pb))
-		return &tmcons.ProposerHeartbeat{Heartbeat: *pb}
-	}
-	vote := signRoundSkipVote(ctx, t, cs, vss[2], stateData.Height, stateData.Round)
-	otherProTxHash, err := vss[2].GetProTxHash(ctx)
-	require.NoError(t, err)
+	t.Cleanup(cs.liveness.stop)
 
 	logger := log.NewNopLogger()
-	r := newStateRateLimitedReactor(ctx, clockwork.NewRealClock())
-	r.state = cs
-	r.peers = map[types.NodeID]*PeerState{peerID: NewPeerState(logger, peerID)}
-	r.voteRateLimit = client.NewRateLimitWithBurst(ctx, 0, 1, true, logger)
-	r.dataRateLimit = client.NewRateLimitWithBurst(ctx, 0, 1, true, logger)
-	r.peers[peerID].SetLaneAdmission(0, cs.msgInfoQueue.admitPeer(peerID))
+	f.r = newStateRateLimitedReactor(ctx, clockwork.NewRealClock())
+	f.r.state = cs
+	f.r.peers = map[types.NodeID]*PeerState{livenessTestPeer: NewPeerState(logger, livenessTestPeer)}
+	f.r.voteRateLimit = client.NewRateLimitWithBurst(ctx, 0, 1, true, logger)
+	f.r.dataRateLimit = client.NewRateLimitWithBurst(ctx, 0, 1, true, logger)
+	f.r.livenessOutbox = make(chan livenessSend, 8)
+	f.r.peers[livenessTestPeer].SetLaneAdmission(0, cs.msgInfoQueue.admitPeer(livenessTestPeer))
 
-	inCh := make(chan p2p.Envelope, 8)
-	errCh := make(chan p2p.PeerError, 8)
-	stateCh := p2p.NewChannel(p2p.ConsensusStateChannel, "state", inCh, make(chan p2p.Envelope, 8), errCh)
-	go r.processMsgCh(ctx, stateCh, channelBundle{state: stateCh})
+	f.inCh = make(chan p2p.Envelope, 8)
+	f.errCh = make(chan p2p.PeerError, 8)
+	stateCh := p2p.NewChannel(p2p.ConsensusStateChannel, "state", f.inCh, make(chan p2p.Envelope, 8), f.errCh)
+	go f.r.processMsgCh(ctx, stateCh, channelBundle{state: stateCh})
+	return f
+}
 
-	for _, msg := range []proto.Message{
-		heartbeat(vss[1], proTxHash),
-		&tmcons.RoundSkipVote{Vote: *vote.ToProto()},
-		// Refused without a signature check: it names a validator that is not
-		// the proposer. Envelopes are handled in order, so its report proves
-		// the two above were handled.
-		heartbeat(vss[2], otherProTxHash),
-	} {
-		inCh <- p2p.Envelope{From: peerID, ChannelID: p2p.ConsensusStateChannel, Message: msg}
+func (f *livenessReactorFixture) send(msg proto.Message) {
+	f.inCh <- p2p.Envelope{From: livenessTestPeer, ChannelID: p2p.ConsensusStateChannel, Message: msg}
+}
+
+// heartbeat returns a heartbeat for the fixture's round, signed by signer in
+// the name of named.
+func (f *livenessReactorFixture) heartbeat(
+	ctx context.Context,
+	t *testing.T,
+	signer *validatorStub,
+	named types.ProTxHash,
+) *tmcons.ProposerHeartbeat {
+	t.Helper()
+	pb := &tmproto.ProposerHeartbeat{
+		Height:            f.stateData.Height,
+		Round:             f.stateData.Round,
+		Sequence:          1,
+		ProposerProTxHash: named,
+		Timestamp:         tmtime.Now(),
 	}
+	require.NoError(t, signer.SignProposerHeartbeat(ctx, f.stateData.state.ChainID,
+		f.stateData.Validators.QuorumType, f.stateData.Validators.QuorumHash, pb))
+	return &tmcons.ProposerHeartbeat{Heartbeat: *pb}
+}
 
+// refused sends a heartbeat in the name of vss[2], which is not the proposer,
+// and waits until the reactor reports it. Envelopes are handled in
+// order, so the report proves everything sent before was handled.
+func (f *livenessReactorFixture) refused(ctx context.Context, t *testing.T) {
+	t.Helper()
+	proTxHash, err := f.vss[2].GetProTxHash(ctx)
+	require.NoError(t, err)
+	f.send(f.heartbeat(ctx, t, f.vss[2], proTxHash))
 	select {
-	case reported := <-errCh:
+	case reported := <-f.errCh:
 		assert.ErrorIs(t, reported.Err, errProposerHeartbeatWrongProposer)
 	case <-time.After(30 * time.Second):
 		t.Fatal("the heartbeat in another validator's name was not refused")
 	}
-	assert.Equal(t, 2, cs.msgInfoQueue.lanes.buffered(), "the heartbeat and the vote wait in the sender's lane")
-	assert.Zero(t, budget.charged, "nothing was verified on the reactor's goroutine")
+}
+
+// The reactor verifies no heartbeat or skip vote itself: that is the consensus
+// goroutine's, in turn with the sender's other messages. It refuses what it can
+// without a signature check, and queues the rest in the sender's lane.
+func TestReactorQueuesLivenessMessagesInTheSendersLane(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	f := newLivenessReactorFixture(ctx, t)
+
+	proTxHash, err := f.vss[1].GetProTxHash(ctx)
+	require.NoError(t, err)
+	vote := signRoundSkipVote(ctx, t, f.cs, f.vss[2], f.stateData.Height, f.stateData.Round)
+	f.send(f.heartbeat(ctx, t, f.vss[1], proTxHash))
+	f.send(&tmcons.RoundSkipVote{Vote: *vote.ToProto()})
+	f.refused(ctx, t)
+
+	assert.Equal(t, 2, f.cs.msgInfoQueue.lanes.buffered(), "the heartbeat and the vote wait in the sender's lane")
+	assert.Zero(t, f.budget.charged, "nothing was verified on the reactor's goroutine")
+}
+
+// A copy of a vote this node counted is not queued again, but once its relay
+// is due again it has the counted vote go out once more (see relayAgain).
+func TestReactorRelaysACountedSkipVoteAgain(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	f := newLivenessReactorFixture(ctx, t)
+	clock := clockwork.NewFakeClock()
+	f.cs.roundSkips.clock = clock
+
+	vote := signRoundSkipVote(ctx, t, f.cs, f.vss[2], f.stateData.Height, f.stateData.Round)
+	f.budget.tokens = baseMessageCost
+	added, _, err := f.cs.roundSkips.add(vote, true)
+	require.NoError(t, err)
+	require.True(t, added)
+
+	f.send(&tmcons.RoundSkipVote{Vote: *vote.ToProto()})
+	f.refused(ctx, t)
+	assert.Empty(t, f.r.livenessOutbox, "relayed as it was counted, moments ago")
+
+	clock.Advance(f.stateData.state.ConsensusParams.Timeout.TimeoutParamsOrDefaults().
+		ProposerSilenceTimeout(f.stateData.Round) / 2)
+	f.send(&tmcons.RoundSkipVote{Vote: *vote.ToProto()})
+	f.refused(ctx, t)
+	require.Len(t, f.r.livenessOutbox, 1)
+	sent := <-f.r.livenessOutbox
+	assert.Equal(t, &tmcons.RoundSkipVote{Vote: *vote.ToProto()}, sent.msg)
+	assert.Zero(t, f.cs.msgInfoQueue.lanes.buffered(), "a vote already counted is not queued")
 }
 
 // The liveness listeners run on the consensus goroutine and on the proposer's

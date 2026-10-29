@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"errors"
 	"sync"
+	"time"
+
+	"github.com/jonboulle/clockwork"
 
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
@@ -48,13 +51,17 @@ var errRoundSkipVoteWrongValidator = errors.New("round skip vote names a validat
 // It runs on the consensus goroutine, which counts votes from peers as the peer
 // scheduler hands them over, this validator's own vote, and follows the height
 // and round (track). The reactor only screens votes from peers before queuing
-// them (wanted). It holds no consensus state: a certificate it recovers goes to
-// the state machine as a message, like one received from a peer.
+// them (wanted), and asks which counted votes to relay again (relayAgain). It
+// holds no consensus state: a certificate it recovers goes to the state machine
+// as a message, like one received from a peer.
 type roundSkipCollector struct {
 	logger log.Logger
 	// budget is the node-wide verification budget a peer's skip vote draws on
 	// before its signature is checked.
 	budget types.VerificationBudget
+	// clock times relays (see relayAgain); the wall clock unless a test
+	// overrides it.
+	clock clockwork.Clock
 
 	mtx sync.Mutex
 	// enabled is whether the chain skips rounds (roundSkipping). Where it does
@@ -64,12 +71,16 @@ type roundSkipCollector struct {
 	round   int32
 	chainID string
 	valSet  *types.ValidatorSet
-	rounds  map[int32]*roundSkipVotes
+	// timeouts are those of the height, which pace relays (see relayAgain).
+	timeouts types.TimeoutParams
+	rounds   map[int32]*roundSkipVotes
 }
 
 type roundSkipVotes struct {
 	votes map[string]*types.RoundSkipVote
-	power int64
+	// relayed holds when each vote was last passed on to peers, by validator.
+	relayed map[string]time.Time
+	power   int64
 	// recovered is set while a certificate is being recovered from these
 	// votes, and stays set once one was.
 	recovered bool
@@ -82,6 +93,7 @@ func newRoundSkipCollector(logger log.Logger, budget types.VerificationBudget) *
 	return &roundSkipCollector{
 		logger: logger,
 		budget: budget,
+		clock:  clockwork.NewRealClock(),
 		rounds: make(map[int32]*roundSkipVotes),
 	}
 }
@@ -99,6 +111,7 @@ func (c *roundSkipCollector) track(stateData *StateData) {
 		c.rounds = make(map[int32]*roundSkipVotes)
 	}
 	c.valSet = stateData.Validators
+	c.timeouts = stateData.state.ConsensusParams.Timeout.TimeoutParamsOrDefaults()
 	if c.round != stateData.Round {
 		c.round = stateData.Round
 		for round := range c.rounds {
@@ -138,10 +151,16 @@ func (c *roundSkipCollector) add(vote *types.RoundSkipVote, verify bool) (bool, 
 	}
 	votes := c.rounds[vote.Round]
 	if votes == nil {
-		votes = &roundSkipVotes{votes: make(map[string]*types.RoundSkipVote)}
+		votes = &roundSkipVotes{
+			votes:   make(map[string]*types.RoundSkipVote),
+			relayed: make(map[string]time.Time),
+		}
 		c.rounds[vote.Round] = votes
 	}
+	// A vote is relayed, or broadcast if it is this validator's own, as it is
+	// counted.
 	votes.votes[vote.ValidatorProTxHash.String()] = vote
+	votes.relayed[vote.ValidatorProTxHash.String()] = c.clock.Now()
 	votes.power += val.VotingPower
 	if votes.recovered || votes.power < types.RoundSkipThresholdPower(valSet) {
 		c.mtx.Unlock()
@@ -224,6 +243,41 @@ func (c *roundSkipCollector) screen(vote *types.RoundSkipVote, verify bool) (ski
 func (c *roundSkipCollector) wanted(vote *types.RoundSkipVote) (bool, error) {
 	_, worth, err := c.screen(vote, true)
 	return worth, err
+}
+
+// relayAgain returns the vote this node counted for vote's validator and round
+// when it is due to be relayed again, and nil otherwise.
+//
+// A node relays a vote as it counts it, and that relay can be dropped on its
+// way out. Every validator sends its own vote again each silence timeout while
+// its round stays silent, but to a node that counted it those copies are not
+// news, so without this a node bridging two parts of the validator set would
+// never pass the vote on again. A copy that arrives at least half a silence
+// timeout after the last relay has the counted vote relayed once more, until
+// the round is certified. That is at most two relays per vote per silence
+// timeout, whoever sends the copies, and none needs a signature check: what is
+// relayed is the vote this node verified, not the copy.
+func (c *roundSkipCollector) relayAgain(vote *types.RoundSkipVote) *types.RoundSkipVote {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+	if !c.enabled || vote.Height != c.height {
+		return nil
+	}
+	votes := c.rounds[vote.Round]
+	if votes == nil || votes.certified {
+		return nil
+	}
+	key := vote.ValidatorProTxHash.String()
+	counted := votes.votes[key]
+	if counted == nil {
+		return nil
+	}
+	now := c.clock.Now()
+	if now.Sub(votes.relayed[key]) < c.timeouts.ProposerSilenceTimeout(vote.Round)/2 {
+		return nil
+	}
+	votes.relayed[key] = now
+	return counted
 }
 
 // afterFailedRecoveryLocked decides what a recovery from collected that failed

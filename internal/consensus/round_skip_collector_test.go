@@ -3,7 +3,9 @@ package consensus
 import (
 	"context"
 	"testing"
+	"time"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -104,6 +106,42 @@ func TestRoundSkipCollectorWanted(t *testing.T) {
 	assert.False(t, wanted, "counted before")
 
 	assert.Equal(t, baseMessageCost, budget.charged, "the screen verifies nothing")
+}
+
+// A node relays a vote as it counts it. A copy arriving later has the counted
+// vote relayed again, in case that relay was lost, but no more often than every
+// half silence timeout, and not once the round is certified.
+func TestRoundSkipCollectorRelayAgain(t *testing.T) {
+	f := newCollectorFixture(t, 9, 1)
+	clock := clockwork.NewFakeClock()
+	f.collector.clock = clock
+	gap := types.TimeoutParams{}.TimeoutParamsOrDefaults().ProposerSilenceTimeout(1) / 2
+
+	counted := f.vote(t, 0, 9, 1)
+	added, _, err := f.collector.add(counted, true)
+	require.NoError(t, err)
+	require.True(t, added)
+
+	assert.Nil(t, f.collector.relayAgain(counted), "just relayed as it was counted")
+	clock.Advance(gap - time.Millisecond)
+	assert.Nil(t, f.collector.relayAgain(counted), "not yet half a silence timeout on")
+
+	clock.Advance(time.Millisecond)
+	copied := f.vote(t, 0, 9, 1)
+	copied.Signature = f.vote(t, 1, 9, 1).Signature
+	assert.Same(t, counted, f.collector.relayAgain(copied), "the counted vote goes out, not the copy")
+	assert.Nil(t, f.collector.relayAgain(copied), "and not again at once")
+
+	assert.Nil(t, f.collector.relayAgain(f.vote(t, 2, 9, 1)), "a vote not counted is not relayed from here")
+	assert.Nil(t, f.collector.relayAgain(f.vote(t, 0, 10, 1)), "another height")
+
+	// Once the round is certified, its votes add nothing anywhere.
+	for i := int32(1); int(i) < f.valSet.QuorumTypeThresholdCount(); i++ {
+		_, _, err := f.collector.add(f.vote(t, i, 9, 1), true)
+		require.NoError(t, err)
+	}
+	clock.Advance(gap)
+	assert.Nil(t, f.collector.relayAgain(counted))
 }
 
 func TestRoundSkipCollector(t *testing.T) {

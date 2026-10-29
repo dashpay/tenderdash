@@ -270,6 +270,13 @@ func (l *proposerLiveness) followRounds(stateData *StateData) {
 		l.seen = nil
 		l.paces = nil
 	}
+	// Rounds the window has moved past need no pace, however many rounds a
+	// height runs to.
+	for round := range l.paces {
+		if round < first || round > last {
+			delete(l.paces, round)
+		}
+	}
 	l.relay = relay
 }
 
@@ -668,11 +675,16 @@ func (l *proposerLiveness) sendHeartbeat(
 		l.logger.Error("signed an invalid proposer heartbeat", "heartbeat", hb, "err", err)
 		return true
 	}
-	// Peers relay it back; it is not news to this node.
+	// The node may have left the round while the signer worked. A heartbeat
+	// for a round it has left would tell validators still waiting there that
+	// it is about to propose in it.
 	l.mtx.Lock()
-	if generation == l.generation {
-		l.rememberLocked(heartbeatIDOf(hb), hb.Timestamp, now, target.silence)
+	if generation != l.generation {
+		l.mtx.Unlock()
+		return false
 	}
+	// Peers relay it back; it is not news to this node.
+	l.rememberLocked(heartbeatIDOf(hb), hb.Timestamp, now, target.silence)
 	l.mtx.Unlock()
 	l.metrics.ProposerHeartbeatsSent.Add(1)
 	l.emitter.Emit(proposerHeartbeatEventName, hb)

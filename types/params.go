@@ -246,7 +246,13 @@ func (t TimeoutParams) TimeoutParamsOrDefaults() TimeoutParams {
 	case t.ProposerHeartbeat == 0:
 		t.ProposerHeartbeat = min(defaultProposerHeartbeat, t.ProposerSilence/proposerSilenceHeartbeats)
 	case t.ProposerSilence == 0:
-		t.ProposerSilence = max(defaultProposerSilence, t.ProposerHeartbeat*proposerSilenceHeartbeats)
+		// Saturated rather than wrapped, as ProposerSilenceTimeout is: nothing
+		// bounds the heartbeat interval from above.
+		if t.ProposerHeartbeat > math.MaxInt64/proposerSilenceHeartbeats {
+			t.ProposerSilence = math.MaxInt64
+		} else {
+			t.ProposerSilence = max(defaultProposerSilence, t.ProposerHeartbeat*proposerSilenceHeartbeats)
+		}
 	}
 	return t
 }

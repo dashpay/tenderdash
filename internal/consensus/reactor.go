@@ -977,8 +977,16 @@ func (r *Reactor) handleStateMessage(ctx context.Context, envelope *p2p.Envelope
 		// Counted on the consensus goroutine, as heartbeats are.
 		voteMsg := msgI.(*RoundSkipVoteMessage)
 		wanted, err := r.state.roundSkips.wanted(voteMsg.Vote)
-		if err != nil || !wanted {
+		if err != nil {
 			return err
+		}
+		if !wanted {
+			// A copy of a vote already counted may still be due to go out again,
+			// in case this node's relay of it was lost (see relayAgain).
+			if again := r.state.roundSkips.relayAgain(voteMsg.Vote); again != nil {
+				r.queueLiveness(livenessSend{msg: &tmcons.RoundSkipVote{Vote: *again.ToProto()}})
+			}
+			return nil
 		}
 		laneCtx, ok := r.laneCtx(ctx, ps, envelope)
 		if !ok {

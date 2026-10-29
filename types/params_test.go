@@ -530,6 +530,16 @@ func TestProposerLivenessTimeouts(t *testing.T) {
 		assert.Equal(t, 8*time.Second, tp.ProposerSilenceTimeout(3))
 	})
 
+	t.Run("should derive the longest silence rather than wrap from a very long heartbeat", func(t *testing.T) {
+		params := *DefaultConsensusParams()
+		params.Timeout.ProposerHeartbeat = 5_000_000_000_000_000_000
+		require.NoError(t, params.ValidateConsensusParams())
+
+		tp := params.Timeout.TimeoutParamsOrDefaults()
+		assert.Equal(t, time.Duration(math.MaxInt64), tp.ProposerSilence)
+		assert.Equal(t, time.Duration(math.MaxInt64), tp.ProposerSilenceTimeout(3))
+	})
+
 	t.Run("should stop growing the silence at the longest duration rather than wrap", func(t *testing.T) {
 		params := *DefaultConsensusParams()
 		params.Timeout.ProposerHeartbeat = 5_000_000_000_000_000_000
