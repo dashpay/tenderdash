@@ -240,9 +240,11 @@ message CanonicalProposerHeartbeat {
 ```
 
 Its request ID is the SHA256 checksum of `"dphb"`, then the height as a
-little-endian uint64, the round as a little-endian uint32, and the sequence as
-a little-endian uint64. The sequence grows with every heartbeat of a round, so
-each heartbeat is a signing request of its own.
+little-endian uint64, the round as a little-endian uint32, the sequence as a
+little-endian uint64, and the timestamp in Unix nanoseconds as a little-endian
+uint64. The sequence grows with every heartbeat of a round, and with the
+timestamp it makes each heartbeat a signing request of its own, even from a
+proposer that restarted with its clock gone back.
 
 A round skip vote's sign bytes are the same for every validator voting to skip
 a round, so the votes of +2/3 recover into one threshold signature, the round

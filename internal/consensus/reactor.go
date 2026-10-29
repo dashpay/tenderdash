@@ -640,9 +640,16 @@ func (r *Reactor) broadcast(ctx context.Context, channel p2p.Channel, msg proto.
 }
 
 // sendHeartbeat sends a proposer heartbeat to the peers that can use it:
-// validators in the heartbeat's height and round, other than from, the peer it
-// came from. A peer outside the validator set cannot verify it, and one in
-// another round drops it.
+// validators at the heartbeat's height within the relay window of its round
+// (relayWindow), other than from, the peer it came from. Those in its round
+// watch with it, and those in a nearby round relay it on to any of their peers
+// still in its round. A peer outside the validator set cannot verify it.
+//
+// Each send is bounded like a vote-set response: this runs on the state
+// channel's goroutine, or on the proposer's heartbeat sender, and a peer that
+// does not drain its queue must not hold back the heartbeat for the rest. One
+// it cannot take at once misses this heartbeat; the next comes within the
+// interval.
 func (r *Reactor) sendHeartbeat(
 	ctx context.Context,
 	stateCh p2p.Channel,
@@ -663,24 +670,33 @@ func (r *Reactor) sendHeartbeat(
 	}
 	r.mtx.RUnlock()
 
-	var lastErr error
 	for _, ps := range peers {
-		if !validators.HasProTxHash(ps.GetProTxHash()) {
+		if !wantsHeartbeat(ps, validators, hb) {
 			continue
 		}
-		if prs := ps.GetRoundState(); prs.Height != hb.Height || prs.Round != hb.Round {
-			continue
-		}
-		select {
-		case <-ctx.Done():
+		if ctx.Err() != nil {
 			return errReactorClosed
-		default:
 		}
-		if err := stateCh.Send(ctx, p2p.Envelope{To: ps.peerID, Message: msg}); err != nil {
-			lastErr = err
+		sendCtx, cancel := context.WithTimeout(ctx, voteSetResponseTimeout)
+		err := stateCh.Send(sendCtx, p2p.Envelope{To: ps.peerID, Message: msg})
+		cancel()
+		if err != nil {
+			r.logger.Debug("dropping proposer heartbeat the router could not take",
+				"peer", ps.peerID, "height", hb.Height, "round", hb.Round, "err", err)
 		}
 	}
-	return lastErr
+	return nil
+}
+
+// wantsHeartbeat reports whether peer ps can use hb: a validator at its height
+// within the relay window of its round.
+func wantsHeartbeat(ps *PeerState, validators *types.ValidatorSet, hb *types.ProposerHeartbeat) bool {
+	if !validators.HasProTxHash(ps.GetProTxHash()) {
+		return false
+	}
+	first, last := relayWindow(hb.Round)
+	prs := ps.GetRoundState()
+	return prs.Height == hb.Height && prs.Round >= first && prs.Round <= last
 }
 
 // logResult creates a log that depends on value of err

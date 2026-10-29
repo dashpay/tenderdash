@@ -620,4 +620,31 @@ func TestProposerLivenessFollowRounds(t *testing.T) {
 	again, err := selector.GetProposer(7, 2)
 	require.NoError(t, err)
 	assert.Equal(t, current.ProTxHash, again.ProTxHash, "the consensus selector is left where it was")
+
+	// The window moves with the node's round.
+	stateData.Round = 3
+	l.followRounds(stateData)
+	assert.Equal(t, int32(0), l.relay.first)
+	assert.Equal(t, int32(3+maxRoundSkipRoundsAhead), l.relay.last)
+	proposer, err := expected.GetProposer(7, 3+maxRoundSkipRoundsAhead)
+	require.NoError(t, err)
+	require.NotNil(t, l.relay.proposers[3+maxRoundSkipRoundsAhead], "the new last round of the window")
+	assert.Equal(t, proposer.ProTxHash, l.relay.proposers[3+maxRoundSkipRoundsAhead].ProTxHash)
+}
+
+func TestWantsHeartbeat(t *testing.T) {
+	valSet, _ := types.RandValidatorSet(4)
+	hb := &types.ProposerHeartbeat{Height: 7, Round: 5}
+	peer := func(proTxHash types.ProTxHash, height int64, round int32) *PeerState {
+		return &PeerState{ProTxHash: proTxHash, PRS: cstypes.PeerRoundState{Height: height, Round: round}}
+	}
+	validator := valSet.Validators[1].ProTxHash
+
+	assert.True(t, wantsHeartbeat(peer(validator, 7, 5), valSet, hb), "a validator waiting in its round")
+	assert.True(t, wantsHeartbeat(peer(validator, 7, 6), valSet, hb),
+		"a validator a round ahead relays it to those still in its round")
+	assert.True(t, wantsHeartbeat(peer(validator, 7, 5-maxRoundSkipRoundsAhead), valSet, hb))
+	assert.False(t, wantsHeartbeat(peer(validator, 7, 5+maxRoundSkipRoundsAhead+1), valSet, hb), "too far ahead")
+	assert.False(t, wantsHeartbeat(peer(validator, 8, 5), valSet, hb), "another height")
+	assert.False(t, wantsHeartbeat(peer(crypto.RandProTxHash(), 7, 5), valSet, hb), "not a validator")
 }

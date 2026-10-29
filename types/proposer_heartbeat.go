@@ -135,10 +135,13 @@ func ProposerHeartbeatSignBytes(chainID string, hb *tmproto.ProposerHeartbeat) [
 }
 
 // ProposerHeartbeatRequestID returns the quorum signing request ID of one
-// heartbeat. It includes the sequence, so every heartbeat is its own signing
-// request rather than a second message signed under an ID already used.
-func ProposerHeartbeatRequestID(height int64, round int32, sequence uint64) []byte {
-	return heightRoundRequestID(proposerHeartbeatRequestIDPrefix, height, round, sequence)
+// heartbeat. It includes the sequence and the signing time, so every heartbeat
+// is its own signing request rather than a second message signed under an ID
+// already used, even from a proposer that restarted with its clock gone back.
+func ProposerHeartbeatRequestID(height int64, round int32, sequence uint64, timestamp time.Time) []byte {
+	// The time's bits are taken as they are, like height's.
+	signedAt := uint64(timestamp.UnixNano())
+	return heightRoundRequestID(proposerHeartbeatRequestIDPrefix, height, round, sequence, signedAt)
 }
 
 // ProposerHeartbeatSignItem returns what the proposer signs with its quorum key
@@ -152,7 +155,7 @@ func ProposerHeartbeatSignItem(
 	return NewSignItem(
 		quorumType,
 		quorumHash,
-		ProposerHeartbeatRequestID(hb.Height, hb.Round, hb.Sequence),
+		ProposerHeartbeatRequestID(hb.Height, hb.Round, hb.Sequence, hb.Timestamp),
 		ProposerHeartbeatSignBytes(chainID, hb),
 	)
 }

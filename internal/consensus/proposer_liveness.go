@@ -67,9 +67,16 @@ type relayRounds struct {
 	quorumType btcjson.LLMQType
 	quorumHash crypto.QuorumHash
 	timeouts   types.TimeoutParams
-	// proposers holds the proposer of each round within
-	// maxRoundSkipRoundsAhead of the node's.
+	// first and last bound the rounds held: those within
+	// maxRoundSkipRoundsAhead of the node's (relayWindow).
+	first, last int32
+	// proposers holds the proposer of each of those rounds.
 	proposers map[int32]*types.Validator
+}
+
+// relayWindow returns the rounds whose heartbeats a node in round relays.
+func relayWindow(round int32) (first, last int32) {
+	return max(round-maxRoundSkipRoundsAhead, 0), round + maxRoundSkipRoundsAhead
 }
 
 func (r *relayRounds) proposerOf(height int64, round int32) *types.Validator {
@@ -220,10 +227,11 @@ func (l *proposerLiveness) followRounds(stateData *StateData) {
 		l.mtx.Unlock()
 		return
 	}
+	first, last := relayWindow(stateData.Round)
 	l.mtx.Lock()
 	relay := l.relay
 	l.mtx.Unlock()
-	if relay != nil && relay.height == stateData.Height && relay.proposers[stateData.Round] != nil &&
+	if relay != nil && relay.height == stateData.Height && relay.first == first && relay.last == last &&
 		bytes.Equal(relay.quorumHash, stateData.Validators.QuorumHash) {
 		return
 	}
@@ -236,10 +244,11 @@ func (l *proposerLiveness) followRounds(stateData *StateData) {
 		quorumType: stateData.Validators.QuorumType,
 		quorumHash: stateData.Validators.QuorumHash,
 		timeouts:   stateData.state.ConsensusParams.Timeout.TimeoutParamsOrDefaults(),
+		first:      first,
+		last:       last,
 		proposers:  make(map[int32]*types.Validator),
 	}
-	first := max(stateData.Round-maxRoundSkipRoundsAhead, 0)
-	for round := first; round <= stateData.Round+maxRoundSkipRoundsAhead; round++ {
+	for round := first; round <= last; round++ {
 		proposer, err := selector.GetProposer(stateData.Height, round)
 		if err != nil {
 			l.logger.Error("cannot determine the proposer of a nearby round", "height", stateData.Height,
