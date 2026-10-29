@@ -3,7 +3,6 @@ package types
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -195,7 +194,7 @@ func TestRoundSkipRequestID(t *testing.T) {
 		id := RoundSkipRequestID(5, 1)
 		assert.NotEqual(t, BlockRequestID(5, 1), id)
 		assert.NotEqual(t, ProposalRequestID(&Proposal{Height: 5, Round: 1}), id)
-		assert.NotEqual(t, ProposerHeartbeatRequestID(5, 1, 0, time.Time{}), id)
+		assert.NotEqual(t, ProposerHeartbeatRequestID(5, 1, 0), id)
 	})
 }
 

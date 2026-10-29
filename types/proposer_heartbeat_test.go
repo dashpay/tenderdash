@@ -86,19 +86,14 @@ func TestProposerHeartbeatSignature(t *testing.T) {
 }
 
 func TestProposerHeartbeatRequestID(t *testing.T) {
-	at := time.Date(2026, 10, 22, 9, 0, 0, 0, time.UTC)
-
 	t.Run("should give every heartbeat its own signing request", func(t *testing.T) {
-		id := ProposerHeartbeatRequestID(5, 0, 1, at)
-		assert.NotEqual(t, id, ProposerHeartbeatRequestID(5, 0, 2, at))
-		assert.NotEqual(t, id, ProposerHeartbeatRequestID(5, 1, 1, at))
-		assert.NotEqual(t, id, ProposerHeartbeatRequestID(6, 0, 1, at))
-		assert.NotEqual(t, id, ProposerHeartbeatRequestID(5, 0, 1, at.Add(time.Millisecond)),
-			"a restarted proposer whose clock went back can repeat a sequence, never with the same time")
+		assert.NotEqual(t, ProposerHeartbeatRequestID(5, 0, 1), ProposerHeartbeatRequestID(5, 0, 2))
+		assert.NotEqual(t, ProposerHeartbeatRequestID(5, 0, 1), ProposerHeartbeatRequestID(5, 1, 1))
+		assert.NotEqual(t, ProposerHeartbeatRequestID(5, 0, 1), ProposerHeartbeatRequestID(6, 0, 1))
 	})
 
 	t.Run("should not share a request ID with a vote or a proposal", func(t *testing.T) {
-		id := ProposerHeartbeatRequestID(5, 0, 0, at)
+		id := ProposerHeartbeatRequestID(5, 0, 0)
 		assert.NotEqual(t, BlockRequestID(5, 0), id)
 		assert.NotEqual(t, ProposalRequestID(&Proposal{Height: 5, Round: 0}), id)
 	})
@@ -138,15 +133,12 @@ func TestProposerHeartbeatValidateBasic(t *testing.T) {
 	})
 }
 
-// The heartbeat request ID is the "dphb" prefix, little-endian height, round,
-// sequence and signing time in Unix nanoseconds, checksummed. Dash Core signs
-// under it, so its bytes must not change.
+// The heartbeat request ID is the "dphb" prefix, little-endian height, round and
+// sequence, checksummed. Dash Core signs under it, so its bytes must not change.
 func TestProposerHeartbeatRequestIDLayout(t *testing.T) {
-	at := time.Unix(0, 1_700_000_000_123_456_789)
 	expected := []byte("dphb")
 	expected = binary.LittleEndian.AppendUint64(expected, 5)
 	expected = binary.LittleEndian.AppendUint32(expected, 2)
 	expected = binary.LittleEndian.AppendUint64(expected, 9)
-	expected = binary.LittleEndian.AppendUint64(expected, 1_700_000_000_123_456_789)
-	assert.Equal(t, crypto.Checksum(expected), ProposerHeartbeatRequestID(5, 2, 9, at))
+	assert.Equal(t, crypto.Checksum(expected), ProposerHeartbeatRequestID(5, 2, 9))
 }

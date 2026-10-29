@@ -135,13 +135,16 @@ func ProposerHeartbeatSignBytes(chainID string, hb *tmproto.ProposerHeartbeat) [
 }
 
 // ProposerHeartbeatRequestID returns the quorum signing request ID of one
-// heartbeat. It includes the sequence and the signing time, so every heartbeat
-// is its own signing request rather than a second message signed under an ID
-// already used, even from a proposer that restarted with its clock gone back.
-func ProposerHeartbeatRequestID(height int64, round int32, sequence uint64, timestamp time.Time) []byte {
-	// The time's bits are taken as they are, like height's.
-	signedAt := uint64(timestamp.UnixNano())
-	return heightRoundRequestID(proposerHeartbeatRequestIDPrefix, height, round, sequence, signedAt)
+// heartbeat. It includes the sequence, so every heartbeat a proposer sends in
+// a run is its own signing request.
+//
+// A proposer that restarts with its clock gone back can repeat a sequence, and
+// so an ID, for a heartbeat with another timestamp. That is harmless: the
+// timestamp is in the signed message, so the signature differs, and the signer
+// keeps no record of the IDs it signed under, as Dash Core does not for
+// `quorum platformsign` without submitting.
+func ProposerHeartbeatRequestID(height int64, round int32, sequence uint64) []byte {
+	return heightRoundRequestID(proposerHeartbeatRequestIDPrefix, height, round, sequence)
 }
 
 // ProposerHeartbeatSignItem returns what the proposer signs with its quorum key
@@ -155,7 +158,7 @@ func ProposerHeartbeatSignItem(
 	return NewSignItem(
 		quorumType,
 		quorumHash,
-		ProposerHeartbeatRequestID(hb.Height, hb.Round, hb.Sequence, hb.Timestamp),
+		ProposerHeartbeatRequestID(hb.Height, hb.Round, hb.Sequence),
 		ProposerHeartbeatSignBytes(chainID, hb),
 	)
 }
