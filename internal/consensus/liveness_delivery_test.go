@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/dash"
 	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/internal/p2p/client"
 	"github.com/dashpay/tenderdash/internal/test/factory"
@@ -47,7 +48,7 @@ func TestLivenessMessagesDispatch(t *testing.T) {
 	var delivered []delivery
 	wal := &countingWAL{}
 	dispatcher := newMsgInfoDispatcher(nil, nil, wal, log.NewNopLogger(), nil,
-		func(_ context.Context, msg Message, peerID types.NodeID) error {
+		func(_ context.Context, _ *StateData, msg Message, peerID types.NodeID) error {
 			delivered = append(delivered, delivery{msg, peerID})
 			return nil
 		})
@@ -65,6 +66,34 @@ func TestLivenessMessagesDispatch(t *testing.T) {
 
 	assert.Equal(t, []delivery{{heartbeat, "peer"}, {vote, "peer"}}, delivered)
 	assert.Zero(t, wal.writes, "neither changes state that WAL replay would have to rebuild")
+}
+
+// A certificate this node recovers is applied on the spot, not queued: a full
+// queue would lose it, and the collector recovers a round's certificate once.
+func TestRecoveredCertificateIsAppliedAtOnce(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	cs, vss := makeState(ctx, t, makeStateArgs{
+		validators: 4,
+		consensusParams: factory.ConsensusParams(func(c *types.ConsensusParams) {
+			c.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_2)
+		}),
+	})
+	stateData := cs.GetStateData()
+	cs.roundSkips.track(&stateData)
+	height, round := stateData.Height, stateData.Round
+
+	// The state is not running, so nothing would ever read a queued
+	// certificate.
+	ctx = dash.ContextWithProTxHash(ctx, cs.privValidator.ProTxHash)
+	for i := 1; i <= stateData.Validators.QuorumTypeThresholdCount(); i++ {
+		vote := signRoundSkipVote(ctx, t, cs, vss[i], height, round)
+		require.NoError(t, cs.handleLivenessMessage(ctx, &stateData, &RoundSkipVoteMessage{Vote: vote}, "peer"))
+	}
+
+	require.NotNil(t, stateData.RoundSkip, "the certificate was applied")
+	assert.Equal(t, round, stateData.RoundSkip.Round)
+	assert.Equal(t, round+1, stateData.Round)
 }
 
 // livenessReactorFixture is a reactor reading a peer's state channel, over a

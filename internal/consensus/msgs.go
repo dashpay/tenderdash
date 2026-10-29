@@ -786,7 +786,7 @@ func MsgFromProto(msg proto.Message) (Message, error) {
 	case *tmcons.ProposerHeartbeat:
 		hb, err := types.ProposerHeartbeatFromProto(&msg.Heartbeat)
 		if err != nil {
-			return nil, fmt.Errorf("proposer heartbeat msg from proto error: %w", err)
+			return nil, fmt.Errorf("%w: proposer heartbeat: %w", errMalformedLivenessMessage, err)
 		}
 		pb = &ProposerHeartbeatMessage{
 			Heartbeat: hb,
@@ -794,7 +794,7 @@ func MsgFromProto(msg proto.Message) (Message, error) {
 	case *tmcons.RoundSkipVote:
 		vote, err := types.RoundSkipVoteFromProto(&msg.Vote)
 		if err != nil {
-			return nil, fmt.Errorf("round skip vote msg from proto error: %w", err)
+			return nil, fmt.Errorf("%w: round skip vote: %w", errMalformedLivenessMessage, err)
 		}
 		pb = &RoundSkipVoteMessage{
 			Vote: vote,
@@ -802,7 +802,7 @@ func MsgFromProto(msg proto.Message) (Message, error) {
 	case *tmcons.RoundSkipCertificate:
 		certificate, err := types.RoundSkipCertificateFromProto(&msg.Certificate)
 		if err != nil {
-			return nil, fmt.Errorf("round skip certificate msg from proto error: %w", err)
+			return nil, fmt.Errorf("%w: round skip certificate: %w", errMalformedLivenessMessage, err)
 		}
 		pb = &RoundSkipCertificateMessage{
 			Certificate: certificate,
@@ -812,11 +812,21 @@ func MsgFromProto(msg proto.Message) (Message, error) {
 	}
 
 	if err := pb.ValidateBasic(); err != nil {
+		switch pb.(type) {
+		case *ProposerHeartbeatMessage, *RoundSkipVoteMessage, *RoundSkipCertificateMessage:
+			return nil, fmt.Errorf("%w: %w", errMalformedLivenessMessage, err)
+		}
 		return nil, err
 	}
 
 	return pb, nil
 }
+
+// errMalformedLivenessMessage is returned for a proposer heartbeat, round skip
+// vote or round skip certificate from a peer that cannot be decoded or fails
+// its basic checks. Any peer can send one for nothing, so it is floodable (see
+// isPeerFloodableError).
+var errMalformedLivenessMessage = errors.New("malformed liveness message")
 
 // WALToProto takes a WAL message and return a proto walMessage and error.
 func WALToProto(msg WALMessage) (*tmcons.WALMessage, error) {

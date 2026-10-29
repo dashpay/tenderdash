@@ -1014,18 +1014,37 @@ func (cs *State) voteToSkipRound(ctx context.Context, stateData *StateData, sile
 	// vote once. Moving on from the round ends the watch, and with it the timer.
 	cs.liveness.rearm(silence)
 	if certificate != nil {
-		if err := cs.sendMessage(ctx, &RoundSkipCertificateMessage{Certificate: certificate}, ""); err != nil {
-			cs.logger.Error("cannot queue round skip certificate", "certificate", certificate, "err", err)
-		}
+		cs.applyRecoveredCertificate(ctx, stateData, certificate)
+	}
+}
+
+// applyRecoveredCertificate hands a round skip certificate this node recovered
+// to the state machine at once, on the consensus goroutine it was recovered on,
+// as if it had come in as a message. Queuing it instead could fail with the
+// queue full, and nothing would recover it again: the collector recovers a
+// round's certificate once.
+func (cs *State) applyRecoveredCertificate(
+	ctx context.Context,
+	stateData *StateData,
+	certificate *types.RoundSkipCertificate,
+) {
+	mi := msgInfo{Msg: &RoundSkipCertificateMessage{Certificate: certificate}, ReceiveTime: tmtime.Now()}
+	if err := cs.msgDispatcher.dispatch(ctx, stateData, mi); err != nil {
+		cs.logger.Error("cannot apply round skip certificate", "certificate", certificate, "err", err)
 	}
 }
 
 // handleLivenessMessage takes a proposer heartbeat or round skip vote from a
 // peer, which the peer scheduler handed over with room in the verification
 // budget for its signature check. One that is news is passed on to the reactor
-// to relay, and a vote that completes +2/3 for its round sends the certificate
-// it recovered to the state machine.
-func (cs *State) handleLivenessMessage(ctx context.Context, msg Message, peerID types.NodeID) error {
+// to relay, and a vote that completes +2/3 for its round has the certificate it
+// recovered applied at once (see applyRecoveredCertificate).
+func (cs *State) handleLivenessMessage(
+	ctx context.Context,
+	stateData *StateData,
+	msg Message,
+	peerID types.NodeID,
+) error {
 	switch m := msg.(type) {
 	case *ProposerHeartbeatMessage:
 		relay, err := cs.liveness.heard(m.Heartbeat)
@@ -1048,7 +1067,7 @@ func (cs *State) handleLivenessMessage(ctx context.Context, msg Message, peerID 
 			cs.emitter.Emit(livenessRelayEventName, livenessRelay{msg: m, from: peerID})
 		}
 		if certificate != nil {
-			return cs.sendMessage(ctx, &RoundSkipCertificateMessage{Certificate: certificate}, "")
+			cs.applyRecoveredCertificate(ctx, stateData, certificate)
 		}
 	}
 	return nil

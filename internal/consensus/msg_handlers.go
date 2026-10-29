@@ -52,6 +52,9 @@ func isPeerFloodableError(err error) bool {
 		// checked against the quorum key, so these do not come from an honest
 		// peer either.
 		errors.Is(err, types.ErrRoundSkipVoteInvalidSignature) ||
+		// A liveness message that does not even decode costs its sender
+		// nothing at all.
+		errors.Is(err, errMalformedLivenessMessage) ||
 		errors.Is(err, types.ErrRoundSkipCertificateInvalidSignature) ||
 		errors.Is(err, errRoundSkipVoteWrongValidator) ||
 		// A certificate naming another quorum is refused before any signature
@@ -80,7 +83,7 @@ type msgInfoDispatcher struct {
 }
 
 // livenessMessageFunc takes a proposer heartbeat or round skip vote from a peer.
-type livenessMessageFunc func(ctx context.Context, msg Message, peerID types.NodeID) error
+type livenessMessageFunc func(ctx context.Context, stateData *StateData, msg Message, peerID types.NodeID) error
 
 func (c *msgInfoDispatcher) match(m Message) (msgHandlerFunc, error) {
 	switch m.(type) {
@@ -161,11 +164,11 @@ func newMsgInfoDispatcher(
 // sender's other messages, so a sender of many cannot crowd out the votes and
 // proposals of others.
 func livenessMessageHandler(liveness livenessMessageFunc) msgHandlerFunc {
-	return func(ctx context.Context, _ *StateData, envelope msgEnvelope) error {
+	return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
 		if liveness == nil {
 			return nil
 		}
-		return liveness(ctx, envelope.Msg, envelope.PeerID)
+		return liveness(ctx, stateData, envelope.Msg, envelope.PeerID)
 	}
 }
 

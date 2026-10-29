@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cosmos/gogoproto/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -15,6 +16,7 @@ import (
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
+	tmcons "github.com/dashpay/tenderdash/proto/tendermint/consensus"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -44,6 +46,28 @@ func TestIsPeerFloodableError(t *testing.T) {
 		"an internal fault must not be treated as floodable")
 	assert.False(t, isPeerFloodableError(errors.New("some other internal error")))
 	assert.False(t, isPeerFloodableError(nil))
+}
+
+// A heartbeat, skip vote or certificate that does not even decode costs its
+// sender nothing, so its rejection is floodable. Other malformed messages keep
+// their classification.
+func TestMalformedLivenessMessagesAreFloodable(t *testing.T) {
+	for _, msg := range []proto.Message{
+		&tmcons.ProposerHeartbeat{},
+		&tmcons.RoundSkipVote{},
+		&tmcons.RoundSkipCertificate{},
+		&tmcons.ProposerHeartbeat{Heartbeat: tmproto.ProposerHeartbeat{Height: 3, ProposerProTxHash: []byte{1}}},
+		&tmcons.RoundSkipCertificate{Certificate: tmproto.RoundSkipCertificate{Height: 3, QuorumHash: []byte{1}}},
+	} {
+		_, err := MsgFromProto(msg)
+		require.Error(t, err, "%T", msg)
+		assert.ErrorIs(t, err, errMalformedLivenessMessage, "%T", msg)
+		assert.True(t, isPeerFloodableError(err), "%T: %v", msg, err)
+	}
+
+	_, err := MsgFromProto(&tmcons.HasVote{Height: -1})
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, errMalformedLivenessMessage)
 }
 
 // A flood of invalid votes must not emit Error-level logs (one per message was
