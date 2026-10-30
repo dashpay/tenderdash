@@ -133,6 +133,12 @@ type Manifest struct {
 	// proposing round 0 of a height.
 	CreateEmptyBlocks *bool `toml:"create_empty_blocks"`
 
+	// CreateEmptyBlocksInterval sets the consensus `create-empty-blocks-interval`
+	// option of every node: how long a proposer waits before proposing an empty
+	// block. Defaults to 0 (no wait). Bounds block production, e.g. so that a
+	// lone validator does not outrun nodes following it in consensus.
+	CreateEmptyBlocksInterval time.Duration `toml:"create_empty_blocks_interval"`
+
 	// ProposeNextBlockImmediately makes the application ask for the next height
 	// right away in every FinalizeBlock response
 	// (ResponseFinalizeBlock.propose_next_block_immediately). Combined with
@@ -209,6 +215,15 @@ type ManifestNode struct {
 	// pause:      temporarily pauses (freezes) the node
 	// restart:    restarts the node, shutting it down with SIGTERM
 	Perturb []string `toml:"perturb"`
+
+	// FinalizeHold holds the node's first FinalizeBlock call for this long
+	// (e.g. "65s") while networking keeps running, to check that block sync
+	// survives a slow local application: it must keep its peers, stay in block
+	// sync and resume fetching on release. The application records what the node
+	// did meanwhile; TestBlockSync_FinalizeHold asserts on it. Requires the
+	// builtin ABCI protocol, mode "full", start_at, no state sync, the
+	// "priority" queue type and no perturbations. Defaults to 0 (disabled).
+	FinalizeHold time.Duration `toml:"finalize_hold"`
 
 	// Log level sets the log level of the specific node i.e. "info".
 	// This is helpful when debugging a specific problem. This overrides the network
