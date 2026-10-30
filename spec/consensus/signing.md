@@ -20,6 +20,10 @@ const (
 
  // Proposals
  ProposalType SignedMsgType = 0x20
+
+ // Proposer liveness, from CONSENSUS_VERSION_2
+ ProposerHeartbeatType SignedMsgType = 0x30
+ RoundSkipType         SignedMsgType = 0x31
 )
 ```
 
@@ -212,6 +216,56 @@ Verification algorithm can be described as follows:
 4. Build `CanonicalVote` message and encode it using Protobuf.
 5. Calculate SHA256 checksum of encoded `CanonicalVote`.
 6. Verify that block signature matches calculated checksum.
+
+## Proposer heartbeats and round skip votes
+
+From `CONSENSUS_VERSION_2`, the proposer of a round that waits for transactions
+signs a heartbeat every `proposer_heartbeat`, and a validator that hears none
+for the round's silence timeout signs a vote to skip the round. Both are signed
+like votes, with the validator's quorum key share over the DIP-7 sign hash of
+the quorum type, the quorum hash, a request ID, and the SHA256 checksum of the
+length-delimited, Protobuf-encoded sign bytes below.
+
+A heartbeat's sign bytes are:
+
+```go
+message CanonicalProposerHeartbeat {
+  SignedMsgType             type      = 1;  // 0x30
+  sfixed64                  height    = 2;
+  sfixed64                  round     = 3;
+  fixed64                   sequence  = 4;
+  google.protobuf.Timestamp timestamp = 5;
+  string                    chain_id  = 6;
+}
+```
+
+Its request ID is the SHA256 checksum of `"dphb"`, then the height as a
+little-endian uint64, the round as a little-endian uint32, and the sequence as
+a little-endian uint64. The sequence grows with every heartbeat of a round, so
+each heartbeat a proposer sends is a signing request of its own. A proposer
+that restarts with its clock gone back can repeat an ID for a heartbeat with
+another timestamp; the timestamp is in the sign bytes, so the signature still
+differs.
+
+A round skip vote's sign bytes are the same for every validator voting to skip
+a round, so the votes of +2/3 recover into one threshold signature, the round
+skip certificate:
+
+```go
+message CanonicalRoundSkip {
+  SignedMsgType type     = 1;  // 0x31
+  sfixed64      height   = 2;
+  sfixed64      round    = 3;
+  string        chain_id = 4;
+}
+```
+
+Its request ID is the SHA256 checksum of `"dpskip"`, then the height as a
+little-endian uint64 and the round as a little-endian uint32.
+
+A heartbeat or skip vote is valid for signing if its height is positive and its
+round is not negative. Neither changes consensus state or conflicts with
+another message, so neither is subject to the double-signing rules below.
 
 ## Invalid Votes and Proposals
 

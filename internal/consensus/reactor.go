@@ -112,6 +112,17 @@ const (
 	// second per peer against the two an honest one sends.
 	maj23TokenCost = 100
 
+	// livenessTokenCost is what one ProposerHeartbeat, RoundSkipVote or
+	// RoundSkipCertificate charges. Each that is new to this node costs a
+	// signature verification, so the weight bounds a forging sender to fifty
+	// verifications a second. An honest peer relays about one heartbeat a
+	// second, well inside that. The exception is a round whose proposer went
+	// silent: every peer relays every validator's skip vote at about the same
+	// time, N * 100 tokens, which takes the whole per-peer burst at about 100
+	// validators and exceeds it above. The excess is dropped; each vote also
+	// arrives through the node's other peers, so certificates still form.
+	livenessTokenCost = 100
+
 	// maj23ClaimsPerTick is how many majority claims a peer's gossip loop offers
 	// in one pass: a prevote majority for its round, one for the proposal's POL
 	// round, a precommit majority, and a catch-up commit.
@@ -260,6 +271,9 @@ type Reactor struct {
 	// test overrides it.
 	clock clockwork.Clock
 
+	// livenessOutbox holds the liveness messages waiting for sendLiveness.
+	livenessOutbox chan livenessSend
+
 	// Context for controlling reactor goroutines
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -279,16 +293,17 @@ func NewReactor(
 	metrics *Metrics,
 ) *Reactor {
 	r := &Reactor{
-		logger:      logger,
-		state:       cs,
-		waitSync:    waitSync,
-		peers:       make(map[types.NodeID]*PeerState),
-		eventBus:    eventBus,
-		Metrics:     metrics,
-		peerEvents:  peerEvents,
-		chCreator:   channelCreator,
-		readySignal: make(chan struct{}),
-		clock:       clockwork.NewRealClock(),
+		logger:         logger,
+		state:          cs,
+		waitSync:       waitSync,
+		peers:          make(map[types.NodeID]*PeerState),
+		eventBus:       eventBus,
+		Metrics:        metrics,
+		peerEvents:     peerEvents,
+		chCreator:      channelCreator,
+		readySignal:    make(chan struct{}),
+		clock:          clockwork.NewRealClock(),
+		livenessOutbox: make(chan livenessSend, livenessOutboxSize),
 	}
 	r.BaseService = *service.NewBaseService(logger, "Consensus", r)
 
@@ -383,6 +398,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	// start routine that handles peer errors from the state machine
 	go r.peerErrorRoutine(r.ctx, chBundle.state)
 
+	go r.sendLiveness(r.ctx, chBundle.state)
 	r.subscribeToBroadcastEvents(r.ctx, chBundle.state)
 
 	if !r.WaitSync() {
@@ -574,6 +590,53 @@ func (r *Reactor) subscribeToBroadcastEvents(ctx context.Context, stateCh p2p.Ch
 		},
 	)
 
+	// The liveness messages go out through the reactor's liveness sender (see
+	// queueLiveness), never from the goroutine that emits them.
+	r.state.emitter.AddListener(
+		proposerHeartbeatEventName,
+		func(data eventemitter.EventData) error {
+			hb := data.(*types.ProposerHeartbeat)
+			r.queueLiveness(livenessSend{msg: &tmcons.ProposerHeartbeat{Heartbeat: *hb.ToProto()}, heartbeat: hb})
+			return nil
+		},
+	)
+
+	r.state.emitter.AddListener(
+		livenessRelayEventName,
+		func(data eventemitter.EventData) error {
+			relay := data.(livenessRelay)
+			switch m := relay.msg.(type) {
+			case *ProposerHeartbeatMessage:
+				r.queueLiveness(livenessSend{
+					msg:       &tmcons.ProposerHeartbeat{Heartbeat: *m.Heartbeat.ToProto()},
+					heartbeat: m.Heartbeat,
+					from:      relay.from,
+				})
+			case *RoundSkipVoteMessage:
+				r.queueLiveness(livenessSend{msg: &tmcons.RoundSkipVote{Vote: *m.Vote.ToProto()}})
+			}
+			return nil
+		},
+	)
+
+	r.state.emitter.AddListener(
+		roundSkipVoteEventName,
+		func(data eventemitter.EventData) error {
+			vote := data.(*types.RoundSkipVote)
+			r.queueLiveness(livenessSend{msg: &tmcons.RoundSkipVote{Vote: *vote.ToProto()}})
+			return nil
+		},
+	)
+
+	r.state.emitter.AddListener(
+		roundSkipCertificateEventName,
+		func(data eventemitter.EventData) error {
+			certificate := data.(*types.RoundSkipCertificate)
+			r.queueLiveness(livenessSend{msg: &tmcons.RoundSkipCertificate{Certificate: *certificate.ToProto()}})
+			return nil
+		},
+	)
+
 	r.state.emitter.AddListener(types.EventCommitValue,
 		func(data eventemitter.EventData) error {
 			commit := data.(*types.Commit)
@@ -595,6 +658,124 @@ func (r *Reactor) broadcast(ctx context.Context, channel p2p.Channel, msg proto.
 			Message:   msg,
 		})
 	}
+}
+
+// livenessOutboxSize is how many liveness messages may wait for the reactor's
+// liveness sender. A round whose proposer went silent produces the most at
+// once: every validator's skip vote, relayed once each, with the heartbeats of
+// the rounds nearby.
+const livenessOutboxSize = 256
+
+// livenessSend is a liveness message waiting for the reactor's liveness sender.
+type livenessSend struct {
+	msg proto.Message
+	// heartbeat is set for a proposer heartbeat, which goes only to the peers
+	// that can use it (see sendHeartbeat). Anything else is broadcast.
+	heartbeat *types.ProposerHeartbeat
+	// from is the peer a relayed heartbeat came from, which does not get it
+	// back.
+	from types.NodeID
+}
+
+// queueLiveness hands a liveness message to the reactor's liveness sender
+// (sendLiveness) without waiting. The listeners that call it run on the
+// consensus goroutine, or on the proposer's heartbeat sender, and a peer that
+// stops draining its queue can make the router slow to take anything; neither
+// may wait on that. A message the sender has no room for is dropped. Each is
+// sent again while it still matters: a heartbeat every interval, a skip vote
+// every silence timeout while its round stays silent, and a certificate on
+// every gossip pass to the peers still in the round it skips.
+func (r *Reactor) queueLiveness(send livenessSend) {
+	select {
+	case r.livenessOutbox <- send:
+	default:
+		r.logger.Debug("dropping liveness message the liveness sender has no room for",
+			"msg_type", fmt.Sprintf("%T", send.msg))
+	}
+}
+
+// sendLiveness sends the liveness messages queued by queueLiveness, each
+// bounded like a vote-set response so a peer that does not drain its queue
+// holds the rest back by no more than that.
+func (r *Reactor) sendLiveness(ctx context.Context, stateCh p2p.Channel) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case send := <-r.livenessOutbox:
+			if send.heartbeat != nil {
+				err := r.sendHeartbeat(ctx, stateCh, send.heartbeat, send.msg, send.from)
+				r.logResult(err, r.logger, "sending proposer heartbeat",
+					"height", send.heartbeat.Height, "round", send.heartbeat.Round)
+				continue
+			}
+			sendCtx, cancel := context.WithTimeout(ctx, voteSetResponseTimeout)
+			err := stateCh.Send(sendCtx, p2p.Envelope{Broadcast: true, Message: send.msg})
+			cancel()
+			if err != nil {
+				r.logger.Debug("dropping liveness message the router could not take",
+					"msg_type", fmt.Sprintf("%T", send.msg), "err", err)
+			}
+		}
+	}
+}
+
+// sendHeartbeat sends a proposer heartbeat to the peers that can use it:
+// validators at the heartbeat's height within the relay window of its round
+// (relayWindow), other than from, the peer it came from. Those in its round
+// watch with it, and those in a nearby round relay it on to any of their peers
+// still in its round. A peer outside the validator set cannot verify it.
+//
+// Each send is bounded like a vote-set response: a peer that does not drain
+// its queue must not hold back the heartbeat for the rest. One it cannot take
+// at once misses this heartbeat; the next comes within the interval.
+func (r *Reactor) sendHeartbeat(
+	ctx context.Context,
+	stateCh p2p.Channel,
+	hb *types.ProposerHeartbeat,
+	msg proto.Message,
+	from types.NodeID,
+) error {
+	validators := r.state.GetStateData().Validators
+	if validators == nil {
+		return nil
+	}
+	r.mtx.RLock()
+	peers := make([]*PeerState, 0, len(r.peers))
+	for id, ps := range r.peers {
+		if id != from {
+			peers = append(peers, ps)
+		}
+	}
+	r.mtx.RUnlock()
+
+	for _, ps := range peers {
+		if !wantsHeartbeat(ps, validators, hb) {
+			continue
+		}
+		if ctx.Err() != nil {
+			return errReactorClosed
+		}
+		sendCtx, cancel := context.WithTimeout(ctx, voteSetResponseTimeout)
+		err := stateCh.Send(sendCtx, p2p.Envelope{To: ps.peerID, Message: msg})
+		cancel()
+		if err != nil {
+			r.logger.Debug("dropping proposer heartbeat the router could not take",
+				"peer", ps.peerID, "height", hb.Height, "round", hb.Round, "err", err)
+		}
+	}
+	return nil
+}
+
+// wantsHeartbeat reports whether peer ps can use hb: a validator at its height
+// within the relay window of its round.
+func wantsHeartbeat(ps *PeerState, validators *types.ValidatorSet, hb *types.ProposerHeartbeat) bool {
+	if !validators.HasProTxHash(ps.GetProTxHash()) {
+		return false
+	}
+	first, last := relayWindow(hb.Round)
+	prs := ps.GetRoundState()
+	return prs.Height == hb.Height && prs.Round >= first && prs.Round <= last
 }
 
 // logResult creates a log that depends on value of err
@@ -774,6 +955,59 @@ func (r *Reactor) handleStateMessage(ctx context.Context, envelope *p2p.Envelope
 
 	case *tmcons.HasCommit:
 		ps.ApplyHasCommitMessage(msgI.(*HasCommitMessage))
+
+	case *tmcons.ProposerHeartbeat:
+		// Verified on the consensus goroutine, where the peer scheduler sets its
+		// signature check against the verification budget in turn with the
+		// sender's other messages (see handleLivenessMessage). The checks that
+		// need no signature run here, so one that cannot be news takes no place
+		// in the sender's lane.
+		hbMsg := msgI.(*ProposerHeartbeatMessage)
+		wanted, err := r.state.liveness.wanted(hbMsg.Heartbeat)
+		if err != nil || !wanted {
+			return err
+		}
+		laneCtx, ok := r.laneCtx(ctx, ps, envelope)
+		if !ok {
+			return nil
+		}
+		return r.state.sendMessage(laneCtx, hbMsg, envelope.From)
+
+	case *tmcons.RoundSkipVote:
+		// Counted on the consensus goroutine, as heartbeats are.
+		voteMsg := msgI.(*RoundSkipVoteMessage)
+		wanted, err := r.state.roundSkips.wanted(voteMsg.Vote)
+		if err != nil {
+			return err
+		}
+		if !wanted {
+			// A copy of a vote already counted may still be due to go out again,
+			// in case this node's relay of it was lost (see relayAgain).
+			if again := r.state.roundSkips.relayAgain(voteMsg.Vote); again != nil {
+				r.queueLiveness(livenessSend{msg: &tmcons.RoundSkipVote{Vote: *again.ToProto()}})
+			}
+			return nil
+		}
+		laneCtx, ok := r.laneCtx(ctx, ps, envelope)
+		if !ok {
+			return nil
+		}
+		return r.state.sendMessage(laneCtx, voteMsg, envelope.From)
+
+	case *tmcons.RoundSkipCertificate:
+		certMsg := msgI.(*RoundSkipCertificateMessage)
+		stateData := r.state.GetStateData()
+		// The state machine verifies and applies it, and broadcasts it if it
+		// moved the node on. One it would not apply is dropped here, before it
+		// is written to the WAL on its way there.
+		if !roundSkipCertificateWanted(&stateData, certMsg.Certificate) {
+			return nil
+		}
+		laneCtx, ok := r.laneCtx(ctx, ps, envelope)
+		if !ok {
+			return nil
+		}
+		return r.state.sendMessage(laneCtx, certMsg, envelope.From)
 
 	case *tmcons.HasVote:
 		if err := ps.ApplyHasVoteMessage(msgI.(*HasVoteMessage)); err != nil {
@@ -1205,8 +1439,11 @@ func newMaj23PeerShareLimiter(
 // every validator; everything else on these channels only updates a peer's
 // recorded round state.
 func stateChannelMessageCost(msg proto.Message) int {
-	if _, ok := msg.(*tmcons.VoteSetMaj23); ok {
+	switch msg.(type) {
+	case *tmcons.VoteSetMaj23:
 		return maj23TokenCost
+	case *tmcons.ProposerHeartbeat, *tmcons.RoundSkipVote, *tmcons.RoundSkipCertificate:
+		return livenessTokenCost
 	}
 	return 1
 }

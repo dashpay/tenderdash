@@ -115,6 +115,16 @@ type RoundState struct {
 	// Consumed once and not persisted, so a restart falls back to the configured wait.
 	ProposeNextBlockImmediately bool `json:"propose_next_block_immediately"`
 
+	// RoundSkip is the certificate for the highest round of this height that
+	// +2/3 of the validators voted to skip because its proposer went silent
+	// while they waited for transactions.
+	RoundSkip *types.RoundSkipCertificate `json:"round_skip"`
+
+	// TxsReported is set once the mempool reported transactions at this
+	// height. It does so once per height, so a round entered after that does
+	// not wait for transactions: no report would end the wait.
+	TxsReported bool `json:"txs_reported"`
+
 	// ProcessedBlockID identifies the successful ProcessProposal behind CurrentRoundState.
 	ProcessedBlockID types.BlockID `json:"-"`
 

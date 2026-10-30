@@ -44,6 +44,22 @@ func isPeerFloodableError(err error) bool {
 		errors.Is(err, ErrUnableToVerifyProposal) ||
 		errors.Is(err, ErrPeerStateInvalidVoteIndex) ||
 		errors.Is(err, ErrInvalidNewRoundStepHeight) ||
+		// Proposer heartbeats are relayed only once verified, so neither of
+		// these comes from an honest peer, and both cost the sender nothing.
+		errors.Is(err, types.ErrProposerHeartbeatInvalidSignature) ||
+		errors.Is(err, errProposerHeartbeatWrongProposer) ||
+		// Skip votes are relayed only once verified, and certificates are
+		// checked against the quorum key, so these do not come from an honest
+		// peer either.
+		errors.Is(err, types.ErrRoundSkipVoteInvalidSignature) ||
+		// A liveness message that does not even decode costs its sender
+		// nothing at all.
+		errors.Is(err, errMalformedLivenessMessage) ||
+		errors.Is(err, types.ErrRoundSkipCertificateInvalidSignature) ||
+		errors.Is(err, errRoundSkipVoteWrongValidator) ||
+		// A certificate naming another quorum is refused before any signature
+		// is read, as a commit for another quorum is below.
+		errors.Is(err, types.ErrRoundSkipCertificateWrongQuorum) ||
 		// Every peer commit for the current height that clears ValidateBasic reaches
 		// these two rejections, and an honest peer on a different quorum rotation or
 		// vote-extension configuration reaches them too. Both cost the sender a
@@ -62,7 +78,12 @@ type msgInfoDispatcher struct {
 	blockPartHandler msgHandlerFunc
 	voteHandler      msgHandlerFunc
 	commitHandler    msgHandlerFunc
+	roundSkipHandler msgHandlerFunc
+	livenessHandler  msgHandlerFunc
 }
+
+// livenessMessageFunc takes a proposer heartbeat or round skip vote from a peer.
+type livenessMessageFunc func(ctx context.Context, stateData *StateData, msg Message, peerID types.NodeID) error
 
 func (c *msgInfoDispatcher) match(m Message) (msgHandlerFunc, error) {
 	switch m.(type) {
@@ -74,6 +95,10 @@ func (c *msgInfoDispatcher) match(m Message) (msgHandlerFunc, error) {
 		return c.voteHandler, nil
 	case *CommitMessage:
 		return c.commitHandler, nil
+	case *RoundSkipCertificateMessage:
+		return c.roundSkipHandler, nil
+	case *ProposerHeartbeatMessage, *RoundSkipVoteMessage:
+		return c.livenessHandler, nil
 	}
 	return nil, fmt.Errorf("got unknown %T type", m)
 }
@@ -106,6 +131,7 @@ func newMsgInfoDispatcher(
 	wal WALWriteFlusher,
 	logger log.Logger,
 	budget types.VerificationBudget,
+	liveness livenessMessageFunc,
 	middleware ...msgMiddlewareFunc,
 ) *msgInfoDispatcher {
 
@@ -120,11 +146,29 @@ func newMsgInfoDispatcher(
 	blockPartHandler := withMiddleware(blockPartMessageHandler(ctrl), mws...)
 	voteHandler := withMiddleware(voteMessageHandler(ctrl), mws...)
 	commitHandler := withMiddleware(commitMessageHandler(ctrl), mws...)
+	roundSkipHandler := withMiddleware(roundSkipCertificateMessageHandler(ctrl, budget), mws...)
+	livenessHandler := withMiddleware(livenessMessageHandler(liveness), mws...)
 	return &msgInfoDispatcher{
 		proposalHandler:  proposalHandler,
 		blockPartHandler: blockPartHandler,
 		voteHandler:      voteHandler,
 		commitHandler:    commitHandler,
+		roundSkipHandler: roundSkipHandler,
+		livenessHandler:  livenessHandler,
+	}
+}
+
+// livenessMessageHandler hands a proposer heartbeat or round skip vote from a
+// peer to liveness tracking. The peer scheduler made room in the verification
+// budget for its signature check before handing it over, in turn with the
+// sender's other messages, so a sender of many cannot crowd out the votes and
+// proposals of others.
+func livenessMessageHandler(liveness livenessMessageFunc) msgHandlerFunc {
+	return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
+		if liveness == nil {
+			return nil
+		}
+		return liveness(ctx, stateData, envelope.Msg, envelope.PeerID)
 	}
 }
 
@@ -137,6 +181,19 @@ func proposalMessageHandler(propSetter cstypes.ProposalSetter, budget types.Veri
 		msg := envelope.Msg.(*ProposalMessage)
 		ctx = ctxWithPeerVerificationBudget(ctx, envelope.PeerID, envelope.fromReplay, budget)
 		return propSetter.Set(ctx, msg.Proposal, envelope.ReceiveTime, &stateData.RoundState)
+	}
+}
+
+// roundSkipCertificateMessageHandler hands a certificate to the state machine
+// with the permit its signature check is drawn against, which only a peer's
+// certificate carries. One without a peer is one this node recovered, and was
+// verified then.
+func roundSkipCertificateMessageHandler(ctrl *Controller, budget types.VerificationBudget) msgHandlerFunc {
+	return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
+		msg := envelope.Msg.(*RoundSkipCertificateMessage)
+		ctx = ctxWithPeerVerificationBudget(ctx, envelope.PeerID, envelope.fromReplay, budget)
+		event := &AddRoundSkipCertificateEvent{Certificate: msg.Certificate, Verified: envelope.PeerID == ""}
+		return ctrl.Dispatch(ctx, event, stateData)
 	}
 }
 
@@ -255,8 +312,11 @@ func walMiddleware(wal WALWriteFlusher, logger log.Logger) msgMiddlewareFunc {
 	return func(hd msgHandlerFunc) msgHandlerFunc {
 		return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
 			mi := envelope.msgInfo
-			if !envelope.fromReplay {
-				if mi.PeerID != "" {
+			// A certificate this node recovered carries no signature of its
+			// own, so it needs no fsync: one lost in a crash is resent by peers.
+			_, recovered := mi.Msg.(*RoundSkipCertificateMessage)
+			if !envelope.fromReplay && !livenessMessage(mi.Msg) {
+				if mi.PeerID != "" || recovered {
 					err := wal.Write(mi)
 					if err != nil {
 						logger.Error("failed writing to WAL", "error", err)
@@ -274,6 +334,19 @@ func walMiddleware(wal WALWriteFlusher, logger log.Logger) msgMiddlewareFunc {
 			return hd(ctx, stateData, envelope)
 		}
 	}
+}
+
+// livenessMessage reports whether msg is a proposer heartbeat or round skip
+// vote. Neither goes to the WAL: neither changes consensus state that replay
+// would have to rebuild. A heartbeat only resets a timer and is stale by the
+// time anything could replay it, and a skip vote is sent again for as long as
+// its round stays silent; the certificate the votes recover is written.
+func livenessMessage(msg Message) bool {
+	switch msg.(type) {
+	case *ProposerHeartbeatMessage, *RoundSkipVoteMessage:
+		return true
+	}
+	return false
 }
 
 func loggingMiddleware(logger log.Logger) msgMiddlewareFunc {
@@ -352,6 +425,23 @@ func makeLogArgsFromMessage(msg Message) []any {
 		return []any{
 			"commit_height", m.Commit.Height,
 			"commit_round", m.Commit.Round,
+		}
+	case *RoundSkipCertificateMessage:
+		return []any{
+			"skip_height", m.Certificate.Height,
+			"skip_round", m.Certificate.Round,
+		}
+	case *ProposerHeartbeatMessage:
+		return []any{
+			"heartbeat_height", m.Heartbeat.Height,
+			"heartbeat_round", m.Heartbeat.Round,
+			"heartbeat_sequence", m.Heartbeat.Sequence,
+		}
+	case *RoundSkipVoteMessage:
+		return []any{
+			"skip_vote_height", m.Vote.Height,
+			"skip_vote_round", m.Vote.Round,
+			"val_proTxHash", m.Vote.ValidatorProTxHash.ShortString(),
 		}
 	}
 	panic("unsupported message type")

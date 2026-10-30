@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/dashpay/dashd-go/btcjson"
 
@@ -40,6 +41,12 @@ type DashCoreSignerClient struct {
 	dashCoreRPCClient dashcore.Client
 	cachedProTxHash   crypto.ProTxHash
 	defaultQuorumType btcjson.LLMQType
+
+	// pubKeys holds this validator's key share for each quorum it was looked
+	// up for. A quorum's shares never change, and every signature is checked
+	// against the share, so without it each one costs a `quorum info` call.
+	pubKeysMtx sync.Mutex
+	pubKeys    map[string]crypto.PubKey
 }
 
 var _ DashPrivValidator = (*DashCoreSignerClient)(nil)
@@ -120,6 +127,27 @@ func (sc *DashCoreSignerClient) GetPubKey(ctx context.Context, quorumHash crypto
 		return nil, fmt.Errorf("quorum hash must be 32 bytes long if requesting public key from dash core")
 	}
 
+	sc.pubKeysMtx.Lock()
+	pubKey, ok := sc.pubKeys[quorumHash.String()]
+	sc.pubKeysMtx.Unlock()
+	if ok {
+		return pubKey, nil
+	}
+	pubKey, err := sc.fetchPubKey(ctx, quorumHash)
+	if err != nil || pubKey == nil {
+		return pubKey, err
+	}
+	sc.pubKeysMtx.Lock()
+	if sc.pubKeys == nil {
+		sc.pubKeys = make(map[string]crypto.PubKey)
+	}
+	sc.pubKeys[quorumHash.String()] = pubKey
+	sc.pubKeysMtx.Unlock()
+	return pubKey, nil
+}
+
+// fetchPubKey looks this validator's key share for quorumHash up in Dash Core.
+func (sc *DashCoreSignerClient) fetchPubKey(ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PubKey, error) {
 	response, err := sc.dashCoreRPCClient.QuorumInfo(sc.defaultQuorumType, quorumHash)
 	if err != nil {
 		return nil, fmt.Errorf("getPubKey Quorum Info Error for (%d) %s : %w", sc.defaultQuorumType, quorumHash.String(), err)
@@ -309,6 +337,48 @@ func (sc *DashCoreSignerClient) SignProposal(
 	}
 	proposalProto.Signature = resp.sign
 	return nil, nil
+}
+
+// SignProposerHeartbeat signs a proposer heartbeat with this validator's quorum
+// key share through Dash Core. Implements PrivValidator.
+func (sc *DashCoreSignerClient) SignProposerHeartbeat(
+	ctx context.Context,
+	chainID string,
+	quorumType btcjson.LLMQType,
+	quorumHash crypto.QuorumHash,
+	heartbeat *tmproto.ProposerHeartbeat,
+) error {
+	if len(quorumHash) != crypto.DefaultHashSize {
+		return errors.New("quorum hash must be 32 bytes long if requesting a signature for a proposer heartbeat")
+	}
+	signItem := types.ProposerHeartbeatSignItem(chainID, heartbeat, quorumType, quorumHash)
+	resp, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, signItem)
+	if err != nil {
+		return err
+	}
+	heartbeat.Signature = resp.sign
+	return nil
+}
+
+// SignRoundSkipVote signs this validator's vote to skip a round with its quorum
+// key share through Dash Core. Implements PrivValidator.
+func (sc *DashCoreSignerClient) SignRoundSkipVote(
+	ctx context.Context,
+	chainID string,
+	quorumType btcjson.LLMQType,
+	quorumHash crypto.QuorumHash,
+	vote *tmproto.RoundSkipVote,
+) error {
+	if len(quorumHash) != crypto.DefaultHashSize {
+		return errors.New("quorum hash must be 32 bytes long if requesting a signature for a round skip vote")
+	}
+	signItem := types.RoundSkipSignItem(chainID, vote.Height, vote.Round, quorumType, quorumHash)
+	resp, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, signItem)
+	if err != nil {
+		return err
+	}
+	vote.Signature = resp.sign
+	return nil
 }
 
 // QuorumSign implements DashPrivValidator

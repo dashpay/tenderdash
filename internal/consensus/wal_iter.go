@@ -159,6 +159,8 @@ func walMsgHeight(msg WALMessage) (int64, int32, error) {
 			return msg.Vote.Height, msg.Vote.Round, nil
 		case *CommitMessage:
 			return msg.Commit.Height, msg.Commit.Round, nil
+		case *RoundSkipCertificateMessage:
+			return msg.Certificate.Height, msg.Certificate.Round, nil
 		}
 	case timeoutInfo:
 		return m.Height, m.Round, nil
