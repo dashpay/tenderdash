@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tenderdash release"
+  short_description: "Review and release Tenderdash for Dash Platform"
+  default_prompt: "Use $tenderdash-release to review changes and prepare a Dash Platform release plan."

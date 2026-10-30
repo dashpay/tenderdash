@@ -1,35 +1,38 @@
-name: "Release"
+name: Release tooling
 
 on:
-  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.agents/skills/tenderdash-release/**'
+      - 'scripts/release/**'
+      - 'scripts/test-local-gates.sh'
+      - 'Makefile'
+      - '.github/workflows/release.yml'
+  push:
+    branches:
+      - master
+      - dev
+      # Keep both names until the integration-branch migration is complete.
+      - v1.8-dev
+      - v1.9-dev
+    paths:
+      - '.agents/skills/tenderdash-release/**'
+      - 'scripts/release/**'
+      - 'scripts/test-local-gates.sh'
+      - 'Makefile'
+      - '.github/workflows/release.yml'
+
+permissions:
+  contents: read
 
 jobs:
-  goreleaser:
+  release-tooling:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-go@v7.0.0
-        with:
-          go-version: "1.27.3"
-
-      - name: Build
-        uses: goreleaser/goreleaser-action@v7
-        if: ${{ github.event_name == 'pull_request' }}
-        with:
-          version: latest
-          args: build --skip-validate # skip validate skips initial sanity checks in order to be able to fully run
-
-      - run: echo https://github.com/tendermint/tendermint/blob/${GITHUB_REF#refs/tags/}/CHANGELOG.md#${GITHUB_REF#refs/tags/} > ../release_notes.md
-
-      - name: Release
-        uses: goreleaser/goreleaser-action@v7
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          version: latest
-          args: release --rm-dist --release-notes=../release_notes.md
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v7
+      - name: Check local release planning and artifact invariants
+        run: python3 -B -m unittest discover -s scripts/release -p test_release.py
+      - name: Check lint base selection
+        run: sh scripts/test-local-gates.sh
+      - name: Check shell syntax
+        run: bash -n scripts/release/build-artifacts.sh

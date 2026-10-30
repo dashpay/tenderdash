@@ -45,7 +45,7 @@ Find the largest existing ADR number and bump it by 1.
 When the problem as well as proposed solution are well understood,
 changes should start with a [draft
 pull request](https://github.blog/2019-02-14-introducing-draft-pull-requests/)
-against the development branch (latest `vMAJOR.MINOR-dev`). The draft signals
+against the integration branch (`dev`). The draft signals
 that work is underway. When the work
 is ready for feedback, hitting "Ready for Review" will signal to the
 maintainers to take a look.
@@ -66,7 +66,7 @@ structure, comments, tests, and errors.
 
 We use [go modules](https://github.com/golang/go/wiki/Modules) to manage dependencies.
 
-The development branch (latest `vMAJOR.MINOR-dev`) should build cleanly with
+The integration branch (`dev`) should build cleanly with
 `go get`, which means dependencies should be kept up-to-date so we can get away
 with telling people they can just `go get` our software. Since some
 dependencies are not under our control, a third party may break our build, in
@@ -127,39 +127,37 @@ If you are a VS Code user, you may want to add the following to your `.vscode/se
 
 ## Release Notes
 
-Release notes are generated from commit messages by
-`scripts/release/release.sh`. Use
-clear conventional commit summaries so the release tooling can assemble accurate
-notes; `CHANGELOG_PENDING.md` is no longer maintained.
+Release notes are prepared from reviewed history and diffs by
+[the project release skill](.agents/skills/tenderdash-release/SKILL.md). Use
+clear conventional commit summaries to aid review; release decisions also inspect
+the actual diffs and compatibility effects; `CHANGELOG_PENDING.md` is no longer maintained.
 
 ## Branching Model and Release
 
-Tenderdash maintains two primary branches:
+Tenderdash maintains two long-lived source branches:
 
-- `master` for the latest stable release.
-- The highest-versioned `vMAJOR.MINOR-dev` branch for active development.
+- `dev` integrates development for the next Dash Platform release.
+- `master` represents the latest stable release used by Dash Platform.
 
-Find the current development branch with:
+During the planned rename, `v1.8-dev` remains the integration target until
+`dev` exists. This preparation does not rename branches or change protections.
+Use short-lived feature, release-candidate, and hotfix branches as needed; do
+not choose a target by sorting historical versioned branch names.
 
-```sh
-git branch -r --list 'origin/v[0-9]*-dev' --sort=-version:refname | head -1
-```
+Normal feature PRs are squash-merged. Release promotion into `master` and
+forward-merging stable fixes preserve ancestry; maintainers must reconcile
+master's protection rules with the release merge strategy before using it.
+Never bypass protections automatically. See [RELEASES.md](RELEASES.md).
 
-Release tags are cut from `master`. We only maintain `master` and the current
-development branch. Changes merge into the development branch first; `master`
-receives cherry-picked release-critical fixes and release updates.
-
-Note all pull requests should be squash merged. This keeps the commit history
-clean and makes it easy to reference the pull request where a change was
-introduced. The one exception is the full-release PR into `master`, which uses a
-merge commit (see [RELEASES.md](./RELEASES.md)).
+Tenderdash support follows Dash Platform's development and coordinated rollout
+needs. There is no separate promise to maintain the latest two Tenderdash minor
+versions. Security reports still receive coordinated handling under
+[SECURITY.md](SECURITY.md).
 
 ### Development Procedure
 
-The latest state of development is on the development branch (latest
-`vMAJOR.MINOR-dev`), which must keep CI green (build, lint, and tests). _Never_
-force push the development branch, unless fixing broken git history (which we
-rarely do anyways).
+The latest state of development is on the integration branch (`dev`), which
+must keep CI green (build, lint, and tests). Never force-push it.
 
 To begin contributing, create a development branch either on
 `github.com/dashpay/tenderdash`, or your fork (using `git remote add origin`).
@@ -170,10 +168,10 @@ Ensure CI is green; run `make build`, `make lint`, and
 squash-merged, either `git rebase` or `git merge` is fine.) When opening a PR,
 fill in every section of `.github/PULL_REQUEST_TEMPLATE.md`.
 
-If a change needs to land in the latest stable release, coordinate with the
-maintainers and open a follow-up PR against `master` after the development
-branch merge. Follow-up PRs should cherry-pick the relevant commit(s) and are
-typically reserved for release-critical fixes.
+For a stable hotfix, branch from `master`, include only the required fix, and
+forward-port it to integration. A compatible fix already on dev can instead be
+cherry-picked into a stable PR. Coordinate both paths with the Platform release
+owners; do not bring unreleased features into a stable patch.
 
 Once you have submitted a pull request label the pull request with either `R:minor`, if the change should be included in the next minor release, or `R:major`, if the change is meant for a major release.
 
