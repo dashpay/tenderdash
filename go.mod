@@ -2,6 +2,9 @@ module github.com/dashpay/tenderdash
 
 go 1.27.3
 
+// Disable MPTCP listeners to block the known CVE-2026-98432 exploit path.
+godebug multipathtcp=0
+
 require (
 	4d63.com/gocheckcompilerdirectives v1.4.0 // indirect
 	4d63.com/gochecknoglobals v0.2.2 // indirect
@@ -91,7 +94,7 @@ require (
 	github.com/dashpay/dashd-go/btcutil v1.3.0 // indirect
 	github.com/dave/dst v0.28.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0 // indirect
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1 // indirect
 	github.com/denis-tingaikin/go-header v1.0.0 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/dlclark/regexp2/v2 v2.2.1 // indirect
@@ -283,7 +286,7 @@ require (
 
 require (
 	github.com/BurntSushi/toml v1.6.0
-	github.com/btcsuite/btcd/btcec/v2 v2.5.0
+	github.com/btcsuite/btcd/btcec/v2 v2.5.1
 	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce
 	github.com/bufbuild/buf v1.74.0
 	github.com/cosmos/gogoproto v1.7.2
@@ -327,7 +330,7 @@ require (
 	github.com/vektra/mockery/v2 v2.53.5
 	golang.org/x/crypto v0.58.0
 	golang.org/x/exp v0.0.0-20261011100332-faecfb24eb49
-	golang.org/x/net v0.61.0
+	golang.org/x/net v0.62.0
 	golang.org/x/sync v0.24.0
 	golang.org/x/sys v0.49.0
 	golang.org/x/term v0.47.0
