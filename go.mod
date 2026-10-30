@@ -2,6 +2,9 @@ module github.com/dashpay/tenderdash
 
 go 1.27.3
 
+// Disable MPTCP listeners to block the known CVE-2026-98432 exploit path.
+godebug multipathtcp=0
+
 require (
 	4d63.com/gocheckcompilerdirectives v1.4.0 // indirect
 	4d63.com/gochecknoglobals v0.2.2 // indirect
