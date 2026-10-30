@@ -1,6 +1,6 @@
 module github.com/dashpay/tenderdash
 
-go 1.27.1
+go 1.27.3
 
 require (
 	4d63.com/gocheckcompilerdirectives v1.4.0 // indirect
