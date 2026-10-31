@@ -3,9 +3,11 @@ package node
 import (
 	"context"
 	"errors"
+	"maps"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -14,6 +16,7 @@ import (
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/internal/proxy"
+	"github.com/dashpay/tenderdash/internal/pubsub"
 	dbm "github.com/dashpay/tenderdash/libs/db"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/libs/service"
@@ -48,6 +51,18 @@ func (c *dbCloseCounter) provider(ctx *config.DBContext) (dbm.DB, error) {
 	defer c.mtx.Unlock()
 	c.closes[ctx.ID] = 0
 	return countedDB{DB: db, id: ctx.ID, counter: c}, nil
+}
+
+func (c *dbCloseCounter) closed(id string) int {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+	return c.closes[id]
+}
+
+func (c *dbCloseCounter) snapshot() map[string]int {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+	return maps.Clone(c.closes)
 }
 
 func (c *dbCloseCounter) requireEachClosedOnce(t *testing.T, ids ...string) {
@@ -154,6 +169,43 @@ type failedStartClient struct {
 func (c failedStartClient) Start(context.Context) error { return c.err }
 func (failedStartClient) Wait()                         {}
 
+type waitProbeClient struct {
+	abciclient.Client
+	onWait func()
+}
+
+func (c waitProbeClient) Wait() { c.onWait(); c.Client.Wait() }
+
+// The application client is the last child joined, so no node-owned database
+// may be closed yet. Only the indexer, already joined, has closed its sink.
+func TestNodeFailedStartReleasesDatabasesAfterJoiningChildren(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	n, counter := rollbackTestNode(ctx, t, nil)
+	failure := errors.New("startup failed")
+	n.services = append(n.services, failingStartService{err: failure})
+	var atLastJoin map[string]int
+	n.rpcEnv.ProxyApp = waitProbeClient{
+		Client: n.rpcEnv.ProxyApp,
+		onWait: func() { atLastJoin = counter.snapshot() },
+	}
+
+	require.ErrorIs(t, n.Start(ctx), failure)
+	require.Equal(t, map[string]int{"blockstore": 0, "state": 0, "peerstore": 0, "evidence": 0, "tx_index": 1}, atLastJoin)
+	counter.requireEachClosedOnce(t, nodeDatabases...)
+}
+
+// An indexer whose own start fails never drains, so the node closes its sinks.
+func TestNodeIndexerStartFailureClosesEventSinks(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	n, counter := rollbackTestNode(ctx, t, nil)
+	require.NoError(t, n.rpcEnv.EventBus.Observe(ctx, func(pubsub.Message) error { return nil }))
+
+	require.ErrorContains(t, n.Start(ctx), "an observer is already registered")
+	counter.requireEachClosedOnce(t, nodeDatabases...)
+}
+
 // Normal shutdown has the same exactly-once guarantee.
 func TestNodeShutdownClosesEachDatabaseOnce(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -191,4 +243,68 @@ func TestSeedFailedStartReleasesDatabaseOnce(t *testing.T) {
 	n.OnDrain()
 	require.ErrorContains(t, n.Start(ctx), "construct a new node")
 	counter.requireEachClosedOnce(t, "peerstore")
+}
+
+type waitProbeService struct {
+	service.Service
+	onWait func()
+}
+
+func (s waitProbeService) Wait() { s.Service.Wait(); s.onWait() }
+
+// Seed rollback joins PEX, then the router, and only then closes the peer store.
+func TestSeedFailedStartReleasesDatabaseAfterJoiningChildren(t *testing.T) {
+	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
+	require.NoError(t, err)
+	cfg.Mode = config.ModeSeed
+	cfg.P2P.ListenAddress = "tcp://127.0.0.1:0"
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	key, err := types.LoadOrGenNodeKey(cfg.NodeKeyFile())
+	require.NoError(t, err)
+	counter := &dbCloseCounter{closes: map[string]int{}}
+	svc, err := makeSeedNode(ctx, log.NewNopLogger(), cfg, counter.provider, key, defaultGenesisDocProviderFunc(cfg))
+	require.NoError(t, err)
+	n := svc.(*seedNodeImpl)
+	hooks := &seedRouterDrain{router: n.router, stopping: make(chan struct{}), release: make(chan struct{})}
+	n.router.BaseService = service.NewBaseService(log.NewNopLogger(), "test-router", hooks)
+	failure := errors.New("PEX startup failed")
+	pex := &failedSeedPEX{err: failure}
+	pex.BaseService = *service.NewBaseService(log.NewNopLogger(), "test-pex", pex)
+	closesAtPEXJoin := make(chan int, 1)
+	n.pexReactor = waitProbeService{Service: pex, onWait: func() { closesAtPEXJoin <- counter.closed("peerstore") }}
+
+	returned := make(chan error, 1)
+	go func() { returned <- n.Start(ctx) }()
+	releaseRouter := sync.OnceFunc(func() { close(hooks.release) })
+	defer func() { releaseRouter(); n.router.Wait(); n.Wait() }()
+
+	select {
+	case closes := <-closesAtPEXJoin:
+		require.Zero(t, closes, "peer store closed before PEX was joined")
+	case <-time.After(5 * time.Second):
+		t.Fatal("rollback did not join PEX")
+	}
+	select {
+	case <-hooks.stopping:
+	case <-time.After(5 * time.Second):
+		t.Fatal("router was not canceled")
+	}
+	// The router worker cannot exit until released, so rollback must still be
+	// blocked joining it. The window only catches a close that arrives early.
+	select {
+	case err := <-returned:
+		t.Fatalf("Start returned before router cleanup: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	require.Zero(t, counter.closed("peerstore"), "peer store closed before the router was joined")
+
+	releaseRouter()
+	select {
+	case err := <-returned:
+		require.ErrorIs(t, err, failure)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Start did not finish after router drained")
+	}
+	require.Equal(t, 1, counter.closed("peerstore"))
 }

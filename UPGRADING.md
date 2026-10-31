@@ -33,6 +33,11 @@ BaseService joins registered work without calling shutdown hooks. Retry requires
 recreating any child that already started successfully and then stopped.
 A node that fails after reserving its RPC listeners, or a seed node that fails
 startup, closes its databases and rejects another `Start`; construct a new node.
+In the same process that panics with `duplicate metrics collector registration
+attempted` for a seed, or for a node with Prometheus enabled, unless
+`Instrumentation.Namespace` differs. An RPC listener bind failure stays retryable
+and keeps the stores open, with no `service.Service` call to release them if you
+give up. Rollback and shutdown do not release a full node's Dash Core RPC client.
 
 Direct consensus `State.Stop` drains a commit already in progress using the
 context originally passed to `State.Start`. Cancel that parent to abort it;

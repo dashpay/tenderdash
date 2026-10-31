@@ -78,11 +78,20 @@ and finally releases application connections and stores.
 
 Arbitrary injected ABCI clients cannot be recreated by the routed wrapper. The
 node reserves RPC listeners before starting children, so retry after listener
-failure remains supported without restarting successful child lifetimes, and
-keeps the node's stores open for that retry. Any later node startup failure, and
-any seed startup failure, is final: rollback releases stores, event sinks and
-other owned resources exactly once, later `Stop` and `Wait` calls are no-ops, and
-another `Start` is rejected. Construct a fresh node graph instead.
+failure remains supported without restarting successful child lifetimes. That
+failure keeps the node's stores open for the retry, and `service.Service` offers
+no way to release them if the caller gives up instead.
+
+Any later node startup failure, and any seed startup failure, is final: rollback
+closes the databases, event sinks and other resources registered as node closers
+exactly once, later `Stop` and `Wait` calls are no-ops, and another `Start` is
+rejected. The Dash Core RPC client created for a full node has no closer, so it is
+not released by rollback or by shutdown.
+
+Recover from a final failure by constructing a fresh node graph. Metrics register
+on the process-wide default registry, so a second build in the same process panics
+with `duplicate metrics collector registration attempted` for a seed, or for a
+node with Prometheus enabled, unless `Instrumentation.Namespace` differs.
 
 ## Cancellation compatibility audit
 
