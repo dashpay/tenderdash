@@ -862,9 +862,14 @@ func (cfg *P2PConfig) ValidateBasic() error {
 	if cfg.RecvRate < 0 {
 		return fmt.Errorf("recv-rate must be >= 0 bytes/second, got %d", cfg.RecvRate)
 	}
-	if cfg.MaxOutgoingConnections > cfg.MaxConnections {
-		return fmt.Errorf("max-outgoing-connections must be <= max-connections (%d), got %d",
-			cfg.MaxConnections, cfg.MaxOutgoingConnections)
+	// The node runs max-connections = 0 with the default limit.
+	maxConnections := cfg.MaxConnections
+	if maxConnections == 0 {
+		maxConnections = DefaultP2PConfig().MaxConnections
+	}
+	if cfg.MaxOutgoingConnections > maxConnections {
+		return fmt.Errorf("max-outgoing-connections must be <= effective max-connections (%d), got %d",
+			maxConnections, cfg.MaxOutgoingConnections)
 	}
 	if cfg.MaxIncomingConnectionTime < 0 {
 		return fmt.Errorf("max-incoming-connection-time must be a non-negative duration (0 disables it), got %s",

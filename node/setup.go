@@ -235,7 +235,7 @@ func createPeerManager(
 	case cfg.P2P.MaxConnections > 0:
 		maxConns = cfg.P2P.MaxConnections
 	default:
-		maxConns = 64
+		maxConns = config.DefaultP2PConfig().MaxConnections
 	}
 
 	var maxOutgoingConns uint16

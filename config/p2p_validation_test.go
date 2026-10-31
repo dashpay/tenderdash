@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -52,6 +53,15 @@ func TestConfigValidateBasicIncludesP2P(t *testing.T) {
 			errContains: "max-outgoing-connections",
 		},
 		{
+			// 0 falls back to the default limit, which still bounds outgoing.
+			name: "MoreOutgoingThanDefaultTotalConnections",
+			mutate: func(c *P2PConfig) {
+				c.MaxConnections = 0
+				c.MaxOutgoingConnections = DefaultP2PConfig().MaxConnections + 1
+			},
+			errContains: "max-outgoing-connections",
+		},
+		{
 			name:        "NegativeMaxIncomingConnectionTime",
 			mutate:      func(c *P2PConfig) { c.MaxIncomingConnectionTime = -1 * time.Second },
 			errContains: "max-incoming-connection-time",
@@ -97,4 +107,16 @@ func TestConfigValidateBasicIncludesP2P(t *testing.T) {
 		cfg.Mode = ModeFull
 		require.NoError(t, cfg.P2P.ValidateBasic(), "a default [p2p] section must remain valid")
 	})
+
+	// The node runs max-connections = 0 with the default limit, so outgoing values
+	// within that limit are valid configurations.
+	for _, outgoing := range []uint16{0, 12, DefaultP2PConfig().MaxConnections} {
+		t.Run(fmt.Sprintf("DefaultTotalConnectionsAllowsOutgoing%d", outgoing), func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Mode = ModeFull
+			cfg.P2P.MaxConnections = 0
+			cfg.P2P.MaxOutgoingConnections = outgoing
+			require.NoError(t, cfg.P2P.ValidateBasic())
+		})
+	}
 }
