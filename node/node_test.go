@@ -7,6 +7,7 @@ import (
 	"math"
 	"net"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -41,6 +42,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/store"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmnet "github.com/dashpay/tenderdash/libs/net"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
 	"github.com/dashpay/tenderdash/libs/service"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
@@ -1064,8 +1066,9 @@ func loadStatefromGenesis(_ctx context.Context, t *testing.T) sm.State {
 }
 
 // TestConnectionLimitAppliesEverywhere pins that the validator, the peer manager and
-// the transport enforce one limit. The transport reads 0 as unlimited, so a raw value
-// reaching it leaves the listener accepting connections the peer manager will refuse.
+// the listener createRouter builds enforce one limit. The transport reads 0 as
+// unlimited, so a raw value reaching it leaves the listener accepting connections the
+// peer manager will refuse.
 func TestConnectionLimitAppliesEverywhere(t *testing.T) {
 	defaultLimit := config.DefaultP2PConfig().MaxConnections
 	for _, tc := range []struct {
@@ -1106,8 +1109,57 @@ func TestConnectionLimitAppliesEverywhere(t *testing.T) {
 					"the connection past the limit must be refused")
 			})
 
-			t.Run("transport", func(t *testing.T) {
-				require.Equal(t, uint32(tc.want), mconnTransportOptions(cfg).MaxAcceptedConnections)
+			t.Run("listener", func(t *testing.T) {
+				if runtime.GOOS != "linux" {
+					t.Skip("dials from 127.0.0.0/8 source addresses, which only Linux routes by default")
+				}
+
+				port, err := tmnet.GetFreePort()
+				require.NoError(t, err)
+				cfg.P2P.ListenAddress = fmt.Sprintf("tcp://127.0.0.1:%d", port)
+
+				nodeKey := types.GenNodeKey()
+				peerManager, closePeerManager, err := createPeerManager(ctx, cfg,
+					func(*config.DBContext) (dbm.DB, error) { return dbm.NewMemDB(), nil },
+					nodeKey.ID, p2p.NopMetrics(), log.NewNopLogger())
+				require.NoError(t, err)
+				defer func() { require.NoError(t, closePeerManager()) }()
+
+				router, err := createRouter(log.NewNopLogger(), p2p.NopMetrics(),
+					func() *types.NodeInfo { return &types.NodeInfo{NodeID: nodeKey.ID} },
+					nodeKey, peerManager, cfg, nil)
+				require.NoError(t, err)
+				require.NoError(t, router.Start(ctx))
+				defer router.Stop()
+
+				// A distinct source address per connection keeps the per-IP connection
+				// window from closing any of them. The server opens the handshake, so a
+				// first byte proves that connection holds a listener slot.
+				var conns []net.Conn
+				defer func() {
+					for _, conn := range conns {
+						_ = conn.Close()
+					}
+				}()
+				firstByte := func(source int) (int, error) {
+					dialer := net.Dialer{LocalAddr: &net.TCPAddr{IP: net.IPv4(127, 0, 1, byte(source)).To4()}}
+					conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", port))
+					require.NoError(t, err)
+					conns = append(conns, conn)
+					require.NoError(t, conn.SetReadDeadline(time.Now().Add(10*time.Second)))
+					return conn.Read(make([]byte, 1))
+				}
+
+				for i := 1; i <= int(tc.want); i++ {
+					n, err := firstByte(i)
+					require.NoError(t, err, "connection %d is within the limit", i)
+					require.Equal(t, 1, n)
+				}
+
+				n, err := firstByte(int(tc.want) + 1)
+				require.Zero(t, n, "the connection past the limit must be closed before any handshake")
+				require.Error(t, err)
+				require.False(t, os.IsTimeout(err), "the connection past the limit must be closed, not held: %v", err)
 			})
 		})
 	}

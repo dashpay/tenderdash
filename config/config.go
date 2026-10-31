@@ -774,7 +774,8 @@ type P2PConfig struct { //nolint: maligned
 	MaxConnections uint16 `mapstructure:"max-connections"`
 
 	// MaxOutgoingConnections defines the maximum number of outgoing connections. It must
-	// not exceed MaxConnections; 0 uses half of MaxConnections.
+	// not exceed MaxConnections; 0 uses half of MaxConnections, rounded down. At
+	// MaxConnections = 1 that is 0, which leaves outgoing without a separate cap.
 	MaxOutgoingConnections uint16 `mapstructure:"max-outgoing-connections"`
 
 	// MaxIncomingConnectionAttempts rate limits the number of incoming connection

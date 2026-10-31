@@ -20,7 +20,7 @@ Rules now enforced, and the values that fail:
 | `max-packet-msg-payload-size` | > 0 bytes | `0` and any negative value |
 | `send-rate` | >= 0 bytes/second | any negative value |
 | `recv-rate` | >= 0 bytes/second | any negative value |
-| `max-outgoing-connections` | <= `max-connections` | any larger value |
+| `max-outgoing-connections` | <= effective `max-connections` (`0` uses the default of 64) | any larger value |
 | `max-incoming-connection-time` | duration >= 0 (`0` disables it) | any negative duration |
 | `incoming-connection-window` | duration >= `1ms` | `0s`, and anything under `1ms` |
 | `allowlist-only` | `true` requires `persistent-peers` or `bootstrap-peers` | `true` with both empty |
