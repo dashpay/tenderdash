@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -21,6 +23,7 @@ import (
 type fakeUpstream struct {
 	mtx        sync.Mutex
 	events     map[string][]string
+	failed     map[string]bool // queries whose subscribe gets an RPC error
 	conn       *websocket.Conn
 	subscribes []string
 }
@@ -52,8 +55,14 @@ func (u *fakeUpstream) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		}
 		u.mtx.Lock()
 		u.subscribes = append(u.subscribes, params.Query)
-		events := u.events[params.Query]
+		events, failed := u.events[params.Query], u.failed[params.Query]
 		u.mtx.Unlock()
+		if failed {
+			if err := conn.WriteJSON(req.MakeErrorf(rpctypes.CodeInternalError, "subscribe failed")); err != nil {
+				return
+			}
+			continue
+		}
 		for _, query := range events {
 			res := req.MakeResponse(coretypes.ResultEvent{
 				Query:          query,
@@ -188,7 +197,7 @@ func TestUnsubscribeAllDuringResubscribe(t *testing.T) {
 
 	reconnecting(t, w, upstream)
 	resubscribed := make(chan struct{})
-	go func() { defer close(resubscribed); w.redoSubscriptionsAfter(0) }()
+	go func() { defer close(resubscribed); w.redoSubscriptionsAfter(ctx, 0) }()
 	// Nothing observable marks the resubscribe blocking on the stopped writer; this
 	// window only lets it get there, and cannot fail correct code.
 	<-time.After(50 * time.Millisecond)
@@ -240,5 +249,130 @@ func TestSubscribeAfterRepeatedUnsubscribeAllBlocksNormally(t *testing.T) {
 	for range events {
 		require.Eventually(t, func() bool { return len(later) == 1 }, 5*time.Second, time.Millisecond)
 		requireEvent(t, later, "later")
+	}
+}
+
+// goroutinesIn counts running goroutines with a frame in the named function.
+func goroutinesIn(function string) int {
+	stacks := make([]byte, 1<<24)
+	return strings.Count(string(stacks[:runtime.Stack(stacks, true)]), function+"(")
+}
+
+func requireStopReturns(t *testing.T, w *wsEvents) {
+	t.Helper()
+	stopped := make(chan error, 1)
+	go func() { stopped <- w.Stop() }()
+	select {
+	case err := <-stopped:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop did not return")
+	}
+}
+
+// An upstream RPC error sends eventListener into a delayed resubscribe. Ending the
+// context there must end the worker, not strand it on a send nobody receives.
+func TestStopJoinsListenerDuringResubscribe(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	listeners := goroutinesIn("(*wsEvents).eventListener")
+	srv := httptest.NewServer(&fakeUpstream{failed: map[string]bool{"q": true}})
+	t.Cleanup(srv.Close)
+	w, err := newWsEvents(srv.URL)
+	require.NoError(t, err)
+	w.resubscribeDelay = time.Hour // only cancellation can end this delay
+	require.NoError(t, w.Start(ctx))
+	_, err = w.Subscribe(ctx, "", "q")
+	require.NoError(t, err)
+	require.Eventually(t, func() bool { return goroutinesIn("(*wsEvents).redoSubscriptionsAfter") == 1 },
+		5*time.Second, time.Millisecond)
+
+	cancel()
+	requireStopReturns(t, w)
+	require.Equal(t, listeners, goroutinesIn("(*wsEvents).eventListener"), "eventListener outlived Stop")
+}
+
+// A subscriber that stopped reading must not turn the join into a shutdown hang.
+func TestStopJoinsListenerBlockedOnSubscriber(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	listeners := goroutinesIn("(*wsEvents).eventListener")
+	upstream := &fakeUpstream{events: map[string][]string{"q": {"q", "q", "q"}}}
+	w := startWsEvents(ctx, t, upstream)
+	q, err := w.Subscribe(ctx, "", "q")
+	require.NoError(t, err)
+	require.Eventually(t, func() bool { return len(q) == 1 }, 5*time.Second, time.Millisecond)
+
+	cancel()
+	requireStopReturns(t, w)
+	require.Equal(t, listeners, goroutinesIn("(*wsEvents).eventListener"), "eventListener outlived Stop")
+}
+
+// After the client shuts down by itself the context can still be live, and then
+// only Stop can release a delivery no subscriber is reading.
+func TestStopListenerReleasesDeliveryWithLiveContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	listeners := goroutinesIn("(*wsEvents).eventListener")
+	upstream := &fakeUpstream{events: map[string][]string{"q": {"q", "q", "q"}}}
+	w := startWsEvents(ctx, t, upstream)
+	q, err := w.Subscribe(ctx, "", "q")
+	require.NoError(t, err)
+	require.Eventually(t, func() bool { return len(q) == 1 }, 5*time.Second, time.Millisecond)
+
+	stopped := make(chan struct{})
+	go func() { w.stopListener(); close(stopped) }()
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("stopListener blocked on a subscriber not reading")
+	}
+	require.Equal(t, listeners, goroutinesIn("(*wsEvents).eventListener"), "eventListener outlived stopListener")
+}
+
+// Starting fails cleanly, and a client that never ran has nothing to join.
+func TestStopWithoutRunningListener(t *testing.T) {
+	w, err := newWsEvents("tcp://127.0.0.1:1")
+	require.NoError(t, err)
+	require.Error(t, w.Start(context.Background()))
+	requireStopReturns(t, w)
+}
+
+// Stop must not report completion while the event loop can still run, here held
+// on a lock that does not observe cancellation.
+func TestStopWaitsForListenerToExit(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	upstream := &fakeUpstream{events: map[string][]string{"q": {"q"}}}
+	w := startWsEvents(ctx, t, upstream)
+	w.mtx.Lock()
+	unlock := sync.OnceFunc(w.mtx.Unlock)
+	defer unlock()
+	require.NoError(t, w.ws.Subscribe(ctx, "q"))
+	require.Eventually(t, func() bool {
+		stacks := make([]byte, 1<<24)
+		for _, stack := range strings.Split(string(stacks[:runtime.Stack(stacks, true)]), "\n\n") {
+			if strings.Contains(stack, "(*wsEvents).eventListener(") && strings.Contains(stack, "RLock") {
+				return true
+			}
+		}
+		return false
+	}, 5*time.Second, time.Millisecond)
+
+	cancel()
+	stopped := make(chan error, 1)
+	go func() { stopped <- w.Stop() }()
+	// Nothing observable marks Stop blocking; this window cannot fail correct code.
+	select {
+	case err := <-stopped:
+		t.Fatalf("Stop returned while the event loop was still running: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	unlock()
+	select {
+	case err := <-stopped:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop did not return after the event loop could exit")
 	}
 }

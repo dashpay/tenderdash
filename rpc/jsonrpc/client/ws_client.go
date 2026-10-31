@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	mrand "math/rand"
 	"net"
@@ -25,6 +26,9 @@ type wsOptions struct {
 	WriteWait            time.Duration // deadline for any write op
 	PingPeriod           time.Duration // frequency with which pings are sent
 }
+
+// errClientStopped reports a send to a client that has shut down.
+var errClientStopped = errors.New("websocket client stopped")
 
 // defaultWSOptions are the default websocket connection settings.
 var defaultWSOptions = wsOptions{
@@ -70,6 +74,8 @@ type WSClient struct { //nolint: maligned
 	// reconnectDone closes when reconnectRoutine exits; no workers start after that.
 	reconnectDone  chan struct{}
 	closeResponses sync.Once
+	// callbacks tracks running onReconnect calls. Only reconnectRoutine adds to it.
+	callbacks sync.WaitGroup
 
 	mtx          sync.RWMutex
 	reconnecting bool
@@ -171,6 +177,7 @@ func (c *WSClient) Stop() error {
 		return nil
 	}
 	<-c.reconnectDone
+	c.callbacks.Wait()
 	c.closeResponsesCh()
 	return nil
 }
@@ -193,8 +200,8 @@ func (c *WSClient) IsReconnecting() bool {
 }
 
 // Send the given RPC request to the server. Results will be available on
-// ResponsesCh, errors, if any, on ErrorsCh. Will block until send succeeds or
-// ctx.Done is closed.
+// ResponsesCh, errors, if any, on ErrorsCh. Will block until send succeeds, ctx.Done
+// is closed or the client has shut down.
 func (c *WSClient) Send(ctx context.Context, request rpctypes.RPCRequest) error {
 	select {
 	case c.send <- request:
@@ -205,6 +212,8 @@ func (c *WSClient) Send(ctx context.Context, request rpctypes.RPCRequest) error 
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	case <-c.reconnectDone:
+		return errClientStopped
 	}
 }
 
@@ -288,7 +297,11 @@ func (c *WSClient) reconnect(ctx context.Context) error {
 		} else {
 			c.Logger.Info("reconnected")
 			if c.onReconnect != nil {
-				go c.onReconnect()
+				c.callbacks.Add(1)
+				go func() {
+					defer c.callbacks.Done()
+					c.onReconnect()
+				}()
 			}
 			return nil
 		}

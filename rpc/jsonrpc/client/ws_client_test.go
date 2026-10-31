@@ -545,3 +545,67 @@ func TestHTTPDialerObservesContext(t *testing.T) {
 	_, err := makeHTTPDialer("tcp", "127.0.0.1:1")(ctx, "", "")
 	require.ErrorIs(t, err, context.Canceled)
 }
+
+// Stop joins a reconnect callback already running, which may still use the client.
+func TestWSClientStopJoinsReconnectCallback(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s := httptest.NewServer(&myTestHandler{t: t, closeConnAfterRead: true})
+	t.Cleanup(s.Close)
+	c, err := NewWS("//"+s.Listener.Addr().String(), "/websocket")
+	require.NoError(t, err)
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	c.OnReconnect(func() {
+		close(entered)
+		<-release
+	})
+	require.NoError(t, c.Start(ctx))
+	require.NoError(t, c.Call(ctx, "drop", make(map[string]interface{})))
+	select {
+	case <-entered:
+	case <-time.After(2 * wsCallTimeout):
+		close(release)
+		t.Fatal("reconnect callback did not run")
+	}
+
+	cancel()
+	stopped := make(chan error, 1)
+	go func() { stopped <- c.Stop() }()
+	// Nothing observable marks Stop blocking; this window cannot fail correct code.
+	select {
+	case err := <-stopped:
+		close(release)
+		t.Fatalf("Stop returned before the reconnect callback finished: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case err := <-stopped:
+		require.NoError(t, err)
+	case <-time.After(wsCallTimeout):
+		t.Fatal("Stop did not return after the reconnect callback finished")
+	}
+}
+
+// A send needs the writer, so it cannot wait for one that will never return.
+func TestWSClientSendFailsAfterShutdown(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s := httptest.NewServer(&myTestHandler{t: t})
+	t.Cleanup(s.Close)
+	c, err := NewWS("//"+s.Listener.Addr().String(), "/websocket")
+	require.NoError(t, err)
+	require.NoError(t, c.Start(ctx))
+	cancel()
+	require.NoError(t, c.Stop())
+
+	sent := make(chan error, 1)
+	go func() { sent <- c.Call(context.Background(), "late", make(map[string]interface{})) }()
+	select {
+	case err := <-sent:
+		require.ErrorIs(t, err, errClientStopped)
+	case <-time.After(wsCallTimeout):
+		t.Fatal("Send blocked on a client that has shut down")
+	}
+}

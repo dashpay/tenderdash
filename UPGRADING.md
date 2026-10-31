@@ -26,7 +26,9 @@ ends or the attempts run out, instead of returning while a reconnect could still
 start workers. Dials now observe that context and fail after ten seconds, including
 the one in `Start`, so a peer that never answers the handshake cannot block either
 call. Once the context ends, `Stop` waits at most for a write in progress to hit
-its ten-second deadline.
+its ten-second deadline. It also joins `OnReconnect` callbacks, which must return
+once the context ends, and `Send` fails once the client has shut down. Stopping the
+HTTP RPC client also joins its event listener and resubscriptions.
 
 `rpc/jsonrpc/server.Serve` and `ServeTLS` always close the listener before
 returning, including when TLS setup fails. Cancellation now reaches request
