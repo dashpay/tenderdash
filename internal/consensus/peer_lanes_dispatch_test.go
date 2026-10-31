@@ -596,13 +596,11 @@ func (l *flipOnErrorLogger) Error(msg string, keyVals ...interface{}) {
 	l.Logger.Error(msg, keyVals...)
 }
 
-// A handler error must not be reported as a peer error once the connection that
-// produced the message has ended. The top-of-loop liveness check and the handler
-// share no lock, so a reconnect (peerDown then peerUp swapping the NodeID's
-// generation) can slip in between them; re-checking liveness before the peer
-// error is raised is what keeps that window from blaming the reconnected peer for
-// a message its live connection never sent. Without the re-check the error is
-// raised against whichever generation the NodeID now holds.
+// A handler error that does not prove misbehavior must not be reported as a peer error
+// once the connection that produced the message has ended. The top-of-loop liveness
+// check and the handler share no lock, so a reconnect (peerDown then peerUp swapping the
+// NodeID's generation) can slip in between them; re-checking liveness before the peer
+// error is raised keeps that window from charging the peer for such a rejection.
 func TestStaleConnectionHandlerErrorIsNotReportedAfterReconnect(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
@@ -640,14 +638,14 @@ func TestStaleConnectionHandlerErrorIsNotReportedAfterReconnect(t *testing.T) {
 	voteCh := p2p.NewChannel(p2p.ConsensusVoteChannel, "vote", inCh, outCh, errCh)
 	go r.processMsgCh(ctx, voteCh, channelBundle{vote: voteCh})
 
-	// A malformed envelope from the peer's live g1 connection: it passes the
+	// An unrecognized payload from the peer's live g1 connection: it passes the
 	// top-of-loop check, fails MsgFromProto in the handler, and reaches the peer-
 	// error raise — by which point the hook has reconnected the NodeID as g2.
 	inCh <- p2p.Envelope{
 		From:      peerID,
 		ConnID:    g1,
 		ChannelID: p2p.ConsensusVoteChannel,
-		Message:   &tmcons.Commit{},
+		Message:   &tmproto.Validator{},
 	}
 	// A control message from a peer that never reconnects, whose report proves the
 	// stale one ahead of it was already processed.
@@ -830,6 +828,45 @@ func isPeerVoteRecord(vote *types.Vote) func(WALMessage) bool {
 		}
 		voteMsg, ok := mi.Msg.(*VoteMessage)
 		return ok && voteMsg.Vote == vote
+	}
+}
+
+// Invalid data proves the sender misbehaved whatever happened to its connection since,
+// so the report survives a reconnect, fenced to the connection that sent it.
+func TestStaleConnectionInvalidDataIsReportedAfterReconnect(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	const peerID = types.NodeID("reconnector")
+	const g1, g2 = uint64(1), uint64(2)
+	cs, _ := makeState(ctx, t, makeStateArgs{validators: 4})
+
+	base := log.NewNopLogger()
+	inCh := make(chan p2p.Envelope, 1)
+	errCh := make(chan p2p.PeerError, 1)
+	ps := NewPeerState(base, peerID)
+	r := &Reactor{
+		logger:        &flipOnErrorLogger{Logger: base, flip: func() { ps.SetLaneAdmission(g2, cs.msgInfoQueue.admitPeer(peerID)) }},
+		state:         cs,
+		Metrics:       NopMetrics(),
+		peers:         map[types.NodeID]*PeerState{peerID: ps},
+		readySignal:   make(chan struct{}),
+		voteRateLimit: client.NewRateLimitWithBurst(ctx, 1, voteRateBurst, true, base),
+		dataRateLimit: client.NewRateLimitWithBurst(ctx, 0, 1, true, base),
+	}
+	ps.SetLaneAdmission(g1, cs.msgInfoQueue.admitPeer(peerID))
+	close(r.readySignal)
+	voteCh := p2p.NewChannel(p2p.ConsensusVoteChannel, "vote", inCh, nil, errCh)
+	go r.processMsgCh(ctx, voteCh, channelBundle{vote: voteCh})
+
+	inCh <- p2p.Envelope{From: peerID, ConnID: g1, ChannelID: p2p.ConsensusVoteChannel, Message: &tmcons.Commit{}}
+
+	select {
+	case reported := <-errCh:
+		require.Equal(t, g1, reported.ConnID, "the report must stay fenced to the connection that sent it")
+		require.ErrorIs(t, reported.Err, p2p.ErrInvalidData)
+	case <-time.After(10 * time.Second):
+		t.Fatal("established invalid data must be reported after a reconnect")
 	}
 }
 

@@ -3,6 +3,7 @@ package consensus
 import (
 	"bytes"
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 
 	"github.com/dashpay/tenderdash/dash"
 	"github.com/dashpay/tenderdash/internal/p2p"
+	dbm "github.com/dashpay/tenderdash/libs/db"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -63,6 +65,49 @@ func TestCommitPeerErrorCarriesConnID(t *testing.T) {
 	report := <-f.node.peerErrorQueue.ch
 	require.Equal(t, types.NodeID("forger"), report.PeerID)
 	require.Equal(t, g1, report.ConnID, "the fatal report must be fenced to the sending connection")
+}
+
+// A verified failure outlives its connection: the report must still reach the router
+// after peerDown, so the identity pays, and its generation keeps the replacement safe.
+func TestPeerErrorRoutineForwardsAfterPeerDown(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	peerID := types.NodeID(strings.Repeat("b2", 20))
+	cs, _ := makeState(ctx, t, makeStateArgs{validators: 1})
+	r := &Reactor{
+		logger: log.NewNopLogger(),
+		state:  cs,
+		peers:  map[types.NodeID]*PeerState{peerID: NewPeerState(log.NewNopLogger(), peerID)},
+	}
+
+	pm, err := p2p.NewPeerManager(ctx, types.NodeID(strings.Repeat("a1", 20)), dbm.NewMemDB(),
+		p2p.PeerManagerOptions{MaxConnected: 10})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, pm.Close()) })
+	require.NoError(t, pm.Accepted(peerID))
+	oldConn := pm.Ready(ctx, peerID, nil)
+
+	// Peer-down runs before the routine ever drains the verified failure.
+	cs.peerErrorQueue.ch <- peerErrorMsg{PeerID: peerID, ConnID: oldConn, Err: types.ErrInvalidCommitSignature{}, Fatal: true}
+	r.peerDown(ctx, p2p.PeerUpdate{NodeID: peerID, Status: p2p.PeerStatusDown}, channelBundle{})
+	pm.Disconnected(ctx, peerID)
+	require.NoError(t, pm.Accepted(peerID))
+	require.Greater(t, pm.Ready(ctx, peerID, nil), oldConn)
+
+	errCh := make(chan p2p.PeerError, 1)
+	go r.peerErrorRoutine(ctx, p2p.NewChannel(p2p.ConsensusStateChannel, "state", nil, nil, errCh))
+
+	select {
+	case got := <-errCh:
+		require.Equal(t, oldConn, got.ConnID)
+		pm.ErroredConn(got.NodeID, got.ConnID, got.Err)
+		evicted, err := pm.TryEvictNext()
+		require.NoError(t, err)
+		require.Empty(t, evicted, "the report must not evict the replacement connection")
+	case <-time.After(10 * time.Second):
+		t.Fatal("a verified failure must be forwarded after its sender disconnected")
+	}
 }
 
 // peerErrorRoutine must forward the originating generation to the router.
