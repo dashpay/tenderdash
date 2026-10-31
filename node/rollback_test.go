@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -80,10 +81,14 @@ func rollbackTestNode(
 	ctx context.Context,
 	t *testing.T,
 	wrapApp func(abciclient.Client) abciclient.Client,
+	configure ...func(*config.Config),
 ) (*nodeImpl, *dbCloseCounter) {
 	t.Helper()
 	cfg, err := config.ResetTestRoot(t.TempDir(), strings.ReplaceAll(t.Name(), "/", "-"))
 	require.NoError(t, err)
+	for _, apply := range configure {
+		apply(cfg)
+	}
 	cfg.RPC.ListenAddress = ""
 	cfg.P2P.ListenAddress = "tcp://127.0.0.1:0"
 	cfg.TxIndex.Indexer = []string{"kv"}
@@ -159,6 +164,59 @@ func TestNodeFailedStartReleasesDatabasesOnce(t *testing.T) {
 		n.Wait()
 		counter.requireEachClosedOnce(t, nodeDatabases...)
 	})
+}
+
+// Releasing resources during rollback must not replace the startup error.
+func TestNodeFailedStartKeepsErrorWhenReleaseFails(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	n, _ := rollbackTestNode(ctx, t, nil)
+	release := n.shutdownOps
+	n.shutdownOps = func() error { return errors.Join(release(), errors.New("release failed")) }
+	failure := errors.New("startup failed")
+	n.rpcEnv.ProxyApp = failedStartClient{Client: abcimocks.NewClient(t), err: failure}
+
+	err := n.Start(ctx)
+	require.ErrorIs(t, err, failure)
+	require.NotContains(t, err.Error(), "release failed")
+}
+
+// coreRPCWorkers counts running Dash Core RPC client dispatchers.
+func coreRPCWorkers() int {
+	stacks := make([]byte, 1<<24)
+	return strings.Count(string(stacks[:runtime.Stack(stacks, true)]), "rpcclient.(*Client).sendPostHandler(")
+}
+
+// A full node owns the Dash Core RPC client it creates, unlike a validator, whose
+// client belongs to its private validator.
+func TestFullNodeReleasesCoreRPCClient(t *testing.T) {
+	fullNode := func(cfg *config.Config) {
+		cfg.Mode = config.ModeFull
+		cfg.PrivValidator.CoreRPCHost = "127.0.0.1:1"
+	}
+	failure := errors.New("startup failed")
+	testCases := map[string]func(context.Context, context.CancelFunc, *testing.T, *nodeImpl){
+		"failed start": func(ctx context.Context, _ context.CancelFunc, t *testing.T, n *nodeImpl) {
+			n.rpcEnv.ProxyApp = failedStartClient{Client: abcimocks.NewClient(t), err: failure}
+			require.ErrorIs(t, n.Start(ctx), failure)
+		},
+		"shutdown": func(ctx context.Context, cancel context.CancelFunc, t *testing.T, n *nodeImpl) {
+			require.NoError(t, n.Start(ctx))
+			cancel()
+			n.Wait()
+		},
+	}
+	for name, run := range testCases {
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			before := coreRPCWorkers()
+			n, _ := rollbackTestNode(ctx, t, nil, fullNode)
+			require.Equal(t, before+1, coreRPCWorkers(), "the full node did not create its client")
+			run(ctx, cancel, t, n)
+			require.Equal(t, before, coreRPCWorkers(), "the Dash Core RPC client outlived the node")
+		})
+	}
 }
 
 type failedStartClient struct {

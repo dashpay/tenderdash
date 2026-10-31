@@ -237,6 +237,8 @@ func makeNode(
 		if err != nil {
 			return nil, fmt.Errorf("failed to create Dash Core RPC client: %w", err)
 		}
+		// A validator's client belongs to its private validator instead.
+		closers = append(closers, dashCoreRPCClient.Close)
 	}
 
 	weAreOnlyValidator := onlyValidatorIsUs(state, proTxHash)

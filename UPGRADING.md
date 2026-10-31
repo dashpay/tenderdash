@@ -37,7 +37,8 @@ In the same process that panics with `duplicate metrics collector registration
 attempted` for a seed, or for a node with Prometheus enabled, unless
 `Instrumentation.Namespace` differs. An RPC listener bind failure stays retryable
 and keeps the stores open, with no `service.Service` call to release them if you
-give up. Rollback and shutdown do not release a full node's Dash Core RPC client.
+give up. A Dash Core request stuck at shutdown can outlive the client's `Close`,
+whose join gives up after five seconds and logs an error.
 
 Direct consensus `State.Stop` drains a commit already in progress using the
 context originally passed to `State.Start`. Cancel that parent to abort it;

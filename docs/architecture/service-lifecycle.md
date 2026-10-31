@@ -85,8 +85,9 @@ no way to release them if the caller gives up instead.
 Any later node startup failure, and any seed startup failure, is final: rollback
 closes the databases, event sinks and other resources registered as node closers
 exactly once, later `Stop` and `Wait` calls are no-ops, and another `Start` is
-rejected. The Dash Core RPC client created for a full node has no closer, so it is
-not released by rollback or by shutdown.
+rejected. A Dash Core request stuck at shutdown can outlive the client's `Close`:
+the pinned client has no HTTP timeout, so the join gives up after five seconds and
+logs an error.
 
 Recover from a final failure by constructing a fresh node graph. Metrics register
 on the process-wide default registry, so a second build in the same process panics
