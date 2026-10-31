@@ -136,12 +136,15 @@ func NewRoutedClient(logger log.Logger, defaultClient Client, routing Routing) (
 // clients the caller already started keep their own lifetime.
 func (cli *routedClient) OnStart(ctx context.Context) error {
 	cli.owned = nil
+	// Client does not require Stop, and BaseService cancels ctx only after OnStart
+	// returns, so this context is what ends a child before a rollback joins it.
+	childCtx, cancelChildren := context.WithCancel(ctx)
 	var errs error
 	for _, client := range cli.clients() {
 		if client.IsRunning() {
 			continue
 		}
-		if err := client.Start(ctx); err != nil {
+		if err := client.Start(childCtx); err != nil {
 			errs = multierror.Append(errs, err)
 			continue
 		}
@@ -149,16 +152,19 @@ func (cli *routedClient) OnStart(ctx context.Context) error {
 	}
 	// A failed attempt gets no OnStop; release what it started before returning.
 	if errs != nil {
+		cancelChildren()
 		cli.stopOwned()
 		return errs
 	}
 
 	if !cli.Go(ctx, func(ctx context.Context) {
+		defer cancelChildren()
 		<-ctx.Done()
 		for _, client := range cli.owned {
 			client.Wait()
 		}
 	}) {
+		cancelChildren()
 		cli.stopOwned()
 	}
 	return nil
