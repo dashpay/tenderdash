@@ -3,8 +3,11 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -366,4 +369,179 @@ func TestWSClientStopWithoutStart(t *testing.T) {
 	case <-time.After(wsCallTimeout):
 		t.Fatal("Stop blocked on a client that never started")
 	}
+}
+
+func requireStopReturns(t *testing.T, c *WSClient) {
+	t.Helper()
+	stopped := make(chan error, 1)
+	go func() { stopped <- c.Stop() }()
+	select {
+	case err := <-stopped:
+		require.NoError(t, err)
+	case <-time.After(wsCallTimeout):
+		t.Fatal("Stop did not return")
+	}
+}
+
+// listenWithoutAnswering returns the address of a peer that never answers the
+// upgrade, and a channel signaled once a client has sent its upgrade request.
+func listenWithoutAnswering(t *testing.T) (string, <-chan net.Conn) {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ln.Close() })
+	accepted := make(chan net.Conn, 8)
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			t.Cleanup(func() { _ = conn.Close() })
+			if _, err := conn.Read(make([]byte, 1)); err == nil {
+				accepted <- conn
+			}
+		}
+	}()
+	return "//" + ln.Addr().String(), accepted
+}
+
+// The first dial observes the context passed to Start.
+func TestWSClientStartCanceledDuringHungHandshake(t *testing.T) {
+	addr, accepted := listenWithoutAnswering(t)
+	c, err := NewWS(addr, "/websocket")
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started := make(chan error, 1)
+	go func() { started <- c.Start(ctx) }()
+	<-accepted
+
+	cancel()
+	select {
+	case err := <-started:
+		require.Error(t, err)
+	case <-time.After(wsCallTimeout):
+		t.Fatal("Start blocked on a hung handshake after its context ended")
+	}
+	require.NoError(t, c.Stop())
+}
+
+// A peer that never answers cannot block a dial forever, even with a live context.
+func TestWSClientHandshakeTimesOut(t *testing.T) {
+	addr, _ := listenWithoutAnswering(t)
+	c, err := NewWS(addr, "/websocket")
+	require.NoError(t, err)
+	c.handshakeTimeout = 50 * time.Millisecond
+	started := make(chan error, 1)
+	go func() { started <- c.Start(context.Background()) }()
+	select {
+	case err := <-started:
+		require.Error(t, err)
+	case <-time.After(wsCallTimeout):
+		t.Fatal("handshake did not time out")
+	}
+}
+
+// Stop follows the context even when a redial is stuck in its handshake.
+func TestWSClientStopDuringHungRedial(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	var accepted atomic.Int32
+	srv := &http.Server{
+		ReadHeaderTimeout: wsCallTimeout,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if accepted.Add(1) == 1 {
+				conn, err := upgrader.Upgrade(w, r, nil)
+				if err == nil {
+					_ = conn.UnderlyingConn().Close() // the client sees 1006 and redials
+				}
+				return
+			}
+			<-r.Context().Done() // never answers
+		}),
+	}
+	go func() { _ = srv.Serve(ln) }()
+	t.Cleanup(func() { _ = srv.Close() })
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c, err := NewWS("//"+ln.Addr().String(), "/websocket")
+	require.NoError(t, err)
+	require.NoError(t, c.Start(ctx))
+	require.Eventually(t, func() bool { return accepted.Load() == 2 }, 2*wsCallTimeout, time.Millisecond)
+
+	cancel()
+	requireStopReturns(t, c)
+}
+
+// A writer stuck in a write outlives its context and the reconnect routine. Stop
+// must still join it, and it must not block reporting the error once it fails.
+func TestWSClientStopJoinsWorkerFailingAfterReconnectExit(t *testing.T) {
+	serverConn := make(chan *websocket.Conn, 1)
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err == nil {
+			serverConn <- conn // never reads, so the client's send path fills
+		}
+	}))
+	t.Cleanup(s.Close)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c, err := NewWS("//"+s.Listener.Addr().String(), "/websocket")
+	require.NoError(t, err)
+	require.NoError(t, c.Start(ctx))
+	peer := <-serverConn
+	t.Cleanup(func() { _ = peer.Close() })
+	// Call returns once the writer has taken the request, too big for socket buffers.
+	require.NoError(t, c.Call(ctx, "big", map[string]interface{}{"x": strings.Repeat("a", 64<<20)}))
+	cancel()
+	select {
+	case <-c.reconnectDone:
+	case <-time.After(wsCallTimeout):
+		t.Fatal("reconnect routine did not exit")
+	}
+
+	stopped := make(chan error, 1)
+	go func() { stopped <- c.Stop() }()
+	// Nothing observable marks Stop blocking; this window cannot fail correct code.
+	select {
+	case err := <-stopped:
+		t.Fatalf("Stop returned while the writer could still use the client: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	// The reader reports this and closes the connection, so the write fails too.
+	require.NoError(t, peer.WriteControl(websocket.CloseMessage,
+		websocket.FormatCloseMessage(websocket.CloseGoingAway, "bye"), time.Now().Add(time.Second)))
+	select {
+	case err := <-stopped:
+		require.NoError(t, err)
+	case <-time.After(wsCallTimeout):
+		t.Fatal("Stop did not return after the workers failed")
+	}
+}
+
+// Each run gets its own shutdown.
+func TestWSClientRestartAfterStop(t *testing.T) {
+	s := httptest.NewServer(&myTestHandler{t: t})
+	t.Cleanup(s.Close)
+	c, err := NewWS("//"+s.Listener.Addr().String(), "/websocket")
+	require.NoError(t, err)
+	for range 2 {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		require.NoError(t, c.Start(ctx))
+		cancel()
+		requireStopReturns(t, c)
+		requireResponsesClosed(t, c)
+	}
+}
+
+// The dialer shared with the HTTP client observes its context, so a cancellation
+// does not wait out the connect timeout of an unreachable peer.
+func TestHTTPDialerObservesContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := makeHTTPDialer("tcp", "127.0.0.1:1")(ctx, "", "")
+	require.ErrorIs(t, err, context.Canceled)
 }

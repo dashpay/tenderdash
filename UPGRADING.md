@@ -23,7 +23,10 @@ subscription workers.
 `WSClient.Stop` is safe to call repeatedly and concurrently, including after
 reconnect attempts run out. During a reconnect it now blocks until the context
 ends or the attempts run out, instead of returning while a reconnect could still
-start workers.
+start workers. Dials now observe that context and fail after ten seconds, including
+the one in `Start`, so a peer that never answers the handshake cannot block either
+call. Once the context ends, `Stop` waits at most for a write in progress to hit
+its ten-second deadline.
 
 `rpc/jsonrpc/server.Serve` and `ServeTLS` always close the listener before
 returning, including when TLS setup fails. Cancellation now reaches request
