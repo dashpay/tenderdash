@@ -17,6 +17,7 @@ import (
 type (
 	errBlockFetch struct {
 		peerID types.NodeID
+		connID uint64
 		height int64
 		err    error
 	}
@@ -36,35 +37,37 @@ func blockFetchJobHandler(blockClient client.BlockClient, peer PeerData, height 
 		ctx = client.WithBlockRequestObserver(ctx, observation)
 		promise, err := blockClient.GetBlock(ctx, height, peer.peerID)
 		if err != nil {
-			return errorResult(peer.peerID, height, err)
+			return errorResult(peer, height, err)
 		}
 		protoResp, err := promise.Await()
 		if err != nil {
-			return errorResult(peer.peerID, height, err)
+			return errorResult(peer, height, err)
 		}
 		resp, err := BlockResponseFromProto(protoResp, peer.peerID)
 		if err != nil {
-			return errorResult(peer.peerID, height, err)
+			return errorResult(peer, height, err)
 		}
 		err = resp.Validate()
 		if err != nil {
-			return errorResult(peer.peerID, height, err)
+			return errorResult(peer, height, err)
 		}
 		if resp.Block.Height != height {
-			return errorResult(peer.peerID, height,
+			return errorResult(peer, height,
 				fmt.Errorf("peer sent block at height %d, requested height %d", resp.Block.Height, height))
 		}
+		resp.ConnID = peer.connID
 		size = protoResp.Size()
 		return workerpool.Result{Value: resp}
 	}
 }
 
-func errorResult(peerID types.NodeID, height int64, err error) workerpool.Result {
+func errorResult(peer PeerData, height int64, err error) workerpool.Result {
 	return workerpool.Result{
 		Err: &errBlockFetch{
 			err:    err,
 			height: height,
-			peerID: peerID,
+			peerID: peer.peerID,
+			connID: peer.connID,
 		},
 	}
 }

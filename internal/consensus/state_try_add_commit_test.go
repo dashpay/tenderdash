@@ -78,7 +78,7 @@ func TestHandleCommitVerifyErrorClassification(t *testing.T) {
 				metrics:        NopMetrics(),
 			}
 
-			action.handleCommitVerifyError(tc.err, peerID, tc.fromReplay)
+			action.handleCommitVerifyError(tc.err, peerID, 0, tc.fromReplay)
 
 			if !tc.wantEvict {
 				require.Empty(t, queue.ch, "peer must not be evicted for %v", tc.err)
@@ -132,7 +132,7 @@ func TestHandleCommitVerifyErrorRecordsPeerVerificationBudgetDrop(t *testing.T) 
 			metrics.VerificationBudgetDrops = counter
 			action := &TryAddCommitAction{metrics: metrics}
 
-			action.handleCommitVerifyError(tc.verificationErr, tc.peerID, tc.fromReplay)
+			action.handleCommitVerifyError(tc.verificationErr, tc.peerID, 0, tc.fromReplay)
 
 			require.Equal(t, tc.wantDrops, counter.value)
 		})
@@ -145,7 +145,7 @@ func TestHandleCommitVerifyErrorRecordsPeerVerificationBudgetDrop(t *testing.T) 
 func TestHandleCommitVerifyErrorNilQueue(t *testing.T) {
 	action := &TryAddCommitAction{metrics: NopMetrics()}
 	assert.NotPanics(t, func() {
-		action.handleCommitVerifyError(types.ErrInvalidCommitSignature{}, "peer", false)
+		action.handleCommitVerifyError(types.ErrInvalidCommitSignature{}, "peer", 0, false)
 	})
 }
 
@@ -157,7 +157,7 @@ func TestHandleCommitVerifyErrorQueueFull(t *testing.T) {
 
 	action := &TryAddCommitAction{peerErrorQueue: queue, metrics: NopMetrics()}
 	assert.NotPanics(t, func() {
-		action.handleCommitVerifyError(types.ErrInvalidCommitSignature{}, "peer", false)
+		action.handleCommitVerifyError(types.ErrInvalidCommitSignature{}, "peer", 0, false)
 	})
 	assert.Len(t, queue.ch, 1, "the pre-existing report must be preserved")
 }

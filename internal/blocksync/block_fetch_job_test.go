@@ -107,6 +107,33 @@ func (suite *BlockFetchJobTestSuite) TestExecuteHeightMismatch() {
 	suite.requireError("peer sent block at height 6, requested height 5", res.Err)
 }
 
+// TestExecuteCarriesPeerConnection pins that a job's outcome stays attributed to the
+// connection generation the peer was reserved under, including a timeout, which has
+// no response envelope to take a generation from.
+func (suite *BlockFetchJobTestSuite) TestExecuteCarriesPeerConnection() {
+	ctx := context.Background()
+	const connID = uint64(7)
+	peer := suite.peer
+	peer.connID = connID
+
+	suite.client.
+		On("GetBlock", mock.Anything, int64(2), peer.peerID).
+		Once().
+		Return(suite.getBlockReturnFunc(suite.promiseResolve(2)), nil)
+	res := blockFetchJobHandler(suite.client, peer, 2)(ctx)
+	suite.Require().NoError(res.Err)
+	suite.Require().Equal(connID, res.Value.(*BlockResponse).ConnID)
+
+	suite.client.
+		On("GetBlock", mock.Anything, int64(3), peer.peerID).
+		Once().
+		Return(suite.getBlockReturnFunc(suite.promiseReject(client.ErrPeerNotResponded)), nil)
+	res = blockFetchJobHandler(suite.client, peer, 3)(ctx)
+	bfErr := &errBlockFetch{}
+	suite.Require().ErrorAs(res.Err, &bfErr)
+	suite.Require().Equal(connID, bfErr.connID)
+}
+
 func TestBlockResponseValidate(t *testing.T) {
 	block := func(h int64) *types.Block {
 		return &types.Block{Header: types.Header{Height: h}}

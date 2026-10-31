@@ -363,7 +363,8 @@ func (suite *BlockP2PMessageHandlerTestSuite) TestHandleStatusResponse() {
 			if tc.wantAdded {
 				suite.fakePeerAdder.
 					On("AddPeer", mock.MatchedBy(func(peerData PeerData) bool {
-						return peerData.height == tc.wantHeight && peerData.base == tc.wantBase
+						return peerData.height == tc.wantHeight && peerData.base == tc.wantBase &&
+							peerData.connID == 1
 					})).
 					Once()
 			}

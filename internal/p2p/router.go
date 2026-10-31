@@ -46,8 +46,11 @@ type RouterOptions struct {
 	MaxIncomingConnectionAttempts uint
 
 	// IncomingConnectionWindow describes how often an IP address
-	// can attempt to create a new connection. Defaults to 10
-	// milliseconds, and cannot be less than 1 millisecond.
+	// can attempt to create a new connection. Cannot be less than 1
+	// millisecond. A zero value here selects 100 milliseconds, which is the
+	// configless default for programmatic construction; a node built from
+	// configuration takes the documented 10 millisecond default instead, and
+	// rejects an explicit zero.
 	IncomingConnectionWindow time.Duration
 
 	// FilterPeerByIP is used by the router to inject filtering
@@ -92,7 +95,7 @@ func (o *RouterOptions) Validate() error {
 	case o.IncomingConnectionWindow == 0:
 		o.IncomingConnectionWindow = 100 * time.Millisecond
 	case o.IncomingConnectionWindow < time.Millisecond:
-		return fmt.Errorf("incomming connection window must be grater than 1m [%s]",
+		return fmt.Errorf("incoming connection window must be at least 1ms, got %s",
 			o.IncomingConnectionWindow)
 	}
 
@@ -381,30 +384,41 @@ func (r *Router) routeChannel(
 			}
 
 		case peerError := <-errCh:
-			disconnect := r.peerManager.ShouldDisconnectOnError(peerError.NodeID, peerError.Fatal)
-			r.logger.Error("peer error",
-				"peer", peerError.NodeID,
-				"err", peerError.Err,
-				"disconnecting", disconnect,
-			)
-
-			if disconnect {
-				// The error is fatal, or all peer slots
-				// are in use and this peer is one we may
-				// shed to relieve the pressure.
-				r.peerManager.Errored(peerError.NodeID, peerError.Err)
-			} else {
-				// this just decrements the peer
-				// score.
-				r.peerManager.processPeerEvent(ctx, PeerUpdate{
-					NodeID: peerError.NodeID,
-					Status: PeerStatusBad,
-				})
-			}
+			r.reportPeerError(ctx, peerError)
 
 		case <-ctx.Done():
 			return
 		}
+	}
+}
+
+// invalidDataConnection is a Connection that retains the peer-attributable
+// failure, if any, that ended it. Transports mark only provably peer-sent data.
+type invalidDataConnection interface {
+	invalidDataErr() error
+}
+
+// reportPeerError records a bad-peer event even when eviction is required, so
+// ordinary peers retain their penalty across reconnects. Reserved peers keep
+// the peer manager's scoring exemption and protection from capacity eviction.
+// Eviction is fenced to peerError.ConnID; the score penalty is not.
+func (r *Router) reportPeerError(ctx context.Context, peerError PeerError) {
+	disconnect := r.peerManager.ShouldDisconnectOnError(peerError.NodeID,
+		peerError.Fatal || errors.Is(peerError.Err, ErrInvalidData))
+
+	r.logger.Debug("peer error",
+		"peer", peerError.NodeID,
+		"err", peerError.Err,
+		"disconnecting", disconnect,
+	)
+
+	r.peerManager.processPeerEvent(ctx, PeerUpdate{
+		NodeID: peerError.NodeID,
+		Status: PeerStatusBad,
+	})
+
+	if disconnect {
+		r.peerManager.ErroredConn(peerError.NodeID, peerError.ConnID, peerError.Err)
 	}
 }
 
@@ -748,7 +762,7 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 
 	go func() {
 		select {
-		case errCh <- r.receivePeer(ioCtx, peerID, conn, connID):
+		case errCh <- r.receivePeer(ctx, ioCtx, peerID, conn, connID):
 		case <-ioCtx.Done():
 		}
 		wg.Done()
@@ -786,6 +800,20 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 	wg.Wait()
 	r.logger.Trace("routePeer: all goroutines finished", "peer", peerID, "err", err)
 
+	// Terminal invalid-data accounting belongs to the connection, not to the I/O
+	// worker that happened to observe teardown first: run it once, after both
+	// workers finished, with the router context they cannot cancel.
+	if failed, ok := conn.(invalidDataConnection); ok {
+		if invalid := failed.invalidDataErr(); invalid != nil {
+			r.reportPeerError(ctx, PeerError{NodeID: peerID, Err: invalid, ConnID: connID})
+			// Never hide an internal failure that won the teardown race.
+			if err == nil || err == io.EOF ||
+				errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				err = invalid
+			}
+		}
+	}
+
 	// Drain the error channel; these should typically not be interesting
 FOR:
 	for {
@@ -807,9 +835,11 @@ FOR:
 		err = ctxErr
 	}
 
-	switch err {
-	case nil, io.EOF:
+	switch {
+	case err == nil || err == io.EOF:
 		r.logger.Info("peer disconnected", "peer", peerID, "endpoint", conn)
+	case isPeerInputError(err):
+		r.logger.Debug("peer failure", "peer", peerID, "endpoint", conn, "err", err)
 	default:
 		r.logger.Error("peer failure", "peer", peerID, "endpoint", conn, "err", err)
 	}
@@ -863,15 +893,16 @@ func (r *Router) completePeerDeliveries(peerID types.NodeID) {
 }
 
 // receivePeer receives inbound messages from a peer, deserializes them and
-// passes them on to the appropriate channel.
-func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Connection, connID uint64) error {
+// passes them on to the appropriate channel. ioCtx ends the connection's I/O;
+// ctx is the router lifecycle, which the competing send worker cannot cancel.
+func (r *Router) receivePeer(ctx, ioCtx context.Context, peerID types.NodeID, conn Connection, connID uint64) error {
 	timeout := time.NewTimer(0)
 	defer timeout.Stop()
 
 	for {
-		chID, bz, err := conn.ReceiveMessage(ctx)
+		chID, bz, err := conn.ReceiveMessage(ioCtx)
 		if err != nil {
-			return err
+			return err // a transport's invalid-data failure is accounted by routePeer
 		}
 
 		r.channelMtx.RLock()
@@ -888,14 +919,24 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 
 		var protoEnvelope p2p.Envelope
 		if err := proto.Unmarshal(bz, &protoEnvelope); err != nil {
-			r.logger.Error("message decoding failed, dropping message", "peer", peerID, "err", err)
-			continue
+			// Authenticated frames must contain valid protobuf, even with unknown fields.
+			err = fmt.Errorf("%w: undecodable message: %w", ErrInvalidData, err)
+			r.reportPeerError(ctx, PeerError{NodeID: peerID, Err: err, ConnID: connID})
+			return err
 		}
 		envelope, err := EnvelopeFromProto(protoEnvelope)
 		if err != nil {
-			// A policy rejection of a peer-supplied value, not an unexpected decode
-			// failure: any peer can trigger it on demand, so it must not be Error.
-			r.logger.Debug("envelope rejected, dropping message", "peer", peerID, "err", err)
+			if errors.Is(err, ErrTooManyEnvelopeAttributes) || errors.Is(err, ErrEnvelopeAttributesTooLarge) {
+				err = fmt.Errorf("%w: %w", ErrInvalidData, err)
+				r.reportPeerError(ctx, PeerError{NodeID: peerID, Err: err, ConnID: connID})
+				return err
+			}
+			// Unknown payloads can reflect version skew; apply ordinary peer-error policy.
+			r.reportPeerError(ctx, PeerError{
+				NodeID: peerID,
+				ConnID: connID,
+				Err:    fmt.Errorf("%w: envelope payload: %w", ErrUnrecognizedMessage, err),
+			})
 			continue
 		}
 		envelope.From = peerID
@@ -941,7 +982,7 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 				"took", time.Since(start).String(),
 			)
 
-		case <-ctx.Done():
+		case <-ioCtx.Done():
 			r.logger.Debug("receivePeer: ctx is done", "peer", peerID, "channel", chID)
 			return nil
 		}
@@ -1010,7 +1051,7 @@ func (r *Router) sendPeer(ctx context.Context, peerID types.NodeID, conn Connect
 // evictPeers evicts connected peers as requested by the peer manager.
 func (r *Router) evictPeers(ctx context.Context) {
 	for {
-		peerID, err := r.peerManager.EvictNext(ctx)
+		peerID, connID, err := r.peerManager.EvictNextConn(ctx)
 
 		switch {
 		case errors.Is(err, context.Canceled):
@@ -1020,17 +1061,34 @@ func (r *Router) evictPeers(ctx context.Context) {
 			return
 		}
 
-		r.logger.Info("evicting peer", "peer", peerID)
+		r.evictPeer(peerID, connID)
+	}
+}
 
-		r.peerMtx.RLock()
-		queue, ok := r.peerQueues[peerID]
-		r.peerMtx.RUnlock()
+// evictPeer closes the send queue of the connection generation connID selected
+// for eviction.
+func (r *Router) evictPeer(peerID types.NodeID, connID uint64) {
+	r.logger.Info("evicting peer", "peer", peerID)
 
-		r.metrics.PeersEvicted.Add(1)
+	r.peerMtx.RLock()
+	queue, ok := r.peerQueues[peerID]
+	r.peerMtx.RUnlock()
 
-		if ok {
-			queue.close()
-		}
+	// Lookup-then-isLiveConn is safe without a shared lock. connID was live when
+	// selected and generations never revive, so if it is live now it was live at
+	// the lookup. While it is live the peer manager admits no other connection
+	// for peerID (Accepted/Dialed), and routePeer cleanup deletes the queue before
+	// Disconnected, so the queue found can only be connID's. It is then closed,
+	// never re-resolved: a replacement admitted later gets its own queue.
+	if ok && connID != 0 && !r.peerManager.isLiveConn(peerID, connID) {
+		r.logger.Debug("skipping eviction of ended connection", "peer", peerID)
+		return
+	}
+
+	r.metrics.PeersEvicted.Add(1)
+
+	if ok {
+		queue.close()
 	}
 }
 

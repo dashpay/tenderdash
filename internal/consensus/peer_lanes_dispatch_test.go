@@ -832,3 +832,42 @@ func isPeerVoteRecord(vote *types.Vote) func(WALMessage) bool {
 		return ok && voteMsg.Vote == vote
 	}
 }
+
+// A peer error must carry the generation of the connection that sent the
+// message, so the router can refuse to evict a replacement connection for it.
+func TestPeerErrorCarriesOriginatingConnection(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	const peerID = types.NodeID("sender")
+	const g1 = uint64(7)
+	cs, _ := makeState(ctx, t, makeStateArgs{validators: 4})
+
+	base := log.NewNopLogger()
+	inCh := make(chan p2p.Envelope, 1)
+	errCh := make(chan p2p.PeerError, 1)
+	ps := NewPeerState(base, peerID)
+	r := &Reactor{
+		logger:        base,
+		state:         cs,
+		Metrics:       NopMetrics(),
+		peers:         map[types.NodeID]*PeerState{peerID: ps},
+		readySignal:   make(chan struct{}),
+		voteRateLimit: client.NewRateLimitWithBurst(ctx, 1, voteRateBurst, true, base),
+		dataRateLimit: client.NewRateLimitWithBurst(ctx, 0, 1, true, base),
+	}
+	ps.SetLaneAdmission(g1, cs.msgInfoQueue.admitPeer(peerID))
+	close(r.readySignal)
+	voteCh := p2p.NewChannel(p2p.ConsensusVoteChannel, "vote", inCh, nil, errCh)
+	go r.processMsgCh(ctx, voteCh, channelBundle{vote: voteCh})
+
+	inCh <- p2p.Envelope{From: peerID, ConnID: g1, ChannelID: p2p.ConsensusVoteChannel, Message: &tmcons.Commit{}}
+
+	select {
+	case reported := <-errCh:
+		require.Equal(t, peerID, reported.NodeID)
+		require.Equal(t, g1, reported.ConnID, "peer error must name the connection that sent the message")
+	case <-time.After(30 * time.Second):
+		t.Fatal("malformed message was not reported")
+	}
+}

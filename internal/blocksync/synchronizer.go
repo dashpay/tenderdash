@@ -348,7 +348,7 @@ func (s *Synchronizer) consumeJobResult(ctx, applyCtx context.Context) error {
 			"failures", maxConsecutiveFailures,
 			"error", bfErr.err)
 		s.RemovePeer(bfErr.peerID)
-		_ = s.client.Send(ctx, p2p.PeerError{NodeID: bfErr.peerID, Err: bfErr})
+		_ = s.client.Send(ctx, p2p.PeerError{NodeID: bfErr.peerID, Err: bfErr, ConnID: bfErr.connID})
 		return nil
 	}
 	resp := res.Value.(*BlockResponse)
@@ -359,7 +359,7 @@ func (s *Synchronizer) consumeJobResult(ctx, applyCtx context.Context) error {
 			s.logger.Error("cannot add a block to the pending list",
 				"height", resp.Block.Height,
 				"error", err.Error())
-			_ = s.client.Send(ctx, p2p.PeerError{NodeID: resp.PeerID, Err: err})
+			_ = s.client.Send(ctx, p2p.PeerError{NodeID: resp.PeerID, Err: err, ConnID: resp.ConnID})
 			return nil
 		}
 		// A duplicate is not the sending peer's fault, we asked more than one peer for
@@ -384,7 +384,7 @@ func (s *Synchronizer) consumeJobResult(ctx, applyCtx context.Context) error {
 			"peer", failed.PeerID,
 			"error", err.Error())
 		s.RemovePeer(failed.PeerID)
-		_ = s.client.Send(ctx, p2p.PeerError{NodeID: failed.PeerID, Err: err})
+		_ = s.client.Send(ctx, p2p.PeerError{NodeID: failed.PeerID, Err: err, ConnID: failed.ConnID})
 	}
 	return nil
 }
@@ -772,6 +772,8 @@ func (s *Synchronizer) runHandler(ctx context.Context, handler func(ctx context.
 // BlockResponse ...
 type BlockResponse struct {
 	PeerID types.NodeID
+	// ConnID is the connection generation failures of this response are fenced to.
+	ConnID uint64
 	Block  *types.Block
 	Commit *types.Commit
 	// Size is the serialized size of Block in bytes, measured while decoding the

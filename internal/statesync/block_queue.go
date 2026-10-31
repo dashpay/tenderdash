@@ -13,6 +13,8 @@ import (
 type lightBlockResponse struct {
 	block *types.LightBlock
 	peer  types.NodeID
+	// connID is the generation of the connection that delivered block.
+	connID uint64
 }
 
 // a block queue is used for asynchronously fetching and verifying light blocks

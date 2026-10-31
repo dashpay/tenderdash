@@ -254,3 +254,63 @@ func TestConnTrackerSweepEvictsExpired(t *testing.T) {
 			"stale entry %s older than the window must be swept away", ip)
 	}
 }
+
+// TestConnTrackerWindowAppliesAtAnyConnCount asserts the reconnect window is
+// enforced no matter how many connections the address currently holds.
+//
+// This is what makes eviction stick. An attacker who parks one idle connection
+// keeps the address's connection count above zero, so an evicted second
+// connection could previously be re-established immediately: the window was
+// only consulted when the count had fallen to zero.
+func TestConnTrackerWindowAppliesAtAnyConnCount(t *testing.T) {
+	const window = time.Hour
+	ip := net.ParseIP("192.0.2.10")
+
+	t.Run("ReconnectWhileAnotherConnIsOpen", func(t *testing.T) {
+		ct := newConnTracker(10, window)
+		require.NoError(t, ct.AddConn(ip), "first connection accepted")
+		require.Error(t, ct.AddConn(ip),
+			"second connection within the window must be rejected even though the first is still open")
+	})
+
+	t.Run("EvictedConnCannotReturnBehindAParkedConn", func(t *testing.T) {
+		ct := newConnTracker(10, window).(*connTrackerImpl)
+		require.NoError(t, ct.AddConn(ip), "parked connection")
+		ct.mutex.Lock()
+		ct.lastConnect[connKey(ip, ct.ipv6PrefixBits)] = time.Now().Add(-2 * window)
+		ct.mutex.Unlock()
+		require.NoError(t, ct.AddConn(ip), "second connection after the window")
+		ct.RemoveConn(ip)
+		require.Equal(t, 1, ct.Len(), "the parked connection must remain")
+		require.Error(t, ct.AddConn(ip),
+			"an evicted peer must not reconnect inside the window by keeping another connection open")
+	})
+
+	t.Run("WindowStillExpires", func(t *testing.T) {
+		const short = 20 * time.Millisecond
+		ct := newConnTracker(10, short)
+		require.NoError(t, ct.AddConn(ip), "first connection accepted")
+		time.Sleep(2 * short)
+		require.NoError(t, ct.AddConn(ip),
+			"once the window has elapsed a second connection is accepted again")
+	})
+}
+
+// TestConnTrackerIgnoresAddresslessConns asserts connections with no IP endpoint
+// are not rate limited against each other. connKey maps them all to one bucket,
+// so tracking them would make unrelated peers on the in-process memory transport
+// throttle one another.
+func TestConnTrackerIgnoresAddresslessConns(t *testing.T) {
+	ct := newConnTracker(1, time.Hour)
+
+	for i := 0; i < 5; i++ {
+		require.NoError(t, ct.AddConn(nil),
+			"a nil IP must never be rate limited")
+		require.NoError(t, ct.AddConn(net.IP{}),
+			"an empty IP must never be rate limited")
+	}
+	require.Equal(t, 0, ct.Len(), "address-less connections must not occupy tracker slots")
+
+	ct.RemoveConn(nil)
+	require.Equal(t, 0, ct.Len())
+}

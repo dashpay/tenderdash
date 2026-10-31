@@ -832,3 +832,35 @@ func (suite *ChannelTestSuite) TestBlockObserverConcurrentReplyAndCancellation()
 		suite.Equal(1, finishes)
 	}
 }
+
+type rejectingHandler struct{}
+
+func (rejectingHandler) Handle(context.Context, *Client, *p2p.Envelope) error {
+	return errors.New("rejected")
+}
+
+// Envelope-derived peer errors must name the connection that delivered the
+// envelope, so a report drained after a reconnect cannot evict the replacement.
+func (suite *ChannelTestSuite) TestIterPeerErrorsCarryConnID() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var got []p2p.PeerError
+	suite.p2pChannel.
+		On("SendError", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) { got = append(got, args.Get(1).(p2p.PeerError)) }).
+		Return(nil)
+
+	unsolicited := newEnvelope(uuid.NewString(), suite.peerID, suite.response)
+	unsolicited.AddAttribute(ResponseIDAttribute, uuid.NewString())
+	unsolicited.ConnID = 7
+	pipe := make(chan p2p.Envelope, 2)
+	pipe <- *unsolicited
+	pipe <- p2p.Envelope{From: suite.peerID, ConnID: 8, Message: &bcproto.StatusRequest{}}
+	close(pipe)
+
+	suite.Require().NoError(suite.client.iter(ctx, p2p.NewChannelIterator(pipe), rejectingHandler{}))
+	suite.Require().Len(got, 2)
+	suite.Equal(uint64(7), got[0].ConnID, "resolve failure")
+	suite.Equal(uint64(8), got[1].ConnID, "handler failure")
+}
