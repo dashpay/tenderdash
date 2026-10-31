@@ -23,6 +23,9 @@ type wsEvents struct {
 
 	mtx           sync.RWMutex
 	subscriptions map[string]*wsSubscription
+	// cleared closes when UnsubscribeAll forgets the subscriptions read with it,
+	// and is then replaced. Both fields are guarded by mtx.
+	cleared chan struct{}
 }
 
 type wsSubscription struct {
@@ -37,6 +40,7 @@ func newWsEvents(remote string) (*wsEvents, error) {
 	w := &wsEvents{
 		Logger:        log.NewNopLogger(),
 		subscriptions: make(map[string]*wsSubscription),
+		cleared:       make(chan struct{}),
 	}
 
 	var err error
@@ -123,17 +127,17 @@ func (w *wsEvents) Unsubscribe(ctx context.Context, _subscriber, query string) e
 // UnsubscribeAll implements SubscriptionClient by using WSClient to
 // unsubscribe given subscriber from all the queries.
 //
-// It returns an error if wsEvents is not running.
+// It returns an error if wsEvents is not running. Subscriptions are forgotten
+// even then: a reconnect must not restore one whose channel nobody reads, which
+// would stall every other subscription on the single events loop.
 func (w *wsEvents) UnsubscribeAll(ctx context.Context, _subscriber string) error {
-	if err := w.ws.UnsubscribeAll(ctx); err != nil {
-		return err
-	}
-
 	w.mtx.Lock()
-	defer w.mtx.Unlock()
 	w.subscriptions = make(map[string]*wsSubscription)
+	close(w.cleared)
+	w.cleared = make(chan struct{})
+	w.mtx.Unlock()
 
-	return nil
+	return w.ws.UnsubscribeAll(ctx)
 }
 
 // After being reconnected, it is necessary to redo subscription to server
@@ -143,17 +147,34 @@ func (w *wsEvents) redoSubscriptionsAfter(d time.Duration) {
 
 	ctx := context.TODO()
 
+	// Sending can block until the writer restarts, so no lock is held across it.
+	// eventListener writes to the map under RLock, so reading it here needs Lock.
 	w.mtx.Lock()
-	defer w.mtx.Unlock()
-
+	queries := make([]string, 0, len(w.subscriptions))
 	for q, info := range w.subscriptions {
 		if q != "" && q == info.id {
 			continue
 		}
-		err := w.ws.Subscribe(ctx, q)
-		if err != nil {
+		queries = append(queries, q)
+	}
+	w.mtx.Unlock()
+
+	for _, q := range queries {
+		w.mtx.Lock()
+		_, ok := w.subscriptions[q]
+		w.mtx.Unlock()
+		if !ok {
+			continue
+		}
+		// If q is forgotten during this send, it stays subscribed upstream until
+		// the next reconnect. That is harmless: eventListener drops events for
+		// unknown queries, and subscribing to q again gets ErrAlreadySubscribed,
+		// which it ignores.
+		if err := w.ws.Subscribe(ctx, q); err != nil {
 			w.Logger.Error("failed to resubscribe", "query", q, "err", err)
+			w.mtx.Lock()
 			delete(w.subscriptions, q)
+			w.mtx.Unlock()
 		}
 	}
 }
@@ -199,11 +220,12 @@ func (w *wsEvents) eventListener(ctx context.Context) {
 					w.subscriptions[result.SubscriptionID] = out
 				}
 			}
-
+			cleared := w.cleared
 			w.mtx.RUnlock()
 			if ok {
 				select {
 				case out.res <- *result:
+				case <-cleared:
 				case <-ctx.Done():
 					return
 				}
