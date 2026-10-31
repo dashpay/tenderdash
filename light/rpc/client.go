@@ -54,6 +54,9 @@ type Client struct {
 	keyPathFn KeyPathFunc
 
 	serviceCtx context.Context
+	// callerOwnsNext records that next was already running when this client
+	// started. Lifecycle hooks never overlap, so OnStart's write precedes OnDrain.
+	callerOwnsNext bool
 }
 
 var _ rpcclient.Client = (*Client)(nil)
@@ -107,6 +110,10 @@ func NewClient(logger log.Logger, next rpcclient.Client, lc LightClient, opts ..
 
 func (c *Client) OnStart(ctx context.Context) error {
 	c.serviceCtx = ctx
+	// A local client shares its node's event bus, whose Start ignores ctx if it is
+	// already running. Clients not reporting their state are started here.
+	running, ok := c.next.(interface{ IsRunning() bool })
+	c.callerOwnsNext = ok && running.IsRunning()
 	if err := c.next.Start(ctx); err != nil {
 		return err
 	}
@@ -116,8 +123,12 @@ func (c *Client) OnStart(ctx context.Context) error {
 
 func (c *Client) OnStop() {}
 
-// OnDrain joins clients exposing transport shutdown in addition to the RPC API.
+// OnDrain joins clients exposing transport shutdown in addition to the RPC API,
+// unless the caller had already started them and so controls their lifetime.
 func (c *Client) OnDrain() {
+	if c.callerOwnsNext {
+		return
+	}
 	if waiter, ok := c.next.(interface{ Wait() }); ok {
 		waiter.Wait()
 	} else if stopper, ok := c.next.(interface{ Stop() error }); ok {
