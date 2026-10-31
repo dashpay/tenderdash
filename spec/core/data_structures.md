@@ -112,9 +112,8 @@ The steps to validate a new block are:
     - This is where checking the signatures correspond to the correct block will be made.
 - Make sure the proposer is part of the validator set.
 - Validate bock time.
-    - Make sure the new blocks time is after the previous blocks time.
-    - Calculate the medianTime and check it against the blocks time.
-    - If the blocks height is the initial height then check if it matches the genesis time.
+    - Above the initial height, make sure the block's time is after the previous block's time.
+    - At the initial height, make sure the block's time is not before the genesis time.
 - Validate the evidence in the block. Note: Evidence can be empty
 
 ## Header
@@ -131,8 +130,8 @@ the data in the current block, the previous block, and the results returned by t
 | LastBlockID | [BlockID](#blockid) | BlockID of the previous block. | Must adhere to the validation rules of [blockID](#blockid). The first block has `block.Header.LastBlockID == BlockID{}`. |
 | LastCommitHash | slice of bytes (`[]byte`) | MerkleRoot of the lastCommit's signatures. The signatures represent the validators that committed to the last block. The first block has an empty slices of bytes for the hash. | Must  be of length 32 |
 | DataHash | slice of bytes (`[]byte`) | MerkleRoot of the hash of transactions. **Note**: The transactions are hashed before being included in the merkle tree, the leaves of the Merkle tree are the hashes, not the transactions themselves. | Must  be of length 32 |
-| ValidatorHash | slice of bytes (`[]byte`) | MerkleRoot of the current validator set. The validators are first sorted by voting power (descending), then by address (ascending) prior to computing the MerkleRoot. | Must  be of length 32 |
-| NextValidatorHash | slice of bytes (`[]byte`) | MerkleRoot of the next validator set. The validators are first sorted by voting power (descending), then by address (ascending) prior to computing the MerkleRoot. | Must  be of length 32 |
+| ValidatorHash | slice of bytes (`[]byte`) | Merkle root of the current validator set's threshold public key and quorum hash (`ValidatorSet.Hash`). The validator list is not hashed, so its order, ascending `ProTxHash` (`ValidatorsByProTxHashes`), does not affect this value. | Must  be of length 32 |
+| NextValidatorHash | slice of bytes (`[]byte`) | Merkle root of the next validator set's threshold public key and quorum hash (`ValidatorSet.Hash`). The validator list is not hashed, so its order, ascending `ProTxHash` (`ValidatorsByProTxHashes`), does not affect this value. | Must  be of length 32 |
 | ConsensusHash | slice of bytes (`[]byte`) | Hash of the protobuf encoded consensus parameters. | Must  be of length 32 |
 | AppHash | slice of bytes (`[]byte`) | Arbitrary byte array returned by the application after executing and commiting the previous block. It serves as the basis for validating any merkle proofs that comes from the ABCI application and represents the state of the actual application rather than the state of the blockchain itself. The first block's `block.Header.AppHash` is given by `ResponseInitChain.app_hash`. | This hash is determined by the application, Tendermint can not perform validation on it. |
 | LastResultHash | slice of bytes (`[]byte`) | `LastResultsHash` is the root hash of a Merkle tree built from `ResponseDeliverTx` responses (`Log`,`Info`, `Codespace` and `Events` fields are ignored). | Must  be of length 32. The first block has `block.Header.ResultsHash == MerkleRoot(nil)`, i.e. the hash of an empty input, for RFC-6962 conformance. |

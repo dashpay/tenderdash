@@ -5,9 +5,9 @@ order: 12
 
 > **Historical.** Tenderdash does not implement BFT Time. Block timestamps
 > are chosen by the proposer and validated for timeliness as specified in
-> [Proposal timestamps and time rules](./consensus-alternative-flows.md#proposal-timestamps-and-time-rules)
-> and [Proposer-Based Timestamps](./proposer-based-timestamp/README.md).
-> This page is kept because the PBTS design documents compare against it.
+> [Proposal timestamps and time rules](./consensus-alternative-flows.md#proposal-timestamps-and-time-rules);
+> [Proposer-Based Timestamps](./proposer-based-timestamp/README.md) is
+> historical design material. This page is kept because the PBTS design documents compare against it.
 
 Tendermint provides a deterministic, Byzantine fault-tolerant, source of time.
 Time in Tendermint is defined with the Time field of the block header.

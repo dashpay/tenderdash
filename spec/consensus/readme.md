@@ -27,8 +27,10 @@ implementation in `internal/consensus`.
 - [Write Ahead Log](./wal.md) — the log the consensus state machine uses to
   recover from crashes.
 - [Evidence](./evidence.md) — detection and handling of misbehaviour.
-- [Proposer-Based Timestamps](./proposer-based-timestamp/README.md) — the
-  timestamp algorithm behind the timeliness rules.
+- [Proposer-Based Timestamps](./proposer-based-timestamp/README.md) —
+  historical design material that predates the implementation; the rules in
+  force are in
+  [Proposal timestamps and time rules](./consensus-alternative-flows.md#proposal-timestamps-and-time-rules).
 - [BFT Time](./bft-time.md) — historical: the median-based timestamp rule
   Tenderdash no longer uses.
 - [Consensus Paper](./consensus-paper/README.md) — the Tendermint consensus

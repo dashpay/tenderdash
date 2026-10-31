@@ -21,7 +21,7 @@ It shall be used to describe protocol semantics, namely the BFT consensus engine
 - [State](./core/state.md)
 - [Consensus Protocol](./consensus/consensus.md) (source-derived; see the [consensus index](./consensus/readme.md))
 - [Proposer Selection](./consensus/proposer-selection.md)
-- [Time](./consensus/proposer-based-timestamp/README.md)
+- [Time](./consensus/consensus-alternative-flows.md#proposal-timestamps-and-time-rules) (historical design: [Proposer-Based Timestamps](./consensus/proposer-based-timestamp/README.md))
 - [Light Client](./consensus/light-client/README.md)
 - [The Base P2P Layer](./p2p/node.md)
 - [Peer Exchange (PEX)](./p2p/messages/pex.md)
