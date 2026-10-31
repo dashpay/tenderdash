@@ -259,3 +259,111 @@ func handleResponses(ctx context.Context, t *testing.T, c *WSClient) {
 		}
 	}
 }
+
+// startFailingClient starts a client that gives up after its first failed redial,
+// and returns it with a server that drops the connection on any request.
+func startFailingClient(ctx context.Context, t *testing.T) (*WSClient, *httptest.Server) {
+	t.Helper()
+	s := httptest.NewServer(&myTestHandler{t: t, closeConnAfterRead: true})
+	t.Cleanup(s.Close)
+	c, err := NewWS("//"+s.Listener.Addr().String(), "/websocket")
+	require.NoError(t, err)
+	c.maxReconnectAttempts = 0
+	require.NoError(t, c.Start(ctx))
+	return c, s
+}
+
+func requireResponsesClosed(t *testing.T, c *WSClient) {
+	t.Helper()
+	select {
+	case _, ok := <-c.ResponsesCh:
+		require.False(t, ok, "unexpected response")
+	case <-time.After(wsCallTimeout):
+		t.Fatal("ResponsesCh was not closed")
+	}
+}
+
+// Running out of reconnect attempts shuts the client down by itself. The owner
+// does not know that, and still calls Stop once its context ends.
+func TestWSClientStopAfterReconnectExhaustion(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c, s := startFailingClient(ctx, t)
+	require.NoError(t, c.Call(ctx, "drop", make(map[string]interface{})))
+	s.Close()
+	requireResponsesClosed(t, c)
+
+	cancel()
+	require.NoError(t, c.Stop())
+	require.NoError(t, c.Stop())
+}
+
+// A Stop already blocked when the attempts run out must finish with that shutdown.
+func TestWSClientStopRacingReconnectExhaustion(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c, s := startFailingClient(ctx, t)
+	require.NoError(t, c.Call(ctx, "drop", make(map[string]interface{})))
+	s.Close()
+	require.Eventually(t, c.IsReconnecting, wsCallTimeout, time.Millisecond)
+
+	stopped := make(chan error, 2)
+	for range cap(stopped) {
+		go func() { stopped <- c.Stop() }()
+	}
+	for range cap(stopped) {
+		select {
+		case err := <-stopped:
+			require.NoError(t, err)
+			requireResponsesClosed(t, c)
+		case <-time.After(wsCallTimeout):
+			t.Fatal("Stop did not return after the attempts ran out")
+		}
+	}
+}
+
+// A reconnect can start new workers, so Stop must not finish while one may still
+// succeed. Every concurrent Stop returns only after the channel closes.
+func TestWSClientStopWaitsForReconnect(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c, _ := startFailingClient(ctx, t)
+	require.NoError(t, c.Call(ctx, "drop", make(map[string]interface{})))
+	require.Eventually(t, c.IsReconnecting, wsCallTimeout, time.Millisecond)
+
+	stopped := make(chan error, 2)
+	for range cap(stopped) {
+		go func() { stopped <- c.Stop() }()
+	}
+	require.Eventually(t, func() bool { return !c.IsReconnecting() }, wsCallTimeout, time.Millisecond)
+	select {
+	case err := <-stopped:
+		t.Fatalf("Stop returned before the context ended: %v", err)
+	default:
+	}
+
+	cancel()
+	for range cap(stopped) {
+		select {
+		case err := <-stopped:
+			require.NoError(t, err)
+			requireResponsesClosed(t, c)
+		case <-time.After(wsCallTimeout):
+			t.Fatal("Stop did not return after the context ended")
+		}
+	}
+}
+
+// A client that never started has nothing to wait for.
+func TestWSClientStopWithoutStart(t *testing.T) {
+	c, err := NewWS("//127.0.0.1:1", "/websocket")
+	require.NoError(t, err)
+	stopped := make(chan error, 1)
+	go func() { stopped <- c.Stop() }()
+	select {
+	case err := <-stopped:
+		require.NoError(t, err)
+	case <-time.After(wsCallTimeout):
+		t.Fatal("Stop blocked on a client that never started")
+	}
+}

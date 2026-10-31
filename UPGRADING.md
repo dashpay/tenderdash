@@ -20,6 +20,11 @@ Plain goroutines and their existing joins remain the implementation's responsibi
 implementations must provide `Go(func(context.Context)) bool` so the server owns
 subscription workers.
 
+`WSClient.Stop` is safe to call repeatedly and concurrently, including after
+reconnect attempts run out. During a reconnect it now blocks until the context
+ends or the attempts run out, instead of returning while a reconnect could still
+start workers.
+
 `rpc/jsonrpc/server.Serve` and `ServeTLS` always close the listener before
 returning, including when TLS setup fails. Cancellation now reaches request
 contexts, rejects new requests with 503, closes active connections instead of a

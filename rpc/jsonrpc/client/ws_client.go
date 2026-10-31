@@ -65,6 +65,9 @@ type WSClient struct { //nolint: maligned
 	protocol string
 
 	wg sync.WaitGroup
+	// reconnectDone closes when reconnectRoutine exits; no workers start after that.
+	reconnectDone  chan struct{}
+	closeResponses sync.Once
 
 	mtx          sync.RWMutex
 	reconnecting bool
@@ -141,21 +144,37 @@ func (c *WSClient) Start(ctx context.Context) error {
 	// channel is unbuffered.
 	c.backlog = make(chan rpctypes.RPCRequest, 1)
 
+	c.reconnectDone = make(chan struct{})
 	c.startReadWriteRoutines(ctx)
 	go c.reconnectRoutine(ctx)
 
 	return nil
 }
 
-// Stop blocks until the client is shut down and returns nil.
+// Stop blocks until the client is shut down and returns nil. It does not end the
+// client: shutdown follows the context passed to Start, or running out of
+// reconnect attempts. It is safe to call repeatedly and concurrently, and returns
+// immediately if the client never started.
 //
 // TODO(creachadair): This method exists for compatibility with the original
 // service plumbing. Give it a better name (e.g., Wait).
 func (c *WSClient) Stop() error {
-	// only close user-facing channels when we can't write to them
-	c.wg.Wait()
-	close(c.ResponsesCh)
+	if c.reconnectDone == nil {
+		return nil
+	}
+	<-c.reconnectDone
+	c.closeResponsesCh()
 	return nil
+}
+
+// closeResponsesCh joins the workers and closes ResponsesCh once. Only close
+// user-facing channels when we can't write to them. Callers must ensure that no
+// more workers can start.
+func (c *WSClient) closeResponsesCh() {
+	c.closeResponses.Do(func() {
+		c.wg.Wait()
+		close(c.ResponsesCh)
+	})
 }
 
 // IsReconnecting returns true if the client is reconnecting right now.
@@ -292,6 +311,7 @@ func (c *WSClient) processBacklog() error {
 }
 
 func (c *WSClient) reconnectRoutine(ctx context.Context) {
+	defer close(c.reconnectDone)
 	for {
 		select {
 		case <-ctx.Done():
@@ -301,10 +321,7 @@ func (c *WSClient) reconnectRoutine(ctx context.Context) {
 			c.wg.Wait()
 			if err := c.reconnect(ctx); err != nil {
 				c.Logger.Error("failed to reconnect", "err", err, "original_err", originalError)
-				if err = c.Stop(); err != nil {
-					c.Logger.Error("failed to stop conn", "error", err)
-				}
-
+				c.closeResponsesCh()
 				return
 			}
 			// drain reconnectAfter
