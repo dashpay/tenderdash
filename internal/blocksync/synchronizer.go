@@ -772,7 +772,8 @@ func (s *Synchronizer) runHandler(ctx context.Context, handler func(ctx context.
 // BlockResponse ...
 type BlockResponse struct {
 	PeerID types.NodeID
-	// ConnID is the connection generation failures of this response are fenced to.
+	// ConnID is the generation of the connection that delivered this response, which
+	// its failures are fenced to.
 	ConnID uint64
 	Block  *types.Block
 	Commit *types.Commit

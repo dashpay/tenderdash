@@ -9,9 +9,12 @@ import (
 // correlated reply. Callbacks must be short, nonblocking bookkeeping operations.
 // Admission is not wire delivery; local transport/router queues remain included.
 // Finished runs once after Started, before promise delivery, even on cancellation.
+// Delivered runs at most once, for the response that settles the request and before
+// promise delivery, with the generation of the connection that delivered it.
 type BlockRequestObserver interface {
 	Started()
 	Finished()
+	Delivered(connID uint64)
 }
 
 type blockObserverKey struct{}
@@ -59,6 +62,9 @@ func (p *pendingResponse) deliver(res result) {
 		return
 	}
 	p.finish()
+	if p.observer != nil {
+		p.observer.Delivered(res.ConnID)
+	}
 	select {
 	case p.ch <- res:
 	default:

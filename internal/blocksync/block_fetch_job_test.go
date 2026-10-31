@@ -134,6 +134,30 @@ func (suite *BlockFetchJobTestSuite) TestExecuteCarriesPeerConnection() {
 	suite.Require().Equal(connID, bfErr.connID)
 }
 
+// TestAttributedConn pins that a report's generation does not depend on how a timeout
+// raced a late delivery: the delivered generation counts only for an answer.
+func TestAttributedConn(t *testing.T) {
+	const reserved, delivered = uint64(3), uint64(9)
+	for _, tc := range []struct {
+		name      string
+		delivered uint64
+		awaitErr  error
+		want      uint64
+	}{
+		{"answered", delivered, nil, delivered},
+		{"answered that the block is missing", delivered, &client.ErrBlockNotFound{Height: 1}, delivered},
+		{"timed out while a delivery raced it", delivered, client.ErrPeerNotResponded, reserved},
+		{"timed out", 0, client.ErrPeerNotResponded, reserved},
+		{"answered through a client reporting no connection", 0, nil, reserved},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			request := newPeerData("peer", 1, 10).service.request()
+			request.Delivered(tc.delivered)
+			require.Equal(t, tc.want, attributedConn(reserved, request, tc.awaitErr))
+		})
+	}
+}
+
 func TestBlockResponseValidate(t *testing.T) {
 	block := func(h int64) *types.Block {
 		return &types.Block{Header: types.Header{Height: h}}

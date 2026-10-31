@@ -130,6 +130,8 @@ type (
 	result     struct {
 		Value any
 		Err   error
+		// ConnID is the generation of the connection that delivered the response.
+		ConnID uint64
 	}
 	// tombstone replaces the response channel of a request that timed out. Keeping
 	// the request ID, rather than dropping it, is what lets resolveMessage tell a
@@ -440,7 +442,7 @@ func (c *Client) resolve(ctx context.Context, envelope *p2p.Envelope) error {
 	if !ok {
 		return fmt.Errorf("responseID attribute is missed: %w", ErrCannotResolveResponse)
 	}
-	res := result{Value: envelope.Message}
+	res := result{Value: envelope.Message, ConnID: envelope.ConnID}
 	if msg, ok := envelope.Message.(*bcproto.NoBlockResponse); ok {
 		res.Err = &ErrBlockNotFound{Height: msg.Height}
 	}

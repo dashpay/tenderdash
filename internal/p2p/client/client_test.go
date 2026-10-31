@@ -707,9 +707,22 @@ func (suite *ChannelTestSuite) TestResponseBeforeSendReturns() {
 }
 
 type countingBlockObserver struct {
-	mtx      sync.Mutex
-	starts   int
-	finishes int
+	mtx       sync.Mutex
+	starts    int
+	finishes  int
+	delivered []uint64
+}
+
+func (o *countingBlockObserver) Delivered(connID uint64) {
+	o.mtx.Lock()
+	defer o.mtx.Unlock()
+	o.delivered = append(o.delivered, connID)
+}
+
+func (o *countingBlockObserver) deliveries() []uint64 {
+	o.mtx.Lock()
+	defer o.mtx.Unlock()
+	return append([]uint64(nil), o.delivered...)
 }
 
 func (o *countingBlockObserver) Started()  { o.mtx.Lock(); defer o.mtx.Unlock(); o.starts++ }
@@ -770,6 +783,36 @@ func (suite *ChannelTestSuite) TestBlockObservationLifecycle() {
 			suite.Equal(1, finishes)
 		})
 	}
+}
+
+// TestBlockObserverLearnsDeliveringConnection pins that the generation which settles a
+// request reaches the observer before the promise does, and that a duplicate response
+// cannot replace it.
+func (suite *ChannelTestSuite) TestBlockObserverLearnsDeliveringConnection() {
+	ctx := context.Background()
+	observer := &countingBlockObserver{}
+	var request p2p.Envelope
+	suite.p2pChannel.On("Send", mock.Anything, mock.Anything).Once().Run(func(args mock.Arguments) {
+		request = args.Get(1).(p2p.Envelope)
+	}).Return(nil)
+	p, err := suite.client.GetBlock(WithBlockRequestObserver(ctx, observer), suite.height, suite.peerID)
+	suite.Require().NoError(err)
+
+	response := func(connID uint64) *p2p.Envelope {
+		return &p2p.Envelope{
+			Attributes: map[string]string{ResponseIDAttribute: request.Attributes[RequestIDAttribute]},
+			From:       suite.peerID,
+			ConnID:     connID,
+			Message:    suite.response,
+		}
+	}
+	suite.Require().NoError(suite.client.resolve(ctx, response(7)))
+	suite.Equal([]uint64{7}, observer.deliveries())
+
+	_, err = p.Await()
+	suite.Require().NoError(err)
+	_ = suite.client.resolve(ctx, response(8))
+	suite.Equal([]uint64{7}, observer.deliveries(), "only the settling response may be recorded")
 }
 
 func (suite *ChannelTestSuite) TestBlockObserverResponseBeforeAdmission() {

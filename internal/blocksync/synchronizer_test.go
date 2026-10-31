@@ -774,7 +774,7 @@ func (suite *SynchronizerTestSuite) TestRequestFailureAfterReconnectSparesReplac
 
 	suite.Require().NoError(answered.Err)
 	suite.Require().Equal(oldConn, answered.Value.(*BlockResponse).ConnID,
-		"a late answer must stay attributed to the connection it was requested on")
+		"an answer from a client reporting no connection must keep the reservation's generation")
 
 	var reported p2p.PeerError
 	suite.client.
@@ -795,6 +795,134 @@ func (suite *SynchronizerTestSuite) TestRequestFailureAfterReconnectSparesReplac
 	evicted, err = peerManager.TryEvictNext()
 	suite.Require().NoError(err)
 	suite.Require().Equal(peerID, evicted, "a failure on the live connection must still evict")
+}
+
+// TestResponseFailureFencesToDeliveringConnection runs requests through a real client:
+// a peer reconnects while its request is outstanding, and whichever connection then
+// answers is the one a bad answer is charged to. Charging the reservation's generation
+// would let N+1 keep its connection after sending the bad answer itself.
+func (suite *SynchronizerTestSuite) TestResponseFailureFencesToDeliveringConnection() {
+	const peerID = types.NodeID("a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1")
+	const (
+		invalidBlock = iota
+		wrongHeight
+		noAnswer
+	)
+	for _, tc := range []struct {
+		name        string
+		fromOldConn bool
+		kind        int
+		wantEvicted bool
+	}{
+		{"replacement answers with a block failing to apply", false, invalidBlock, true},
+		{"replacement answers with the wrong height", false, wrongHeight, true},
+		{"old connection answers with a block failing to apply", true, invalidBlock, false},
+		{"old connection answers with the wrong height", true, wrongHeight, false},
+		{"nobody answers", true, noAnswer, false},
+	} {
+		suite.Run(tc.name, func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			peerManager, err := p2p.NewPeerManager(ctx, types.NodeID(strings.Repeat("b2", 20)), dbm.NewMemDB(),
+				p2p.PeerManagerOptions{MaxConnected: 10})
+			suite.Require().NoError(err)
+			defer func() { suite.Require().NoError(peerManager.Close()) }()
+			suite.Require().NoError(peerManager.Accepted(peerID))
+			oldConn := peerManager.Ready(ctx, peerID, nil)
+
+			inCh, outCh := make(chan p2p.Envelope, 1), make(chan p2p.Envelope, 1)
+			errCh := make(chan p2p.PeerError, 1)
+			clock := clockwork.NewFakeClock()
+			descriptors := map[p2p.ChannelID]*p2p.ChannelDescriptor{p2p.BlockSyncChannel: {ID: p2p.BlockSyncChannel}}
+			realClient := client.New(descriptors,
+				func(context.Context, *p2p.ChannelDescriptor) (p2p.Channel, error) {
+					return p2p.NewChannel(p2p.BlockSyncChannel, "test", inCh, outCh, errCh), nil
+				},
+				client.WithClock(clock))
+			go func() {
+				_ = realClient.Consume(ctx, client.ConsumerParams{ReadChannels: []p2p.ChannelID{p2p.BlockSyncChannel}})
+			}()
+
+			resultCh := make(chan workerpool.Result, 1)
+			wp := workerpool.New(1, workerpool.WithResultCh(resultCh))
+			applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+			pool := NewSynchronizer(1, suite.client, applier, WithWorkerPool(wp))
+			onConn := func(connID uint64) PeerData {
+				peer := newPeerData(peerID, 1, 100)
+				peer.connID = connID
+				return peer
+			}
+			pool.AddPeer(onConn(oldConn))
+			peer, found := pool.peerStore.reservePeer(1)
+			suite.Require().True(found)
+
+			finished := make(chan workerpool.Result, 1)
+			go func() { finished <- blockFetchJobHandler(realClient, peer, 1)(ctx) }()
+			request := <-outCh
+
+			pool.RemovePeer(peerID)
+			peerManager.Disconnected(ctx, peerID)
+			suite.Require().NoError(peerManager.Accepted(peerID))
+			newConn := peerManager.Ready(ctx, peerID, nil)
+			pool.AddPeer(onConn(newConn))
+			for i := int32(1); i < maxConsecutiveFailures; i++ {
+				pool.peerStore.AddFailure(peerID, maxConsecutiveFailures)
+			}
+
+			answerOn := newConn
+			if tc.fromOldConn {
+				answerOn = oldConn
+			}
+			answer := func(resp *blocksync.BlockResponse) {
+				inCh <- p2p.Envelope{
+					Attributes: map[string]string{client.ResponseIDAttribute: request.Attributes[client.RequestIDAttribute]},
+					From:       peerID,
+					ConnID:     answerOn,
+					ChannelID:  p2p.BlockSyncChannel,
+					Message:    resp,
+				}
+			}
+			switch tc.kind {
+			case invalidBlock:
+				answer(suite.responses[0])
+				suite.blockExec.
+					On("VerifyCommit", mock.Anything, mock.Anything, int64(1), mock.Anything).
+					Once().
+					Return(types.VerifiedCommit{}, nil)
+				suite.blockExec.
+					On("ValidateBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Once().
+					Return(errors.New("invalid block"))
+			case wrongHeight:
+				answer(suite.responses[1])
+			case noAnswer:
+				wait, stop := context.WithTimeout(ctx, 5*time.Second)
+				defer stop()
+				suite.Require().NoError(clock.BlockUntilContext(wait, 1))
+				clock.Advance(time.Minute)
+			}
+
+			var reported p2p.PeerError
+			suite.client.
+				On("Send", mock.Anything, mock.AnythingOfType("p2p.PeerError")).
+				Once().
+				Run(func(args mock.Arguments) { reported = args.Get(1).(p2p.PeerError) }).
+				Return(nil)
+			resultCh <- <-finished
+			suite.Require().NoError(pool.consumeJobResult(ctx, ctx))
+
+			suite.Require().Equal(answerOn, reported.ConnID)
+			peerManager.ErroredConn(reported.NodeID, reported.ConnID, reported.Err)
+			evicted, err := peerManager.TryEvictNext()
+			suite.Require().NoError(err)
+			if tc.wantEvicted {
+				suite.Require().Equal(peerID, evicted, "the connection that sent the bad answer must be evicted")
+			} else {
+				suite.Require().Empty(evicted, "a failure of the old connection must not evict the replacement")
+			}
+		})
+	}
 }
 
 // TestApplyFailurePunishesSupplyingPeer checks that an apply failure is charged to
