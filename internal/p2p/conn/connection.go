@@ -566,10 +566,11 @@ FOR_LOOP:
 			// received" timestamp above, so we can ignore
 			// this message
 		case *tmp2p.Packet_PacketMsg:
-			if pkt.PacketMsg.ChannelID < 0 {
-				// Invalid under any protocol version, unlike a channel this build
-				// does not know. Recorded before Stop; see PeerInputError.
-				err := fmt.Errorf("%w: negative channel ID %d", protoio.ErrMalformedMsg, pkt.PacketMsg.ChannelID)
+			if pkt.PacketMsg.ChannelID < 0 || pkt.PacketMsg.ChannelID > math.MaxUint16 {
+				// Outside ChannelID's range, so no conforming sender produced it, unlike
+				// a channel this build does not know. Recorded before Stop; see
+				// PeerInputError.
+				err := fmt.Errorf("%w: channel ID %d out of range", protoio.ErrMalformedMsg, pkt.PacketMsg.ChannelID)
 				c.peerInputErr.Store(&err)
 				c.logger.Debug("Connection failed @ recvRoutine", "conn", c, "err", err)
 				c.stopForError(ctx, err)

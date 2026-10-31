@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"context"
+	"math"
 	"net"
 	"testing"
 	"time"
@@ -83,7 +84,7 @@ func TestRoutePeer_MConnMalformedFrame_ScoresAndDisconnects(t *testing.T) {
 	require.Equal(t, before-1, f.score(), "a malformed authenticated frame must cost exactly one penalty")
 }
 
-// A negative channel ID is invalid under any protocol version, so it costs score. A
+// A channel ID outside uint16 cannot come from a conforming sender, so it costs score. A
 // channel this build does not know can be version skew: it ends the connection for free.
 func TestRoutePeer_MConnPacketChannelID(t *testing.T) {
 	for _, tc := range []struct {
@@ -94,6 +95,9 @@ func TestRoutePeer_MConnPacketChannelID(t *testing.T) {
 		{"negative", -1, 1},
 		{"unknown in range", 2, 0},
 		{"above the current range", 256, 0},
+		{"largest a sender can encode", math.MaxUint16, 0},
+		{"too large for any sender", math.MaxUint16 + 1, 1},
+		{"largest on the wire", math.MaxInt32, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
