@@ -83,6 +83,41 @@ func TestRoutePeer_MConnMalformedFrame_ScoresAndDisconnects(t *testing.T) {
 	require.Equal(t, before-1, f.score(), "a malformed authenticated frame must cost exactly one penalty")
 }
 
+// A negative channel ID is invalid under any protocol version, so it costs score. A
+// channel this build does not know can be version skew: it ends the connection for free.
+func TestRoutePeer_MConnPacketChannelID(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		channelID   int32
+		wantPenalty int
+	}{
+		{"negative", -1, 1},
+		{"unknown in range", 2, 0},
+		{"above the current range", 256, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			defer cancel()
+
+			f := newPunishFixture(ctx, t, 10)
+			f.enableRoutePeer()
+			mc, remote := newMConnWithRawRemote(ctx, t)
+			before := f.score()
+
+			go func() {
+				_, _ = protoio.NewDelimitedWriter(remote).WriteMsg(&p2pproto.Packet{
+					Sum: &p2pproto.Packet_PacketMsg{PacketMsg: &p2pproto.PacketMsg{
+						ChannelID: tc.channelID, EOF: true, Data: []byte{0x01},
+					}},
+				})
+			}()
+
+			f.router.routePeer(ctx, f.peerID, mc, ChannelIDSet{1: {}})
+			require.EqualValues(t, int(before)-tc.wantPenalty, f.score())
+		})
+	}
+}
+
 // A connection that drops mid-frame proves nothing about the peer, so the
 // transport must not report it as invalid data.
 func TestRoutePeer_MConnIOFailure_IsNotPunished(t *testing.T) {
