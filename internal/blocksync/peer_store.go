@@ -32,8 +32,8 @@ type (
 		peerID         types.NodeID
 		// connID is the newest connection generation this peer advertised its
 		// status on. Requests go out by node ID and each is correlated by its own
-		// ID, so this is the connection a request's outcome is attributed to, and
-		// the only one known for a request that never gets an answer.
+		// ID, so a reservation's copy of it is the connection that request's outcome
+		// is attributed to, and the only one known if it never gets an answer.
 		connID uint64
 	}
 )
