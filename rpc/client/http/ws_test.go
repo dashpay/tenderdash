@@ -23,7 +23,8 @@ import (
 type fakeUpstream struct {
 	mtx        sync.Mutex
 	events     map[string][]string
-	failed     map[string]bool // queries whose subscribe gets an RPC error
+	failed     map[string]bool          // queries whose subscribe gets an RPC error
+	gates      map[string]chan struct{} // hold a query's events until closed
 	conn       *websocket.Conn
 	subscribes []string
 }
@@ -55,8 +56,11 @@ func (u *fakeUpstream) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		}
 		u.mtx.Lock()
 		u.subscribes = append(u.subscribes, params.Query)
-		events, failed := u.events[params.Query], u.failed[params.Query]
+		events, failed, gate := u.events[params.Query], u.failed[params.Query], u.gates[params.Query]
 		u.mtx.Unlock()
+		if gate != nil {
+			<-gate
+		}
 		if failed {
 			if err := conn.WriteJSON(req.MakeErrorf(rpctypes.CodeInternalError, "subscribe failed")); err != nil {
 				return
@@ -74,6 +78,24 @@ func (u *fakeUpstream) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+// subscribe subscribes w to query and lets the upstream send the query's events
+// only afterwards. wsEvents records a query after sending its request, so it drops
+// events that arrive first.
+func (u *fakeUpstream) subscribe(ctx context.Context, t *testing.T, w *wsEvents, query string) <-chan coretypes.ResultEvent {
+	t.Helper()
+	gate := make(chan struct{})
+	defer close(gate)
+	u.mtx.Lock()
+	if u.gates == nil {
+		u.gates = make(map[string]chan struct{})
+	}
+	u.gates[query] = gate
+	u.mtx.Unlock()
+	out, err := w.Subscribe(ctx, "", query)
+	require.NoError(t, err)
+	return out
 }
 
 func (u *fakeUpstream) setEvents(events map[string][]string) {
@@ -103,6 +125,8 @@ func startWsEvents(ctx context.Context, t *testing.T, upstream *fakeUpstream) *w
 	w, err := newWsEvents(srv.URL)
 	require.NoError(t, err)
 	require.NoError(t, w.Start(ctx))
+	// The test's deferred cancel has run by then, so no worker outlives its test.
+	t.Cleanup(func() { requireStopReturns(t, w) })
 	return w
 }
 
@@ -143,8 +167,7 @@ func TestUnsubscribeAllTimeoutDuringReconnectForgetsSubscriptions(t *testing.T) 
 	defer cancelCleanup()
 	require.ErrorIs(t, w.UnsubscribeAll(cleanupCtx, ""), context.DeadlineExceeded)
 
-	other, err := w.Subscribe(ctx, "", "other")
-	require.NoError(t, err)
+	other := upstream.subscribe(ctx, t, w, "other")
 	requireEvent(t, other, "other")
 	require.NotContains(t, upstream.subscribesOnCurrentConnection(), "gone",
 		"the reconnect restored a subscription whose cleanup timed out")
@@ -159,8 +182,7 @@ func TestUnsubscribeAllReleasesBlockedDelivery(t *testing.T) {
 		"other": {"other"},
 	}}
 	w := startWsEvents(ctx, t, upstream)
-	gone, err := w.Subscribe(ctx, "", "gone")
-	require.NoError(t, err)
+	gone := upstream.subscribe(ctx, t, w, "gone")
 	// Taking one event lets the next fill the buffer, so the third has to block.
 	requireEvent(t, gone, "gone")
 	require.Eventually(t, func() bool { return len(gone) == 1 }, 5*time.Second, time.Millisecond)
@@ -169,8 +191,7 @@ func TestUnsubscribeAllReleasesBlockedDelivery(t *testing.T) {
 	<-time.After(50 * time.Millisecond)
 
 	require.NoError(t, w.UnsubscribeAll(ctx, ""))
-	other, err := w.Subscribe(ctx, "", "other")
-	require.NoError(t, err)
+	other := upstream.subscribe(ctx, t, w, "other")
 	requireEvent(t, other, "other")
 }
 
@@ -218,8 +239,7 @@ func TestUnsubscribeAllDuringResubscribe(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("resubscribe did not finish after the reconnect")
 	}
-	other, err := w.Subscribe(ctx, "", "other")
-	require.NoError(t, err)
+	other := upstream.subscribe(ctx, t, w, "other")
 	requireEvent(t, other, "other")
 	restored := 0
 	for _, query := range upstream.subscribesOnCurrentConnection() {
@@ -244,8 +264,7 @@ func TestSubscribeAfterRepeatedUnsubscribeAllBlocksNormally(t *testing.T) {
 	require.NoError(t, w.UnsubscribeAll(ctx, ""))
 	require.NoError(t, w.UnsubscribeAll(ctx, ""))
 
-	later, err := w.Subscribe(ctx, "", "later")
-	require.NoError(t, err)
+	later := upstream.subscribe(ctx, t, w, "later")
 	for range events {
 		require.Eventually(t, func() bool { return len(later) == 1 }, 5*time.Second, time.Millisecond)
 		requireEvent(t, later, "later")
@@ -256,6 +275,16 @@ func TestSubscribeAfterRepeatedUnsubscribeAllBlocksNormally(t *testing.T) {
 func goroutinesIn(function string) int {
 	stacks := make([]byte, 1<<24)
 	return strings.Count(string(stacks[:runtime.Stack(stacks, true)]), function+"(")
+}
+
+// requireListenerExited must hold as soon as the join returns, so it does not wait.
+func requireListenerExited(t *testing.T, w *wsEvents) {
+	t.Helper()
+	select {
+	case <-w.listenerDone:
+	default:
+		t.Fatal("eventListener outlived the join")
+	}
 }
 
 func requireStopReturns(t *testing.T, w *wsEvents) {
@@ -275,13 +304,13 @@ func requireStopReturns(t *testing.T, w *wsEvents) {
 func TestStopJoinsListenerDuringResubscribe(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	listeners := goroutinesIn("(*wsEvents).eventListener")
 	srv := httptest.NewServer(&fakeUpstream{failed: map[string]bool{"q": true}})
 	t.Cleanup(srv.Close)
 	w, err := newWsEvents(srv.URL)
 	require.NoError(t, err)
 	w.resubscribeDelay = time.Hour // only cancellation can end this delay
 	require.NoError(t, w.Start(ctx))
+	t.Cleanup(func() { requireStopReturns(t, w) })
 	_, err = w.Subscribe(ctx, "", "q")
 	require.NoError(t, err)
 	require.Eventually(t, func() bool { return goroutinesIn("(*wsEvents).redoSubscriptionsAfter") == 1 },
@@ -289,23 +318,21 @@ func TestStopJoinsListenerDuringResubscribe(t *testing.T) {
 
 	cancel()
 	requireStopReturns(t, w)
-	require.Equal(t, listeners, goroutinesIn("(*wsEvents).eventListener"), "eventListener outlived Stop")
+	requireListenerExited(t, w)
 }
 
 // A subscriber that stopped reading must not turn the join into a shutdown hang.
 func TestStopJoinsListenerBlockedOnSubscriber(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	listeners := goroutinesIn("(*wsEvents).eventListener")
 	upstream := &fakeUpstream{events: map[string][]string{"q": {"q", "q", "q"}}}
 	w := startWsEvents(ctx, t, upstream)
-	q, err := w.Subscribe(ctx, "", "q")
-	require.NoError(t, err)
+	q := upstream.subscribe(ctx, t, w, "q")
 	require.Eventually(t, func() bool { return len(q) == 1 }, 5*time.Second, time.Millisecond)
 
 	cancel()
 	requireStopReturns(t, w)
-	require.Equal(t, listeners, goroutinesIn("(*wsEvents).eventListener"), "eventListener outlived Stop")
+	requireListenerExited(t, w)
 }
 
 // After the client shuts down by itself the context can still be live, and then
@@ -313,11 +340,9 @@ func TestStopJoinsListenerBlockedOnSubscriber(t *testing.T) {
 func TestStopListenerReleasesDeliveryWithLiveContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	listeners := goroutinesIn("(*wsEvents).eventListener")
 	upstream := &fakeUpstream{events: map[string][]string{"q": {"q", "q", "q"}}}
 	w := startWsEvents(ctx, t, upstream)
-	q, err := w.Subscribe(ctx, "", "q")
-	require.NoError(t, err)
+	q := upstream.subscribe(ctx, t, w, "q")
 	require.Eventually(t, func() bool { return len(q) == 1 }, 5*time.Second, time.Millisecond)
 
 	stopped := make(chan struct{})
@@ -327,7 +352,7 @@ func TestStopListenerReleasesDeliveryWithLiveContext(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("stopListener blocked on a subscriber not reading")
 	}
-	require.Equal(t, listeners, goroutinesIn("(*wsEvents).eventListener"), "eventListener outlived stopListener")
+	requireListenerExited(t, w)
 }
 
 // Starting fails cleanly, and a client that never ran has nothing to join.

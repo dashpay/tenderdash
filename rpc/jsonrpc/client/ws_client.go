@@ -128,7 +128,8 @@ func NewWS(remoteAddr, endpoint string) (*WSClient, error) {
 
 // OnReconnect sets the callback, which will be called every time after
 // successful reconnect.
-// Could only be set before Start.
+// Could only be set before Start. The callback must return once the context passed
+// to Start ends, and must not call Stop, which joins it and would never return.
 func (c *WSClient) OnReconnect(cb func()) {
 	c.onReconnect = cb
 }
@@ -166,9 +167,9 @@ func (c *WSClient) Start(ctx context.Context) error {
 
 // Stop blocks until the client is shut down and returns nil. It does not end the
 // client: shutdown follows the context passed to Start, or running out of
-// reconnect attempts. After either, the wait is bounded by the write deadline of a
-// write in progress. It is safe to call repeatedly and concurrently, and returns
-// immediately if the client never started.
+// reconnect attempts. After either, it waits for running OnReconnect callbacks, and
+// for a write in progress, which ends at its write deadline. It is safe to call
+// repeatedly and concurrently, and returns immediately if the client never started.
 //
 // TODO(creachadair): This method exists for compatibility with the original
 // service plumbing. Give it a better name (e.g., Wait).

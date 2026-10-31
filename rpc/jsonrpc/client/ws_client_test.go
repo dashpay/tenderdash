@@ -513,10 +513,12 @@ func TestWSClientStopJoinsWorkerFailingAfterReconnectExit(t *testing.T) {
 	// The reader reports this and closes the connection, so the write fails too.
 	require.NoError(t, peer.WriteControl(websocket.CloseMessage,
 		websocket.FormatCloseMessage(websocket.CloseGoingAway, "bye"), time.Now().Add(time.Second)))
+	// Encoding the request is slow under -race and load, and the writer cannot stop
+	// until it has finished. This only needs to tell that from a hang.
 	select {
 	case err := <-stopped:
 		require.NoError(t, err)
-	case <-time.After(wsCallTimeout):
+	case <-time.After(6 * wsCallTimeout):
 		t.Fatal("Stop did not return after the workers failed")
 	}
 }
