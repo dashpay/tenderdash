@@ -13,7 +13,7 @@ type simpleQueue struct {
 	input   chan Envelope
 	output  chan Envelope
 	closeFn func()
-	closeCh <-chan struct{}
+	closeCh chan struct{}
 
 	maxSize int
 	chDescs []*ChannelDescriptor
@@ -29,7 +29,7 @@ func newSimplePriorityQueue(ctx context.Context, size int) *simpleQueue {
 		input:   make(chan Envelope, size*2),
 		output:  make(chan Envelope, size/2),
 		maxSize: size * size,
-		closeCh: ctx.Done(),
+		closeCh: make(chan struct{}),
 		closeFn: cancel,
 	}
 
@@ -43,6 +43,7 @@ func (q *simpleQueue) close()                   { q.closeFn() }
 func (q *simpleQueue) closed() <-chan struct{}  { return q.closeCh }
 
 func (q *simpleQueue) run(ctx context.Context) {
+	defer close(q.closeCh)
 	defer q.closeFn()
 
 	var chPriorities = make(map[ChannelID]uint, len(q.chDescs))
@@ -54,6 +55,7 @@ func (q *simpleQueue) run(ctx context.Context) {
 	pq := make(priorityQueue, 0, q.maxSize)
 	heap.Init(&pq)
 	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
 	// must have a buffer of exactly one because both sides of
 	// this channel are used in this loop, and simply signals adds
 	// to the heap
@@ -61,8 +63,6 @@ func (q *simpleQueue) run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			return
-		case <-q.closeCh:
 			return
 		case e := <-q.input:
 			// enqueue the incoming Envelope
@@ -105,8 +105,6 @@ func (q *simpleQueue) run(ctx context.Context) {
 				next := pq[0].envelope
 				select {
 				case <-ctx.Done():
-					return
-				case <-q.closeCh:
 					return
 				case q.output <- next:
 					heap.Pop(&pq)

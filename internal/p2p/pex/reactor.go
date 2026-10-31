@@ -83,6 +83,7 @@ type Reactor struct {
 	peerManager *p2p.PeerManager
 	chCreator   p2p.ChannelCreator
 	peerEvents  p2p.PeerEventSubscriber
+	peerUpdates *p2p.PeerUpdates
 	// list of available peers to loop through and send peer requests to
 	availablePeers map[types.NodeID]struct{}
 
@@ -135,20 +136,27 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	}
 
 	peerUpdates := r.peerEvents(ctx, "pex")
-	go r.processPexCh(ctx, channel)
-	go r.processPeerUpdates(ctx, peerUpdates)
+	r.peerUpdates = peerUpdates
+	r.Go(ctx, func(ctx context.Context) { r.processPexCh(ctx, channel) })
+	r.Go(ctx, func(ctx context.Context) { r.processPeerUpdates(ctx, peerUpdates) })
 	return nil
 }
 
-// OnStop stops the reactor by signaling to all spawned goroutines to exit and
-// blocking until they all exit.
+// OnStop implements service.Implementation.
 func (r *Reactor) OnStop() {}
+
+// OnDrain joins the subscription after its consumers have stopped.
+func (r *Reactor) OnDrain() { r.peerUpdates.Close() }
 
 // processPexCh implements a blocking event loop where we listen for p2p
 // Envelope messages from the pexCh.
 func (r *Reactor) processPexCh(ctx context.Context, pexCh p2p.Channel) {
+	ctx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	defer func() { cancel(); <-done }()
 	incoming := make(chan *p2p.Envelope)
 	go func() {
+		defer close(done)
 		defer close(incoming)
 		iter := pexCh.Receive(ctx)
 		for iter.Next(ctx) {

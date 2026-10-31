@@ -191,9 +191,10 @@ func TestMConnectionWillEventuallyTimeout(t *testing.T) {
 		}
 	}()
 
-	// wait for the send routine to die because it doesn't
+	done := make(chan struct{})
+	go func() { mconn.Wait(); close(done) }()
 	select {
-	case <-mconn.doneSendRoutine:
+	case <-done:
 		require.True(t, time.Since(mconn.getLastMessageAt()) > mconn.config.PongTimeout,
 			"the connection state reflects that we've passed the pong timeout")
 		// since we hit the timeout, things should be shutdown

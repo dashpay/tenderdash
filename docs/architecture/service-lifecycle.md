@@ -1,9 +1,11 @@
-# Service lifecycle core
+# Service lifecycle
 
 `BaseService.Start` gives `OnStart` an attempt-scoped child context. Parent
 cancellation and manual `Stop` both cancel it. `Go(ctx, fn)` registers workers
 using that context or a derived context; registration is synchronized with
-shutdown and rejected for a different attempt or after shutdown begins.
+shutdown and rejected for a different attempt, a canceled context, or after
+shutdown begins. Clean up any resources acquired before a rejected admission.
+Plain `go` statements are not tracked.
 
 Shutdown closes admission, marks `IsRunning` false, cancels the context and
 calls `OnStop`. It then joins registered workers, calls optional `OnDrain`, and
@@ -25,54 +27,92 @@ The implementation must roll back acquired resources: failed attempts do not
 invoke `OnStop` or `OnDrain`. Successfully stopped services cannot restart.
 Composite retries also require recreating children already successfully stopped.
 
-## First migration stage
+## Ownership and durability
 
-Consensus State registers its receive loop and joins its queue fan-in and WAL
-before returning. The timeout ticker, WAL and autofile group use shared worker
-tracking. AutoFile explicitly joins its timer/signal worker. WAL ownership lasts
-until the receive loop's final write. Consensus handoff admission is also joined,
-so a late blocksync handoff cannot start State after reactor shutdown. The caller
-may cancel its wait after admission, but the reactor still owns and joins the
-handoff. Startup and the resulting State use the reactor's lifetime.
+Registering a wrapper does not automatically join its children. Owners stop and
+wait for child services before closing their shared stores, transports or sinks.
+A request or peer session can retain its own cancellation and join group when
+its lifetime is shorter than the enclosing service.
 
-Node waits for reactors before closing event sinks and stores. The blocked
-receive-loop regression and original node teardown tests verify this path
-without using leaktest as an extra production-shutdown barrier.
-
-This is a partial migration. Plain goroutines are not tracked automatically.
-RPC/WebSocket handlers, mempool rechecks, reactor gossip and other service
-workers retain their existing ownership mechanisms. This change does not claim
-that Node.Wait joins every helper or introduce the broader durable-finalization
-and dependency-lifetime changes from #1515.
+Consensus keeps its WAL available until the receive loop finishes. WAL and
+file groups flush after their periodic workers exit; AutoFile closes and joins
+its timer/signal worker. The node runs application
+connections, the event bus and the indexer on a dependency context that outlives
+reactor cancellation, and cancels it only after reactors have been joined. These
+explicitly owned lifetimes can outlive cancellation of the caller; their owners
+must still join them. A timeout is not a substitute for completion.
 
 Three compatibility bridges preserve parent-context lifetimes: blocksync
 application during handoff, connection error callbacks after I/O shutdown, and
 an admitted consensus commit during direct State.Stop. Parent cancellation still
 aborts these operations. In particular, reactor/node shutdown can interrupt
-finalization and require WAL recovery. Their existing ownership mechanisms remain
-in place; this does not detach application work from node shutdown.
+finalization and require WAL recovery; durable finalization across node
+shutdown is not guaranteed. Owners still join these operations before releasing
+the resources they use.
+
+## Migration coverage
+
+The service audit covers consensus (state, reactor, ticker, gossip and WAL),
+autofile groups, node and seed owners, event bus and pubsub, indexer, block and
+state sync, mempool, evidence, P2P router/PEX/connections, quorum event handling,
+ABCI clients/servers, proxy wrappers, signer services, HTTP/WebSocket RPC servers,
+and the light RPC wrapper. Worker-free implementations retain their hooks
+without artificial workers.
+
+Service-scoped cancel functions, completion channels and custom `Wait` methods
+are replaced by the shared mechanism. Connection/request groups, peer-session
+cancellation, restartable RPC broadcast admission and worker-pool synchronization
+remain where they represent a separate lifetime.
+
+This does not claim a repository-wide join for every plain goroutine. RPC
+websocket client reconnection/session helpers are outside `BaseService`; generic
+consumer middleware can hide context-canceled, in-memory limiter housekeeping.
+Those boundaries need their own ownership API before a service can promise to
+join every helper. Router connection/request groups and AutoFile workers are
+joined explicitly rather than converted into unrelated service lifetimes.
+
+RPC shutdown closes admission and joins active handlers, including hijacked
+WebSocket sessions and their subscription workers. Node shutdown then drains
+async broadcasts and reactors, cancels and joins every mempool recheck batch,
+and finally releases application connections and stores.
+
+Arbitrary injected ABCI clients cannot be recreated by the routed wrapper. The
+node reserves RPC listeners before starting children, so retry after listener
+failure remains supported without restarting successful child lifetimes. That
+failure keeps the node's stores open for the retry, and `service.Service` offers
+no way to release them if the caller gives up instead.
+
+Any later node startup failure, and any seed startup failure, is final: rollback
+closes the databases, event sinks and other resources registered as node closers
+exactly once, later `Stop` and `Wait` calls are no-ops, and another `Start` is
+rejected. The Dash Core RPC client created for a full node has no closer, so it is
+not released by rollback or by shutdown.
+
+Recover from a final failure by constructing a fresh node graph. Metrics register
+on the process-wide default registry, so a second build in the same process panics
+with `duplicate metrics collector registration attempted` for a seed, or for a
+node with Prometheus enabled, unless `Instrumentation.Namespace` differs.
 
 ## Cancellation compatibility audit
 
-Cancellation precedes OnStop for every BaseService implementation, not only the
-managed-worker migrations. The in-tree hook/callback audit covers these groups:
+Cancellation precedes `OnStop` for every `BaseService` implementation. The
+in-tree hook/callback audit covers these groups:
 
 | Implementations | Cancellation and cleanup policy |
 | --- | --- |
 | Consensus State, reactor, ticker, WAL; autofile Group | Managed work is joined; commit uses the State parent context; file ownership ends with explicit Close. |
-| Blocksync reactor and Synchronizer | Handoff preserves application work across Synchronizer.Stop; stopping its parent reactor may cancel it. Reactor OnStop stops and waits for the Synchronizer, so reactor Wait covers in-flight application. |
-| P2P Router and MConnection | Connection callbacks retain the parent. Router removes peer bookkeeping even with a canceled context; final PeerStatusDown broadcasts are best effort. |
-| PEX, mempool, statesync and evidence reactors | Processing uses the work context; stop hooks close resources/dispatchers or require no extra signal. Existing plain-worker ownership is unchanged. |
-| EventBus, pubsub Server and indexer Service | Event processing is cancellation-driven; indexer closes sinks in its existing hook. No guarantee of a live cleanup callback context. |
+| Blocksync reactor and Synchronizer | Handoff preserves application work across Synchronizer.Stop; stopping its parent reactor may cancel it. The reactor joins the Synchronizer in OnStop, and again in OnDrain for one started by an admitted handoff. |
+| P2P Router and MConnection | Connection callbacks retain the parent context and are joined by `Wait`. Router removes peer bookkeeping even with a canceled context; final PeerStatusDown broadcasts are best effort. |
+| PEX, mempool, statesync and evidence reactors | Processing uses the work context; stop hooks close resources/dispatchers or require no extra signal. |
+| EventBus, pubsub Server and indexer Service | Event processing is cancellation-driven; the indexer closes its sinks in OnDrain. No guarantee of a live cleanup callback context. |
 | ABCI local, socket, gRPC and routed clients; proxy; socket/gRPC servers | Stop hooks close transports, drain requests or stop children without requiring a live work context. |
 | SignerServer, signer listener/dialer endpoints | Hooks close endpoints/listeners; dial/retry work observes cancellation. |
-| ValidatorConnExecutor and light RPC Client | Unsubscribe uses a separate bounded cleanup context; client hooks invoke owned closers. |
-| Node and seed node | Parent cancellation stops children; hooks wait for existing service completion before closing owned stores. |
+| ValidatorConnExecutor and light RPC Client | Unsubscribe uses a separate bounded cleanup context. The light client scopes WebSocket subscriptions to its service and the caller session, and joins (or stops) the wrapped client in OnDrain. |
+| Node and seed node | Parent cancellation stops children; the node joins reactors before canceling its dependency context and closing owned stores. |
 
-This is a cancellation compatibility audit, not a claim that unmigrated plain
-workers are all joined. Subscribers must stop with their owner, without relying
-on a final router broadcast. Avoid detaching broadcasts from cancellation:
-unresponsive subscribers could otherwise block shutdown.
+Subscribers must stop with their owner, without relying on a final router
+broadcast. Avoid detaching broadcasts from cancellation: unresponsive
+subscribers could otherwise block shutdown.
 
 Group rotation reuses its AutoFile and closes the current descriptor before
 renaming; it does not create a worker or signal registration per rotation. The

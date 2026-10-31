@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"time"
 
 	tmpubsub "github.com/dashpay/tenderdash/internal/pubsub"
 	rpccore "github.com/dashpay/tenderdash/internal/rpc/core"
@@ -14,6 +15,10 @@ import (
 	rpchttp "github.com/dashpay/tenderdash/rpc/client/http"
 	rpcserver "github.com/dashpay/tenderdash/rpc/jsonrpc/server"
 )
+
+// disconnectCleanupTimeout bounds unsubscribing a closed WebSocket session from
+// the upstream client, which only has to queue the request.
+const disconnectCleanupTimeout = time.Second
 
 // A Proxy defines parameters for running an HTTP server proxy.
 type Proxy struct {
@@ -103,8 +108,12 @@ func (p *Proxy) listen(ctx context.Context) (net.Listener, *http.ServeMux, error
 	wmLogger := p.Logger.With("protocol", "websocket")
 	wm := rpcserver.NewWebsocketManager(wmLogger, r,
 		rpcserver.OnDisconnect(func(remoteAddr string) {
-			err := p.Client.UnsubscribeAll(context.Background(), remoteAddr)
-			if err != nil && err != tmpubsub.ErrSubscriptionNotFound {
+			// Serve joins this callback, and closing the listener does not end ctx.
+			// Bound it: once the upstream client stops, its send has no receiver.
+			cleanupCtx, cancel := context.WithTimeout(ctx, disconnectCleanupTimeout)
+			defer cancel()
+			err := p.Client.UnsubscribeAll(cleanupCtx, remoteAddr)
+			if err != nil && err != tmpubsub.ErrSubscriptionNotFound && ctx.Err() == nil {
 				wmLogger.Error("Failed to unsubscribe addr from events", "addr", remoteAddr, "err", err)
 			}
 		}),

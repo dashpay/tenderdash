@@ -35,6 +35,8 @@ type RateLimit struct {
 	clock clockwork.Clock
 
 	logger log.Logger
+	cancel context.CancelFunc
+	done   chan struct{}
 }
 
 // RateLimitOptionFunc overrides a default parameter of a RateLimit.
@@ -86,6 +88,7 @@ func NewRateLimitWithBurst(
 	logger log.Logger,
 	opts ...RateLimitOptionFunc,
 ) *RateLimit {
+	ctx, cancel := context.WithCancel(ctx)
 	if limit > 0 && burst < 1 {
 		burst = 1
 	}
@@ -96,6 +99,8 @@ func NewRateLimitWithBurst(
 		drop:     drop,
 		clock:    clockwork.NewRealClock(),
 		logger:   logger,
+		cancel:   cancel,
+		done:     make(chan struct{}),
 	}
 	for _, opt := range opts {
 		opt(h)
@@ -105,6 +110,12 @@ func NewRateLimitWithBurst(
 	go h.gcRoutine(ctx)
 
 	return h
+}
+
+// Close stops and joins the limiter's garbage collection worker.
+func (h *RateLimit) Close() {
+	h.cancel()
+	<-h.done
 }
 
 func (h *RateLimit) getLimiter(peerID types.NodeID) *limiter {
@@ -203,6 +214,7 @@ func (h *RateLimit) waitN(ctx context.Context, l *limiter, nTokens int) error {
 
 // gcRoutine is a goroutine that removes unused limiters for peers every `PeerRateLimitLifetime` seconds.
 func (h *RateLimit) gcRoutine(ctx context.Context) {
+	defer close(h.done)
 	ticker := h.clock.NewTicker(PeerRateLimitLifetime * time.Second)
 	defer ticker.Stop()
 

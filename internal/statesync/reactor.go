@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"runtime/debug"
 	"sort"
+	stdsync "sync"
 	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
@@ -321,13 +322,21 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 		return nil
 	}
 
-	go r.processChannels(ctx, map[p2p.ChannelID]p2p.Channel{
-		SnapshotChannel:   snapshotCh,
-		ChunkChannel:      chunkCh,
-		LightBlockChannel: blockCh,
-		ParamsChannel:     paramsCh,
+	r.Go(ctx, func(ctx context.Context) {
+		r.processChannels(ctx, map[p2p.ChannelID]p2p.Channel{
+			SnapshotChannel:   snapshotCh,
+			ChunkChannel:      chunkCh,
+			LightBlockChannel: blockCh,
+			ParamsChannel:     paramsCh,
+		})
 	})
-	go r.processPeerUpdates(ctx, r.peerEvents(ctx, "statesync"))
+	updates := r.peerEvents(ctx, "statesync")
+	if !r.Go(ctx, func(ctx context.Context) {
+		defer updates.Close()
+		r.processPeerUpdates(ctx, updates)
+	}) {
+		updates.Close()
+	}
 
 	if r.needsStateSync {
 		r.logger.Info("starting state sync")
@@ -353,8 +362,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	return nil
 }
 
-// OnStop stops the reactor by signaling to all spawned goroutines to exit and
-// blocking until they all exit.
+// OnStop unblocks outstanding dispatcher requests.
 func (r *Reactor) OnStop() {
 	// tell the dispatcher to stop sending any more requests
 	r.dispatcher.Close()
@@ -639,7 +647,8 @@ func (r *Reactor) backfill(
 	)
 
 	ctxWithCancel, cancel := context.WithCancel(ctx)
-	defer cancel()
+	var fetchers stdsync.WaitGroup
+	defer func() { cancel(); fetchers.Wait() }()
 
 	// Peer-dispatch gate for this run: it quarantines peers that supply light
 	// blocks this node cannot accept and reports when no peer is left to serve.
@@ -670,7 +679,7 @@ func (r *Reactor) backfill(
 		dispatch.quarantine(peer, reason)
 		queue.discardPeer(peer)
 		queue.requeue(height)
-		err := r.sendBlockError(ctx, p2p.PeerError{
+		err := r.sendBlockError(ctxWithCancel, p2p.PeerError{
 			NodeID: peer,
 			Err:    reason,
 			Fatal:  bool(severity),
@@ -685,7 +694,9 @@ func (r *Reactor) backfill(
 	// waiting on blocks. If it takes 4s to retrieve a block and 1s to verify
 	// it, then steady state involves four workers.
 	for i := 0; i < r.cfg.Fetchers; i++ {
+		fetchers.Add(1)
 		go func() {
+			defer fetchers.Done()
 			for {
 				select {
 				case <-ctxWithCancel.Done():
@@ -780,7 +791,7 @@ func (r *Reactor) backfill(
 								"height", height,
 								"error", err)
 							queue.retry(height)
-							if serr := r.sendBlockError(ctx, p2p.PeerError{
+							if serr := r.sendBlockError(ctxWithCancel, p2p.PeerError{
 								NodeID: peer,
 								Err:    fmt.Errorf("received invalid light block: %w", err),
 							}); serr != nil {
@@ -1326,7 +1337,7 @@ func (r *Reactor) processPeerUp(ctx context.Context, peerUpdate p2p.PeerUpdate) 
 		if sp, ok := stateProvider.(*stateProviderP2P); ok {
 			// we do this in a separate routine to not block whilst waiting for the light client to finish
 			// whatever call it's currently executing
-			go sp.addProvider(newProvider)
+			r.Go(ctx, func(context.Context) { sp.addProvider(newProvider) })
 		}
 	}
 

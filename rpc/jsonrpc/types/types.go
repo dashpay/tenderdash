@@ -316,6 +316,8 @@ func (resp RPCResponse) String() string {
 
 // WSRPCConnection represents a websocket connection.
 type WSRPCConnection interface {
+	// Go starts work owned and joined by the websocket session.
+	Go(func(context.Context)) bool
 	// GetRemoteAddr returns a remote address of the connection.
 	GetRemoteAddr() string
 	// WriteRPCResponse writes the response onto connection (BLOCKING).
