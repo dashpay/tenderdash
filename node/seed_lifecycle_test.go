@@ -55,7 +55,6 @@ func TestSeedFailedStartDrainsRouter(t *testing.T) {
 	svc, err := makeSeedNode(ctx, log.NewNopLogger(), cfg, config.DefaultDBProvider, key, defaultGenesisDocProviderFunc(cfg))
 	require.NoError(t, err)
 	n := svc.(*seedNodeImpl)
-	defer func() { require.NoError(t, n.shutdownOps()) }()
 	hooks := &seedRouterDrain{router: n.router, stopping: make(chan struct{}), release: make(chan struct{})}
 	n.router.BaseService = service.NewBaseService(log.NewNopLogger(), "test-router", hooks)
 	failure := errors.New("PEX startup failed")

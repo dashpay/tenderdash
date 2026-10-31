@@ -78,9 +78,11 @@ and finally releases application connections and stores.
 
 Arbitrary injected ABCI clients cannot be recreated by the routed wrapper. The
 node reserves RPC listeners before starting children, so retry after listener
-failure remains supported without restarting successful child lifetimes. After
-a later node startup failure, construct a fresh node graph: rollback can also
-permanently close non-service resources such as mempool recheck admission.
+failure remains supported without restarting successful child lifetimes, and
+keeps the node's stores open for that retry. Any later node startup failure, and
+any seed startup failure, is final: rollback releases stores, event sinks and
+other owned resources exactly once, later `Stop` and `Wait` calls are no-ops, and
+another `Start` is rejected. Construct a fresh node graph instead.
 
 ## Cancellation compatibility audit
 

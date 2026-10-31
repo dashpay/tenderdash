@@ -31,6 +31,8 @@ A stop requested during startup cancels work immediately but defers `OnStop`
 until successful startup returns. Failed startup must roll back its resources;
 BaseService joins registered work without calling shutdown hooks. Retry requires
 recreating any child that already started successfully and then stopped.
+A node that fails after reserving its RPC listeners, or a seed node that fails
+startup, closes its databases and rejects another `Start`; construct a new node.
 
 Direct consensus `State.Stop` drains a commit already in progress using the
 context originally passed to `State.Start`. Cancel that parent to abort it;

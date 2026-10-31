@@ -7,6 +7,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
@@ -43,6 +44,10 @@ import (
 	_ "net/http/pprof" //nolint: gosec // securely exposed on separate, optional port
 )
 
+// errResourcesReleased rejects a start after a failed start released the node's
+// resources.
+var errResourcesReleased = errors.New("failed startup released node resources; construct a new node")
+
 // nodeImpl is the highest level interface to a full Tendermint node.
 // It includes all configuration information and running services.
 type nodeImpl struct {
@@ -71,6 +76,7 @@ type nodeImpl struct {
 	shutdownOps      closer
 	rpcEnv           *rpccore.Environment
 	dependencyCancel context.CancelFunc
+	released         atomic.Bool // shutdownOps ran; set by OnDrain
 }
 
 // newDefaultNode returns a Tendermint node with default settings for the
@@ -470,6 +476,9 @@ func makeNode(
 
 // OnStart starts the Node. It implements service.Service.
 func (n *nodeImpl) OnStart(ctx context.Context) (err error) {
+	if n.released.Load() {
+		return errResourcesReleased
+	}
 	// Reserve RPC addresses before starting services; serve only once the node is ready.
 	rpcListeners, err := rpccore.ListenRPC(n.config.RPC)
 	if err != nil {
@@ -491,10 +500,18 @@ func (n *nodeImpl) OnStart(ctx context.Context) (err error) {
 	n.dependencyCancel = dependencyCancel
 	ctx, cancelAttempt := context.WithCancel(ctx)
 	var startedReactors []service.Service
+	indexerStarted := false
+	// Past the retryable RPC reservation, failure is final and BaseService will
+	// not call OnDrain. Workers it joins after this return serve only pprof and
+	// metrics, so they do not use the released resources.
 	defer func() {
 		if err != nil {
 			cancelAttempt()
 			n.joinChildren(startedReactors)
+			if !indexerStarted {
+				n.stopEventSinks()
+			}
+			n.OnDrain()
 		}
 	}()
 	if err := n.rpcEnv.ProxyApp.Start(dependencyCtx); err != nil {
@@ -526,6 +543,7 @@ func (n *nodeImpl) OnStart(ctx context.Context) (err error) {
 	if err := n.indexerService.Start(dependencyCtx); err != nil {
 		return err
 	}
+	indexerStarted = true
 
 	// Create the handshaker, which calls RequestInfo, sets the AppVersion on the state,
 	// and replays any blocks as necessary to sync tendermint with the app.
@@ -662,21 +680,25 @@ func (n *nodeImpl) joinChildren(reactors []service.Service) {
 	n.rpcEnv.ProxyApp.Wait()
 }
 
-// OnDrain releases storage after child services and node workers have finished.
+// stopEventSinks closes sinks of an indexer that never started, whose own OnDrain
+// therefore cannot run.
+func (n *nodeImpl) stopEventSinks() {
+	for _, es := range n.eventSinks {
+		if err := es.Stop(); err != nil {
+			n.logger.Error("failed to close eventsink", "eventsink", es.Type(), "err", err)
+		}
+	}
+}
+
+// OnDrain releases storage after child services and node workers have finished,
+// at most once. shutdownOps also closes the block and state store databases.
 func (n *nodeImpl) OnDrain() {
+	if !n.released.CompareAndSwap(false, true) {
+		return
+	}
 	if err := n.shutdownOps(); err != nil {
 		if strings.TrimSpace(err.Error()) != "" {
 			n.logger.Error("problem shutting down additional services", "err", err)
-		}
-	}
-	if n.blockStore != nil {
-		if err := n.blockStore.Close(); err != nil {
-			n.logger.Error("problem closing blockstore", "err", err)
-		}
-	}
-	if n.stateStore != sm.Store(nil) {
-		if err := n.stateStore.Close(); err != nil {
-			n.logger.Error("problem closing statestore", "err", err)
 		}
 	}
 }
