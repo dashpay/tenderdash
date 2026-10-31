@@ -16,6 +16,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/libs/log"
 	ssproto "github.com/dashpay/tenderdash/proto/tendermint/statesync"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -81,7 +82,7 @@ func TestDispatcherReturnsNoBlock(t *testing.T) {
 
 	go func() {
 		<-chans.Out
-		require.NoError(t, d.Respond(ctx, nil, peer))
+		require.NoError(t, d.Respond(ctx, nil, peer, 0))
 		cancel()
 	}()
 
@@ -90,6 +91,52 @@ func TestDispatcherReturnsNoBlock(t *testing.T) {
 
 	require.Nil(t, lb)
 	require.NoError(t, err)
+}
+
+// TestDispatcherReportsDeliveringConnection pins what fences a refusal to its sender:
+// calls are tracked per peer, so a response from a connection that has since been
+// replaced can resolve a newer call, and only its own generation can tell them apart.
+func TestDispatcherReportsDeliveringConnection(t *testing.T) {
+	const staleConnID = uint64(7)
+
+	for _, tc := range []struct {
+		name    string
+		tamper  func(*tmproto.LightBlock)
+		wantErr error
+	}{
+		{name: "usable response", tamper: func(*tmproto.LightBlock) {}},
+		{
+			name:    "undecodable response",
+			tamper:  func(lb *tmproto.LightBlock) { lb.ValidatorSet.QuorumType = int32(outOfRangeQuorumType) },
+			wantErr: errMalformedLightBlock,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			chans, ch := testChannel(100)
+			d := NewDispatcher(ch, log.NewTestingLogger(t))
+			peer := factory.NodeID(t, "a")
+
+			resp := mockLBResp(ctx, t, peer, 1, time.Now())
+			block, err := resp.block.ToProto()
+			require.NoError(t, err)
+			tc.tamper(block)
+
+			responded := make(chan error, 1)
+			go func() {
+				<-chans.Out
+				responded <- d.Respond(ctx, block, peer, staleConnID)
+			}()
+
+			_, connID, err := d.lightBlockWithConn(ctx, 1, peer)
+			require.ErrorIs(t, err, tc.wantErr)
+			require.Equal(t, staleConnID, connID,
+				"the caller must learn which connection delivered the response")
+			require.ErrorIs(t, <-responded, tc.wantErr)
+		})
+	}
 }
 
 // TestDispatcherDeliversUndecodableResponse pins the contract the backfill loop
@@ -117,7 +164,7 @@ func TestDispatcherDeliversUndecodableResponse(t *testing.T) {
 		// Survives ToProto and the header hashes, and is refused by the
 		// ValidatorSet.ValidateBasic that decoding runs.
 		block.ValidatorSet.QuorumType = int32(outOfRangeQuorumType)
-		require.Error(t, d.Respond(ctx, block, peer),
+		require.Error(t, d.Respond(ctx, block, peer, 0),
 			"Respond must still report an undecodable response to its own caller")
 	}()
 
@@ -357,7 +404,7 @@ func handleRequests(ctx context.Context, t *testing.T, d *Dispatcher, ch chan p2
 			peer := request.To
 			resp := mockLBResp(ctx, t, peer, int64(height), time.Now())
 			block, _ := resp.block.ToProto()
-			require.NoError(t, d.Respond(ctx, block, resp.peer))
+			require.NoError(t, d.Respond(ctx, block, resp.peer, 0))
 		case <-ctx.Done():
 			return
 		}

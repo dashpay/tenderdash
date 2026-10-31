@@ -624,6 +624,71 @@ func (suite *SynchronizerTestSuite) TestDuplicateBlockIsVisibleAtDefaultLogLevel
 	suite.Require().Contains(logs.String(), string(peerID2))
 }
 
+// TestPeerErrorsCarrySupplyingConnection pins that a report outliving its connection
+// cannot evict the replacement: results and pending blocks are consumed long after
+// the request, and a generation of zero evicts whichever connection is live.
+func (suite *SynchronizerTestSuite) TestPeerErrorsCarrySupplyingConnection() {
+	ctx := context.Background()
+	const (
+		peerID = types.NodeID("peer")
+		connID = uint64(7)
+	)
+	newPool := func(resultCh chan workerpool.Result) *Synchronizer {
+		wp := workerpool.New(1, workerpool.WithResultCh(resultCh))
+		applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+		pool := NewSynchronizer(1, suite.client, applier, WithWorkerPool(wp))
+		pool.AddPeer(newPeerData(peerID, 1, 100))
+		return pool
+	}
+	expectReport := func() {
+		suite.client.
+			On("Send", mock.Anything, mock.MatchedBy(func(peerErr p2p.PeerError) bool {
+				return peerErr.NodeID == peerID && peerErr.ConnID == connID
+			})).
+			Once().
+			Return(nil)
+	}
+
+	suite.Run("sustained request failures", func() {
+		resultCh := make(chan workerpool.Result, 1)
+		pool := newPool(resultCh)
+		for i := int32(1); i < maxConsecutiveFailures; i++ {
+			pool.peerStore.AddFailure(peerID, maxConsecutiveFailures)
+		}
+		expectReport()
+		resultCh <- workerpool.Result{Err: &errBlockFetch{
+			peerID: peerID,
+			connID: connID,
+			height: 1,
+			err:    client.ErrPeerNotResponded,
+		}}
+		suite.Require().NoError(pool.consumeJobResult(ctx, ctx))
+	})
+
+	suite.Run("block failing to apply", func() {
+		resultCh := make(chan workerpool.Result, 1)
+		pool := newPool(resultCh)
+		poisoned, err := BlockResponseFromProto(suite.responses[0], peerID)
+		suite.Require().NoError(err)
+		poisoned.ConnID = connID
+		pool.pendingToApply[poisoned.Block.Height] = *poisoned
+		honest, err := BlockResponseFromProto(suite.responses[1], "honest peer")
+		suite.Require().NoError(err)
+
+		suite.blockExec.
+			On("VerifyCommit", mock.Anything, mock.Anything, poisoned.Block.Height, poisoned.Commit).
+			Once().
+			Return(types.VerifiedCommit{}, nil)
+		suite.blockExec.
+			On("ValidateBlock", mock.Anything, mock.Anything, poisoned.Block, mock.Anything).
+			Once().
+			Return(errors.New("invalid block"))
+		expectReport()
+		resultCh <- workerpool.Result{Value: honest}
+		suite.Require().NoError(pool.consumeJobResult(ctx, ctx))
+	})
+}
+
 // TestApplyFailurePunishesSupplyingPeer checks that an apply failure is charged to
 // the peer that supplied the failing block, not to the peer whose response merely
 // happened to be consumed last. Otherwise a single peer can poison a height and
@@ -973,7 +1038,7 @@ func (suite *SynchronizerTestSuite) TestNoBlockResponseRetriesAnotherPeer() {
 	pool.AddPeer(newPeerData(peerID, height, 1030))
 	pool.peerStore.Update(peerID, AddNumPending(1))
 	pool.jobProgressCounter.Add(1)
-	resultCh <- errorResult(peerID, height, &client.ErrBlockNotFound{Height: height})
+	resultCh <- errorResult(PeerData{peerID: peerID}, height, &client.ErrBlockNotFound{Height: height})
 	suite.Require().NoError(pool.consumeJobResult(ctx, ctx))
 	suite.Equal([]int64{height}, pool.jobGen.pushedBack)
 	suite.False(pool.peerStore.HasPeerForHeight(height), "a negative reply invalidates the advertised range")
@@ -1003,7 +1068,7 @@ func (suite *SynchronizerTestSuite) TestNoBlockResponseForWrongHeightPreservesRa
 	pool := NewSynchronizer(1000, suite.client, nil, WithWorkerPool(wp))
 	pool.AddPeer(newPeerData(peerID, 1000, 1030))
 	pool.peerStore.Update(peerID, AddNumPending(1))
-	resultCh <- errorResult(peerID, 1000, &client.ErrBlockNotFound{Height: 1030})
+	resultCh <- errorResult(PeerData{peerID: peerID}, 1000, &client.ErrBlockNotFound{Height: 1030})
 	suite.Require().NoError(pool.consumeJobResult(context.Background(), context.Background()))
 	suite.True(pool.peerStore.HasPeerForHeight(1000))
 	peer, found := pool.peerStore.Get(peerID)
