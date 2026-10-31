@@ -740,7 +740,7 @@ func (m *PeerManager) ShouldDisconnectOnError(peerID types.NodeID, fatal bool) b
 	if fatal {
 		return true
 	}
-	if len(m.connected) < int(m.options.MaxConnected) {
+	if m.options.MaxConnected == 0 || len(m.connected) < int(m.options.MaxConnected) {
 		return false
 	}
 	peer, ok := m.store.Get(peerID)

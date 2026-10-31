@@ -390,6 +390,27 @@ func TestReceivePeer_UnknownPayloadBurstDoesNotWriteDatabase(t *testing.T) {
 	require.False(t, f.isEvicted())
 }
 
+// With no connection limit there is no pressure to relieve, so an unrecognized message
+// costs score but not the connection. Invalid data still evicts: that is about the peer.
+func TestReportPeerError_UnlimitedCapacity_KeepsOrdinaryPeer(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	f := newPunishFixture(ctx, t, 0)
+	before := f.score()
+
+	f.router.reportPeerError(ctx, PeerError{
+		NodeID: f.peerID,
+		ConnID: f.connID,
+		Err:    fmt.Errorf("%w: envelope payload", ErrUnrecognizedMessage),
+	})
+	require.Less(t, f.score(), before, "the peer must still lose score")
+	require.False(t, f.isEvicted(), "unlimited capacity must not evict for a non-fatal error")
+
+	f.router.reportPeerError(ctx, PeerError{NodeID: f.peerID, ConnID: f.connID, Err: ErrInvalidData})
+	require.True(t, f.isEvicted(), "invalid data must still evict")
+}
+
 // A report consumed after its connection ended must not evict the NodeID's
 // replacement connection, while the identity still pays the score penalty.
 func TestReportPeerError_StaleConnection_SparesReplacement(t *testing.T) {
