@@ -22,7 +22,7 @@ func newCloseTestClient(t *testing.T, handler http.HandlerFunc) (*RPCClient, *ht
 	return client, srv
 }
 
-// Close joins an idle client, repeatedly, and later requests fail instead of hanging.
+// Close joins an idle client, repeatedly, and the first later request gets an error.
 func TestRPCClientCloseJoinsIdleClient(t *testing.T) {
 	client, _ := newCloseTestClient(t, func(http.ResponseWriter, *http.Request) {})
 	client.closeTimeout = 5 * time.Second

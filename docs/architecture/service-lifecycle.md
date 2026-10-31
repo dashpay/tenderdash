@@ -85,9 +85,15 @@ no way to release them if the caller gives up instead.
 Any later node startup failure, and any seed startup failure, is final: rollback
 closes the databases, event sinks and other resources registered as node closers
 exactly once, later `Stop` and `Wait` calls are no-ops, and another `Start` is
-rejected. A Dash Core request stuck at shutdown can outlive the client's `Close`:
-the pinned client has no HTTP timeout, so the join gives up after five seconds and
-logs an error.
+rejected.
+
+The five-second bound covers only the join in the Dash Core client's `Close`; a
+request still stuck there outlives it and an error is logged. It does not bound
+node shutdown. The pinned client has no HTTP timeout or cancellation, so a reactor
+stuck in a Dash Core call blocks `Wait`, or the rollback inside a failed `Start`,
+before closers run. The node command's `--shutdown-timeout` limits only its wait
+after the context ends, then exits reporting incomplete cleanup; it does not limit
+`Start`, and embedders must bound `Wait` themselves.
 
 Recover from a final failure by constructing a fresh node graph. Metrics register
 on the process-wide default registry, so a second build in the same process panics

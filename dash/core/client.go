@@ -110,7 +110,9 @@ func NewRPCClient(host string, username string, password string, logger log.Logg
 }
 
 // Close closes the underlying connection and joins its dispatcher, up to
-// closeTimeout. It is safe to call repeatedly. Later requests fail.
+// closeTimeout. It is safe to call repeatedly. Do not send requests after Close:
+// they can return an error, but they block forever once the endpoint's send
+// buffer fills, because nothing drains it any more.
 func (rpcClient *RPCClient) Close() error {
 	rpcClient.endpoint.Shutdown()
 	joined := make(chan struct{})

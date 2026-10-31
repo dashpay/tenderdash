@@ -237,7 +237,9 @@ func makeNode(
 		if err != nil {
 			return nil, fmt.Errorf("failed to create Dash Core RPC client: %w", err)
 		}
-		// A validator's client belongs to its private validator instead.
+		// A validator's client belongs to its private validator instead. Close
+		// bounds only its own join: this closer runs after reactors are joined, so
+		// a reactor stuck in a Dash Core call blocks shutdown before reaching it.
 		closers = append(closers, dashCoreRPCClient.Close)
 	}
 
