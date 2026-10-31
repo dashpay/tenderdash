@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cosmos/gogoproto/proto"
 	"github.com/fortytw2/leaktest"
 	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/mock"
@@ -806,6 +807,9 @@ func (suite *SynchronizerTestSuite) TestResponseFailureFencesToDeliveringConnect
 	const (
 		invalidBlock = iota
 		wrongHeight
+		undecodable
+		noCommit
+		missingOtherHeight
 		noAnswer
 	)
 	for _, tc := range []struct {
@@ -818,6 +822,9 @@ func (suite *SynchronizerTestSuite) TestResponseFailureFencesToDeliveringConnect
 		{"replacement answers with the wrong height", false, wrongHeight, true},
 		{"old connection answers with a block failing to apply", true, invalidBlock, false},
 		{"old connection answers with the wrong height", true, wrongHeight, false},
+		{"replacement answers with an undecodable block", false, undecodable, true},
+		{"replacement answers without a commit", false, noCommit, true},
+		{"replacement reports a different height missing", false, missingOtherHeight, true},
 		{"nobody answers", true, noAnswer, false},
 	} {
 		suite.Run(tc.name, func() {
@@ -874,7 +881,7 @@ func (suite *SynchronizerTestSuite) TestResponseFailureFencesToDeliveringConnect
 			if tc.fromOldConn {
 				answerOn = oldConn
 			}
-			answer := func(resp *blocksync.BlockResponse) {
+			answer := func(resp proto.Message) {
 				inCh <- p2p.Envelope{
 					Attributes: map[string]string{client.ResponseIDAttribute: request.Attributes[client.RequestIDAttribute]},
 					From:       peerID,
@@ -896,6 +903,12 @@ func (suite *SynchronizerTestSuite) TestResponseFailureFencesToDeliveringConnect
 					Return(errors.New("invalid block"))
 			case wrongHeight:
 				answer(suite.responses[1])
+			case undecodable:
+				answer(&blocksync.BlockResponse{})
+			case noCommit:
+				answer(&blocksync.BlockResponse{Block: suite.responses[0].Block})
+			case missingOtherHeight:
+				answer(&blocksync.NoBlockResponse{Height: 2})
 			case noAnswer:
 				wait, stop := context.WithTimeout(ctx, 5*time.Second)
 				defer stop()

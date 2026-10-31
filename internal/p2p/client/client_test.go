@@ -812,7 +812,45 @@ func (suite *ChannelTestSuite) TestBlockObserverLearnsDeliveringConnection() {
 	_, err = p.Await()
 	suite.Require().NoError(err)
 	_ = suite.client.resolve(ctx, response(8))
+	suite.Equal([]uint64{7}, observer.deliveries(), "a late response must not be recorded")
+
+	// A promise goroutine races the map above, so pin the guard on the entry itself.
+	observer = &countingBlockObserver{}
+	pending := &pendingResponse{ch: make(chan result, 1), observer: observer}
+	pending.deliver(result{ConnID: 7})
+	pending.deliver(result{ConnID: 8})
 	suite.Equal([]uint64{7}, observer.deliveries(), "only the settling response may be recorded")
+}
+
+// TestResponseFromAnotherPeerDoesNotResolve pins that a request ID is no credential: a
+// peer that learned one must neither settle the request nor label its generation.
+func (suite *ChannelTestSuite) TestResponseFromAnotherPeerDoesNotResolve() {
+	ctx := context.Background()
+	observer := &countingBlockObserver{}
+	var request p2p.Envelope
+	suite.p2pChannel.On("Send", mock.Anything, mock.Anything).Once().Run(func(args mock.Arguments) {
+		request = args.Get(1).(p2p.Envelope)
+	}).Return(nil)
+	p, err := suite.client.GetBlock(WithBlockRequestObserver(ctx, observer), suite.height, suite.peerID)
+	suite.Require().NoError(err)
+
+	response := func(from types.NodeID, connID uint64) *p2p.Envelope {
+		return &p2p.Envelope{
+			Attributes: map[string]string{ResponseIDAttribute: request.Attributes[RequestIDAttribute]},
+			From:       from,
+			ConnID:     connID,
+			Message:    suite.response,
+		}
+	}
+	suite.Require().ErrorIs(suite.client.resolve(ctx, response("colluding peer", 9)), ErrCannotResolveResponse,
+		"the sender must be reported, as for any other response it was not asked for")
+	suite.Empty(observer.deliveries(), "another peer must not label the request's generation")
+
+	suite.Require().NoError(suite.client.resolve(ctx, response(suite.peerID, 7)))
+	suite.Equal([]uint64{7}, observer.deliveries())
+	got, err := p.Await()
+	suite.Require().NoError(err)
+	suite.Equal(suite.response, got, "the peer asked must still be able to answer")
 }
 
 func (suite *ChannelTestSuite) TestBlockObserverResponseBeforeAdmission() {

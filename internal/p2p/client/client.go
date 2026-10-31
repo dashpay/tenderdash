@@ -442,6 +442,13 @@ func (c *Client) resolve(ctx context.Context, envelope *p2p.Envelope) error {
 	if !ok {
 		return fmt.Errorf("responseID attribute is missed: %w", ErrCannotResolveResponse)
 	}
+	// Request IDs are visible to the peer asked, so one proves nothing about the sender.
+	if val, ok := c.pending.Load(respID); ok {
+		if pending, ok := val.(*pendingResponse); ok && pending.peerID != envelope.From {
+			return fmt.Errorf("response %s came from peer %s, which was not asked: %w",
+				respID, envelope.From, ErrCannotResolveResponse)
+		}
+	}
 	res := result{Value: envelope.Message, ConnID: envelope.ConnID}
 	if msg, ok := envelope.Message.(*bcproto.NoBlockResponse); ok {
 		res.Err = &ErrBlockNotFound{Height: msg.Height}
@@ -489,7 +496,7 @@ func (c *Client) sendWithResponse(ctx context.Context, reqID string, peerID type
 	msg proto.Message, observers ...BlockRequestObserver,
 ) (chan result, error) {
 	c.expireTombstones()
-	pending := &pendingResponse{ch: make(chan result, 1)}
+	pending := &pendingResponse{ch: make(chan result, 1), peerID: peerID}
 	if len(observers) > 0 {
 		pending.observer = observers[0]
 	}

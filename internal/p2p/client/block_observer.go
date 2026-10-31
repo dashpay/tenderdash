@@ -3,6 +3,8 @@ package client
 import (
 	"context"
 	"sync"
+
+	"github.com/dashpay/tenderdash/types"
 )
 
 // BlockRequestObserver observes client admission and the end of waiting for a
@@ -27,6 +29,8 @@ func WithBlockRequestObserver(ctx context.Context, observer BlockRequestObserver
 // pendingResponse serializes admission, the first response and retirement. A
 // reply can arrive while Send is returning; in that case its active time is zero.
 type pendingResponse struct {
+	// peerID is the only peer allowed to answer; set once, before the entry is shared.
+	peerID   types.NodeID
 	mtx      sync.Mutex
 	ch       chan result
 	observer BlockRequestObserver
