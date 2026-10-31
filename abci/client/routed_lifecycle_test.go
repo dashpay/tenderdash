@@ -62,6 +62,9 @@ func TestRoutedClientFailedStartReleasesOnlyItsChildren(t *testing.T) {
 			case <-time.After(5 * time.Second):
 				t.Fatal("child started by the failed attempt was not joined")
 			}
+			// Only a client that started and stopped refuses another start.
+			require.ErrorContains(t, attemptOwned.Start(callerCtx), "already stopped",
+				"the failed attempt never started this child")
 			require.True(t, callerOwned.IsRunning(), "failed start stopped a caller-owned client")
 		})
 	}
