@@ -28,6 +28,9 @@ The protocol is specified, from the implementation, in the
 
 The wire format of consensus messages is in
 [Consensus messages](../../../spec/p2p/messages/consensus.md); the timestamp
-algorithm in [Proposer-Based Timestamps](../../../spec/consensus/proposer-based-timestamp/README.md).
+rules in force are in
+[Proposal timestamps and time rules](../../../spec/consensus/consensus-alternative-flows.md#proposal-timestamps-and-time-rules)
+([Proposer-Based Timestamps](../../../spec/consensus/proposer-based-timestamp/README.md)
+is historical design material).
 Operational guidance for timestamp problems is in the
 [PBTS runbook](../../tools/debugging/proposer-based-timestamps-runbook.md).

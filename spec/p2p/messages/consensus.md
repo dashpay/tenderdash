@@ -32,12 +32,10 @@ next block in the blockchain should be.
 ### Vote
 
 Vote is sent to vote for some block (or to inform others that a process does not vote in the
-current round). Vote is defined in the
-[Blockchain](https://github.com/tendermint/tendermint/blob/master/spec/core/data_structures.md#blockidd)
-section and contains validator's
-information (validator address and index), height and round for which the vote is sent, vote type,
-blockID if process vote for some block (`nil` otherwise) and a timestamp when the vote is sent. The
-message is signed by the validator private key.
+current round). [Vote](../../core/data_structures.md#vote) contains the validator's
+information (`ProTxHash` and index), height and round for which the vote is sent, vote type,
+blockID if process vote for some block (`nil` otherwise), the block signature and, on a non-nil
+precommit, the vote extensions. The message is signed by the validator private key.
 
 | Name | Type                                       | Description               | Field Number |
 |------|--------------------------------------------|---------------------------|--------------|
@@ -83,7 +81,7 @@ In case the block is also committed, then IsCommit flag is set to true.
 | height                | int64                                                        | Height of corresponding block          | 1            |
 | round                 | int32                                                        | Round of voting to finalize the block. | 2            |
 | block_part_set_header | [PartSetHeader](../../core/data_structures.md#partsetheader) |                                        | 3            |
-| block_parts           | int32                                                        |                                        | 4            |
+| block_parts           | BitArray                                                     |                                        | 4            |
 | is_commit             | bool                                                         |                                        | 5            |
 
 ### ProposalPOL
@@ -98,17 +96,34 @@ and what prevotes for the re-proposed block the process has.
 | proposal_pol_round | int32    |                               | 2            |
 | proposal_pol       | bitarray |                               | 3            |
 
-### ReceivedVote
+### HasVote
 
-ReceivedVote is sent to indicate that a particular vote has been received. It contains height,
+HasVote is sent to indicate that a particular vote has been received. It contains height,
 round, vote type and the index of the validator that is the originator of the corresponding vote.
 
 | Name   | Type                                                             | Description                            | Field Number |
 |--------|------------------------------------------------------------------|----------------------------------------|--------------|
 | height | int64                                                            | Height of corresponding block          | 1            |
 | round  | int32                                                            | Round of voting to finalize the block. | 2            |
-| type   | [SignedMessageType](../../core/data_structures.md#signedmsgtype) |                                        | 3            |
+| type   | [SignedMsgType](../../core/data_structures.md#signedmsgtype)     |                                        | 3            |
 | index  | int32                                                            |                                        | 4            |
+
+### Commit
+
+Commit is sent on the VoteChannel to deliver a threshold-signed commit for a block.
+
+| Name   | Type                                       | Description                | Field Number |
+|--------|--------------------------------------------|----------------------------|--------------|
+| commit | [Commit](../../core/data_structures.md#commit) | Commit for a decided block | 1            |
+
+### HasCommit
+
+HasCommit is sent to indicate that a process holds the commit for a given height and round.
+
+| Name   | Type  | Description                 | Field Number |
+|--------|-------|-----------------------------|--------------|
+| height | int64 | Height of the commit        | 1            |
+| round  | int32 | Round the commit belongs to | 2            |
 
 ### VoteSetMaj23
 
@@ -119,7 +134,8 @@ It contains height, round, vote type and the BlockID.
 |--------|------------------------------------------------------------------|----------------------------------------|--------------|
 | height | int64                                                            | Height of corresponding block          | 1            |
 | round  | int32                                                            | Round of voting to finalize the block. | 2            |
-| type   | [SignedMessageType](../../core/data_structures.md#signedmsgtype) |                                        | 3            |
+| type   | [SignedMsgType](../../core/data_structures.md#signedmsgtype)     |                                        | 3            |
+| block_id | [BlockID](../../core/data_structures.md#blockid)               |                                        | 4            |
 
 ### VoteSetBits
 
@@ -131,9 +147,9 @@ the votes a process has.
 |----------|------------------------------------------------------------------|----------------------------------------|--------------|
 | height   | int64                                                            | Height of corresponding block          | 1            |
 | round    | int32                                                            | Round of voting to finalize the block. | 2            |
-| type     | [SignedMessageType](../../core/data_structures.md#signedmsgtype) |                                        | 3            |
+| type     | [SignedMsgType](../../core/data_structures.md#signedmsgtype)     |                                        | 3            |
 | block_id | [BlockID](../../core/data_structures.md#blockid)                 |                                        | 4            |
-| votes    | BitArray                                                         | Round of voting to finalize the block. | 5            |
+| votes    | BitArray                                                         | Votes the process has for the BlockID. | 5            |
 
 ### Message
 
@@ -141,12 +157,14 @@ Message is a [`oneof` protobuf type](https://developers.google.com/protocol-buff
 
 | Name | Type | Description | Field Number |
 | --- | --- | --- | --- |
-| new_round_step | [NewRoundStep](#newroundstep) | Height of corresponding block | 1 |
-| new_valid_block | [NewValidBlock](#newvalidblock) | Round of voting to finalize the block. | 2 |
+| new_round_step | [NewRoundStep](#newroundstep) | | 1 |
+| new_valid_block | [NewValidBlock](#newvalidblock) | | 2 |
 | proposal | [Proposal](#proposal) | | 3 |
 | proposal_pol | [ProposalPOL](#proposalpol) | | 4 |
 | block_part | [BlockPart](#blockpart) | | 5 |
 | vote | [Vote](#vote) | | 6 |
-| received_vote | [ReceivedVote](#receivedvote) | | 7 |
+| has_vote | [HasVote](#hasvote) | | 7 |
 | vote_set_maj23 | [VoteSetMaj23](#votesetmaj23) | | 8 |
 | vote_set_bits | [VoteSetBits](#votesetbits) | | 9 |
+| commit | [Commit](#commit) | | 10 |
+| has_commit | [HasCommit](#hascommit) | | 11 |
