@@ -144,7 +144,7 @@ func (d *Dispatcher) dispatch(ctx context.Context, peer types.NodeID, height int
 // than dropped. Dropping it leaves the caller waiting out its own deadline and
 // reading the sender as slow, which charges a shared retry budget for one peer's
 // choice and hides the reason the response was unusable.
-func (d *Dispatcher) Respond(ctx context.Context, lb *tmproto.LightBlock, peer types.NodeID) error {
+func (d *Dispatcher) Respond(lb *tmproto.LightBlock, peer types.NodeID) error {
 	d.mtx.Lock()
 	defer d.mtx.Unlock()
 
@@ -158,12 +158,7 @@ func (d *Dispatcher) Respond(ctx context.Context, lb *tmproto.LightBlock, peer t
 	// If lb is nil we take that to mean that the peer didn't have the requested light
 	// block and thus pass on the nil to the caller.
 	if lb == nil {
-		select {
-		case answerCh <- lightBlockResult{}:
-			return nil
-		case <-ctx.Done():
-			return ctx.Err()
-		}
+		return deliverLightBlockResult(answerCh, lightBlockResult{})
 	}
 
 	// LightBlockFromProto runs the ValidateBasic of every part it decodes, so this
@@ -172,19 +167,25 @@ func (d *Dispatcher) Respond(ctx context.Context, lb *tmproto.LightBlock, peer t
 	block, err := types.LightBlockFromProto(lb)
 	if err != nil {
 		err = fmt.Errorf("%w: %w", errMalformedLightBlock, err)
-		select {
-		case answerCh <- lightBlockResult{err: err}:
-			return err
-		case <-ctx.Done():
-			return ctx.Err()
+		if deliverErr := deliverLightBlockResult(answerCh, lightBlockResult{err: err}); deliverErr != nil {
+			return deliverErr
 		}
+		return err
 	}
 
+	return deliverLightBlockResult(answerCh, lightBlockResult{block: block})
+}
+
+// deliverLightBlockResult never waits. A call takes one answer and its channel has
+// room for exactly that, so a full channel means this response is surplus. Waiting
+// for room would hold the dispatcher lock against the caller's cleanup, which needs
+// that lock and no longer reads the channel.
+func deliverLightBlockResult(answerCh chan<- lightBlockResult, result lightBlockResult) error {
 	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case answerCh <- lightBlockResult{block: block}:
+	case answerCh <- result:
 		return nil
+	default:
+		return errUnsolicitedResponse
 	}
 }
 
