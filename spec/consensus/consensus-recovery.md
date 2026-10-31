@@ -63,10 +63,17 @@ ticker and, unless `doWALCatchup` was disabled by block sync, runs
   peer budgets, no evictions), tocks go through `handleTimeout`. With
   `WalSkipRoundsToLast` a replayed proposal for a later round advances the
   round directly;
-- replay mode: the node does not propose (`EnterProposeAction.Execute`), skips
-  timeliness checks (`isValidForPrevote`), and re-signs nothing new — its own
-  votes come back from the WAL as internal messages, and the private
-  validator refuses to double-sign in the meantime (see [WAL](./wal.md));
+- replay mode: the node does not propose (`EnterProposeAction.Execute`) and
+  skips timeliness checks (`isValidForPrevote`), but it may still attempt to
+  sign votes: replayed messages drive the normal actions, and neither
+  `prevoter.Do` nor `voteSigner.signVote` checks replay mode, so a replayed
+  step can also produce a vote that was never signed before the crash. Its
+  earlier votes also come back from the WAL as internal messages. Conflicting
+  block votes are prevented by the signer's persisted state: `FilePV` reuses
+  the stored block signature for identical sign bytes at the same
+  height/round/step (re-signing only precommit extensions) and refuses
+  regressions and conflicting sign bytes (see [WAL](./wal.md)).
+  `DashCoreSignerClient` keeps no such state in Tenderdash;
 - a corrupted WAL is backed up to `<wal>.CORRUPTED`, repaired by truncating
   at the first undecodable record (`repairWalFile`), and replay is retried
   once; other errors are logged and the node starts anyway.

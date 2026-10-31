@@ -19,11 +19,14 @@ by rotating an index over the validator set.
   before every other validator has proposed once. Across heights the
   guarantee is narrower: in `v1` the rotation continues from one height to
   the next, so any `|V|` consecutive elections are fair as long as every
-  block is committed in the round it was first proposed; in `v0` only the
-  **round-0** proposers rotate fairly across heights — a validator that
-  proposed in round `r > 0` proposes again in round 0 of the next height
-  (e.g. with `V = A,B,C,D`, a height lost at round 0 by `A` and committed at
-  round 1 by `B` yields the election sequence `A, B, B, C, D`).
+  block is committed in the round it was first proposed; in `v0` the same
+  condition makes only the **round-0** proposers rotate by one per height, and
+  other elections can repeat a validator early. With `V = A,B,C,D`, a height
+  lost at round 0 by `A` and committed at round 1 with a fresh block by `B`
+  yields the election sequence `A, B, B, C, D`; committed at round 2 with a
+  fresh block by `C`, it yields `A, B, C, B`. A re-proposal also breaks the
+  round-0 rotation: if `B` re-proposes `A`'s round-0 block and it is committed
+  at round 1, the next height starts with `A` again.
 
 Both follow from the construction below.
 

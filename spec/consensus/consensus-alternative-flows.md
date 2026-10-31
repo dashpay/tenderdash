@@ -235,8 +235,14 @@ and `addVoteErrorMw` (`internal/consensus/state_add_vote.go`).
 
 ## Vote extensions
 
-- The node asks ABCI `ExtendVote` only when signing a **non-nil precommit**
-  (`voteSigner.signVote`). The response must parse
+- The node normally asks ABCI `ExtendVote` when signing a **non-nil
+  precommit** (`voteSigner.signVote`). The one exception signs nothing: when
+  `VerifyVoteExtension` rejects a commit's extensions, no expectation is known
+  for its block and round, and the block is processed for `commit.Round`,
+  `blockExecutor.verifyCommitExtensions` calls `ExtendVote` for that block and
+  round to learn the expected vector. This can happen on any node, validator
+  or not ([Parked commit](./consensus-commit.md#parked-commit-and-replacement-candidates)).
+  On both paths the response must parse
   (`NewVoteExtensionsFromABCIExtended`); otherwise the node panics.
 - Supported extension types (`types/vote_extension.go`):
   `THRESHOLD_RECOVER` and `THRESHOLD_RECOVER_RAW` (threshold-recoverable;

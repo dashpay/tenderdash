@@ -212,8 +212,11 @@ POL round's prevotes already have a majority) → `EnterPrevote(h, Round)`.
 4. `prevoter.signVote`: with no lock and `POLRound == -1`,
    `checkProposalBlock` is true → `voteSigner.signAddVote(PrevoteType, BlockID)`.
 
-Step `Prevote` is set on return. Any failure in 1–2 yields a **nil prevote**
-instead. **⇢** [Prevote rule](./consensus-transitions.md#prevote-decision-prevoterdo).
+Step `Prevote` is set on return. A failure in step 1, or `ErrBlockRejected`
+(application `REJECT`) or `ErrInvalidBlock` (`ValidateBlockWithRoundState`) in
+step 2, yields a **nil prevote** instead. Any other step-2 error — transport
+failure, `UNKNOWN` status or a malformed response — **panics** the node
+(`prevoter.handleError`). **⇢** [Prevote rule](./consensus-transitions.md#prevote-decision-prevoterdo).
 
 ### 6. Collecting prevotes
 
