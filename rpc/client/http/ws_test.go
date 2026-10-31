@@ -155,6 +155,9 @@ func TestUnsubscribeAllReleasesBlockedDelivery(t *testing.T) {
 	// Taking one event lets the next fill the buffer, so the third has to block.
 	requireEvent(t, gone, "gone")
 	require.Eventually(t, func() bool { return len(gone) == 1 }, 5*time.Second, time.Millisecond)
+	// Nothing observable marks the delivery blocking; this window only lets it get
+	// there, and cannot fail correct code.
+	<-time.After(50 * time.Millisecond)
 
 	require.NoError(t, w.UnsubscribeAll(ctx, ""))
 	other, err := w.Subscribe(ctx, "", "other")
