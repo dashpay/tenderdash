@@ -638,13 +638,15 @@ func TestStaleConnectionHandlerErrorIsNotReportedAfterReconnect(t *testing.T) {
 	voteCh := p2p.NewChannel(p2p.ConsensusVoteChannel, "vote", inCh, outCh, errCh)
 	go r.processMsgCh(ctx, voteCh, channelBundle{vote: voteCh})
 
-	// An unrecognized payload from the peer's live g1 connection: it passes the
-	// top-of-loop check, fails MsgFromProto in the handler, and reaches the peer-
-	// error raise — by which point the hook has reconnected the NodeID as g2.
+	// An unrecognized payload from the peer's live g1 connection, on the data channel
+	// because the vote channel's limiter drops any message it has no price for before
+	// the handler. It passes the top-of-loop check, fails MsgFromProto in the handler,
+	// and reaches the peer-error raise, by which point the hook has reconnected the
+	// NodeID as g2.
 	inCh <- p2p.Envelope{
 		From:      peerID,
 		ConnID:    g1,
-		ChannelID: p2p.ConsensusVoteChannel,
+		ChannelID: p2p.ConsensusDataChannel,
 		Message:   &tmproto.Validator{},
 	}
 	// A control message from a peer that never reconnects, whose report proves the
