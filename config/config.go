@@ -770,11 +770,11 @@ type P2PConfig struct { //nolint: maligned
 	UPNP bool `mapstructure:"upnp"`
 
 	// MaxConnections defines the maximum number of connected peers (inbound and
-	// outbound).
+	// outbound); 0 uses the default. Read it through EffectiveMaxConnections.
 	MaxConnections uint16 `mapstructure:"max-connections"`
 
 	// MaxOutgoingConnections defines the maximum number of outgoing connections. It must
-	// not exceed MaxConnections; 0 means all connections can be outgoing.
+	// not exceed MaxConnections; 0 uses half of MaxConnections.
 	MaxOutgoingConnections uint16 `mapstructure:"max-outgoing-connections"`
 
 	// MaxIncomingConnectionAttempts rate limits the number of incoming connection
@@ -844,6 +844,15 @@ func DefaultP2PConfig() *P2PConfig {
 	}
 }
 
+// EffectiveMaxConnections returns the connection limit the node enforces, which is
+// the default when max-connections is 0.
+func (cfg *P2PConfig) EffectiveMaxConnections() uint16 {
+	if cfg.MaxConnections == 0 {
+		return DefaultP2PConfig().MaxConnections
+	}
+	return cfg.MaxConnections
+}
+
 // ValidateBasic performs basic validation (checking param bounds, etc.) and
 // returns an error if any check fails.
 func (cfg *P2PConfig) ValidateBasic() error {
@@ -862,11 +871,7 @@ func (cfg *P2PConfig) ValidateBasic() error {
 	if cfg.RecvRate < 0 {
 		return fmt.Errorf("recv-rate must be >= 0 bytes/second, got %d", cfg.RecvRate)
 	}
-	// The node runs max-connections = 0 with the default limit.
-	maxConnections := cfg.MaxConnections
-	if maxConnections == 0 {
-		maxConnections = DefaultP2PConfig().MaxConnections
-	}
+	maxConnections := cfg.EffectiveMaxConnections()
 	if cfg.MaxOutgoingConnections > maxConnections {
 		return fmt.Errorf("max-outgoing-connections must be <= effective max-connections (%d), got %d",
 			maxConnections, cfg.MaxOutgoingConnections)

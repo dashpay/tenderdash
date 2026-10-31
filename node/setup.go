@@ -229,14 +229,7 @@ func createPeerManager(
 		privatePeerIDs[types.NodeID(id)] = struct{}{}
 	}
 
-	var maxConns uint16
-
-	switch {
-	case cfg.P2P.MaxConnections > 0:
-		maxConns = cfg.P2P.MaxConnections
-	default:
-		maxConns = config.DefaultP2PConfig().MaxConnections
-	}
+	maxConns := cfg.P2P.EffectiveMaxConnections()
 
 	var maxOutgoingConns uint16
 	switch {
@@ -366,9 +359,7 @@ func createRouter(
 	transportConf.MaxPacketMsgPayloadSize = cfg.P2P.MaxPacketMsgPayloadSize
 	transport := p2p.NewMConnTransport(
 		p2pLogger, transportConf, channelDescriptors(cfg),
-		p2p.MConnTransportOptions{
-			MaxAcceptedConnections: uint32(cfg.P2P.MaxConnections),
-		},
+		mconnTransportOptions(cfg),
 	)
 
 	ep, err := p2p.NewEndpoint(nodeKey.ID.AddressString(cfg.P2P.ListenAddress))
@@ -391,6 +382,12 @@ func createRouter(
 		ep,
 		opts,
 	)
+}
+
+func mconnTransportOptions(cfg *config.Config) p2p.MConnTransportOptions {
+	return p2p.MConnTransportOptions{
+		MaxAcceptedConnections: uint32(cfg.P2P.EffectiveMaxConnections()),
+	}
 }
 
 func makeNodeInfo(

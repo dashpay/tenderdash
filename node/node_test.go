@@ -32,6 +32,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/evidence"
 	"github.com/dashpay/tenderdash/internal/mempool"
 	mempoolmocks "github.com/dashpay/tenderdash/internal/mempool/mocks"
+	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/internal/proxy"
 	"github.com/dashpay/tenderdash/internal/pubsub"
 	sm "github.com/dashpay/tenderdash/internal/state"
@@ -1060,6 +1061,56 @@ func loadStatefromGenesis(_ctx context.Context, t *testing.T) sm.State {
 	require.NotNil(t, state)
 
 	return state
+}
+
+// TestConnectionLimitAppliesEverywhere pins that the validator, the peer manager and
+// the transport enforce one limit. The transport reads 0 as unlimited, so a raw value
+// reaching it leaves the listener accepting connections the peer manager will refuse.
+func TestConnectionLimitAppliesEverywhere(t *testing.T) {
+	defaultLimit := config.DefaultP2PConfig().MaxConnections
+	for _, tc := range []struct {
+		name       string
+		configured uint16
+		want       uint16
+	}{
+		{name: "zero uses the default", configured: 0, want: defaultLimit},
+		{name: "explicit value", configured: 8, want: 8},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			cfg := config.DefaultConfig()
+			cfg.P2P.MaxConnections = tc.configured
+
+			t.Run("validator", func(t *testing.T) {
+				cfg.P2P.MaxOutgoingConnections = tc.want
+				require.NoError(t, cfg.P2P.ValidateBasic())
+				cfg.P2P.MaxOutgoingConnections = tc.want + 1
+				require.ErrorContains(t, cfg.P2P.ValidateBasic(), "max-outgoing-connections")
+				cfg.P2P.MaxOutgoingConnections = 0
+			})
+
+			t.Run("peer manager", func(t *testing.T) {
+				peerManager, closePeerManager, err := createPeerManager(ctx, cfg,
+					func(*config.DBContext) (dbm.DB, error) { return dbm.NewMemDB(), nil },
+					types.NodeID(strings.Repeat("ff", 20)), p2p.NopMetrics(), log.NewNopLogger())
+				require.NoError(t, err)
+				defer func() { require.NoError(t, closePeerManager()) }()
+
+				for i := range int(tc.want) {
+					require.NoError(t, peerManager.Accepted(types.NodeID(fmt.Sprintf("%040x", i))),
+						"connection %d is within the limit", i)
+				}
+				require.Error(t, peerManager.Accepted(types.NodeID(fmt.Sprintf("%040x", tc.want))),
+					"the connection past the limit must be refused")
+			})
+
+			t.Run("transport", func(t *testing.T) {
+				require.Equal(t, uint32(tc.want), mconnTransportOptions(cfg).MaxAcceptedConnections)
+			})
+		})
+	}
 }
 
 func TestGetRouterConfigWiresMaxIncomingConnectionAttempts(t *testing.T) {
