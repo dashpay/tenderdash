@@ -270,6 +270,9 @@ func TestRandomBeaconRelockNewBeacon(t *testing.T) {
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
 	stateData := cs1.GetStateData()
 	height, round := stateData.Height, stateData.Round
+	// Copied before consensus starts: the consensus goroutine moves the set's proposer index in place
+	// on every round change, so copying it later races with that write.
+	_, valSet := cs1.GetValidatorSet()
 
 	timeoutWaitCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryTimeoutWait)
 	proposalCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryCompleteProposal)
@@ -305,7 +308,6 @@ func TestRandomBeaconRelockNewBeacon(t *testing.T) {
 	round++
 	propR1 := types.NewProposal(height, 1, round, 0, blockID, theBlock.Time)
 	p := propR1.ToProto()
-	_, valSet := cs1.GetValidatorSet()
 	_, err = vs2.SignProposal(ctx, stateData.state.ChainID, valSet.QuorumType, valSet.QuorumHash, p)
 	require.NoError(t, err)
 	propR1.Signature = p.Signature
