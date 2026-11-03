@@ -582,6 +582,48 @@ Whenever a process is about to save a block and its commit, in consensus, block 
 first calls `RequestVerifyVoteExtension` for the commit, once `ProcessProposal` has processed the
 block. This includes commits the process assembled from its own +2/3 precommits.
 
+### ApplyBlockRandomness
+
+#### Parameters and Types
+
+* **Request**:
+
+    | Name   | Type  | Description                                                              | Field Number |
+    |--------|-------|--------------------------------------------------------------------------|--------------|
+    | hash   | bytes | The header hash of the block the Prevotes are for.                       | 1            |
+    | height | int64 | Height of the block.                                                     | 2            |
+    | round  | int32 | Round whose Prevotes produced the beacon.                                | 3            |
+    | beacon | bytes | 96-byte BLS threshold signature recovered from the Prevotes of `round`. | 4            |
+
+* **Response**:
+
+    | Name     | Type  | Description                                                                | Field Number |
+    |----------|-------|----------------------------------------------------------------------------|--------------|
+    | app_hash | bytes | App hash after the randomness is applied; the hash the Precommits sign. | 1            |
+
+* **Usage**:
+    * Used from consensus version 2 (`VersionParams.consensus_version`). Before that, Tenderdash never calls it.
+    * The beacon is the BLS threshold signature recovered from the Prevotes of round `round` for block `hash`.
+      Every set of threshold shares recovers the same bytes, and nobody can compute them before the Prevotes exist.
+      Tenderdash verifies the beacon against the quorum's threshold public key before the call.
+    * The Application applies the randomness to the state that `ProcessProposal` (or `PrepareProposal`) left for
+      that block and round, and returns the resulting app hash. When nothing in the block uses randomness, it
+      returns the header app hash.
+    * The header keeps the app hash from `ProcessProposal`, which Prevotes sign. Precommits and the commit sign the
+      returned app hash, and the commit carries it with the beacon (`Commit.app_hash`, `Commit.beacon`, and
+      `CommitInfo.app_hash`, `CommitInfo.beacon` in `RequestFinalizeBlock`).
+    * The implementation MUST be deterministic, and MUST return the same `app_hash` when called again for the same
+      block, round and beacon.
+    * An ABCI error is fatal, as for `ExtendVote`.
+
+#### When does Tenderdash call it?
+
+* On a validator, once the Prevotes of round _r_ for block _v_ reach the threshold and their signature is
+  recovered, before `ExtendVote` and before signing its Precommit for _v_.
+* On every path that finalizes a block from a commit (block sync, replay, a node that did not vote): after
+  `ProcessProposal` of the committed block for the commit round, with the commit's beacon, and before
+  `FinalizeBlock`. Tenderdash compares the returned `app_hash` with the commit's and stops on a mismatch.
+
 ### FinalizeBlock
 
 #### Parameters and Types
@@ -806,12 +848,14 @@ enum VoteExtensionType {
 
 * **Fields**:
 
-    | Name           | Type  | Description                                                                                  | Field Number |
-    |----------------|-------|----------------------------------------------------------------------------------------------|--------------|
-    | round          | int32 | Commit round. Reflects the round at which the block proposer decided in the previous height. | 1            |
-    | QuorumHash     | bytes | Quorum hash of a current height.                                                             | 3            |
-    | BlockSignature | bytes | Block signature.                                                                             | 4            |
-    | StateSignature | bytes | State signature.                                                                             | 5            |
+    | Name                      | Type                                     | Description                                                                                  | Field Number |
+    |---------------------------|------------------------------------------|----------------------------------------------------------------------------------------------|--------------|
+    | round                     | int32                                    | Commit round. Reflects the round at which the block proposer decided in the previous height. | 1            |
+    | quorum_hash               | bytes                                    | Quorum hash of a current height.                                                             | 2            |
+    | block_signature           | bytes                                    | Block signature.                                                                             | 3            |
+    | threshold_vote_extensions | repeated [VoteExtension](#voteextension) | Threshold-recovered vote extensions of the commit.                                           | 4            |
+    | beacon                    | bytes                                    | Random beacon of the commit round. Set from consensus version 2; empty before.               | 5            |
+    | app_hash                  | bytes                                    | App hash the commit signs, returned by `ApplyBlockRandomness`. From consensus version 2.     | 6            |
 
 ### ExtendedCommitInfo
 

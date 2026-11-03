@@ -490,6 +490,41 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 	return resp, nil
 }
 
+// ApplyBlockRandomness implements ABCI. The example application uses no randomness, so it returns
+// the app hash of the state that PrepareProposal or ProcessProposal left for the block and round.
+func (app *Application) ApplyBlockRandomness(_ context.Context, req *abci.RequestApplyBlockRandomness) (*abci.ResponseApplyBlockRandomness, error) {
+	app.mu.Lock()
+	defer app.mu.Unlock()
+
+	roundState, err := app.processedRoundState(req.Height, req.Round)
+	if err != nil {
+		return nil, fmt.Errorf("apply block randomness (hash: %X): %w", req.Hash, err)
+	}
+
+	resp := &abci.ResponseApplyBlockRandomness{AppHash: roundState.GetAppHash()}
+	app.logger.Debug("ApplyBlockRandomness", "req", req, "resp", resp)
+	return resp, nil
+}
+
+// processedRoundState returns the state of the proposal executed at the given height and round.
+// Caller should lock the Application.
+func (app *Application) processedRoundState(height int64, round int32) (State, error) {
+	var found State
+	for _, state := range app.roundStates {
+		if state.GetHeight() != height || state.GetRound() != round {
+			continue
+		}
+		if found != nil {
+			return nil, fmt.Errorf("more than one proposal executed at height %d round %d", height, round)
+		}
+		found = state
+	}
+	if found == nil {
+		return nil, fmt.Errorf("no proposal executed at height %d round %d", height, round)
+	}
+	return found, nil
+}
+
 // eventValUpdate generates an event that contains info about current validator set
 func (app *Application) eventValUpdate(height int64) abci.Event {
 	size := 0

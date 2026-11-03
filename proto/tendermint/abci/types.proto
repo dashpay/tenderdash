@@ -22,21 +22,22 @@ import "gogoproto/gogo.proto";
 // Request types
 message Request {
   oneof value {
-    RequestEcho                echo                  = 1;
-    RequestFlush               flush                 = 2;
-    RequestInfo                info                  = 3;
-    RequestInitChain           init_chain            = 4;
-    RequestQuery               query                 = 5;
-    RequestCheckTx             check_tx              = 7;
-    RequestListSnapshots       list_snapshots        = 11;
-    RequestOfferSnapshot       offer_snapshot        = 12;
-    RequestLoadSnapshotChunk   load_snapshot_chunk   = 13;
-    RequestApplySnapshotChunk  apply_snapshot_chunk  = 14;
-    RequestPrepareProposal     prepare_proposal      = 15;
-    RequestProcessProposal     process_proposal      = 16;
-    RequestExtendVote          extend_vote           = 17;
-    RequestVerifyVoteExtension verify_vote_extension = 18;
-    RequestFinalizeBlock       finalize_block        = 19;
+    RequestEcho                 echo                   = 1;
+    RequestFlush                flush                  = 2;
+    RequestInfo                 info                   = 3;
+    RequestInitChain            init_chain             = 4;
+    RequestQuery                query                  = 5;
+    RequestCheckTx              check_tx               = 7;
+    RequestListSnapshots        list_snapshots         = 11;
+    RequestOfferSnapshot        offer_snapshot         = 12;
+    RequestLoadSnapshotChunk    load_snapshot_chunk    = 13;
+    RequestApplySnapshotChunk   apply_snapshot_chunk   = 14;
+    RequestPrepareProposal      prepare_proposal       = 15;
+    RequestProcessProposal      process_proposal       = 16;
+    RequestExtendVote           extend_vote            = 17;
+    RequestVerifyVoteExtension  verify_vote_extension  = 18;
+    RequestFinalizeBlock        finalize_block         = 19;
+    RequestApplyBlockRandomness apply_block_randomness = 20;
   }
   reserved 6, 8, 9, 10;  // RequestBeginBlock, RequestDeliverTx, RequestEndBlock, RequestCommit
 }
@@ -559,27 +560,62 @@ message RequestFinalizeBlock {
   tendermint.types.BlockID block_id = 7 [(gogoproto.customname) = "BlockID"];
 }
 
+// Applies the block's randomness and returns the app hash the Precommit signs.
+//
+// #### Usage
+//
+// - Used from consensus version 2 (`VersionParams.consensus_version`). Before that, Tenderdash never calls it.
+// - `RequestApplyBlockRandomness.beacon` is the random beacon of the block and round: the 96-byte BLS threshold
+//   signature recovered from the Prevotes of round `round` for the block `hash`. Tenderdash has verified it against
+//   the quorum's threshold public key before the call.
+// - The Application applies the randomness to the state that `ProcessProposal` (or `PrepareProposal`) left for
+//   that block and round, and returns the resulting Merkle root hash in `ResponseApplyBlockRandomness.app_hash`.
+//   When nothing in the block uses randomness, `app_hash` equals the app hash of the block header.
+// - The header keeps the app hash from `ProcessProposal`, which Prevotes sign. Precommits and the commit sign
+//   `ResponseApplyBlockRandomness.app_hash`, and the commit carries it in `Commit.app_hash`.
+// - The implementation MUST be deterministic: every process that applies the same beacon to the same block
+//   and round MUST return the same `app_hash`.
+// - Tenderdash may call it more than once for the same block, round and beacon; the Application MUST return
+//   the same `app_hash` each time.
+// - An ABCI error is fatal, as for `ExtendVote`.
+//
+// #### When does Tenderdash call it?
+//
+// - On a validator, once the Prevotes of round _r_ for block _v_ reach the threshold and their signature is
+//   recovered, before `ExtendVote` and before signing its Precommit for _v_.
+// - On every path that finalizes a block from a commit it did not assemble itself (block sync, replay, a
+//   node that did not vote): after `ProcessProposal` of the committed block for the commit round, with the
+//   commit's beacon, and before `FinalizeBlock`. Tenderdash compares the returned `app_hash` with
+//   `Commit.app_hash` and stops on a mismatch.
+message RequestApplyBlockRandomness {
+  bytes hash   = 1;  // The header hash of the block the Prevotes are for.
+  int64 height = 2;  // Height of the block.
+  int32 round  = 3;  // Round whose Prevotes produced the beacon.
+  bytes beacon = 4;  // 96-byte BLS threshold signature recovered from those Prevotes.
+}
+
 //----------------------------------------
 // Response types
 
 message Response {
   oneof value {
-    ResponseException           exception             = 1;
-    ResponseEcho                echo                  = 2;
-    ResponseFlush               flush                 = 3;
-    ResponseInfo                info                  = 4;
-    ResponseInitChain           init_chain            = 5;
-    ResponseQuery               query                 = 6;
-    ResponseCheckTx             check_tx              = 7;
-    ResponseListSnapshots       list_snapshots        = 8;
-    ResponseOfferSnapshot       offer_snapshot        = 9;
-    ResponseLoadSnapshotChunk   load_snapshot_chunk   = 10;
-    ResponseApplySnapshotChunk  apply_snapshot_chunk  = 11;
-    ResponsePrepareProposal     prepare_proposal      = 12;
-    ResponseProcessProposal     process_proposal      = 13;
-    ResponseExtendVote          extend_vote           = 14;
-    ResponseVerifyVoteExtension verify_vote_extension = 15;
-    ResponseFinalizeBlock       finalize_block        = 16;
+    ResponseException            exception              = 1;
+    ResponseEcho                 echo                   = 2;
+    ResponseFlush                flush                  = 3;
+    ResponseInfo                 info                   = 4;
+    ResponseInitChain            init_chain             = 5;
+    ResponseQuery                query                  = 6;
+    ResponseCheckTx              check_tx               = 7;
+    ResponseListSnapshots        list_snapshots         = 8;
+    ResponseOfferSnapshot        offer_snapshot         = 9;
+    ResponseLoadSnapshotChunk    load_snapshot_chunk    = 10;
+    ResponseApplySnapshotChunk   apply_snapshot_chunk   = 11;
+    ResponsePrepareProposal      prepare_proposal       = 12;
+    ResponseProcessProposal      process_proposal       = 13;
+    ResponseExtendVote           extend_vote            = 14;
+    ResponseVerifyVoteExtension  verify_vote_extension  = 15;
+    ResponseFinalizeBlock        finalize_block         = 16;
+    ResponseApplyBlockRandomness apply_block_randomness = 17;
   }
 }
 
@@ -783,6 +819,12 @@ message ResponseFinalizeBlock {
   bool propose_next_block_immediately = 3;
 }
 
+message ResponseApplyBlockRandomness {
+  // The Merkle root hash of the application state after the randomness is applied. 32 bytes.
+  // Equals the header app hash when nothing in the block uses randomness.
+  bytes app_hash = 1;
+}
+
 //----------------------------------------
 // Misc.
 
@@ -791,6 +833,12 @@ message CommitInfo {
   bytes    quorum_hash                                              = 2;
   bytes    block_signature                                          = 3;
   repeated tendermint.types.VoteExtension threshold_vote_extensions = 4;
+  // Random beacon of the committed block: the threshold signature recovered from the prevotes of
+  // the commit round. Set from consensus version 2; empty before.
+  bytes beacon = 5;
+  // App hash the commit signs: the result of `ApplyBlockRandomness` for the committed block and
+  // round. Set from consensus version 2; empty before.
+  bytes app_hash = 6;
 }
 
 // Event allows application developers to attach additional information to
@@ -963,4 +1011,5 @@ service ABCIApplication {
   rpc ExtendVote(RequestExtendVote) returns (ResponseExtendVote);
   rpc VerifyVoteExtension(RequestVerifyVoteExtension) returns (ResponseVerifyVoteExtension);
   rpc FinalizeBlock(RequestFinalizeBlock) returns (ResponseFinalizeBlock);
+  rpc ApplyBlockRandomness(RequestApplyBlockRandomness) returns (ResponseApplyBlockRandomness);
 }

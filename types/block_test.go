@@ -314,6 +314,33 @@ func TestCommit(t *testing.T) {
 	assert.True(t, commit.IsCommit())
 }
 
+// TestCommitBeaconFields checks that the beacon and the app hash of a commit survive the protobuf
+// round trip and reach the CommitInfo passed to the application.
+func TestCommitBeaconFields(t *testing.T) {
+	commit := &Commit{
+		Height: 3,
+		Round:  1,
+		BlockID: BlockID{
+			Hash:          crypto.Checksum([]byte("block")),
+			PartSetHeader: PartSetHeader{Total: 1, Hash: crypto.Checksum([]byte("parts"))},
+			StateID:       RandStateID().Hash(),
+		},
+		QuorumHash:              crypto.RandQuorumHash(),
+		ThresholdBlockSignature: crypto.CRandBytes(SignatureSize),
+		Beacon:                  crypto.CRandBytes(SignatureSize),
+		AppHash:                 crypto.Checksum([]byte("final app hash")),
+	}
+
+	decoded, err := CommitFromProto(commit.ToProto())
+	require.NoError(t, err)
+	assert.Equal(t, commit.Beacon, decoded.Beacon)
+	assert.Equal(t, commit.AppHash, decoded.AppHash)
+
+	info := commit.ToCommitInfo()
+	assert.Equal(t, commit.Beacon, info.Beacon)
+	assert.EqualValues(t, commit.AppHash, info.AppHash)
+}
+
 func TestCommitValidateBasic(t *testing.T) {
 	const height int64 = 5
 	testCases := []struct {
@@ -357,6 +384,8 @@ func TestMaxCommitBytes(t *testing.T) {
 		},
 		QuorumHash:              crypto.Checksum([]byte("QuorumHash")),
 		ThresholdBlockSignature: crypto.CRandBytes(SignatureSize),
+		Beacon:                  crypto.CRandBytes(SignatureSize),
+		AppHash:                 crypto.Checksum([]byte("AppHash")),
 	}
 
 	bIDProto := commit.BlockID.ToProto()
@@ -595,7 +624,7 @@ func TestBlockMaxDataBytes(t *testing.T) {
 
 func TestBlockMaxDataBytesNoEvidence(t *testing.T) {
 	// minBlockSize is minimum correct size of a block
-	const minBlockSize = 1129
+	const minBlockSize = 1261
 
 	testCases := []struct {
 		maxBytes int64

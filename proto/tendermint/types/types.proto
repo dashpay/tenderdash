@@ -156,6 +156,12 @@ message Commit {
   bytes                  quorum_hash               = 4;
   bytes                  threshold_block_signature = 5;
   repeated VoteExtension threshold_vote_extensions = 6;
+  // Random beacon: the threshold signature recovered from the prevotes of the commit round.
+  // Set from consensus version 2; empty before.
+  bytes beacon = 7;
+  // App hash the precommits sign, returned by ApplyBlockRandomness for this block and round.
+  // Set from consensus version 2; empty before.
+  bytes app_hash = 8;
 }
 
 message Proposal {

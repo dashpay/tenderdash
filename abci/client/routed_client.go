@@ -375,3 +375,8 @@ func (cli *routedClient) FinalizeBlock(ctx context.Context, req *types.RequestFi
 	result, err := cli.delegate(ctx, req)
 	return result.(*types.ResponseFinalizeBlock), err
 }
+
+func (cli *routedClient) ApplyBlockRandomness(ctx context.Context, req *types.RequestApplyBlockRandomness) (*types.ResponseApplyBlockRandomness, error) {
+	result, err := cli.delegate(ctx, req)
+	return result.(*types.ResponseApplyBlockRandomness), err
+}

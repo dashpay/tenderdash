@@ -397,6 +397,14 @@ func (cli *socketClient) FinalizeBlock(ctx context.Context, req *types.RequestFi
 	return res.GetFinalizeBlock(), nil
 }
 
+func (cli *socketClient) ApplyBlockRandomness(ctx context.Context, req *types.RequestApplyBlockRandomness) (*types.ResponseApplyBlockRandomness, error) {
+	res, err := cli.doRequest(ctx, types.ToRequestApplyBlockRandomness(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.GetApplyBlockRandomness(), nil
+}
+
 //----------------------------------------
 
 func resMatchesReq(req *types.Request, res *types.Response) (ok bool) {
@@ -431,6 +439,8 @@ func resMatchesReq(req *types.Request, res *types.Response) (ok bool) {
 		_, ok = res.Value.(*types.Response_OfferSnapshot)
 	case *types.Request_FinalizeBlock:
 		_, ok = res.Value.(*types.Response_FinalizeBlock)
+	case *types.Request_ApplyBlockRandomness:
+		_, ok = res.Value.(*types.Response_ApplyBlockRandomness)
 	}
 	return ok
 }

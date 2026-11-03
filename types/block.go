@@ -745,8 +745,9 @@ const (
 const (
 	// MaxCommitOverheadBytes is the max size of commit, with overhead but without vote extensions:
 	// (110+2) for BlockID,  (8+2) for Height, (4+2) for Round,
-	// (32+2) for QuorumHash, (96+2) for Block signature.
-	MaxCommitOverheadBytes int64 = (110 + 2) + (8 + 2) + (4 + 2) + (32 + 2) + (96 + 2) + 0
+	// (32+2) for QuorumHash, (96+2) for Block signature,
+	// (96+2) for Beacon, (32+2) for AppHash.
+	MaxCommitOverheadBytes int64 = (110 + 2) + (8 + 2) + (4 + 2) + (32 + 2) + (96 + 2) + (96 + 2) + (32 + 2) + 0
 )
 
 //-------------------------------------
@@ -765,6 +766,12 @@ type Commit struct {
 	ThresholdBlockSignature []byte            `json:"threshold_block_signature"`
 	// ThresholdVoteExtensions keeps the list of recovered threshold signatures for vote-extensions
 	ThresholdVoteExtensions tmproto.VoteExtensions `json:"threshold_vote_extensions"`
+	// Beacon is the threshold signature recovered from the prevotes of the commit round.
+	// Set from consensus version 2; empty before.
+	Beacon []byte `json:"beacon,omitempty"`
+	// AppHash is the app hash the precommits sign: the result of ApplyBlockRandomness for this
+	// block and round. Set from consensus version 2; empty before.
+	AppHash tmbytes.HexBytes `json:"app_hash,omitempty"`
 
 	// Memoized in first call to corresponding method.
 	// NOTE: can't memoize in constructor because constructor isn't used for
@@ -797,6 +804,8 @@ func (commit *Commit) ToCommitInfo() types.CommitInfo {
 		QuorumHash:              commit.QuorumHash,
 		BlockSignature:          commit.ThresholdBlockSignature,
 		ThresholdVoteExtensions: commit.ThresholdVoteExtensions,
+		Beacon:                  commit.Beacon,
+		AppHash:                 commit.AppHash,
 	}
 }
 
@@ -1005,6 +1014,8 @@ func (commit *Commit) ToProto() *tmproto.Commit {
 	c.ThresholdBlockSignature = commit.ThresholdBlockSignature
 	c.ThresholdVoteExtensions = commit.ThresholdVoteExtensions
 	c.QuorumHash = commit.QuorumHash
+	c.Beacon = commit.Beacon
+	c.AppHash = commit.AppHash
 
 	return c
 }
@@ -1031,6 +1042,8 @@ func CommitFromProto(cp *tmproto.Commit) (*Commit, error) {
 	commit.QuorumHash = cp.QuorumHash
 	commit.ThresholdBlockSignature = cp.ThresholdBlockSignature
 	commit.ThresholdVoteExtensions = cp.ThresholdVoteExtensions
+	commit.Beacon = cp.Beacon
+	commit.AppHash = cp.AppHash
 
 	commit.Height = cp.Height
 	commit.Round = cp.Round

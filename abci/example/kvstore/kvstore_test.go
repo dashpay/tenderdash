@@ -441,6 +441,13 @@ func testClient(ctx context.Context, t *testing.T, app abciclient.Client, height
 	require.False(t, rpp.TxResults[0].IsErr())
 	require.Len(t, rpp.Events, 1)
 
+	rabr, err := app.ApplyBlockRandomness(ctx, &types.RequestApplyBlockRandomness{
+		Height: height,
+		Beacon: tmcrypto.CRandBytes(tmtypes.SignatureSize),
+	})
+	require.NoError(t, err)
+	require.Equal(t, rpp.AppHash, rabr.AppHash, "no randomness is applied, so the app hash is unchanged")
+
 	rfb := &types.RequestFinalizeBlock{Height: height}
 	rfb.Block, rfb.BlockID = makeBlock(t, height, [][]byte{tx}, rpp.AppHash)
 	ar, err := app.FinalizeBlock(ctx, rfb)
@@ -643,4 +650,39 @@ func TestProcessProposalRoundReprocessing(t *testing.T) {
 	reqFin.Block, reqFin.BlockID = makeBlock(t, height, [][]byte{tx}, again.AppHash)
 	_, err = app.FinalizeBlock(ctx, reqFin)
 	require.NoError(t, err)
+}
+
+// TestApplyBlockRandomness checks that ApplyBlockRandomness answers for the round that was processed,
+// gives the same answer when called again, and fails for a round that was not processed.
+func TestApplyBlockRandomness(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	app := newKvApp(ctx, t, 1)
+	const height = 1
+	resp, err := app.ProcessProposal(ctx, &types.RequestProcessProposal{
+		Txs:     [][]byte{[]byte(testKey)},
+		Hash:    []byte("block-hash"),
+		Height:  height,
+		Round:   1,
+		Version: &pbversion.Consensus{App: uint64(height)},
+	})
+	require.NoError(t, err)
+
+	req := &types.RequestApplyBlockRandomness{
+		Hash:   []byte("block-hash"),
+		Height: height,
+		Round:  1,
+		Beacon: tmcrypto.CRandBytes(tmtypes.SignatureSize),
+	}
+	first, err := app.ApplyBlockRandomness(ctx, req)
+	require.NoError(t, err)
+	require.Equal(t, resp.AppHash, first.AppHash)
+
+	again, err := app.ApplyBlockRandomness(ctx, req)
+	require.NoError(t, err)
+	require.Equal(t, first.AppHash, again.AppHash)
+
+	_, err = app.ApplyBlockRandomness(ctx, &types.RequestApplyBlockRandomness{Height: height, Round: 0})
+	require.ErrorContains(t, err, "no proposal executed")
 }

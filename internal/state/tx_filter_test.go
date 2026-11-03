@@ -15,7 +15,7 @@ import (
 
 func TestTxFilter(t *testing.T) {
 	const maxBlockBytes = 3241
-	maxTxSize := maxBlockBytes - 1132
+	maxTxSize := maxBlockBytes - 1264
 	genDoc := factory.MinimalGenesisDoc()
 	genDoc.ConsensusParams.Block.MaxBytes = maxBlockBytes
 	genDoc.ConsensusParams.Evidence.MaxBytes = 1500
