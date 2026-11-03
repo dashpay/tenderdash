@@ -13,9 +13,11 @@ import (
 	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	sf "github.com/dashpay/tenderdash/internal/state/test/factory"
 	"github.com/dashpay/tenderdash/internal/test/factory"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	dbm "github.com/dashpay/tenderdash/libs/db"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -251,4 +253,206 @@ func TestReplayBlockRandomBeacon(t *testing.T) {
 	app, _, err = replay(crypto.Checksum([]byte("diverged")))
 	require.ErrorIs(t, err, sm.ErrAppHashMismatch)
 	require.Equal(t, []string{"process", "randomness"}, app.calls)
+}
+
+// TestRandomBeaconRelockNewBeacon checks that a block locked in round 0 and voted again in round 1 at
+// consensus version 2 gets the beacon of round 1: the validator's round 1 precommit signs another final
+// state ID than its round 0 precommit, and the block commits at round 1 with the round 1 beacon.
+func TestRandomBeaconRelockNewBeacon(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	config := configSetup(t)
+
+	params := factory.ConsensusParams(func(cp *types.ConsensusParams) {
+		cp.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_2)
+	})
+	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, consensusParams: params})
+	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
+
+	timeoutWaitCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryTimeoutWait)
+	proposalCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryCompleteProposal)
+	proTxHash, err := cs1.privValidator.GetProTxHash(ctx)
+	require.NoError(t, err)
+	voteCh := subscribeToVoter(ctx, t, cs1, proTxHash)
+	newRoundCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryNewRound)
+	ownVote := func(voteType tmproto.SignedMsgType) *types.Vote {
+		t.Helper()
+		vote := ensureMessageBeforeTimeout(t, voteCh, ensureTimeout).Data().(types.EventDataVote).Vote
+		require.Equal(t, voteType, vote.Type)
+		return vote
+	}
+
+	// Round 0: lock on the block, then everyone else precommits nil.
+	startTestRound(ctx, cs1, height, round)
+	ensureNewRound(t, newRoundCh, height, round)
+	ensureNewProposal(t, proposalCh, height, round)
+	stateData = cs1.GetStateData()
+	blockID := stateData.BlockID()
+	theBlock := stateData.ProposalBlock
+	theBlockParts := stateData.ProposalBlockParts
+	ownVote(tmproto.PrevoteType)
+	signAddVotes(ctx, t, cs1, tmproto.PrevoteType, config.ChainID(), blockID, vs2, vs3, vs4)
+	precommitR0 := ownVote(tmproto.PrecommitType)
+	require.True(t, precommitR0.BlockID.SameBlock(blockID))
+	require.False(t, precommitR0.BlockID.Equals(blockID))
+	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), types.BlockID{}, vs2, vs3, vs4)
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
+
+	// Round 1: the same block is proposed again and prevoted again.
+	incrementRound(vs2, vs3, vs4)
+	round++
+	propR1 := types.NewProposal(height, 1, round, 0, blockID, theBlock.Time)
+	p := propR1.ToProto()
+	_, valSet := cs1.GetValidatorSet()
+	_, err = vs2.SignProposal(ctx, stateData.state.ChainID, valSet.QuorumType, valSet.QuorumHash, p)
+	require.NoError(t, err)
+	propR1.Signature = p.Signature
+	require.NoError(t, cs1.SetProposalAndBlock(ctx, propR1, theBlockParts, ""))
+	ensureNewRound(t, newRoundCh, height, round)
+	ensureNewProposal(t, proposalCh, height, round)
+	ownVote(tmproto.PrevoteType)
+	signAddVotes(ctx, t, cs1, tmproto.PrevoteType, config.ChainID(), blockID, vs2, vs3, vs4)
+	precommitR1 := ownVote(tmproto.PrecommitType)
+	require.True(t, precommitR1.BlockID.SameBlock(blockID))
+	require.False(t, precommitR1.BlockID.Equals(precommitR0.BlockID),
+		"round 1 has another beacon, so another final app hash")
+
+	// Everyone precommits the round 1 final state: the block commits at round 1.
+	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), precommitR1.BlockID, vs2, vs3, vs4)
+	ensureNewRound(t, newRoundCh, height+1, 0)
+
+	commit := cs1.blockStore.LoadSeenCommit()
+	require.NotNil(t, commit)
+	require.Equal(t, round, commit.Round)
+	require.True(t, commit.BlockID.Equals(precommitR1.BlockID))
+	require.NoError(t, commit.VerifyRandomBeacon(stateData.state.ChainID, valSet, &theBlock.Header))
+	require.EqualValues(t, crypto.Checksum(append(theBlock.AppHash.Copy(), commit.Beacon...)), commit.AppHash)
+}
+
+// countingRandomness answers ApplyBlockRandomness with appHash and counts the calls.
+type countingRandomness struct {
+	appHash []byte
+	calls   int
+}
+
+func (r *countingRandomness) ApplyBlockRandomness(_ context.Context, _ *types.Block, _ int32, _ []byte) (tmbytes.HexBytes, error) {
+	r.calls++
+	return r.appHash, nil
+}
+
+// TestVoteSignerFinalStateIDCached checks that a validator signs a single final state ID per block and
+// round: once computed, it is returned without asking the application again, even if the application
+// would now answer differently. Signing two would be duplicate-vote evidence.
+func TestVoteSignerFinalStateIDCached(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const chainID = "test-chain"
+	const height, round = int64(3), int32(1)
+	valSet, privVals := types.RandValidatorSet(4)
+	block := types.MakeBlock(height, nil, &types.Commit{}, nil)
+	block.ChainID = chainID
+	block.ValidatorsHash = valSet.Hash()
+	block.AppHash = crypto.Checksum([]byte("header app hash"))
+	blockID := block.BlockID(nil)
+
+	votes := cstypes.NewHeightVoteSet(chainID, height, valSet, cstypes.WithRandomBeacon(true))
+	votes.SetRound(round)
+	for i, privVal := range privVals {
+		proTxHash, err := privVal.GetProTxHash(ctx)
+		require.NoError(t, err)
+		vote := &types.Vote{ValidatorProTxHash: proTxHash, ValidatorIndex: int32(i), Height: height, Round: round,
+			Type: tmproto.PrevoteType, BlockID: blockID}
+		protoVote := vote.ToProto()
+		require.NoError(t, privVal.SignVote(ctx, chainID, valSet.QuorumType, valSet.QuorumHash, protoVote, nil))
+		require.NoError(t, vote.PopulateSignsFromProto(protoVote))
+		_, err = votes.AddVote(vote)
+		require.NoError(t, err)
+	}
+	require.NotEmpty(t, votes.Prevotes(round).ThresholdBlockSignature())
+
+	stateData := &StateData{RoundState: cstypes.RoundState{
+		Height: height, Round: round, ProposalBlock: block, Votes: votes,
+	}}
+	randomness := &countingRandomness{appHash: crypto.Checksum([]byte("final app hash"))}
+	signer := &voteSigner{logger: log.NewNopLogger(), randomness: randomness}
+
+	first, err := signer.finalStateID(ctx, stateData, blockID)
+	require.NoError(t, err)
+	require.EqualValues(t, block.StateIDWithAppHash(randomness.appHash).Hash(), first)
+	require.Equal(t, 1, randomness.calls)
+
+	randomness.appHash = crypto.Checksum([]byte("another final app hash"))
+	again, err := signer.finalStateID(ctx, stateData, blockID)
+	require.NoError(t, err)
+	require.Equal(t, first, again, "the state ID signed first is signed again")
+	require.Equal(t, 1, randomness.calls, "the application is not asked again")
+}
+
+// TestReactorRandomBeaconNonValidator runs four validators and a node outside the validator set at
+// consensus version 2. That node never votes and receives no votes: it finalizes every block from a
+// peer's commit, checking the commit's beacon and applying it with ApplyBlockRandomness itself, and must
+// reach the same final app hash and state as the validators.
+func TestReactorRandomBeaconNonValidator(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	const nVals, nPeers = 4, 5
+	gen := consensusNetGen{
+		cfg:       configSetup(t),
+		nPeers:    nPeers,
+		nVals:     nVals,
+		appFunc:   newKVStoreFunc(t),
+		tickerFun: newTickerFunc(),
+		consensusParams: factory.ConsensusParams(func(cp *types.ConsensusParams) {
+			cp.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_2)
+			cp.Timeout.Propose = 2 * time.Second
+		}),
+	}
+	states, _, _, _ := gen.generate(ctx, t)
+	rts := setup(ctx, t, nPeers, states, 100)
+	rts.switchToConsensus(ctx)
+
+	var observer *State
+	for _, state := range states {
+		stateData := state.GetStateData()
+		if !stateData.Validators.HasProTxHash(state.privValidator.ProTxHash) {
+			observer = state
+		}
+	}
+	require.NotNil(t, observer, "one node is outside the validator set")
+
+	const lastHeight = int64(3)
+	require.Eventually(t, func() bool {
+		for _, state := range states {
+			if state.blockStore.Height() < lastHeight {
+				return false
+			}
+		}
+		return true
+	}, 45*time.Second, 50*time.Millisecond, "every node commits %d blocks", lastHeight)
+
+	for height := int64(1); height < lastHeight; height++ {
+		block := observer.blockStore.LoadBlock(height)
+		commit := observer.blockStore.LoadBlockCommit(height)
+		require.NotNil(t, block)
+		require.NotNil(t, commit)
+		stateData := observer.GetStateData()
+		require.NoError(t, commit.VerifyRandomBeacon(stateData.state.ChainID, stateData.Validators, &block.Header))
+		for _, state := range states {
+			other := state.blockStore.LoadBlockCommit(height)
+			require.Equal(t, commit.Beacon, other.Beacon, "height %d", height)
+			require.EqualValues(t, commit.AppHash, other.AppHash, "height %d", height)
+		}
+	}
+	// The observer's own state follows the commits it finalized.
+	stateData := observer.GetStateData()
+	last := observer.blockStore.LoadSeenCommit()
+	require.NotNil(t, last)
+	if last.Height == stateData.state.LastBlockHeight {
+		require.EqualValues(t, last.AppHash, stateData.state.LastAppHash)
+		require.True(t, last.BlockID.Equals(stateData.state.LastBlockID))
+	}
 }

@@ -98,6 +98,9 @@ validator11 = 100
 
 [consensus_version_updates]
 
+# Same-block randomness from 1011: nodes state sync, block sync and restart at consensus version 2,
+# then the network moves back to versions 1 and 0.
+1010 = 2
 1070 = 1
 1076 = 0
 1079 = 1

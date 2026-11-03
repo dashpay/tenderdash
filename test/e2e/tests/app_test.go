@@ -134,10 +134,16 @@ func TestApp_Hash(t *testing.T) {
 		block, err := client.Block(ctx, &blockHeight)
 		require.NoError(t, err)
 		require.Equal(t, blockHeight, block.Block.Height)
+		// The app hash the block's commit signs: the header's, or from consensus version 2
+		// the one after the block's randomness is applied.
+		commit, err := client.Commit(ctx, &blockHeight)
+		require.NoError(t, err)
+		committedAppHash, err := commit.CommittedAppHash()
+		require.NoError(t, err)
 		require.EqualValues(t,
 			info.Response.LastBlockAppHash,
-			block.Block.AppHash.Bytes(),
-			"app hash does not match last block's app hash at height %d", blockHeight)
+			committedAppHash.Bytes(),
+			"app hash does not match the app hash committed at height %d", blockHeight)
 	})
 }
 
