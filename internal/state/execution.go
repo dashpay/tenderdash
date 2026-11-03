@@ -252,7 +252,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	numRequestedTxs := txs.Len()
 	block := state.MakeBlock(height, txs, commit, evidence, proposerProTxHash, proposedAppVersion)
 
-	localLastCommit := buildLastCommitInfo(block, state.InitialHeight)
+	localLastCommit := buildLastCommitInfo(block, state)
 	version := block.Version.ToProto()
 	request := abci.RequestPrepareProposal{
 		MaxTxBytes:         maxDataBytes,
@@ -383,7 +383,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		Round:              round,
 		Time:               block.Header.Time,
 		Txs:                block.Data.Txs.ToSliceOfBytes(),
-		ProposedLastCommit: buildLastCommitInfo(block, state.InitialHeight),
+		ProposedLastCommit: buildLastCommitInfo(block, state),
 		Misbehavior:        block.Evidence.ToABCI(),
 		NextValidatorsHash: block.NextValidatorsHash,
 
@@ -848,18 +848,30 @@ func (blockExec *BlockExecutor) flushMempool(
 	return err
 }
 
-func buildLastCommitInfo(block *types.Block, initialHeight int64) abci.CommitInfo {
-	if block.Height == initialHeight {
+// buildLastCommitInfo returns the CommitInfo of block.LastCommit, the commit of the block state was
+// last updated with.
+//
+// From consensus version 2 it also carries that commit's beacon and app hash. They are taken from
+// state, which holds the values the last block was finalized with: block.LastCommit carries the
+// proposer's copy, which is checked against them only when the block is validated, after
+// ProcessProposal.
+func buildLastCommitInfo(block *types.Block, state State) abci.CommitInfo {
+	if block.Height == state.InitialHeight {
 		// there is no last commit for the initial height.
 		// return an empty value.
 		return abci.CommitInfo{}
 	}
-	return abci.CommitInfo{
+	info := abci.CommitInfo{
 		Round:                   block.LastCommit.Round,
 		QuorumHash:              block.LastCommit.QuorumHash,
 		BlockSignature:          block.LastCommit.ThresholdBlockSignature,
 		ThresholdVoteExtensions: block.LastCommit.ThresholdVoteExtensions,
 	}
+	if len(state.LastBlockBeacon) > 0 {
+		info.Beacon = bytes.Clone(state.LastBlockBeacon)
+		info.AppHash = bytes.Clone(state.LastAppHash)
+	}
+	return info
 }
 
 // Update returns a copy of state with the fields set using the arguments passed in.
