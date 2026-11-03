@@ -285,6 +285,36 @@ func TestFailureMetrics(t *testing.T) {
 	assert.Equal(t, 2, hst.count["method=check_tx,type=sync,success=true"])
 }
 
+// TestApplyBlockRandomnessMetrics checks that the proxy client forwards ApplyBlockRandomness and records
+// its timing under the apply_block_randomness method.
+func TestApplyBlockRandomnessMetrics(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	logger := log.NewTestingLogger(t)
+	mtr := mockMetrics()
+	hst := mtr.MethodTiming.(*mockMetric)
+
+	app := mocks.NewApplication(t)
+	app.On("ApplyBlockRandomness", mock.Anything, mock.Anything).
+		Return(&types.ResponseApplyBlockRandomness{AppHash: []byte("final apphash")}, nil).Once()
+	app.On("ApplyBlockRandomness", mock.Anything, mock.Anything).
+		Return(nil, errors.New("some error")).Once()
+
+	proxy := New(abciclient.NewLocalClient(logger, app), log.NewNopLogger(), mtr)
+
+	res, err := proxy.ApplyBlockRandomness(ctx, &types.RequestApplyBlockRandomness{})
+	require.NoError(t, err)
+	assert.EqualValues(t, "final apphash", res.AppHash)
+	_, err = proxy.ApplyBlockRandomness(ctx, &types.RequestApplyBlockRandomness{})
+	assert.Error(t, err)
+
+	cancel()
+	proxy.Wait()
+	assert.Equal(t, 1, hst.count["method=apply_block_randomness,type=sync,success=true"])
+	assert.Equal(t, 1, hst.count["method=apply_block_randomness,type=sync,success=false"])
+}
+
 func mockMetrics() *Metrics {
 	return &Metrics{
 		MethodTiming: &mockMetric{

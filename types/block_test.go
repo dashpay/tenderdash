@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
 	"github.com/dashpay/tenderdash/crypto/merkle"
@@ -314,8 +315,9 @@ func TestCommit(t *testing.T) {
 	assert.True(t, commit.IsCommit())
 }
 
-// TestCommitBeaconFields checks that the beacon and the app hash of a commit survive the protobuf
-// round trip and reach the CommitInfo passed to the application.
+// TestCommitBeaconFields checks that the beacon and the app hash of a commit survive protobuf
+// encoding and decoding, reach the CommitInfo passed to the application, and show in the commit's
+// string form.
 func TestCommitBeaconFields(t *testing.T) {
 	commit := &Commit{
 		Height: 3,
@@ -331,14 +333,25 @@ func TestCommitBeaconFields(t *testing.T) {
 		AppHash:                 crypto.Checksum([]byte("final app hash")),
 	}
 
-	decoded, err := CommitFromProto(commit.ToProto())
+	bz, err := commit.ToProto().Marshal()
 	require.NoError(t, err)
-	assert.Equal(t, commit.Beacon, decoded.Beacon)
-	assert.Equal(t, commit.AppHash, decoded.AppHash)
+	var pb tmproto.Commit
+	require.NoError(t, pb.Unmarshal(bz))
+	decoded, err := CommitFromProto(&pb)
+	require.NoError(t, err)
+	require.Equal(t, commit, decoded)
 
 	info := commit.ToCommitInfo()
 	assert.Equal(t, commit.Beacon, info.Beacon)
 	assert.EqualValues(t, commit.AppHash, info.AppHash)
+	bz, err = info.Marshal()
+	require.NoError(t, err)
+	var decodedInfo abci.CommitInfo
+	require.NoError(t, decodedInfo.Unmarshal(bz))
+	require.Equal(t, info, decodedInfo)
+
+	assert.Contains(t, commit.String(), commit.AppHash.String())
+	assert.Contains(t, commit.StringIndented(""), commit.AppHash.String())
 }
 
 func TestCommitValidateBasic(t *testing.T) {
@@ -393,7 +406,10 @@ func TestMaxCommitBytes(t *testing.T) {
 
 	pb := commit.ToProto()
 	pbSize := int64(pb.Size())
-	assert.EqualValues(t, MaxCommitOverheadBytes, pbSize)
+	assert.EqualValues(t, MaxCommitOverheadBytes+MaxCommitRandomnessBytes, pbSize)
+
+	commit.Beacon, commit.AppHash = nil, nil
+	assert.EqualValues(t, MaxCommitOverheadBytes, commit.ToProto().Size())
 }
 
 func TestHeaderHash(t *testing.T) {
@@ -624,7 +640,7 @@ func TestBlockMaxDataBytes(t *testing.T) {
 
 func TestBlockMaxDataBytesNoEvidence(t *testing.T) {
 	// minBlockSize is minimum correct size of a block
-	const minBlockSize = 1261
+	const minBlockSize = 1129
 
 	testCases := []struct {
 		maxBytes int64

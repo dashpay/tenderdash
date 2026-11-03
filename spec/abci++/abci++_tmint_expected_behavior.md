@@ -55,11 +55,12 @@ success-sync        = offer-snapshot 1*apply-chunk
 recovery            = info consensus-exec
 
 consensus-exec      = (inf)consensus-height
-consensus-height    = *consensus-round 1*verify-commit decide commit
+consensus-height    = *consensus-round 1*check-commit [apply-randomness] decide commit
+check-commit        = [apply-randomness] verify-commit
 consensus-round     = proposer / non-proposer
 
 proposer            = *got-vote prepare-proposal *got-vote process-proposal [extend]
-extend              = *got-vote extend-vote *got-vote
+extend              = *got-vote [apply-randomness] extend-vote *got-vote
 non-proposer        = *got-vote [process-proposal] [extend]
 
 init-chain          = %s"<InitChain>"
@@ -69,6 +70,7 @@ info                = %s"<Info>"
 prepare-proposal    = %s"<PrepareProposal>"
 process-proposal    = %s"<ProcessProposal>"
 extend-vote         = %s"<ExtendVote>"
+apply-randomness    = %s"<ApplyBlockRandomness>"
 got-vote            = %s"<VerifyVoteExtension>"
 verify-commit       = %s"<VerifyVoteExtension>"
 decide              = %s"<FinalizeBlock>"
@@ -158,21 +160,26 @@ Let us now examine the grammar line by line, providing further details.
   completes successfully. During startup replay/catch-up, rejection of a stored
   commit instead terminates the run before `FinalizeBlock` and `Commit`, without
   retry; see the [VerifyVoteExtension REJECT paths](abci++_methods.md#verifyvoteextension).
+  From consensus version 2, Tenderdash applies the commit's beacon with `ApplyBlockRandomness`
+  (`apply-randomness`) before verifying a commit and again before `FinalizeBlock`, and the Application
+  commits the candidate state with that randomness applied. Before version 2 it never calls it.
 
 >```abnf
->consensus-height    = *consensus-round 1*verify-commit decide commit
+>consensus-height    = *consensus-round 1*check-commit [apply-randomness] decide commit
+>check-commit        = [apply-randomness] verify-commit
 >consensus-round     = proposer / non-proposer
 >```
 
 * For every round, if the local process is the proposer of the current round, Tendermint starts by
   calling `PrepareProposal`, followed by `ProcessProposal`. Then, optionally, the Application is
-  asked to extend its vote for that round. Calls to `VerifyVoteExtension` can come at any time: the
-  local process may be slightly late in the current round, or votes may come from a future round
-  of this height.
+  asked to extend its vote for that round; from consensus version 2, `ApplyBlockRandomness` comes
+  first, with the beacon recovered from the round's Prevotes. Calls to `VerifyVoteExtension` can
+  come at any time: the local process may be slightly late in the current round, or votes may come
+  from a future round of this height.
 
 >```abnf
 >proposer            = *got-vote prepare-proposal *got-vote process-proposal [extend]
->extend              = *got-vote extend-vote *got-vote
+>extend              = *got-vote [apply-randomness] extend-vote *got-vote
 >```
 
 * Also for every round, if the local process is _not_ the proposer of the current round, Tendermint
@@ -197,6 +204,7 @@ Let us now examine the grammar line by line, providing further details.
 >prepare-proposal    = %s"<PrepareProposal>"
 >process-proposal    = %s"<ProcessProposal>"
 >extend-vote         = %s"<ExtendVote>"
+>apply-randomness    = %s"<ApplyBlockRandomness>"
 >got-vote            = %s"<VerifyVoteExtension>"
 >verify-commit       = %s"<VerifyVoteExtension>"
 >decide              = %s"<FinalizeBlock>"
