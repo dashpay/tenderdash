@@ -2,7 +2,10 @@ package statesync
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"testing"
@@ -32,9 +35,13 @@ import (
 	"github.com/dashpay/tenderdash/internal/store"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/light"
 	"github.com/dashpay/tenderdash/light/provider"
+	lightdb "github.com/dashpay/tenderdash/light/store/db"
 	ssproto "github.com/dashpay/tenderdash/proto/tendermint/statesync"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/rpc/coretypes"
+	rpctypes "github.com/dashpay/tenderdash/rpc/jsonrpc/types"
 	"github.com/dashpay/tenderdash/types"
 	"github.com/dashpay/tenderdash/version"
 )
@@ -262,7 +269,12 @@ func testReactorSync(t *testing.T, before, after int64) {
 	require.NoError(t, pool.Start(local))
 	defer pool.Close()
 	hookCalled := false
+	var chain map[int64]*types.LightBlock
 	rts.reactor.postSyncHook = func(ctx context.Context, restored sm.State) error {
+		// The restored state is at the snapshot height, so it carries that block's hashes. The handshake after
+		// a restart compares LastAppHash with the app hash the application reports.
+		require.Equal(t, chain[snapshotHeight].AppHash, restored.LastAppHash)
+		require.Equal(t, chain[snapshotHeight].ResultsHash, restored.LastResultsHash)
 		pool.Update(ctx, restored, nil)
 		require.Equal(t, after, pool.State().ConsensusParams.Evidence.MaxBytes)
 		require.Equal(t, restored.LastBlockHeight, pool.State().LastBlockHeight)
@@ -270,7 +282,7 @@ func testReactorSync(t *testing.T, before, after int64) {
 		return nil
 	}
 
-	chain := buildLightBlockChain(ctx, t, 1, 10, time.Now(), rts.privVal)
+	chain = buildLightBlockChain(ctx, t, 1, 10, time.Now(), rts.privVal)
 	registerMockCoreQuorums(t, rts.dashcoreClient, chain)
 	// app accepts any snapshot
 	rts.conn.
@@ -288,7 +300,7 @@ func testReactorSync(t *testing.T, before, after int64) {
 		Return(&abci.ResponseInfo{
 			AppVersion:       testAppVersion,
 			LastBlockHeight:  snapshotHeight,
-			LastBlockAppHash: chain[snapshotHeight+1].AppHash,
+			LastBlockAppHash: chain[snapshotHeight].AppHash,
 		}, nil)
 
 	// store accepts state and validator sets
@@ -700,6 +712,8 @@ func TestReactor_StateProviderP2P(t *testing.T) {
 	state, err := rts.reactor.stateProvider.State(actx, 5)
 	require.NoError(t, err)
 	require.Equal(t, appHash, state.LastAppHash)
+	require.Equal(t, chain[5].AppHash, state.LastAppHash)
+	require.Equal(t, chain[5].ResultsHash, state.LastResultsHash)
 	require.Equal(t, types.DefaultConsensusParams(), &state.ConsensusParams)
 
 	commit, err := rts.reactor.stateProvider.Commit(actx, 5)
@@ -711,6 +725,70 @@ func TestReactor_StateProviderP2P(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, added)
+}
+
+// TestReactor_StateProviderRPC checks the state the RPC state provider restores. Its light client gets
+// light blocks from peers, and a JSON-RPC server answers the consensus params request.
+func TestReactor_StateProviderRPC(t *testing.T) {
+	const snapshotHeight = 5
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	rts := setup(ctx, t, nil, nil, nil, 2)
+	closeCh := make(chan struct{})
+	defer close(closeCh)
+
+	chain := buildLightBlockChain(ctx, t, 1, 10, time.Now(), rts.privVal)
+	registerMockCoreQuorums(t, rts.dashcoreClient, chain)
+	go handleLightBlockRequests(ctx, t, chain, rts.blockOutCh, rts.blockInCh, closeCh, 0, 0)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var (
+			req  rpctypes.RPCRequest
+			args coretypes.RequestConsensusParams
+		)
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Method != "consensus_params" ||
+			json.Unmarshal(req.Params, &args) != nil || args.Height == nil {
+			http.Error(w, "unexpected request", http.StatusBadRequest)
+			return
+		}
+		resp := req.MakeResponse(&coretypes.ResultConsensusParams{
+			BlockHeight:     int64(*args.Height),
+			ConsensusParams: *types.DefaultConsensusParams(),
+		})
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	providers := []provider.Provider{
+		NewBlockProvider(types.NodeID(strings.Repeat("a", 2*types.NodeIDByteLength)), factory.DefaultTestChainID, rts.reactor.dispatcher),
+		NewBlockProvider(types.NodeID(strings.Repeat("b", 2*types.NodeIDByteLength)), factory.DefaultTestChainID, rts.reactor.dispatcher),
+	}
+	lc, err := light.NewClient(ctx, factory.DefaultTestChainID, providers[0], providers[1:],
+		lightdb.New(dbm.NewMemDB()), rts.dashcoreClient, light.Logger(log.NewNopLogger()))
+	require.NoError(t, err)
+	sp := &stateProviderRPC{
+		lc:             lc,
+		initialHeight:  1,
+		providers:      map[provider.Provider]string{providers[0]: server.URL, providers[1]: server.URL},
+		logger:         log.NewNopLogger(),
+		dashCoreClient: rts.dashcoreClient,
+	}
+
+	actx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+
+	appHash, err := sp.AppHash(actx, snapshotHeight)
+	require.NoError(t, err)
+	require.Equal(t, chain[snapshotHeight].AppHash, appHash)
+
+	state, err := sp.State(actx, snapshotHeight)
+	require.NoError(t, err)
+	require.EqualValues(t, snapshotHeight, state.LastBlockHeight)
+	require.Equal(t, appHash, state.LastAppHash)
+	require.Equal(t, chain[snapshotHeight].ResultsHash, state.LastResultsHash)
+	require.Equal(t, types.DefaultConsensusParams(), &state.ConsensusParams)
 }
 
 func TestReactor_Backfill(t *testing.T) {
@@ -975,11 +1053,11 @@ func mockLB(ctx context.Context, t *testing.T, height int64, time time.Time, las
 	currentVals *types.ValidatorSet, currentPrivVals []types.PrivValidator,
 ) (*types.ValidatorSet, []types.PrivValidator, *types.LightBlock) {
 	t.Helper()
+	// MakeHeader gives each height random app and results hashes, so a hash taken from the wrong height shows.
 	header := factory.MakeHeader(t, &types.Header{
 		Height:            height,
 		LastBlockID:       lastBlockID,
 		Time:              time,
-		AppHash:           make([]byte, crypto.DefaultHashSize),
 		ProposerProTxHash: currentVals.Proposer().ProTxHash,
 	})
 	header.Version.App = testAppVersion
