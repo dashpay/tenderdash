@@ -60,6 +60,10 @@ func TxPreCheckForState(state State) mempool.PreCheckFunc {
 		if err != nil {
 			return err
 		}
+		if state.ConsensusParams.Version.RandomBeacon() {
+			// From consensus version 2, the last commit also carries its beacon and app hash.
+			maxDataBytes -= types.MaxCommitRandomnessBytes
+		}
 		return mempool.PreCheckMaxBytes(maxDataBytes)(tx)
 	}
 }
