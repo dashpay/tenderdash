@@ -597,3 +597,26 @@ func newBlock(hdr types.Header, lastCommit *types.Commit) *types.Block {
 		LastCommit: lastCommit,
 	}
 }
+
+// TestLoadBlockMistypedLastCommitRandomness is the regression test for a block an older release
+// stored while its LastCommit carried the beacon field with the varint wire type: that release skips
+// the field, so it commits and stores such a block from a byzantine proposer, and an upgraded node
+// panicked when loading it. It now loads the block without the field.
+func TestLoadBlockMistypedLastCommitRandomness(t *testing.T) {
+	state, bs := makeStateAndBlockStore(t, t.TempDir())
+	block, err := factory.MakeBlock(state, 1, new(types.Commit), 0)
+	require.NoError(t, err)
+	pb, err := block.ToProto()
+	require.NoError(t, err)
+	bz, err := pb.Marshal()
+	require.NoError(t, err)
+	// another occurrence of last_commit (field 4) holding field 7 with wire type 0
+	raw := append(append([]byte{}, bz...), 0x22, 0x02, 0x38, 0x01)
+	parts := types.NewPartSetFromData(raw, types.BlockPartSizeBytes)
+	bs.SaveBlock(block, parts, makeTestCommit(t, state, block.Height))
+
+	var loaded *types.Block
+	require.NotPanics(t, func() { loaded = bs.LoadBlock(1) })
+	require.NotNil(t, loaded)
+	require.Equal(t, block.Hash(), loaded.Hash())
+}

@@ -183,7 +183,6 @@ func (bs *BlockStore) LoadBlock(height int64) *types.Block {
 		return nil
 	}
 
-	pbb := new(tmproto.Block)
 	buf := []byte{}
 	for i := 0; i < int(blockMeta.BlockID.PartSetHeader.Total); i++ {
 		part := bs.LoadBlockPart(height, i)
@@ -194,7 +193,7 @@ func (bs *BlockStore) LoadBlock(height int64) *types.Block {
 		}
 		buf = append(buf, part.Bytes...)
 	}
-	err := proto.Unmarshal(buf, pbb)
+	pbb, err := types.UnmarshalBlockProto(buf)
 	if err != nil {
 		// NOTE: The existence of meta should imply the existence of the
 		// block. So, make sure meta is only saved after blocks are saved.
