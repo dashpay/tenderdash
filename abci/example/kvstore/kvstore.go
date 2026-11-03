@@ -47,8 +47,12 @@ type Application struct {
 	// LastCommittedState is last state that was committed by Tenderdash and finalized with abci.FinalizeBlock()
 	LastCommittedState State
 	// roundStates contains state for each round, indexed by roundKey()
-	roundStates  map[string]State
-	RetainBlocks int64 // blocks to retain after commit (via ResponseCommit.RetainHeight)
+	roundStates map[string]State
+	// processedBlocks maps each block ProcessProposal executed at this height, by round and block hash,
+	// to its key in roundStates. Two blocks of one round, from an equivocating proposer, have
+	// different keys.
+	processedBlocks map[processedBlock]string
+	RetainBlocks    int64 // blocks to retain after commit (via ResponseCommit.RetainHeight)
 
 	// preparedProposals stores info about all rounds that got PrepareProposal executed, used to detect
 	// duplicate PrepareProposal calls.
@@ -218,6 +222,7 @@ func newApplication(stateStore StoreFactory, opts ...OptFunc) (*Application, err
 		logger:                 log.NewNopLogger(),
 		LastCommittedState:     NewKvState(dbm.NewMemDB(), initialHeight), // initial state to avoid InitChain() in unit tests
 		roundStates:            map[string]State{},
+		processedBlocks:        map[processedBlock]string{},
 		preparedProposals:      map[int32]bool{},
 		processedProposals:     map[int32][]byte{},
 		validatorSetUpdates:    map[int64]abci.ValidatorSetUpdate{},
@@ -392,6 +397,10 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProc
 			Status: abci.ResponseProcessProposal_REJECT,
 		}, err
 	}
+	if len(req.Hash) > 0 {
+		block := processedBlock{round: req.Round, hash: string(req.Hash)}
+		app.processedBlocks[block] = roundKey(roundState.GetAppHash(), roundState.GetHeight(), roundState.GetRound())
+	}
 
 	if req.Version.App != app.appVersionForHeight(req.Height) {
 		app.logger.Error("app version mismatch in process proposal request",
@@ -496,7 +505,7 @@ func (app *Application) ApplyBlockRandomness(_ context.Context, req *abci.Reques
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
-	roundState, err := app.processedRoundState(req.Height, req.Round)
+	roundState, err := app.processedRoundState(req.Hash, req.Height, req.Round)
 	if err != nil {
 		return nil, fmt.Errorf("apply block randomness (hash: %X): %w", req.Hash, err)
 	}
@@ -506,9 +515,25 @@ func (app *Application) ApplyBlockRandomness(_ context.Context, req *abci.Reques
 	return resp, nil
 }
 
-// processedRoundState returns the state of the proposal executed at the given height and round.
+// processedBlock identifies a block ProcessProposal executed at the current height.
+type processedBlock struct {
+	round int32
+	hash  string
+}
+
+// processedRoundState returns the state ProcessProposal left for the block with the given hash at
+// the given height and round. Without a hash, it returns the only state executed at that height and
+// round, by PrepareProposal or ProcessProposal.
 // Caller should lock the Application.
-func (app *Application) processedRoundState(height int64, round int32) (State, error) {
+func (app *Application) processedRoundState(hash []byte, height int64, round int32) (State, error) {
+	if len(hash) > 0 {
+		key, ok := app.processedBlocks[processedBlock{round: round, hash: string(hash)}]
+		state := app.roundStates[key]
+		if !ok || state == nil || state.GetHeight() != height {
+			return nil, fmt.Errorf("block not processed at height %d round %d", height, round)
+		}
+		return state, nil
+	}
 	var found State
 	for _, state := range app.roundStates {
 		if state.GetHeight() != height || state.GetRound() != round {
@@ -827,6 +852,7 @@ func (app *Application) resetRoundStates() {
 		state.Close()
 	}
 	app.roundStates = map[string]State{}
+	app.processedBlocks = map[processedBlock]string{}
 }
 
 // executeProposal executes transactions and creates new candidate state
