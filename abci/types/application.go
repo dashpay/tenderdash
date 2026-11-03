@@ -46,7 +46,7 @@ type Application interface {
 	VerifyVoteExtension(context.Context, *RequestVerifyVoteExtension) (*ResponseVerifyVoteExtension, error)
 	// Deliver the decided block with its txs to the Application
 	FinalizeBlock(context.Context, *RequestFinalizeBlock) (*ResponseFinalizeBlock, error)
-	// Apply the block's random beacon and return the app hash the precommit signs (consensus version 2)
+	// Apply the block's random beacon and return the app hash the precommit signs (consensus version 2).
 	ApplyBlockRandomness(context.Context, *RequestApplyBlockRandomness) (*ResponseApplyBlockRandomness, error)
 }
 

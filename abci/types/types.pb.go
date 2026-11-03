@@ -1646,6 +1646,10 @@ func (m *RequestProcessProposal) GetQuorumHash() []byte {
 //     `VerifyVoteExtension` rejection that follows `ProcessProposal` of that block and round, to learn the
 //     vector a commit of that block and round must carry; see `VerifyVoteExtension`. An ABCI error or an
 //     invalid response from this call is fatal, as on the Precommit path.
+//   - From consensus version 2, Tenderdash calls `ApplyBlockRandomness` before `ExtendVote`, but the extensions
+//     MUST NOT depend on the beacon or on the state `ApplyBlockRandomness` produced: other processes verify them
+//     against the state `ProcessProposal` left, possibly before they recover the round's beacon, or without ever
+//     recovering it.
 //
 // #### When does Tenderdash call it?
 //
@@ -1911,7 +1915,12 @@ func (m *RequestVerifyVoteExtension) GetVoteExtensions() []*ExtendVoteExtension 
 //     already passed on to the Application via `RequestPrepareProposal` or `RequestProcessProposal`.
 //     If the Application is in same-block execution mode, it applies the right candidate state here
 //     (rather than executing the whole block). In this case the Application disregards all parameters in
-//     `RequestFinalizeBlock` except `RequestFinalizeBlock.hash`.
+//     `RequestFinalizeBlock` except `RequestFinalizeBlock.hash` and, from consensus version 2, the
+//     randomness fields below.
+//   - From consensus version 2, the state to commit is the candidate state of the block for
+//     `RequestFinalizeBlock.round` with `RequestFinalizeBlock.commit.beacon` applied, as `ApplyBlockRandomness`
+//     applies it, and its Merkle root hash MUST equal `RequestFinalizeBlock.commit.app_hash`. Committing the
+//     candidate state without the randomness diverges from the rest of the network.
 type RequestFinalizeBlock struct {
 	// Info about the current commit
 	Commit CommitInfo `protobuf:"bytes,1,opt,name=commit,proto3" json:"commit"`
@@ -2024,6 +2033,12 @@ func (m *RequestFinalizeBlock) GetBlockID() *types1.BlockID {
 //     When nothing in the block uses randomness, `app_hash` equals the app hash of the block header.
 //   - The header keeps the app hash from `ProcessProposal`, which Prevotes sign. Precommits and the commit sign
 //     `ResponseApplyBlockRandomness.app_hash`, and the commit carries it in `Commit.app_hash`.
+//   - The randomness may change only the application state behind `app_hash`. Transaction results, events,
+//     validator set updates, consensus parameter updates and the other outputs of `ProcessProposal` are fixed
+//     by the header the Prevotes signed: they MUST NOT depend on the beacon, and Tenderdash keeps the ones
+//     `ProcessProposal` returned.
+//   - Vote extensions and their verification MUST NOT depend on the beacon or on the state this call produces;
+//     see `ExtendVote`.
 //   - The implementation MUST be deterministic: every process that applies the same beacon to the same block
 //     and round MUST return the same `app_hash`.
 //   - Tenderdash may call it more than once for the same block, round and beacon; the Application MUST return
@@ -2034,10 +2049,10 @@ func (m *RequestFinalizeBlock) GetBlockID() *types1.BlockID {
 //
 //   - On a validator, once the Prevotes of round _r_ for block _v_ reach the threshold and their signature is
 //     recovered, before `ExtendVote` and before signing its Precommit for _v_.
-//   - On every path that finalizes a block from a commit it did not assemble itself (block sync, replay, a
-//     node that did not vote): after `ProcessProposal` of the committed block for the commit round, with the
-//     commit's beacon, and before `FinalizeBlock`. Tenderdash compares the returned `app_hash` with
-//     `Commit.app_hash` and stops on a mismatch.
+//   - On every path that finalizes a block from a commit (consensus, block sync, replay, a node that did not
+//     vote): after `ProcessProposal` of the committed block for the commit round, with the commit's beacon, and
+//     before `FinalizeBlock`. Tenderdash compares the returned `app_hash` with `Commit.app_hash` and stops on a
+//     mismatch.
 type RequestApplyBlockRandomness struct {
 	Hash   []byte `protobuf:"bytes,1,opt,name=hash,proto3" json:"hash,omitempty"`
 	Height int64  `protobuf:"varint,2,opt,name=height,proto3" json:"height,omitempty"`
@@ -3547,7 +3562,8 @@ func (m *ResponseFinalizeBlock) GetProposeNextBlockImmediately() bool {
 
 type ResponseApplyBlockRandomness struct {
 	// The Merkle root hash of the application state after the randomness is applied. 32 bytes.
-	// Equals the header app hash when nothing in the block uses randomness.
+	// Equals the header app hash when nothing in the block uses randomness. The randomness changes
+	// nothing but this state: the other results of the block are the ones ProcessProposal returned.
 	AppHash []byte `protobuf:"bytes,1,opt,name=app_hash,json=appHash,proto3" json:"app_hash,omitempty"`
 }
 
