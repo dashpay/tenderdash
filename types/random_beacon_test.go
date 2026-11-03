@@ -250,3 +250,34 @@ func TestConsensusParamsConsensusVersion(t *testing.T) {
 		assert.Equal(t, version >= 2, params.Version.RandomBeacon(), "version %d", version)
 	}
 }
+
+// TestVerifyAppHashIgnoresUnsignedAppHash checks the commit of a block before consensus version 2 whose
+// app hash a proposer filled with 32 bytes that bind nothing (the size bound lets them through, and the
+// commit's signature does not cover them): the signed state ID is the header's, so the header's app hash
+// is the committed one and light blocks still validate. VerifyRandomBeacon, which needs the commit's own
+// app hash to be the signed one, still refuses it.
+func TestVerifyAppHashIgnoresUnsignedAppHash(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := newRandomBeaconFixture(t)
+	commit := &Commit{
+		Height:                  f.header.Height,
+		Round:                   randomBeaconTestRound,
+		BlockID:                 f.blockID,
+		QuorumHash:              f.valSet.QuorumHash,
+		ThresholdBlockSignature: crypto.CRandBytes(SignatureSize),
+		Beacon:                  f.recoverBeacon(ctx, t),
+		AppHash:                 crypto.CRandBytes(crypto.DefaultAppHashSize),
+	}
+
+	appHash, err := commit.VerifyAppHash(&f.header)
+	require.NoError(t, err)
+	require.EqualValues(t, f.header.AppHash, appHash)
+	lightBlock := LightBlock{
+		SignedHeader: &SignedHeader{Header: &f.header, Commit: commit},
+		ValidatorSet: f.valSet,
+	}
+	require.NoError(t, lightBlock.ValidateBasic(f.header.ChainID))
+
+	require.ErrorIs(t, commit.VerifyRandomBeacon(f.header.ChainID, f.valSet, &f.header), ErrInvalidCommitBeacon)
+}

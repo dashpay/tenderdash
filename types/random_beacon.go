@@ -48,31 +48,44 @@ func (h *Header) StateIDWithAppHash(appHash []byte) tmproto.StateID {
 }
 
 // VerifyAppHash returns the app hash that commit's state ID commits to for header, the header of the
-// block commit commits: commit.AppHash when the commit carries one, otherwise header.AppHash. It fails
-// unless commit.BlockID.StateID is the hash of header's StateID with that app hash.
+// block commit commits. It is header.AppHash when commit.BlockID.StateID is the hash of header's
+// StateID, as before consensus version 2 and whenever the block's randomness left the app hash
+// unchanged, and otherwise commit.AppHash, which then must be the app hash whose state ID the commit
+// signs. Any other commit fails.
 //
 // The threshold signature of a commit covers commit.BlockID.StateID, so once it is verified, the
 // returned app hash is the one the validators signed, whatever consensus version the block used.
+// commit.AppHash is not covered by the signature: before consensus version 2 a proposer can fill a
+// block's LastCommit with an app hash that binds nothing, and the state ID still decides.
 func (commit *Commit) VerifyAppHash(header *Header) (tmbytes.HexBytes, error) {
 	if commit == nil || header == nil {
 		return nil, errors.New("nil commit or header")
 	}
-	if len(commit.AppHash) == 0 {
-		if !bytes.Equal(header.StateID().Hash(), commit.BlockID.StateID) {
-			return nil, fmt.Errorf("commit state ID %X does not match the header's state ID", commit.BlockID.StateID)
-		}
+	if bytes.Equal(header.StateID().Hash(), commit.BlockID.StateID) {
 		return header.AppHash, nil
 	}
+	if len(commit.AppHash) == 0 {
+		return nil, fmt.Errorf("commit state ID %X does not match the header's state ID", commit.BlockID.StateID)
+	}
+	if err := commit.verifySignedAppHash(header); err != nil {
+		return nil, err
+	}
+	return commit.AppHash, nil
+}
+
+// verifySignedAppHash checks that commit.BlockID.StateID is the hash of header's StateID with
+// commit.AppHash.
+func (commit *Commit) verifySignedAppHash(header *Header) error {
 	if len(commit.AppHash) != crypto.DefaultAppHashSize {
-		return nil, fmt.Errorf("%w: app hash size is %d, expected %d",
+		return fmt.Errorf("%w: app hash size is %d, expected %d",
 			ErrInvalidCommitBeacon, len(commit.AppHash), crypto.DefaultAppHashSize)
 	}
 	stateID := header.StateIDWithAppHash(commit.AppHash)
 	if !bytes.Equal(stateID.Hash(), commit.BlockID.StateID) {
-		return nil, fmt.Errorf("%w: commit state ID %X is not the state ID of the header with app hash %X",
+		return fmt.Errorf("%w: commit state ID %X is not the state ID of the header with app hash %X",
 			ErrInvalidCommitBeacon, commit.BlockID.StateID, commit.AppHash)
 	}
-	return commit.AppHash, nil
+	return nil
 }
 
 // CommittedAppHash returns the app hash the signed header's commit signs: from consensus version 2 the
@@ -108,7 +121,9 @@ func (commit *Commit) VerifyRandomBeacon(chainID string, vals *ValidatorSet, hea
 		return fmt.Errorf("%w: header hash %X does not match commit block hash %X",
 			ErrInvalidCommitBeacon, header.Hash(), commit.BlockID.Hash)
 	}
-	if _, err := commit.VerifyAppHash(header); err != nil {
+	// The commit's own app hash must be the signed one: unlike VerifyAppHash, this does not fall back
+	// to the header's when the state IDs happen to match.
+	if err := commit.verifySignedAppHash(header); err != nil {
 		return err
 	}
 	prevoteBlockID := BlockID{
