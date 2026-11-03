@@ -87,6 +87,10 @@ type VoteSet struct {
 	// dash fields
 	thresholdBlockSig    []byte         // If a 2/3 majority is seen, recover the block sig
 	thresholdVoteExtSigs VoteExtensions // If a 2/3 majority is seen, recover the vote extension sigs
+
+	// randomBeacon makes a prevote majority for a block count only once its threshold signature,
+	// the block's random beacon for the round, is recovered (consensus version 2).
+	randomBeacon bool
 }
 
 type maj23Info struct {
@@ -105,6 +109,19 @@ func WithLogger(logger log.Logger) VoteSetOption {
 		if logger != nil {
 			voteSet.logger = logger
 		}
+	}
+}
+
+// WithRandomBeacon makes a prevote VoteSet recover the threshold signature of a +2/3 majority for a
+// block, as precommit VoteSets do, and count the majority only once that succeeds. The recovered
+// signature is the block's random beacon for the round (consensus version 2); see
+// ThresholdBlockSignature. It has no effect on other vote types.
+//
+// The majority gate (QuorumVotingThresholdPower) can be below the voting power the recovery needs
+// (QuorumTypeThresholdVotingPower), so without this a polka could form before the beacon exists.
+func WithRandomBeacon(enabled bool) VoteSetOption {
+	return func(voteSet *VoteSet) {
+		voteSet.randomBeacon = enabled
 	}
 }
 
@@ -433,7 +450,7 @@ func (voteSet *VoteSet) addVerifiedVote(
 		// is actually finalized (the whole method runs under voteSet.mtx).
 		maj23BlockID := vote.BlockID
 		voteSet.maj23 = &maj23BlockID
-		if voteSet.signedMsgType == tmproto.PrecommitType {
+		if voteSet.recoversThresholdSigns(vote) {
 			if err := voteSet.recoverThresholdSignsAndVerify(votesByBlock); err != nil {
 				// Keep the vote and retry when a complete extension group crosses the
 				// recovery threshold; remote input must not turn failure into a panic.
@@ -465,6 +482,20 @@ func (voteSet *VoteSet) addVerifiedVote(
 	}
 
 	return true, conflicting
+}
+
+// recoversThresholdSigns reports whether a +2/3 majority for vote's block counts only once its
+// threshold signatures are recovered: always for precommits, and for prevotes for a block (not nil)
+// with WithRandomBeacon.
+func (voteSet *VoteSet) recoversThresholdSigns(vote *Vote) bool {
+	switch voteSet.signedMsgType {
+	case tmproto.PrecommitType:
+		return true
+	case tmproto.PrevoteType:
+		return voteSet.randomBeacon && !vote.BlockID.IsNil()
+	default:
+		return false
+	}
 }
 
 // recoverThresholdSignsAndVerify recovers threshold signatures and verifies them.
@@ -726,6 +757,21 @@ func (voteSet *VoteSet) IsCommit() bool {
 	voteSet.mtx.Lock()
 	defer voteSet.mtx.Unlock()
 	return voteSet.maj23 != nil
+}
+
+// ThresholdBlockSignature returns a copy of the threshold block signature recovered from the votes
+// of the +2/3 majority, or nil when there is none. For a prevote VoteSet created WithRandomBeacon, it
+// is the random beacon of the majority block for this round.
+func (voteSet *VoteSet) ThresholdBlockSignature() []byte {
+	if voteSet == nil {
+		return nil
+	}
+	voteSet.mtx.Lock()
+	defer voteSet.mtx.Unlock()
+	if voteSet.maj23 == nil {
+		return nil
+	}
+	return bytes.Clone(voteSet.thresholdBlockSig)
 }
 
 // IsQuorumReached returns true if quorum was reached otherwise returns false.

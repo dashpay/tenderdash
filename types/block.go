@@ -1158,6 +1158,15 @@ func (blockID BlockID) Equals(other BlockID) bool {
 		blockID.StateID.Equal(other.StateID)
 }
 
+// SameBlock reports whether two BlockIDs name the same block: the same hash and part set header.
+// The state IDs may differ. From consensus version 2, proposals and prevotes carry the state ID of
+// the header, while precommits and the commit carry the state ID with the app hash returned by
+// ApplyBlockRandomness, so a commit's BlockID and the BlockID derived from its block differ there.
+func (blockID BlockID) SameBlock(other BlockID) bool {
+	return bytes.Equal(blockID.Hash, other.Hash) &&
+		blockID.PartSetHeader.Equals(other.PartSetHeader)
+}
+
 // Key returns a machine-readable string representation of the BlockID
 func (blockID BlockID) Key() string {
 	pbph := blockID.PartSetHeader.ToProto()

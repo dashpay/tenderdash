@@ -246,6 +246,12 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockSto
 		}
 		precommits := s.Votes.Precommits(s.CommitRound)
 		s.LastCommit = precommits.MakeCommit()
+		// From consensus version 2 the commit also carries the beacon and the app hash the state was
+		// finalized with.
+		if len(state.LastBlockBeacon) > 0 {
+			s.LastCommit.Beacon = state.LastBlockBeacon
+			s.LastCommit.AppHash = state.LastAppHash
+		}
 	case commit != nil:
 		s.LastCommit = commit
 	case s.LastCommit == nil:
@@ -316,7 +322,8 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockSto
 	s.ValidBlock = nil
 	s.ValidBlockParts = nil
 	s.Commit = nil
-	s.Votes = cstypes.NewHeightVoteSet(state.ChainID, height, validators, cstypes.WithLogger(s.logger))
+	s.Votes = cstypes.NewHeightVoteSet(state.ChainID, height, validators, cstypes.WithLogger(s.logger),
+		cstypes.WithRandomBeacon(state.ConsensusParams.Version.RandomBeacon()))
 	s.CommitRound = -1
 	s.LastValidators = state.LastValidators
 	s.TriggeredTimeoutPrecommit = false
@@ -593,8 +600,12 @@ func (s *StateData) retargetTo(blockID types.BlockID, reason retargetReason) {
 // question about the whole BlockID: a part set header that happens to match says
 // nothing about the hash or the state ID. A Proposal that outlives the block it
 // names rejects the real block's last part over its core chain locked height.
+//
+// The state IDs are not compared: from consensus version 2 a commit or a precommit
+// majority names the block with the state ID of the app hash ApplyBlockRandomness
+// returned, while the Proposal carries the header's, and both describe one block.
 func (s *StateData) dropStaleProposal(blockID types.BlockID, reason retargetReason) {
-	if s.Proposal == nil || s.Proposal.BlockID.Equals(blockID) {
+	if s.Proposal == nil || s.Proposal.BlockID.SameBlock(blockID) {
 		return
 	}
 	s.logger.Debug("dropping proposal for a block the round no longer tracks",

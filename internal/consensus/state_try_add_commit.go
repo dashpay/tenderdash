@@ -45,6 +45,13 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 	event := stateEvent.Data.(*TryAddCommitEvent)
 	stateData := stateEvent.StateData
 	commit := event.Commit
+	if !stateData.state.ConsensusParams.Version.RandomBeacon() {
+		// Before consensus version 2 a commit carries no beacon; see WithoutRandomBeacon.
+		commit = commit.WithoutRandomBeacon()
+		stripped := *event
+		stripped.Commit = commit
+		event = &stripped
+	}
 	peerID := event.PeerID
 	fromReplay := event.FromReplay
 	ctx = ctxWithPeerVerificationBudget(ctx, peerID, fromReplay, cs.verificationBudget)
@@ -255,6 +262,24 @@ func verifyCommitBlock(
 	// applied against this block and then recorded carrying its own BlockID. The
 	// next height compares that record against the state this block produced;
 	// they disagree, and no proposer at any round can satisfy both.
+	//
+	// From consensus version 2 the commit's state ID carries the app hash the
+	// commit signs instead of the header's, and the commit carries that app hash
+	// and the round's random beacon: both are checked against this block.
+	if stateData.state.ConsensusParams.Version.RandomBeacon() {
+		if err := commit.VerifyRandomBeacon(stateData.state.ChainID, stateData.Validators, &block.Header); err != nil {
+			// Debug: the commit's signature does not cover its beacon or app hash, so a
+			// peer can alter them freely and must not be able to flood the error log.
+			logger.Debug("commit random beacon does not match the block it commits",
+				"height", commit.Height,
+				"node_proTxHash", proTxHash.ShortString(),
+				"commit_state_id", commit.BlockID.StateID,
+				"error", err,
+			)
+			return false, fmt.Errorf("cannot finalize commit: %w", err)
+		}
+		return true, nil
+	}
 	if !bytes.Equal(block.StateID().Hash(), commit.BlockID.StateID) {
 		logger.Error("commit state ID does not match the block it commits",
 			"height", commit.Height,
@@ -338,6 +363,15 @@ func verifyProcessedCommit(ctx context.Context, blockExec *blockExecutor, stateD
 	}
 	if err := blockExec.validate(ctx, stateData); err != nil {
 		return fmt.Errorf("+2/3 committed an invalid block: %w", err)
+	}
+	// From consensus version 2 the application applies the commit's beacon before
+	// it checks the extensions, in the order a validator signing a precommit uses.
+	// The beacon and app hash were verified against the block by verifyCommitBlock;
+	// an application that reaches another app hash has diverged.
+	if stateData.state.ConsensusParams.Version.RandomBeacon() {
+		if err := sm.VerifyBlockRandomness(ctx, blockExec.blockExec, stateData.ProposalBlock, commit); err != nil {
+			panic(fmt.Errorf("cannot finalize commit at height %d round %d: %w", commit.Height, commit.Round, err))
+		}
 	}
 	return blockExec.verifyCommitExtensions(ctx, &stateData.RoundState, commit)
 }

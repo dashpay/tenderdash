@@ -99,6 +99,8 @@ func TestCommitKey(t *testing.T) {
 			c.ThresholdVoteExtensions = tmproto.VoteExtensions{{Extension: []byte("a")}, {}}
 		},
 		"stripped": func(c *types.Commit) { c.ThresholdVoteExtensions = nil },
+		"beacon":   func(c *types.Commit) { c.Beacon = []byte("beacon") },
+		"app hash": func(c *types.Commit) { c.AppHash = []byte("app hash") },
 	} {
 		changed := *base
 		change(&changed)

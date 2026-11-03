@@ -10,14 +10,17 @@ import (
 )
 
 // commitKey identifies a commit by what the application's extension check
-// depends on: height, round, block and extension vector. Commits with equal keys
-// differ at most in their quorum hash and threshold block signature, which that
-// check does not read.
+// depends on: height, round, block and extension vector, and by the random beacon
+// and app hash checked against the block from consensus version 2. Neither is
+// covered by the threshold signature, so a copy carrying others must not pass for
+// one already tried. Commits with equal keys differ at most in their quorum hash
+// and threshold block signature, which those checks do not read.
 type commitKey struct {
 	height     int64
 	round      int32
 	blockID    string
 	extensions [sha256.Size]byte
+	randomness [sha256.Size]byte
 }
 
 func newCommitKey(commit *types.Commit) commitKey {
@@ -30,11 +33,16 @@ func newCommitKey(commit *types.Commit) commitKey {
 		buf = binary.AppendUvarint(buf, uint64(len(bz)))
 		buf = append(buf, bz...)
 	}
+	var randomness []byte
+	randomness = binary.AppendUvarint(randomness, uint64(len(commit.Beacon)))
+	randomness = append(randomness, commit.Beacon...)
+	randomness = append(randomness, commit.AppHash...)
 	return commitKey{
 		height:     commit.Height,
 		round:      commit.Round,
 		blockID:    commit.BlockID.Key(),
 		extensions: sha256.Sum256(buf),
+		randomness: sha256.Sum256(randomness),
 	}
 }
 

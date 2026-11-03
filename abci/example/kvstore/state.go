@@ -42,6 +42,8 @@ type State interface {
 
 	// GetAppHash returns app hash for the state. You need to call UpdateAppHash() beforehand.
 	GetAppHash() tmbytes.HexBytes
+	// SetAppHash replaces the app hash of the state, as the block's randomness does (consensus version 2).
+	SetAppHash(appHash tmbytes.HexBytes)
 
 	// UpdateAppHash regenerates apphash for the state. It accepts transactions and tx results from current round.
 	// It is deterministic for a given state, txs and txResults.
@@ -168,6 +170,10 @@ func (state *kvState) IncrementHeight() {
 
 func (state kvState) GetAppHash() tmbytes.HexBytes {
 	return state.AppHash.Copy()
+}
+
+func (state *kvState) SetAppHash(appHash tmbytes.HexBytes) {
+	state.AppHash = appHash.Copy()
 }
 
 func (state *kvState) UpdateAppHash(lastCommittedState State, _txs types1.Txs, txResults []*types.ExecTxResult) error {

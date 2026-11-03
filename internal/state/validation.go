@@ -82,8 +82,13 @@ func validateBlock(state State, block *types.Block, lastCommit types.VerifiedCom
 		if len(block.LastCommit.ThresholdBlockSignature) != 0 {
 			return errors.New("initial block can't have ThresholdBlockSignature set")
 		}
-	} else if err := verifyLastCommit(state, block, lastCommit, metrics); err != nil {
-		return err
+	} else {
+		if err := verifyLastCommit(state, block, lastCommit, metrics); err != nil {
+			return err
+		}
+		if err := verifyLastCommitBeacon(state, block); err != nil {
+			return err
+		}
 	}
 
 	// NOTE: We can't actually verify it's the right proposer because we don't
@@ -148,6 +153,26 @@ func verifyLastCommit(state State, block *types.Block, lastCommit types.Verified
 	}
 	if skipped {
 		metrics.LastCommitVerificationSkipped.Add(1)
+	}
+	return nil
+}
+
+// verifyLastCommitBeacon checks the random beacon and the app hash of block.LastCommit when the last
+// block was committed at consensus version 2 or later, that is when state.LastBlockBeacon is set. They
+// must be the ones of the commit the last block was finalized with: its threshold signature covers
+// neither, and a block whose LastCommit carried others would hand block sync and light clients a
+// commit for the last block that fails verification. Before that, both fields are ignored.
+func verifyLastCommitBeacon(state State, block *types.Block) error {
+	if len(state.LastBlockBeacon) == 0 {
+		return nil
+	}
+	if !bytes.Equal(block.LastCommit.Beacon, state.LastBlockBeacon) {
+		return fmt.Errorf("wrong Block.LastCommit.Beacon. Expected %X, got %X",
+			state.LastBlockBeacon, block.LastCommit.Beacon)
+	}
+	if !bytes.Equal(block.LastCommit.AppHash, state.LastAppHash) {
+		return fmt.Errorf("wrong Block.LastCommit.AppHash. Expected %X, got %X",
+			state.LastAppHash, block.LastCommit.AppHash)
 	}
 	return nil
 }

@@ -101,6 +101,27 @@ func Rollback(bs BlockStore, ss Store) (int64, []byte, error) {
 		LastAppHash:     latestBlock.Header.AppHash,
 	}
 
+	// From consensus version 2, the commit of the rolled back block signs a state ID with the app hash
+	// ApplyBlockRandomness returned, and the next block's LastCommit must carry its beacon and app hash.
+	// Take all three from that commit: the latest block's LastCommit.
+	rollbackParams, err := ss.LoadConsensusParams(rollbackHeight)
+	if err != nil {
+		return -1, nil, err
+	}
+	if rollbackParams.Version.RandomBeacon() {
+		commit := bs.LoadBlockCommit(rollbackHeight)
+		if commit == nil {
+			return -1, nil, fmt.Errorf("commit at height %d not found", rollbackHeight)
+		}
+		if !commit.BlockID.SameBlock(rollbackBlock.BlockID) {
+			return -1, nil, fmt.Errorf("commit at height %d is for block %v, not %v",
+				rollbackHeight, commit.BlockID, rollbackBlock.BlockID)
+		}
+		rolledBackState.LastBlockID = commit.BlockID
+		rolledBackState.LastAppHash = commit.AppHash
+		rolledBackState.LastBlockBeacon = commit.Beacon
+	}
+
 	// persist the new state. This overrides the invalid one. NOTE: this will also
 	// persist the validator set and consensus params over the existing structures,
 	// but both should be the same

@@ -195,6 +195,14 @@ func addVoteDispatchPrevoteMw(ctrl *Controller) AddVoteMiddlewareFunc {
 			height := stateData.Height
 			// If +2/3 prevotes for *anything* for future round:
 			switch {
+			case stateData.Step == cstypes.RoundStepApplyCommit && vote.Round == stateData.CommitRound &&
+				stateData.state.ConsensusParams.Version.RandomBeacon():
+				// A commit of this node's own precommits waits for the random beacon of the commit round
+				// (consensus version 2); this prevote may have completed it.
+				if blockID, ok := prevotes.TwoThirdsMajority(); ok && !blockID.IsNil() {
+					_ = ctrl.Dispatch(ctx, &TryFinalizeCommitEvent{Height: height}, stateData)
+				}
+
 			case stateData.Round < vote.Round && prevotes.HasTwoThirdsAny():
 				// Round-skip if there is any 2/3+ of votes ahead of us
 				_ = ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: vote.Round}, stateData)

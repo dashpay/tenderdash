@@ -107,7 +107,13 @@ type State struct {
 	LastResultsHash tmbytes.HexBytes
 
 	// the latest LastAppHash we've received from calling abci.Commit()
+	// From consensus version 2, it is the app hash the last block's commit signs, as returned by
+	// ApplyBlockRandomness, which can differ from the app hash in that block's header.
 	LastAppHash tmbytes.HexBytes
+
+	// LastBlockBeacon is the random beacon carried by the last block's commit, from consensus version 2;
+	// empty before. The next block's LastCommit must carry the same beacon.
+	LastBlockBeacon []byte
 }
 
 //  NewRound changes the State to apply settings new round and height to it.
@@ -142,7 +148,8 @@ func (state State) Copy() State {
 		ConsensusParams:                  state.ConsensusParams,
 		LastHeightConsensusParamsChanged: state.LastHeightConsensusParamsChanged,
 
-		LastAppHash: state.LastAppHash,
+		LastAppHash:     state.LastAppHash,
+		LastBlockBeacon: state.LastBlockBeacon,
 
 		LastResultsHash: state.LastResultsHash,
 	}
@@ -217,6 +224,7 @@ func (state *State) ToProto() (*tmstate.State, error) {
 	sm.LastHeightConsensusParamsChanged = state.LastHeightConsensusParamsChanged
 	sm.LastResultsHash = state.LastResultsHash
 	sm.AppHash = state.LastAppHash
+	sm.LastBlockBeacon = state.LastBlockBeacon
 
 	return sm, nil
 }
@@ -262,6 +270,7 @@ func FromProto(pb *tmstate.State) (*State, error) { //nolint:golint
 	state.LastHeightConsensusParamsChanged = pb.LastHeightConsensusParamsChanged
 	state.LastResultsHash = pb.LastResultsHash
 	state.LastAppHash = pb.AppHash
+	state.LastBlockBeacon = pb.LastBlockBeacon
 
 	return state, nil
 }

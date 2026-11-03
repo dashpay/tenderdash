@@ -77,6 +77,13 @@ type VersionParams struct {
 	ConsensusVersion int32  `json:"consensus,string"`
 }
 
+// RandomBeacon reports whether same-block randomness is on (consensus version 2 and later): the
+// threshold signature recovered from a block's prevotes is its random beacon, the application applies
+// it with ApplyBlockRandomness, and precommits and the commit sign the app hash it returns.
+func (params VersionParams) RandomBeacon() bool {
+	return params.ConsensusVersion >= int32(tmproto.VersionParams_CONSENSUS_VERSION_2)
+}
+
 // SynchronyParams influence the validity of block timestamps.
 // For more information on the relationship of the synchrony parameters to
 // block validity, see the Proposer-Based Timestamps specification:
@@ -351,6 +358,10 @@ func (params ConsensusParams) ValidateConsensusParams() error {
 
 	if len(params.Validator.PubKeyTypes) == 0 {
 		return errors.New("len(Validator.PubKeyTypes) must be greater than 0")
+	}
+
+	if _, ok := tmproto.VersionParams_ConsensusVersion_name[params.Version.ConsensusVersion]; !ok {
+		return fmt.Errorf("version.ConsensusVersion %d is unknown", params.Version.ConsensusVersion)
 	}
 
 	// Check if keyType is a known ABCIPubKeyType

@@ -472,7 +472,18 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 		time.Sleep(time.Duration(app.cfg.FinalizeBlockDelayMS) * time.Millisecond)
 	}
 
-	err := app.newHeight(appHash, req.Height, req.Round)
+	// From consensus version 2 the commit carries the round's random beacon and the app hash after it
+	// is applied, and that is the state committed.
+	var committedAppHash tmbytes.HexBytes
+	if len(req.Commit.Beacon) > 0 {
+		committedAppHash = randomAppHash(roundState.GetAppHash(), req.Commit.Beacon)
+		if !committedAppHash.Equal(req.Commit.AppHash) {
+			return &abci.ResponseFinalizeBlock{}, fmt.Errorf("commit app hash %X does not match the app hash %X after applying the beacon",
+				tmbytes.HexBytes(req.Commit.AppHash), committedAppHash)
+		}
+	}
+
+	err := app.newHeight(appHash, req.Height, req.Round, committedAppHash)
 	if err != nil {
 		return &abci.ResponseFinalizeBlock{}, err
 	}
@@ -490,8 +501,9 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 	return resp, nil
 }
 
-// ApplyBlockRandomness implements ABCI. The example application uses no randomness, so it returns
-// the app hash of the state that PrepareProposal or ProcessProposal left for the block and round.
+// ApplyBlockRandomness implements ABCI. The example application applies a toy translation: the app hash
+// after the randomness is the hash of the app hash that PrepareProposal or ProcessProposal left for the
+// block and round, followed by the beacon. It is deterministic, and always differs from the header's.
 func (app *Application) ApplyBlockRandomness(_ context.Context, req *abci.RequestApplyBlockRandomness) (*abci.ResponseApplyBlockRandomness, error) {
 	app.mu.Lock()
 	defer app.mu.Unlock()
@@ -500,10 +512,18 @@ func (app *Application) ApplyBlockRandomness(_ context.Context, req *abci.Reques
 	if err != nil {
 		return nil, fmt.Errorf("apply block randomness (hash: %X): %w", req.Hash, err)
 	}
+	if len(req.Beacon) == 0 {
+		return nil, fmt.Errorf("apply block randomness (hash: %X): empty beacon", req.Hash)
+	}
 
-	resp := &abci.ResponseApplyBlockRandomness{AppHash: roundState.GetAppHash()}
+	resp := &abci.ResponseApplyBlockRandomness{AppHash: randomAppHash(roundState.GetAppHash(), req.Beacon)}
 	app.logger.Debug("ApplyBlockRandomness", "req", req, "resp", resp)
 	return resp, nil
+}
+
+// randomAppHash is the example application's translation of an app hash with a block's random beacon.
+func randomAppHash(appHash tmbytes.HexBytes, beacon []byte) tmbytes.HexBytes {
+	return crypto.Checksum(append(appHash.Copy(), beacon...))
 }
 
 // processedRoundState returns the state of the proposal executed at the given height and round.
@@ -789,8 +809,10 @@ func (app *Application) Close() error {
 }
 
 // newHeight frees resources from previous height and starts new height.
+// finalAppHash, when set, replaces the committed state's app hash: it is the app hash after the
+// block's randomness is applied (consensus version 2).
 // Caller should lock the Application.
-func (app *Application) newHeight(committedAppHash tmbytes.HexBytes, height int64, round int32) error {
+func (app *Application) newHeight(committedAppHash tmbytes.HexBytes, height int64, round int32, finalAppHash tmbytes.HexBytes) error {
 	// Committed round becomes new state
 	committedState := app.roundStates[roundKey(committedAppHash, height, round)]
 	if committedState == nil {
@@ -799,6 +821,9 @@ func (app *Application) newHeight(committedAppHash tmbytes.HexBytes, height int6
 	err := committedState.Copy(app.LastCommittedState)
 	if err != nil {
 		return err
+	}
+	if finalAppHash != nil {
+		app.LastCommittedState.SetAppHash(finalAppHash)
 	}
 
 	app.resetDuplicateDetection(app.preparedProposals != nil && app.processedProposals != nil)

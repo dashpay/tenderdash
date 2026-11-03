@@ -65,7 +65,7 @@ func (p *Proposaler) Set(
 
 	// Keep a later-round proposal from disrupting the committed-block download.
 	if rs.Commit != nil && rs.ProposalBlockParts.HasHeader(rs.Commit.BlockID.PartSetHeader) &&
-		!proposal.BlockID.Equals(rs.Commit.BlockID) {
+		!proposal.BlockID.SameBlock(rs.Commit.BlockID) {
 		return nil
 	}
 
@@ -339,7 +339,7 @@ func (p *Proposaler) checkProposalAgainstRoundState(
 func roundStateRefusal(proposal *types.Proposal, rs *cstypes.RoundState) error {
 	commit := rs.Commit
 	if commit != nil && commit.Height == proposal.Height && commit.Round == proposal.Round &&
-		!proposal.BlockID.Equals(commit.BlockID) {
+		!proposal.BlockID.SameBlock(commit.BlockID) {
 		return ErrInvalidProposalForCommit
 	}
 	if rs.ProposalBlockParts != nil && !rs.ProposalBlockParts.HasHeader(proposal.BlockID.PartSetHeader) {
@@ -361,7 +361,9 @@ func (p *Proposaler) verifyProposalForNonValidatorSet(proposal *types.Proposal, 
 		// We received a proposal we can not check
 		return ErrUnableToVerifyProposal
 	}
-	if !proposal.BlockID.Equals(commit.BlockID) {
+	// Hash and part set header only: from consensus version 2 the commit carries
+	// the state ID of the app hash it signs, not the header's.
+	if !proposal.BlockID.SameBlock(commit.BlockID) {
 		return ErrInvalidProposalForCommit
 	}
 	return nil

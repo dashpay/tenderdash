@@ -441,12 +441,14 @@ func testClient(ctx context.Context, t *testing.T, app abciclient.Client, height
 	require.False(t, rpp.TxResults[0].IsErr())
 	require.Len(t, rpp.Events, 1)
 
+	beacon := tmcrypto.CRandBytes(tmtypes.SignatureSize)
 	rabr, err := app.ApplyBlockRandomness(ctx, &types.RequestApplyBlockRandomness{
 		Height: height,
-		Beacon: tmcrypto.CRandBytes(tmtypes.SignatureSize),
+		Beacon: beacon,
 	})
 	require.NoError(t, err)
-	require.Equal(t, rpp.AppHash, rabr.AppHash, "no randomness is applied, so the app hash is unchanged")
+	require.EqualValues(t, randomAppHash(rpp.AppHash, beacon), rabr.AppHash)
+	require.NotEqualValues(t, rpp.AppHash, rabr.AppHash)
 
 	rfb := &types.RequestFinalizeBlock{Height: height}
 	rfb.Block, rfb.BlockID = makeBlock(t, height, [][]byte{tx}, rpp.AppHash)
@@ -652,16 +654,19 @@ func TestProcessProposalRoundReprocessing(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TestApplyBlockRandomness checks that ApplyBlockRandomness answers for the round that was processed,
-// gives the same answer when called again, and fails for a round that was not processed.
+// TestApplyBlockRandomness checks the example application's toy translation: ApplyBlockRandomness answers
+// the hash of the processed round's app hash and the beacon, gives the same answer when called again, and
+// fails for a round that was not processed; FinalizeBlock commits that app hash when the commit carries
+// the beacon, and refuses a commit whose app hash differs.
 func TestApplyBlockRandomness(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	app := newKvApp(ctx, t, 1)
 	const height = 1
+	tx := []byte(testKey)
 	resp, err := app.ProcessProposal(ctx, &types.RequestProcessProposal{
-		Txs:     [][]byte{[]byte(testKey)},
+		Txs:     [][]byte{tx},
 		Hash:    []byte("block-hash"),
 		Height:  height,
 		Round:   1,
@@ -669,20 +674,39 @@ func TestApplyBlockRandomness(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	beacon := tmcrypto.CRandBytes(tmtypes.SignatureSize)
 	req := &types.RequestApplyBlockRandomness{
 		Hash:   []byte("block-hash"),
 		Height: height,
 		Round:  1,
-		Beacon: tmcrypto.CRandBytes(tmtypes.SignatureSize),
+		Beacon: beacon,
 	}
 	first, err := app.ApplyBlockRandomness(ctx, req)
 	require.NoError(t, err)
-	require.Equal(t, resp.AppHash, first.AppHash)
+	require.EqualValues(t, randomAppHash(resp.AppHash, beacon), first.AppHash)
+	require.NotEqualValues(t, resp.AppHash, first.AppHash)
 
 	again, err := app.ApplyBlockRandomness(ctx, req)
 	require.NoError(t, err)
 	require.Equal(t, first.AppHash, again.AppHash)
 
-	_, err = app.ApplyBlockRandomness(ctx, &types.RequestApplyBlockRandomness{Height: height, Round: 0})
+	_, err = app.ApplyBlockRandomness(ctx, &types.RequestApplyBlockRandomness{Height: height, Round: 0, Beacon: beacon})
 	require.ErrorContains(t, err, "no proposal executed")
+
+	finalize := func(appHash []byte) error {
+		reqFin := &types.RequestFinalizeBlock{
+			Height: height,
+			Round:  1,
+			Commit: types.CommitInfo{Round: 1, Beacon: beacon, AppHash: appHash},
+		}
+		reqFin.Block, reqFin.BlockID = makeBlock(t, height, [][]byte{tx}, resp.AppHash)
+		_, err := app.FinalizeBlock(ctx, reqFin)
+		return err
+	}
+	require.ErrorContains(t, finalize(resp.AppHash), "does not match the app hash")
+	require.NoError(t, finalize(first.AppHash))
+
+	info, err := app.Info(ctx, &types.RequestInfo{})
+	require.NoError(t, err)
+	assertRespInfo(t, height, first.AppHash, *info)
 }

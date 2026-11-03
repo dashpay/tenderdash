@@ -113,6 +113,12 @@ func (mock *mockProxyApp) ProcessProposal(_ context.Context, _req *abci.RequestP
 	return r, nil
 }
 
+// ApplyBlockRandomness returns the app hash the real application committed: the
+// mock replays a block the application has already finalized.
+func (mock *mockProxyApp) ApplyBlockRandomness(_ context.Context, _req *abci.RequestApplyBlockRandomness) (*abci.ResponseApplyBlockRandomness, error) {
+	return &abci.ResponseApplyBlockRandomness{AppHash: mock.appHash}, nil
+}
+
 func (mock *mockProxyApp) FinalizeBlock(_ context.Context, _req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
 	mock.txCount++
 

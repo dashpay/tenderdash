@@ -218,6 +218,40 @@ func errRejectedBefore(commit *types.Commit) error {
 		commit.Height, commit.Round, commit.BlockID.Hash, sm.ErrCommitExtensionsRejected)
 }
 
+// errBeaconNotRecovered means this node has not recovered the random beacon of the commit round from
+// its prevotes, so it cannot complete a commit built from its own precommits.
+var errBeaconNotRecovered = errors.New("random beacon of the commit round not recovered")
+
+// completeCommit gives commit, built from this node's own precommits at consensus version 2, the random
+// beacon and the app hash it carries: the beacon recovered from the prevotes of the commit round, and
+// the app hash the application returns from ApplyBlockRandomness for it. The block must be processed
+// for commit.Round.
+//
+// It returns errBeaconNotRecovered while this node has no prevote majority with a recovered beacon for
+// the block in that round; a peer's commit or the missing prevotes can still finish the height. It
+// panics if the application fails, or reaches an app hash whose state ID is not the one the precommits
+// signed: this node has diverged from the validators that committed the block.
+func (c *blockExecutor) completeCommit(ctx context.Context, stateData *StateData, commit *types.Commit) error {
+	prevotes := stateData.Votes.Prevotes(commit.Round)
+	polka, ok := prevotes.TwoThirdsMajority()
+	beacon := prevotes.ThresholdBlockSignature()
+	if !ok || !polka.SameBlock(commit.BlockID) || len(beacon) == 0 {
+		return errBeaconNotRecovered
+	}
+	block := stateData.ProposalBlock
+	appHash, err := c.blockExec.ApplyBlockRandomness(ctx, block, commit.Round, beacon)
+	if err != nil {
+		panic(fmt.Errorf("ApplyBlockRandomness call failed: %w", err))
+	}
+	commit.Beacon = beacon
+	commit.AppHash = appHash
+	if err := commit.VerifyRandomBeacon(stateData.state.ChainID, stateData.Validators, &block.Header); err != nil {
+		panic(fmt.Errorf("the application's app hash after applying the randomness of block %X at height %d round %d "+
+			"does not match the commit: %w", block.Hash(), commit.Height, commit.Round, err))
+	}
+	return nil
+}
+
 func (c *blockExecutor) mustEnsureProcess(ctx context.Context, rs *cstypes.RoundState, round int32) {
 	err := c.ensureProcess(ctx, rs, round)
 	if err != nil {
@@ -228,15 +262,21 @@ func (c *blockExecutor) mustEnsureProcess(ctx context.Context, rs *cstypes.Round
 func (c *blockExecutor) finalize(ctx context.Context, stateData *StateData, commit *types.Commit) (sm.State, *abci.ResponseFinalizeBlock, error) {
 	block := stateData.ProposalBlock
 	blockParts := stateData.ProposalBlockParts
+	// The block ID the commit signs, which becomes the next header's LastBlockID. From consensus
+	// version 2 its state ID carries the app hash the commit signs, not the header's.
+	blockID := types.BlockID{
+		Hash:          block.Hash(),
+		PartSetHeader: blockParts.Header(),
+		StateID:       block.StateID().Hash(),
+	}
+	if commit != nil {
+		blockID = commit.BlockID
+	}
 	return c.blockExec.FinalizeBlock(
 		ctx,
 		stateData.state.Copy(),
 		stateData.CurrentRoundState,
-		types.BlockID{
-			Hash:          block.Hash(),
-			PartSetHeader: blockParts.Header(),
-			StateID:       block.StateID().Hash(),
-		},
+		blockID,
 		block,
 		commit,
 		// consensus holds no proof for the block's LastCommit, so it is verified
