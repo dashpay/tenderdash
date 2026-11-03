@@ -693,7 +693,9 @@ type Commit struct {
 	ThresholdBlockSignature []byte           `protobuf:"bytes,5,opt,name=threshold_block_signature,json=thresholdBlockSignature,proto3" json:"threshold_block_signature,omitempty"`
 	ThresholdVoteExtensions []*VoteExtension `protobuf:"bytes,6,rep,name=threshold_vote_extensions,json=thresholdVoteExtensions,proto3" json:"threshold_vote_extensions,omitempty"`
 	// Random beacon: the threshold signature recovered from the prevotes of the commit round.
-	// Set from consensus version 2; empty before.
+	// Set from consensus version 2; empty before. Neither this field nor app_hash is covered by the
+	// commit's signature: a commit is refused unless both are empty or they are exactly 96 and 32
+	// bytes, and a block's last commit is read without them when they are not.
 	Beacon []byte `protobuf:"bytes,7,opt,name=beacon,proto3" json:"beacon,omitempty"`
 	// App hash the precommits sign, returned by ApplyBlockRandomness for this block and round.
 	// Set from consensus version 2; empty before.

@@ -710,3 +710,63 @@ func TestApplyBlockRandomness(t *testing.T) {
 	require.NoError(t, err)
 	assertRespInfo(t, height, first.AppHash, *info)
 }
+
+// TestApplyBlockRandomnessEquivocation is the regression test for a node that executed two blocks of
+// one round, as with an equivocating proposer: it processed block A at round 0, then a block at round 1,
+// which lets round 0 be processed again, then the other round 0 block B, which the network committed.
+// ApplyBlockRandomness used to pick the state by height and round only and failed with "more than one
+// proposal executed", which is fatal; it now picks the state of the block the request names, and
+// refuses a block that was not processed.
+func TestApplyBlockRandomnessEquivocation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	app := newKvApp(ctx, t, 1)
+	process := func(height int64, round int32, hash string, txs ...string) *types.ResponseProcessProposal {
+		t.Helper()
+		resp, err := app.ProcessProposal(ctx, &types.RequestProcessProposal{
+			Txs:     bytes2TxsBytes(txs),
+			Hash:    []byte(hash),
+			Height:  height,
+			Round:   round,
+			Version: &pbversion.Consensus{App: uint64(height)},
+		})
+		require.NoError(t, err)
+		return resp
+	}
+	// The app hash changes with the txs only after the initial height.
+	h1 := process(1, 0, "h1", "k=v")
+	reqFin := &types.RequestFinalizeBlock{Height: 1}
+	reqFin.Block, reqFin.BlockID = makeBlock(t, 1, [][]byte{[]byte("k=v")}, h1.AppHash)
+	_, err := app.FinalizeBlock(ctx, reqFin)
+	require.NoError(t, err)
+
+	const height = 2
+	a := process(height, 0, "block-A", "a=1")
+	process(height, 1, "block-X", "x=3")
+	b := process(height, 0, "block-B", "b=2", "c=4")
+	require.NotEqual(t, a.AppHash, b.AppHash, "two states for round 0")
+
+	beacon := tmcrypto.CRandBytes(tmtypes.SignatureSize)
+	apply := func(hash string) (*types.ResponseApplyBlockRandomness, error) {
+		return app.ApplyBlockRandomness(ctx, &types.RequestApplyBlockRandomness{
+			Hash: []byte(hash), Height: height, Round: 0, Beacon: beacon,
+		})
+	}
+	respB, err := apply("block-B")
+	require.NoError(t, err)
+	require.EqualValues(t, randomAppHash(b.AppHash, beacon), respB.AppHash)
+	respA, err := apply("block-A")
+	require.NoError(t, err)
+	require.EqualValues(t, randomAppHash(a.AppHash, beacon), respA.AppHash)
+	_, err = apply("block-never-processed")
+	require.ErrorContains(t, err, "block not processed")
+}
+
+func bytes2TxsBytes(txs []string) [][]byte {
+	out := make([][]byte, 0, len(txs))
+	for _, tx := range txs {
+		out = append(out, []byte(tx))
+	}
+	return out
+}

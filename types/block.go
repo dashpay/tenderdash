@@ -337,7 +337,7 @@ func BlockFromProto(bp *tmproto.Block) (*Block, error) {
 	b.CoreChainLock = coreChainLock
 
 	if bp.LastCommit != nil {
-		lc, err := CommitFromProto(bp.LastCommit)
+		lc, err := CommitFromProto(lastCommitWithoutMalformedRandomness(bp.LastCommit))
 		if err != nil {
 			return nil, err
 		}
@@ -345,6 +345,23 @@ func BlockFromProto(bp *tmproto.Block) (*Block, error) {
 	}
 
 	return b, b.ValidateBasic()
+}
+
+// lastCommitWithoutMalformedRandomness returns the block's LastCommit without its beacon and app hash
+// when they do not have the sizes ValidateBasic requires, and cp itself otherwise.
+//
+// A block's LastCommit is not refused for them, unlike a commit received on its own: releases before
+// these fields skip them as unknown, so they accept such a block, and an upgraded node refusing it
+// would split from them. Neither field is covered by the block hash, and dropping them here keeps
+// them from being read, stored in the decoded block, or passed on.
+func lastCommitWithoutMalformedRandomness(cp *tmproto.Commit) *tmproto.Commit {
+	if validRandomBeaconSizes(cp.Beacon, cp.AppHash) {
+		return cp
+	}
+	stripped := *cp
+	stripped.Beacon = nil
+	stripped.AppHash = nil
+	return &stripped
 }
 
 //-----------------------------------------------------------------------------
@@ -752,6 +769,17 @@ const (
 
 //-------------------------------------
 
+// ErrInvalidCommitRandomness is returned for a commit whose beacon and app hash are neither both empty
+// nor exactly a threshold signature and an app hash.
+var ErrInvalidCommitRandomness = errors.New("invalid commit beacon or app hash size")
+
+// validRandomBeaconSizes reports whether a commit's beacon and app hash are both empty, or a threshold
+// signature and an app hash: the only forms a commit can carry them in.
+func validRandomBeaconSizes(beacon, appHash []byte) bool {
+	return (len(beacon) == 0 && len(appHash) == 0) ||
+		(len(beacon) == SignatureSize && len(appHash) == crypto.DefaultAppHashSize)
+}
+
 // Commit contains the evidence that a block was committed by a set of validators.
 // NOTE: Commit is empty for height 1, but never nil.
 type Commit struct {
@@ -900,6 +928,14 @@ func (commit *Commit) ValidateBasic() error {
 				len(commit.ThresholdBlockSignature),
 			)
 		}
+	}
+
+	// Neither field is covered by the commit hash or its threshold signature, so a peer can fill them
+	// in a commit it relays. Bounding them here refuses such a commit before it is stored or passed
+	// to the application, whatever the consensus version.
+	if !validRandomBeaconSizes(commit.Beacon, commit.AppHash) {
+		return fmt.Errorf("%w: beacon of %d bytes and app hash of %d bytes, expected both empty or %d and %d bytes",
+			ErrInvalidCommitRandomness, len(commit.Beacon), len(commit.AppHash), SignatureSize, crypto.DefaultAppHashSize)
 	}
 
 	// Reject extension types nothing can dispatch on: proto3's open enums let an

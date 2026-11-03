@@ -10,12 +10,9 @@ import (
 	"slices"
 	"time"
 
-	"github.com/cosmos/gogoproto/proto"
-
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
 	"github.com/dashpay/tenderdash/libs/log"
-	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -170,8 +167,7 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 			return added, err
 		}
 
-		var pbb = new(tmproto.Block)
-		err = proto.Unmarshal(bz, pbb)
+		pbb, err := types.UnmarshalBlockProto(bz)
 		if err != nil {
 			return added, err
 		}
