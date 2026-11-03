@@ -762,9 +762,11 @@ const (
 const (
 	// MaxCommitOverheadBytes is the max size of commit, with overhead but without vote extensions:
 	// (110+2) for BlockID,  (8+2) for Height, (4+2) for Round,
-	// (32+2) for QuorumHash, (96+2) for Block signature,
-	// (96+2) for Beacon, (32+2) for AppHash.
-	MaxCommitOverheadBytes int64 = (110 + 2) + (8 + 2) + (4 + 2) + (32 + 2) + (96 + 2) + (96 + 2) + (32 + 2) + 0
+	// (32+2) for QuorumHash, (96+2) for Block signature.
+	MaxCommitOverheadBytes int64 = (110 + 2) + (8 + 2) + (4 + 2) + (32 + 2) + (96 + 2) + 0
+	// MaxCommitRandomnessBytes is what a commit grows by when it carries a random beacon (consensus
+	// version 2): (96+2) for Beacon, (32+2) for AppHash.
+	MaxCommitRandomnessBytes int64 = (96 + 2) + (32 + 2)
 )
 
 //-------------------------------------
@@ -998,12 +1000,14 @@ func (commit *Commit) String() string {
 		return "nil-Commit"
 	}
 	return fmt.Sprintf(
-		`Commit{H: %d, R: %d, BlockID: %v, QuorumHash %v, BlockSignature: %v}#%v`,
+		`Commit{H: %d, R: %d, BlockID: %v, QuorumHash %v, BlockSignature: %v, Beacon: %v, AppHash: %v}#%v`,
 		commit.Height,
 		commit.Round,
 		commit.BlockID,
 		commit.QuorumHash,
 		base64.StdEncoding.EncodeToString(commit.ThresholdBlockSignature),
+		base64.StdEncoding.EncodeToString(commit.Beacon),
+		commit.AppHash,
 		commit.hash)
 }
 
@@ -1017,11 +1021,15 @@ func (commit *Commit) StringIndented(indent string) string {
 %s  Round:      %d
 %s  BlockID:    %v
 %s  BlockSignature: %v
+%s  Beacon:     %v
+%s  AppHash:    %v
 %s}#%v`,
 		indent, commit.Height,
 		indent, commit.Round,
 		indent, commit.BlockID,
 		indent, base64.StdEncoding.EncodeToString(commit.ThresholdBlockSignature),
+		indent, base64.StdEncoding.EncodeToString(commit.Beacon),
+		indent, commit.AppHash,
 		indent, commit.hash)
 }
 
@@ -1032,6 +1040,8 @@ func (commit *Commit) MarshalZerologObject(e *zerolog.Event) {
 		e.Int32("round", commit.Round)
 		e.Str("BlockID.Hash", commit.BlockID.Hash.String())
 		e.Str("BlockSignature", hex.EncodeToString(commit.ThresholdBlockSignature))
+		e.Str("Beacon", hex.EncodeToString(commit.Beacon))
+		e.Str("AppHash", commit.AppHash.String())
 	}
 }
 
