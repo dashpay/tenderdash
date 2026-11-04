@@ -11,38 +11,38 @@ This file defines the JSON-RPC spec of Tenderdash. This is meant to be implement
 
 ## Support
 
-  |              | [Tenderdash](https://github.com/dashpay/tenderdash/)        | [Tendermint-Rs](https://github.com/informalsystems/tendermint-rs) |
-  |--------------|:-----------------------------------------------------------:|:-----------------------------------------------------------------:|
-  | JSON-RPC 2.0 |                             ✅                              |                                ✅                                 |
-  | HTTP         |                             ✅                              |                                ✅                                 |
-  | HTTPS        |                             ✅                              |                                ❌                                 |
-  | WS           |                             ✅                              |                                ✅                                 |
-  
-  | Routes                                  | [Tenderdash](https://github.com/dashpay/tenderdash/)       | [Tendermint-Rs](https://github.com/informalsystems/tendermint-rs) |
-  |-----------------------------------------|:----------------------------------------------------------:|:-----------------------------------------------------------------:|
-  | [Health](#health)                       |                             ✅                              |                                 ✅                                 |
-  | [Status](#status)                       |                             ✅                              |                                 ✅                                 |
-  | [NetInfo](#netinfo)                     |                             ✅                              |                                 ✅                                 |
-  | [Blockchain](#blockchain)               |                             ✅                              |                                 ✅                                 |
-  | [Header](#header)                       |                             ✅                              |                                 ❌                                  |
-  | [HeaderByHash](#headerbyhash)           |                             ✅                              |                                 ❌                                 |
-  | [Block](#block)                         |                             ✅                              |                                 ✅                                 |
-  | [BlockByHash](#blockbyhash)             |                             ✅                              |                                 ❌                                 |
-  | [BlockResults](#blockresults)           |                             ✅                              |                                 ✅                                 |
-  | [Commit](#commit)                       |                             ✅                              |                                 ✅                                 |
-  | [Validators](#validators)               |                             ✅                              |                                 ✅                                 |
-  | [Genesis](#genesis)                     |                             ✅                              |                                 ✅                                 |
-  | [GenesisChunked](#genesischunked)       |                             ✅                              |                                 ❌                                 |
-  | [ConsensusParams](#consensusparams)     |                             ✅                              |                                 ❌                                 |
-  | [UnconfirmedTxs](#unconfirmedtxs)       |                             ✅                              |                                 ❌                                 |
-  | [NumUnconfirmedTxs](#numunconfirmedtxs) |                             ✅                              |                                 ❌                                 |
-  | [Tx](#tx)                               |                             ✅                              |                                 ❌                                 |
-  | [BroadCastTxSync](#broadcasttxsync)     |                             ✅                              |                                 ✅                                 |
-  | [BroadCastTxAsync](#broadcasttxasync)   |                             ✅                              |                                 ✅                                 |
-  | [ABCIInfo](#abciinfo)                   |                             ✅                              |                                 ✅                                 |
-  | [ABCIQuery](#abciquery)                 |                             ✅                              |                                 ✅                                 |
-  | [BroadcastTxAsync](#broadcasttxasync)   |                             ✅                              |                                 ✅                                 |
-  | [BroadcastEvidence](#broadcastevidence) |                             ✅                              |                                 ✅                                 |
+|  | [Tenderdash](https://github.com/dashpay/tenderdash/) |
+| -------------- | :-----------------------------------------------------------: |
+| JSON-RPC 2.0 | ✅ |
+| HTTP | ✅ |
+| HTTPS | ✅ |
+| WS | ✅ |
+
+| Routes | [Tenderdash](https://github.com/dashpay/tenderdash/) |
+| ----------------------------------------- | :----------------------------------------------------------: |
+| [Health](#health) | ✅ |
+| [Status](#status) | ✅ |
+| [NetInfo](#netinfo) | ✅ |
+| [Blockchain](#blockchain) | ✅ |
+| [Header](#header) | ✅ |
+| [HeaderByHash](#headerbyhash) | ✅ |
+| [Block](#block) | ✅ |
+| [BlockByHash](#blockbyhash) | ✅ |
+| [BlockResults](#blockresults) | ✅ |
+| [Commit](#commit) | ✅ |
+| [Validators](#validators) | ✅ |
+| [Genesis](#genesis) | ✅ |
+| [GenesisChunked](#genesischunked) | ✅ |
+| [ConsensusParams](#consensusparams) | ✅ |
+| [UnconfirmedTxs](#unconfirmedtxs) | ✅ |
+| [NumUnconfirmedTxs](#numunconfirmedtxs) | ✅ |
+| [Tx](#tx) | ✅ |
+| [BroadCastTxSync](#broadcasttxsync) | ✅ |
+| [BroadCastTxAsync](#broadcasttxasync) | ✅ |
+| [ABCIInfo](#abciinfo) | ✅ |
+| [ABCIQuery](#abciquery) | ✅ |
+| [BroadcastTxAsync](#broadcasttxasync) | ✅ |
+| [BroadcastEvidence](#broadcastevidence) | ✅ |
 
 ## Timestamps
 
