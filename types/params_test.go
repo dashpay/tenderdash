@@ -479,7 +479,7 @@ func TestProposerLivenessTimeouts(t *testing.T) {
 		})
 		require.NoError(t, updated.ValidateConsensusParams())
 		assert.Equal(t, heartbeat, updated.Timeout.ProposerHeartbeat)
-		assert.Zero(t, updated.Timeout.ProposerSilence, "an update leaves the other field as it was")
+		assert.Zero(t, updated.Timeout.ProposerSilence, "the other is derived from the one named")
 		assert.Equal(t, 50*time.Second, updated.Timeout.TimeoutParamsOrDefaults().ProposerSilence)
 
 		silence := 2 * time.Second
@@ -488,6 +488,37 @@ func TestProposerLivenessTimeouts(t *testing.T) {
 		})
 		require.NoError(t, updated.ValidateConsensusParams())
 		assert.Equal(t, silence, updated.Timeout.ProposerSilence)
+	})
+
+	// A node that state-syncs over RPC takes the params /consensus_params
+	// reports, with every timeout filled in, where the chain may hold the
+	// liveness timeouts unset. Both hash alike, and must go on hashing alike
+	// through later updates, or the synced node refuses the chain's blocks.
+	t.Run("should update params taken from /consensus_params like the chain's own", func(t *testing.T) {
+		chain := *DefaultConsensusParams()
+		chain.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_2)
+		synced := chain
+		// What internal/rpc/core/consensus.go hands the syncing node.
+		synced.Timeout = synced.Timeout.TimeoutParamsOrDefaults()
+		require.NotEqual(t, chain.Timeout, synced.Timeout)
+		require.Equal(t, chain.HashConsensusParams(), synced.HashConsensusParams())
+
+		heartbeat, silence, propose := 2*time.Second, 7*time.Second, 4*time.Second
+		for name, update := range map[string]*tmproto.TimeoutParams{
+			"heartbeat only": {ProposerHeartbeat: &heartbeat},
+			"silence only":   {ProposerSilence: &silence},
+			"both":           {ProposerHeartbeat: &heartbeat, ProposerSilence: &silence},
+			"neither":        {Propose: &propose},
+		} {
+			t.Run(name, func(t *testing.T) {
+				fromChain := chain.UpdateConsensusParams(&tmproto.ConsensusParams{Timeout: update})
+				fromSynced := synced.UpdateConsensusParams(&tmproto.ConsensusParams{Timeout: update})
+				require.NoError(t, fromChain.ValidateConsensusParams())
+				require.NoError(t, fromSynced.ValidateConsensusParams())
+				assert.Equal(t, fromChain.HashConsensusParams(), fromSynced.HashConsensusParams())
+				assert.Equal(t, fromChain.Timeout.TimeoutParamsOrDefaults(), fromSynced.Timeout.TimeoutParamsOrDefaults())
+			})
+		}
 	})
 
 	t.Run("should refuse a pair that cannot work", func(t *testing.T) {
