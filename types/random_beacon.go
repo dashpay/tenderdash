@@ -137,17 +137,3 @@ func (commit *Commit) VerifyRandomBeacon(chainID string, vals *ValidatorSet, hea
 	}
 	return nil
 }
-
-// WithoutRandomBeacon returns commit without its random beacon and app hash. Before consensus version 2
-// both fields must be empty, but neither is covered by the commit's threshold signature, so a peer could
-// fill them; nodes drop them from commits of such heights instead of storing or passing them on. It
-// returns commit itself when both are already empty.
-func (commit *Commit) WithoutRandomBeacon() *Commit {
-	if commit == nil || (len(commit.Beacon) == 0 && len(commit.AppHash) == 0) {
-		return commit
-	}
-	stripped := *commit
-	stripped.Beacon = nil
-	stripped.AppHash = nil
-	return &stripped
-}

@@ -969,6 +969,72 @@ func TestProposalRequestsCarryLastCommitRandomness(t *testing.T) {
 	assert.Equal(t, expected, processReq.ProposedLastCommit)
 }
 
+// TestProposalDropsRelayedCommitRandomness is the regression test for a peer relaying a validly
+// signed commit with a correctly sized beacon and app hash added: neither is covered by the commit's
+// hash or threshold signature, so the commit is accepted and becomes the next proposal's LastCommit.
+// Releases before the beacon drop both fields when they decode a block, and block sync rebuilds the
+// parts of the block from what it decoded, so a proposal that kept them could not be block synced by
+// those releases. The proposer drops them instead, until the last block is committed with a beacon
+// from consensus version 2.
+func TestProposalDropsRelayedCommitRandomness(t *testing.T) {
+	const height = 2
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	logger := log.NewNopLogger()
+
+	eventBus := eventbus.NewDefault(logger)
+	require.NoError(t, eventBus.Start(ctx))
+	state, stateDB, privVals := makeState(t, 1, height)
+
+	var prepareReq *abci.RequestPrepareProposal
+	app := abcimocks.NewApplication(t)
+	app.On("PrepareProposal", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		prepareReq = args.Get(1).(*abci.RequestPrepareProposal)
+	}).Return(&abci.ResponsePrepareProposal{
+		AppHash: make([]byte, crypto.DefaultAppHashSize), AppVersion: 1,
+	}, nil)
+	cc := abciclient.NewLocalClient(logger, app)
+	proxyApp := proxy.New(cc, logger, proxy.NopMetrics())
+	require.NoError(t, proxyApp.Start(ctx))
+
+	mp := &mpmocks.Mempool{}
+	mp.On("ReapMaxBytesMaxGas", mock.Anything, mock.Anything).Return(types.Txs{})
+
+	blockExec := sm.NewBlockExecutor(sm.NewStore(stateDB), proxyApp, mp, sm.EmptyEvidencePool{}, nil, eventBus)
+	proposer := state.Validators.GetByIndex(0)
+	commit, _ := makeValidCommit(ctx, t, height, factory.MakeBlockID(), state.Validators, privVals)
+	beacon := crypto.CRandBytes(bls12381.SignatureSize)
+	appHash := crypto.CRandBytes(crypto.DefaultAppHashSize)
+	commit.Beacon, commit.AppHash = beacon, appHash
+	relayed, err := types.CommitFromProto(commit.ToProto())
+	require.NoError(t, err)
+	require.Equal(t, commit.Hash(), relayed.Hash(), "the beacon and app hash are not part of the commit hash")
+
+	block, _, err := blockExec.CreateProposalBlock(ctx, height, 0, state, relayed, proposer.ProTxHash, 0)
+	require.NoError(t, err)
+	assert.Empty(t, block.LastCommit.Beacon)
+	assert.Empty(t, block.LastCommit.AppHash)
+	require.NotNil(t, prepareReq)
+	assert.Empty(t, prepareReq.LocalLastCommit.Beacon)
+	assert.Empty(t, prepareReq.LocalLastCommit.AppHash)
+	assert.Equal(t, beacon, relayed.Beacon, "the relayed commit is not changed")
+	assert.EqualValues(t, appHash, relayed.AppHash, "the relayed commit is not changed")
+
+	// A release before the beacon decodes the block without fields 7 and 8 of its LastCommit, and
+	// block sync checks the parts it rebuilds from that block against the next commit's BlockID.
+	parts, err := block.MakePartSet(types.BlockPartSizeBytes)
+	require.NoError(t, err)
+	pb, err := block.ToProto()
+	require.NoError(t, err)
+	pb.LastCommit.Beacon, pb.LastCommit.AppHash = nil, nil
+	legacy, err := types.BlockFromProto(pb)
+	require.NoError(t, err)
+	legacyParts, err := legacy.MakePartSet(types.BlockPartSizeBytes)
+	require.NoError(t, err)
+	assert.Equal(t, parts.Header(), legacyParts.Header())
+}
+
 // TestPrepareProposalErrorOnNonExistingRemoved tests that the block creation logic returns
 // an error if the ResponsePrepareProposal returned from the application marks
 //
