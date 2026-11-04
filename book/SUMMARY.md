@@ -218,16 +218,4 @@
 
 # Engineering notes
 
-- [Consensus DoS Defense — Design Spec (v2)](docs/CONSENSUS_DOS_DEFENSE_SPEC.md)
-- [Consensus DoS — devnet test runbook](docs/CONSENSUS_DOS_DEVNET_RUNBOOK.md)
-- [Consensus DoS — Per-Message Matrix](docs/CONSENSUS_DOS_MESSAGE_MATRIX.md)
-- [Per-Message DoS Findings (research synthesis, for review)](docs/CONSENSUS_DOS_PER_MESSAGE_FINDINGS.md)
-- [Consensus DoS — Piece 10 spec: bound the evidence channel](docs/CONSENSUS_DOS_PIECE10_SPEC.md)
-- [Consensus DoS — Piece 2 spec: verification fairness](docs/CONSENSUS_DOS_PIECE2_SPEC.md)
-- [Consensus DoS — Piece 3b spec: honest connectivity](docs/CONSENSUS_DOS_PIECE3B_SPEC.md)
-- [Consensus DoS — Plan](docs/CONSENSUS_DOS_PLAN.md)
-- [Consensus DoS — rollout spec (devnet → testnet)](docs/CONSENSUS_DOS_ROLLOUT_SPEC.md)
-- [Consensus vote-flood DoS — hardening spec](docs/CONSENSUS_VOTE_FLOOD_SPEC.md)
-- [Devnet: custom Tenderdash DoS-hardened image + config-knob plumbing](docs/DEVNET_DOS_IMAGE_AND_TUNING.md)
 - [Building the documentation](docs/DOCS_README.md)
-- [Masternode vote gating — restrict consensus votes to evonodes](docs/MASTERNODE_VOTE_GATING_SPEC.md)

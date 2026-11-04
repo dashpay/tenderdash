@@ -387,7 +387,8 @@ logged (`Reactor.handleMessage`), not panicked.
 
 These mechanisms never change *what* a node signs, but they decide whether a
 message is processed at all (dropped messages are local decisions, not peer
-faults, unless stated). Design details live in `docs/CONSENSUS_DOS_*.md`.
+faults, unless stated). For operational monitoring, see
+[DoS observability](../../docs/dos-observability/README.md).
 
 - **Reactor admission** (`internal/consensus/reactor.go`,
   `message_cost.go`): per-peer token buckets on the vote channel (cost 1 per
