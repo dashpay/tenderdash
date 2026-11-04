@@ -45,19 +45,6 @@ ancestry. Master currently has protection rules that must be reconciled with
 that merge strategy by maintainers before a release. The skill must report any
 block and must not bypass or modify branch protections.
 
-## Staged move to dev
-
-This preparation keeps push CI on `master`, `dev`, `v1.8-dev`, and `v1.9-dev`.
-Local lint and the release evidence helper prefer `origin/dev`, falling back
-only to `origin/v1.8-dev` before the rename. An explicit PR target still overrides
-the lint base. Historical branch names never determine the next version.
-
-A separate administrator operation will rename `v1.8-dev` to `dev`, preserve
-protections, and verify the default and open PR bases. PRs based on v1.9-dev need
-an explicit retarget; stacked feature PRs retain their parent branch until that
-parent lands. No branch is renamed or deleted by these helpers. Remove the
-transition filters/fallback after consumers have migrated.
-
 ## Validation and artifacts
 
 Record baseline tag/SHA, source SHA, release version, protocol decisions,

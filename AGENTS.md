@@ -72,8 +72,8 @@ make format
 ## Branching and PR Workflow
 
 - `dev` is the integration branch; `master` is the latest stable Dash Platform release line.
-- During the planned rename, use `v1.8-dev` until `origin/dev` exists. Do not
-  infer the integration branch from the highest versioned branch name.
+- Select PR targets by their role and dependencies, not by sorting versioned
+  branch names.
 - Create feature branches from integration and open PRs back into it. Stable
   hotfixes branch from `master` and are forward-ported to integration.
 - Keep commits focused and well-described.
@@ -111,4 +111,4 @@ independent consensus product with a fixed minor-version support window.
 Use [tenderdash-release](.agents/skills/tenderdash-release/SKILL.md) for release
 analysis or a requested release. Read the actual history and diffs before
 selecting SemVer; a normal development task does not authorize publication.
-See [RELEASES.md](RELEASES.md) for the branch migration and coordinated rollout.
+See [RELEASES.md](RELEASES.md) for release preparation and coordinated rollout.

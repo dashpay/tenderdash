@@ -22,8 +22,7 @@ fixed number of minor releases, or support for arbitrary downstream applications
 Report security concerns through [SECURITY.md](SECURITY.md).
 
 `dev` is the integration branch and `master` is the latest stable release line.
-During the planned branch rename, `v1.8-dev` remains the integration branch until
-`dev` exists. Production deployments should use the release artifacts selected
+Production deployments should use the release artifacts selected
 by Dash Platform, not a moving development branch. See [releases](https://github.com/dashpay/tenderdash/releases)
 and the [release process](RELEASES.md).
 

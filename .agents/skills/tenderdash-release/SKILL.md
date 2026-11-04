@@ -22,11 +22,10 @@ prerelease, or stable hotfix. Inspect live refs, published tags/releases, and op
 release PRs before selecting commits. Fetch the necessary refs/tags; do not trust
 stale local tracking refs or assume the GitHub default is the release source.
 
-- **Next release:** use `origin/dev`, or explicitly `origin/v1.8-dev` during the
-  planned rename. Record its exact SHA. Freeze that candidate; a later tip is a
-  new candidate requiring review. The helper accepts that reviewed ancestor of
-  the fetched integration tip without substituting newer commits. A temporary
-  release branch can isolate a freeze.
+- **Next release:** use `origin/dev` and record its exact SHA. Freeze that
+  candidate; a later tip is a new candidate requiring review. The helper accepts
+  that reviewed ancestor of the fetched integration tip without substituting
+  newer commits. A temporary release branch can isolate a freeze.
 - **Current-stable hotfix:** start from `origin/master` and its latest published
   tag. Isolate only required fixes in a feature branch; exclude next-version
   development. Plan the forward-port to dev as part of completion.

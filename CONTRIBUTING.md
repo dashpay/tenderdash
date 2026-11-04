@@ -12,17 +12,15 @@ The useful distinction is each branch's role:
 
 | Role | Purpose and target |
 | --- | --- |
-| Integration | Development for the next Platform release; currently `v1.8-dev`. |
+| Integration (`dev`) | Development for the next Platform release. |
 | Stable (`master`) | Latest stable Platform release line and the base for an urgent stable hotfix. |
 | Feature branch | A focused change proposed back to its integration target. |
 | Release candidate | A reviewed, frozen integration commit prepared for promotion to stable. |
 | Hotfix or backport | An isolated fix for an affected deployed release, with a corresponding integration fix. |
 
-The move from `v1.8-dev` to `dev` is a staged migration described in
-[RELEASES.md](RELEASES.md#staged-move-to-dev). Until that operation is complete,
-use `v1.8-dev` for ordinary integration PRs. Existing PRs targeting another
-branch, including stacked PRs, need an explicit target decision; a larger
-version number in a branch name does not select the integration branch.
+Target `dev` for ordinary integration PRs. Select another target explicitly for
+a release, hotfix or dependent change, following [RELEASES.md](RELEASES.md).
+Choose by the branch's role rather than sorting historical versioned names.
 
 A PR that depends on another open PR can target its parent feature branch.
 Describe the dependency and keep its diff focused; after the parent lands,
@@ -62,7 +60,7 @@ line:
 ```sh
 git clone --recurse-submodules https://github.com/dashpay/tenderdash.git
 cd tenderdash
-git switch -c my-change origin/v1.8-dev
+git switch -c my-change origin/dev
 make build
 ```
 
@@ -91,7 +89,7 @@ space-separated package list:
 ```sh
 make test PACKAGES=./types
 make test_race PACKAGES=./types
-make lint LINT_BASE=origin/v1.8-dev
+make lint LINT_BASE=origin/dev
 ```
 
 `make test` enables the deadlock build tag; `make test_race` enables the race
