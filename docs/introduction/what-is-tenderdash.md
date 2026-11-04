@@ -51,7 +51,7 @@ Important application calls include:
 - `Info`, `InitChain` and `Query` support startup, initialization and queries.
 - Snapshot methods support [state sync](../nodes/state-sync.md).
 
-The [Go application interface](https://github.com/dashpay/tenderdash/blob/master/abci/types/application.go)
+The [Go application interface](../../abci/types/application.go)
 and [ABCI specification](../../spec/abci/README.md) define the contract.
 Use the interface and specification from the same release as your node.
 

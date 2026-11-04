@@ -5,14 +5,14 @@ title: Overview and basic concepts
 
 ## Outline
 1. [Outline](#outline)
-2. [ABCI++ vs. ABCI](#abci-vs-abci)
+2. [Application execution](#application-execution)
 3. [Methods overview](#methods-overview)
    1. [Consensus/block execution methods](#consensusblock-execution-methods)
    2. [Mempool methods](#mempool-methods)
    3. [Info methods](#info-methods)
    4. [State-sync methods](#state-sync-methods)
    5. [Other methods](#other-methods)
-4. [Next-block execution vs. same-block execution](#next-block-execution-vs-same-block-execution)
+4. [Same-block execution](#same-block-execution)
    1. [Tenderdash timeouts in same-block execution](#tenderdash-timeouts-in-same-block-execution)
 5. [Determinism](#determinism)
 6. [Errors](#errors)
@@ -24,12 +24,14 @@ title: Overview and basic concepts
 
 # Overview and basic concepts
 
-## ABCI++ vs. ABCI
+## Application execution
+
 [&uparrow; Back to Outline](#outline)
 
-With ABCI, the application can only act at one phase in consensus, immediately after a block has been finalized. This restriction on the application prevents numerous features for the application, including many scalability improvements that are now better understood than when ABCI was first written. For example, many of the scalability proposals can be boiled down to "Make the miner / block proposers / validators do work, so the network does not have to". This includes optimizations such as tx-level signature aggregation, state transition proofs, etc. Furthermore, many new security properties cannot be achieved in the current paradigm, as the application cannot enforce validators to do more than just finalize txs. This includes features such as threshold cryptography, and guaranteed IBC connection attempts.
-
-ABCI++ overcomes these limitations by allowing the application to intervene at three key places of the block execution. The new interface allows block proposers to perform application-dependent work in a block through the `PrepareProposal` method; validators to perform application-dependent work in a proposed block through the `ProcessProposal` method; and applications to require their validators do more than just validate blocks, e.g., validator guaranteed IBC connection attempts, through the `ExtendVote` and `VerifyVoteExtension` methods. Furthermore, ABCI++ renames {`BeginBlock`, [`DeliverTx`], `EndBlock`} to `FinalizeBlock`, as a simplified way to deliver a decided block to the Application.
+The Application constructs and executes candidate blocks through `PrepareProposal`
+and `ProcessProposal`. It supplies vote extensions through `ExtendVote` and
+checks peer votes and commits through `VerifyVoteExtension`. `FinalizeBlock`
+persists the decided candidate after consensus accepts the commit.
 
 ## Methods overview
 [&uparrow; Back to Outline](#outline)
@@ -44,56 +46,35 @@ block, resulting in an updated Application state.
 During consensus execution of a block height, before method `FinalizeBlock` is
 called, methods `PrepareProposal`, `ProcessProposal`, `ExtendVote`, and
 `VerifyVoteExtension` may be called several times.
-See [Tenderdash's expected behavior](abci++_tmint_expected_behavior.md)
+See [Tenderdash's expected behavior](expected-behavior.md)
 for details on the possible call sequences of these methods.
 
-* [**InitChain:**](./abci++_methods.md#initchain) This method initializes the blockchain. Tenderdash calls it once upon genesis.
+* [**InitChain:**](methods.md#initchain) This method initializes the blockchain. Tenderdash calls it once upon genesis.
 
-* [**PrepareProposal:**](./abci++_methods.md#prepareproposal) It allows the block proposer to perform application-dependent work in a block before using it as its proposal. This enables, for instance, batch optimizations to a block, which has been empirically demonstrated to be a key component for scaling. Method `PrepareProposal` is called every time Tenderdash is about to send
-a proposal message, but no previous proposal has been locked at Tenderdash level.
-Tenderdash gathers outstanding transactions from the mempool, generates a block header, and uses
-them to create a block to propose. Then, it calls `RequestPrepareProposal`
-with the newly created proposal, called _raw proposal_. The Application can
-make changes to the raw proposal, such as modifying transactions, and returns
-the (potentially) modified proposal, called _prepared proposal_ in the
-`Response*` call. The logic modifying the raw proposal can be non-deterministic.
+* [**PrepareProposal:**](methods.md#prepareproposal) Constructs and executes a fresh
+  candidate from mempool transactions, supplying the current block's commitments.
+  A reusable valid block can be proposed without preparing a fresh candidate.
+* [**ProcessProposal:**](methods.md#processproposal) Executes a candidate deterministically
+  and returns its status and commitments. Processing precedes the lock-based voting
+  decision and can repeat when validating a commit from another round.
+* [**ExtendVote:**](methods.md#extendvote) Supplies the extensions for a non-nil precommit.
+  It can also run on an observer after a rejected commit, without signing a vote.
+* [**VerifyVoteExtension:**](methods.md#verifyvoteextension) Checks a peer's precommit
+  or a commit's recovered vector. At commit level, the Application must reject a
+  vector that differs from the expected threshold-recoverable subset for that block
+  and round. The methods contract describes the distinct rejection paths.
 
-* [**ProcessProposal:**](./abci++_methods.md#processproposal) It allows a validator to perform application-dependent work in a proposed block. This enables features such as allowing validators to reject a block according to whether the state machine deems it valid, and changing the block execution pipeline. Tenderdash calls it when it receives a proposal and it is not locked on a block. The Application cannot
-modify the proposal at this point but can reject it if it realizes it is invalid.
-If that is the case, Tenderdash will prevote `nil` on the proposal, which has
-strong liveness implications for Tenderdash. As a general rule, the Application
-SHOULD accept a prepared proposal passed via `ProcessProposal`, even if a part of
-the proposal is invalid (e.g., an invalid transaction); the Application can
-ignore the invalid part of the prepared proposal at block execution time.
-
-* [**ExtendVote:**](./abci++_methods.md#extendvote) It allows applications to force their validators to do more than just validate within consensus. `ExtendVote` allows applications to include deterministic and non-deterministic data, opaque to Tenderdash, to precommit messages (the final round of voting.
-The data, called _vote extensions_, will also be made available to the
-application in the next height, along with the vote it is extending, in the rounds
-where the local process is the proposer.
-ExtendVote call should return the `ExtendVoteExtension` list, where each element is an object with two attributes: a type and
-bytes array.
-If the Application does not have vote extensions to provide, it returns an empty array as its vote extensions.
-Tenderdash calls `ExtendVote` when is about to send a non-`nil` precommit message.
-* [**VerifyVoteExtension:**](./abci++_methods.md#verifyvoteextension) It allows validators to validate the vote extensions data attached to a precommit message. If the validation fails, the precommit message will be deemed invalid and ignored
-by Tenderdash. This has a negative impact on Tenderdash's liveness, i.e., if vote extensions repeatedly cannot be verified by correct validators, Tenderdash may not be able to finalize a block even if sufficiently many (+2/3) of the validators send precommit votes for that block. Thus, `VerifyVoteExtension` should be used with special care.
-As a general rule, an Application that detects an invalid vote extension SHOULD
-accept it in `ResponseVerifyVoteExtension` and ignore it in its own logic. Tenderdash calls it when
-a process receives a precommit message with a (possibly empty) vote extensions.
-Tenderdash also calls it, with an empty `validator_pro_tx_hash`, to verify a commit's
-threshold-recovered extensions before `FinalizeBlock`; that check must reject a vector the
-Application did not expect.
-
-* [**FinalizeBlock:**](./abci++_methods.md#finalizeblock) It delivers a decided block to the Application to persist the candidate for the block and round processed last. The current block's application and result hashes were returned by `PrepareProposal`/`ProcessProposal` and are already in its header. `ResponseFinalizeBlock` returns only retention and next-block scheduling hints, not execution results or events. See [Commit and apply](../consensus/consensus-happy-path.md#9-commit-and-apply).
+* [**FinalizeBlock:**](methods.md#finalizeblock) It delivers a decided block to the Application to persist the candidate for the block and round processed last. The current block's application and result hashes were returned by `PrepareProposal`/`ProcessProposal` and are already in its header. `ResponseFinalizeBlock` returns only retention and next-block scheduling hints, not execution results or events. See [Commit and apply](../consensus/consensus-happy-path.md#9-commit-and-apply).
 
 ### Mempool methods
 
-* [**CheckTx:**](./abci++_methods.md#checktx) This method allows the Application to validate transactions against its current state, e.g., checking signatures and account balances. If a transaction passes the validation, then Tenderdash adds it to its local mempool, discarding it otherwise. Tenderdash calls it when it receives a new transaction either coming from an external user or another node. Furthermore, Tenderdash can be configured to re-call `CheckTx` on any decided transaction (after `FinalizeBlock`).
+* [**CheckTx:**](methods.md#checktx) This method allows the Application to validate transactions against its current state, e.g., checking signatures and account balances. If a transaction passes the validation, then Tenderdash adds it to its local mempool, discarding it otherwise. Tenderdash calls it when it receives a new transaction either coming from an external user or another node. Furthermore, Tenderdash can be configured to re-call `CheckTx` on remaining mempool transactions after `FinalizeBlock`.
 
 ### Info methods
 
-* [**Info:**](./abci++_methods.md#info) Used to sync Tenderdash with the Application during a handshake that happens on startup.
+* [**Info:**](methods.md#info) Used to sync Tenderdash with the Application during a handshake that happens on startup.
 
-* [**Query:**](./abci++_methods.md#query) Clients can use this method to query the Application for information about the application state.
+* [**Query:**](methods.md#query) Clients can use this method to query the Application for information about the application state.
 
 ### State-sync methods
 
@@ -104,7 +85,7 @@ state machine snapshots instead of replaying historical blocks. For more details
 New nodes will discover and request snapshots from other nodes in the P2P network.
 A Tenderdash node that receives a request for snapshots from a peer will call
 `ListSnapshots` on its Application. The Application returns the list of locally avaiable snapshots.
-Note that the list does not contain the actual snapshot but metadata about it: height at which the snapshot was taken, application-specific verification data and more (see [snapshot data type](./abci++_methods.md#snapshot) for more details). After receiving a list of available snapshots from a peer, the new node can offer any of the snapshots in the list to its local Application via the `OfferSnapshot` method. The Application can check at this point the validity of the snapshot metadata.
+Note that the list does not contain the actual snapshot but metadata about it: height at which the snapshot was taken, application-specific verification data and more (see [snapshot data type](methods.md#snapshot) for more details). After receiving a list of available snapshots from a peer, the new node can offer any of the snapshots in the list to its local Application via the `OfferSnapshot` method. The Application can check at this point the validity of the snapshot metadata.
 
 Snapshots may be quite large and are thus broken into smaller "chunks" that can be
 assembled into the whole snapshot. Once the Application accepts a snapshot and
@@ -120,23 +101,23 @@ To ensure that the sync proceeded correctly, Tenderdash compares the local Appli
 
 In summary:
 
-* [**ListSnapshots:**](./abci++_methods.md#listsnapshots) Used by nodes to discover available snapshots on peers.
+* [**ListSnapshots:**](methods.md#listsnapshots) Used by nodes to discover available snapshots on peers.
 
-* [**LoadSnapshotChunk:**](./abci++_methods.md#loadsnapshotchunk) Used by Tenderdash to retrieve snapshot chunks from the application to send to peers.
+* [**LoadSnapshotChunk:**](methods.md#loadsnapshotchunk) Used by Tenderdash to retrieve snapshot chunks from the application to send to peers.
 
-* [**OfferSnapshot:**](./abci++_methods.md#offersnapshot) When a node receives a snapshot from a peer, Tenderdash uses this method to offer the snapshot to the Application.
+* [**OfferSnapshot:**](methods.md#offersnapshot) When a node receives a snapshot from a peer, Tenderdash uses this method to offer the snapshot to the Application.
 
-* [**ApplySnapshotChunk:**](./abci++_methods.md#applysnapshotchunk) Used by Tenderdash to hand snapshot chunks to the Application.
+* [**ApplySnapshotChunk:**](methods.md#applysnapshotchunk) Used by Tenderdash to hand snapshot chunks to the Application.
 
 ### Other methods
 
-Additionally, there is a [**Flush**](./abci++_methods.md#flush) method that is called on every connection,
-and an [**Echo**](./abci++_methods.md#echo) method that is just for debugging.
+Additionally, there is a [**Flush**](methods.md#flush) method that is called on every connection,
+and an [**Echo**](methods.md#echo) method that is just for debugging.
 
 More details on managing state across connections can be found in the section on
-[ABCI Applications](../abci/apps.md).
+[ABCI Applications](app-requirements.md).
 
-## Next-block execution vs. same-block execution
+## Same-block execution
 
 [&uparrow; Back to Outline](#outline)
 
@@ -145,8 +126,7 @@ return the application hash and transaction results for the block being proposed
 Those commitments are included in that block's header. Validator-set and
 parameter changes from height `h` take effect at `h + 1`.
 
-The legacy next-block execution model is historical background, not an alternate
-live mode of this implementation. The authoritative lifecycle is the
+The authoritative lifecycle is the
 [primary consensus flow](../consensus/consensus-happy-path.md) and
 [validator/parameter transition](../consensus/consensus-alternative-flows.md#validator-set-and-parameter-changes).
 
@@ -174,7 +154,7 @@ Processing can revisit the same block and round after another execution context
 has replaced it. Commit verification can also call `ExtendVote` without signing
 to discover an expected vector after rejection. These calls must not be treated as
 once-per-height callbacks; see
-[expected call sequences](./abci++_tmint_expected_behavior.md#valid-method-call-sequences).
+[expected call sequences](expected-behavior.md#valid-method-call-sequences).
 Extension generation and verification must not mutate committed application state.
 
 Sources of non-determinism in applications may include:
@@ -212,7 +192,7 @@ a nonzero transaction code is not the same as rejecting a whole proposal.
 `ProcessProposal.status` controls proposal acceptance, while
 `VerifyVoteExtension.status` controls vote/commit-vector acceptance. The
 [nil-vote versus panic distinction](../consensus/consensus-transitions.md#prevote-decision-prevoterdo)
-and [commit rejection paths](./abci++_methods.md#verifyvoteextension) are part of
+and [commit rejection paths](methods.md#verifyvoteextension) are part of
 the consensus contract. ABCI transport errors and malformed responses must not be
 assumed to act like a nonzero transaction code.
 
@@ -231,7 +211,7 @@ it is already included.
 contain one result for each included transaction. The consensus-relevant result
 fields contribute to the current block's `ResultsHash`, which is checked against
 the Application's answer before voting. `ResponseFinalizeBlock` has no
-`tx_results` field. See [ExecTxResult](./abci++_methods.md#exectxresult).
+`tx_results` field. See [ExecTxResult](methods.md#exectxresult).
 
 ### `Query`
 
@@ -246,10 +226,10 @@ returned directly to the client that initiated the query.
 `ResponseProcessProposal.events` contains block events and each `ExecTxResult`
 can contain transaction events. These results are retained for publication when
 the block is finalized; `ResponseFinalizeBlock` has no events field.
-Applications may respond to these ABCI++ methods with a set of events.
-Events allow applications to associate metadata about ABCI++ method execution with the
+Applications may respond to these ABCI methods with a set of events.
+Events allow applications to associate metadata about ABCI method execution with the
 transactions and blocks this metadata relates to.
-Events returned via these ABCI++ methods do not impact Tenderdash consensus in any way
+Events returned via these ABCI methods do not impact Tenderdash consensus in any way
 and instead exist to power subscriptions and queries of Tenderdash state.
 
 An `Event` contains a `type` and a list of `EventAttributes`, which are key-value
@@ -276,8 +256,8 @@ the `index` flag is non-deterministic and may vary across different nodes in the
 
 ```protobuf
 message EventAttribute {
-  bytes key   = 1;
-  bytes value = 2;
+  string key = 1;
+  string value = 2;
   bool  index = 3;  // nondeterministic
 }
 ```
@@ -291,25 +271,25 @@ Example:
   {
    Type: "validator.provisions",
    Attributes: []abci.EventAttribute{
-    abci.EventAttribute{Key: []byte("address"), Value: []byte("..."), Index: true},
-    abci.EventAttribute{Key: []byte("amount"), Value: []byte("..."), Index: true},
-    abci.EventAttribute{Key: []byte("balance"), Value: []byte("..."), Index: true},
+    abci.EventAttribute{Key: "address", Value: "...", Index: true},
+    abci.EventAttribute{Key: "amount", Value: "...", Index: true},
+    abci.EventAttribute{Key: "balance", Value: "...", Index: true},
    },
   },
   {
    Type: "validator.provisions",
    Attributes: []abci.EventAttribute{
-    abci.EventAttribute{Key: []byte("address"), Value: []byte("..."), Index: true},
-    abci.EventAttribute{Key: []byte("amount"), Value: []byte("..."), Index: false},
-    abci.EventAttribute{Key: []byte("balance"), Value: []byte("..."), Index: false},
+    abci.EventAttribute{Key: "address", Value: "...", Index: true},
+    abci.EventAttribute{Key: "amount", Value: "...", Index: false},
+    abci.EventAttribute{Key: "balance", Value: "...", Index: false},
    },
   },
   {
    Type: "validator.slashed",
    Attributes: []abci.EventAttribute{
-    abci.EventAttribute{Key: []byte("address"), Value: []byte("..."), Index: false},
-    abci.EventAttribute{Key: []byte("amount"), Value: []byte("..."), Index: true},
-    abci.EventAttribute{Key: []byte("reason"), Value: []byte("..."), Index: true},
+    abci.EventAttribute{Key: "address", Value: "...", Index: false},
+    abci.EventAttribute{Key: "amount", Value: "...", Index: true},
+    abci.EventAttribute{Key: "reason", Value: "...", Index: true},
    },
   },
   // ...
@@ -326,7 +306,7 @@ malicious behavior by a network participant. It is the responsibility of Tenderd
 to detect such malicious behavior. When malicious behavior is detected, Tenderdash
 will gossip evidence of the behavior to other nodes and commit the evidence to
 the chain once it is verified by all validators. This evidence will then be
-passed on to the Application through ABCI++. It is the responsibility of the
+passed on to the Application through ABCI. It is the responsibility of the
 Application to handle the evidence and exercise punishment.
 
 EvidenceType has the following protobuf format:
@@ -341,5 +321,5 @@ enum EvidenceType {
 
 There are two forms of evidence: Duplicate Vote and Light Client Attack. More
 information can be found in either [data structures](../core/data_structures.md)
-or [accountability](../light-client/accountability/)
+or [accountability](../light-client/accountability)
 

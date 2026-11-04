@@ -16,7 +16,7 @@ attribute `sender=Bob` can therefore be queried as `transfer.sender='Bob'`.
 Set an attribute's `Index` flag to `true` to include it in event indexes.
 
 For the execution lifecycle, see [commit and apply](../../spec/consensus/consensus-happy-path.md#9-commit-and-apply).
-The [event publisher](https://github.com/dashpay/tenderdash/blob/master/internal/state/events.go)
+The [event publisher](../../internal/state/events.go)
 shows how committed proposal results become transaction and block events.
 
 ## Configuration

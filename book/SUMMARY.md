@@ -81,15 +81,15 @@
     - [Recovery and synchronisation](spec/consensus/consensus-recovery.md)
     - [Known issues and discrepancies](spec/consensus/consensus-known-issues.md)
 
-# ABCI++
+# ABCI
 
-- [ABCI++](spec/abci++/README.md)
-- [Application Requirements](spec/abci++/abci++_app_requirements.md)
-- [Overview and basic concepts](spec/abci++/abci++_basic_concepts.md)
-- [Client and Server](spec/abci++/abci++_client_server.md)
-- [Methods](spec/abci++/abci++_methods.md)
-- [Tenderdash's expected behavior](spec/abci++/abci++_tmint_expected_behavior.md)
-- [Protocol Documentation](spec/abci++/api.md)
+- [ABCI](spec/abci/README.md)
+- [Application Requirements](spec/abci/app-requirements.md)
+- [Overview and basic concepts](spec/abci/basic-concepts.md)
+- [Client and Server](spec/abci/client-server.md)
+- [Methods](spec/abci/methods.md)
+- [Tenderdash's expected behavior](spec/abci/expected-behavior.md)
+- [Protocol Documentation](spec/abci/api.md)
 
 # Core data structures and encoding
 
@@ -137,13 +137,6 @@
 # RPC protocol
 
 - [RPC spec](spec/rpc/README.md)
-
-# Historical ABCI reference
-
-- [ABCI](spec/abci/README.md)
-- [Methods and Types](spec/abci/abci.md)
-- [Applications](spec/abci/apps.md)
-- [Client and Server](spec/abci/client-server.md)
 
 # Light-client research
 
@@ -206,11 +199,6 @@
 - [RFC 018: BLS Signature Aggregation Exploration](docs/rfc/rfc-018-bls-agg-exploration.md)
 - [RFC 019: Configuration File Versioning](docs/rfc/rfc-019-config-version.md)
 - [RFC 021: The Future of the Socket Protocol](docs/rfc/rfc-021-socket-protocol.md)
-
-# Roadmap
-
-- [Roadmap](docs/roadmap/README.md)
-- [Tenderdash Development](docs/roadmap/roadmap.md)
 
 # DoS observability
 

@@ -48,7 +48,7 @@ node in the network.
 For a local development chain, `tenderdash init validator` writes a complete
 genesis and matching signing files. Do not construct a production quorum by
 copying keys from an example. The current
-[GenesisDoc definition](https://github.com/dashpay/tenderdash/blob/master/types/genesis.go)
+[GenesisDoc definition](../../types/genesis.go)
 describes the supported fields, including validator pro-tx-hashes, quorum hash,
 quorum type and threshold public key.
 
@@ -362,7 +362,7 @@ library will deny making connections to peers with the same IP address.
 ### Upgrading
 
 See the
-[UPGRADING.md](https://github.com/dashpay/tenderdash/blob/master/UPGRADING.md)
+[UPGRADING.md](../../UPGRADING.md)
 guide. You may need to reset your chain between major breaking releases.
 Although, we expect Tenderdash to have fewer breaking releases in the future
 (especially after 1.0 release).

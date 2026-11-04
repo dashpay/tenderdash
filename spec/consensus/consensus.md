@@ -13,7 +13,7 @@ implementation wins and the divergence is recorded in
 
 Audience: protocol engineers and auditors. Readers are expected to know the
 Tendermint consensus algorithm ([consensus paper](./consensus-paper/README.md))
-and the ABCI++ interface ([ABCI++ spec](../abci++/README.md)).
+and the ABCI++ interface ([ABCI++ spec](../abci/README.md)).
 
 ## Documents
 
@@ -34,7 +34,7 @@ Related specifications that this one links to rather than restates:
 - [Write-ahead log](./wal.md) — WAL file layout and replay.
 - [Evidence](./evidence.md) — evidence model for misbehaviour.
 - [Consensus channel messages](../p2p/messages/consensus.md) — wire format of the messages exchanged.
-- [ABCI++ expected behaviour](../abci++/abci++_tmint_expected_behavior.md) — the ABCI++ call sequence from the application's point of view.
+- [ABCI++ expected behaviour](../abci/expected-behavior.md) — the ABCI++ call sequence from the application's point of view.
 - [Proposer-based timestamps](./proposer-based-timestamp/README.md) — pointers to current rules and retained historical research; the rules in force are in [Proposal timestamps and time rules](./consensus-alternative-flows.md#proposal-timestamps-and-time-rules).
 
 ## Scope

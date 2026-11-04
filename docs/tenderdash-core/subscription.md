@@ -59,7 +59,9 @@ giving the height of the block containing the transaction.  For `NewBlock` and
 the height of the block.
 
 Additional attributes can be provided by the application as [ABCI `Event`
-records][abci-event] in response to the `FinalizeBlock` request.  The full name
+records][abci-event] in `ResponseProcessProposal.Events` for block events and
+`ExecTxResult.Events` for transaction events. These events are published after
+finalization; `ResponseFinalizeBlock` has no events field.  The full name
 of the attribute in the query is formed by combining the `type` and attribute
 `key` with a period.
 
@@ -86,7 +88,7 @@ Certain application-specific metadata are also indexed for offline queries.
 See [Indexing transactions](../app-dev/indexing-transactions.md) for more details.
 
 [query]: https://godoc.org/github.com/dashpay/tenderdash/internal/pubsub/query/syntax
-[abci-event]: https://github.com/dashpay/tenderdash/blob/master/proto/tendermint/abci/types.proto#L397
+[abci-event]: ../../spec/abci/api.md#tendermint-abci-Event
 
 ## Event Log API
 

@@ -340,13 +340,13 @@ something like this (subject to refinement):
 - [`tm-db` library][tmdb]
 
 [adr065]: https://github.com/tendermint/tendermint/blob/master/docs/architecture/adr-065-custom-event-indexing.md
-[adr075]: https://github.com/dashpay/tenderdash/blob/master/docs/architecture/adr-075-rpc-subscription.md
+[adr075]: ../architecture/adr-075-rpc-subscription.md
 [esink]: https://pkg.go.dev/github.com/dashpay/tenderdash/internal/state/indexer#EventSink
-[event-rpc]: ../tenderdash-core/rpc.md#/Websocket/subscribe
+[event-rpc]: ../../api/rpc/index.html#/Websocket/subscribe
 [i1161]: https://github.com/tendermint/tendermint/issues/1161
 [i7135]: https://github.com/tendermint/tendermint/issues/7135
 [i7247]: https://github.com/tendermint/tendermint/issues/7247
-[kv-index]: https://github.com/dashpay/tenderdash/blob/master/internal/state/indexer/tx/kv
+[kv-index]: ../../internal/state/indexer/tx/kv
 [postgres]: https://postgresql.org/
 [psql]: https://github.com/tendermint/tendermint/blob/master/internal/state/indexer/sink/psql
 [query]: https://pkg.go.dev/github.com/dashpay/tenderdash/internal/pubsub/query/syntax

@@ -42,8 +42,8 @@ Applications in other languages must implement the protobuf messages and ABCI
 lifecycle for the Tenderdash release they target. Check compatibility before
 using a third-party ABCI library.
 
-Use the [application interface](https://github.com/dashpay/tenderdash/blob/master/abci/types/application.go),
-[protobuf definitions](https://github.com/dashpay/tenderdash/blob/master/proto/tendermint/abci/types.proto)
+Use the [application interface](../../abci/types/application.go),
+[protobuf definitions](../../proto/tendermint/abci/types.proto)
 and [ABCI specification](../../spec/abci/README.md) as the contract. Test
 transaction rejection, proposal processing, block finalization, deterministic
 state hashes and restart recovery before connecting to a live network.

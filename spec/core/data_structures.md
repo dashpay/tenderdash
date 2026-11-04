@@ -53,7 +53,7 @@ and a list of evidence of malfeasance (ie. signing conflicting votes).
 | Name | Type | Description | Validation |
 | --- | --- | --- | --- |
 | Header | [Header](#header) | Header corresponding to the block. This field contains information used throughout consensus and other areas of the protocol. To find out what it contains, visit [header] (#header) | Must adhere to the validation rules of [header](#header) |
-| Data | [Data](#data) | Data contains a list of transactions. The contents of the transaction is unknown to Tenderdash. | This field can be empty or populated, but no validation is performed. Applications can perform validation on individual transactions prior to block creation using [checkTx](../abci/abci.md#checktx). |
+| Data | [Data](#data) | Data contains a list of transactions. The contents of the transaction is unknown to Tenderdash. | This field can be empty or populated, but no validation is performed. Applications can perform validation on individual transactions prior to block creation using [checkTx](../abci/methods.md#checktx). |
 | Evidence | [EvidenceList](#evidencelist) | Evidence contains a list of infractions committed by validators. | Can be empty, but when populated the validations rules from [evidenceList](#evidencelist) apply |
 | LastCommit | [Commit](#commit) | The threshold-signed commit of the previous block. | Must not be nil, must carry no threshold block signature at the initial height, and must adhere to the validation rules of [commit](#commit). |
 | CoreChainLock | `CoreChainLock` (optional) | Core chain lock carried by the block. | When present, must pass `CoreChainLock.ValidateBasic`. |

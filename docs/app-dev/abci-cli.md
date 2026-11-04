@@ -87,7 +87,7 @@ arbitrary application's consensus lifecycle. In particular, they cannot set the
 round, timestamp, proposer, quorum or commit metadata. `prepare_proposal` fixes
 `max_tx_bytes` at 65536, and `process_proposal` fixes the application protocol
 version to the example application's version. Consult the
-[command implementation](https://github.com/dashpay/tenderdash/blob/master/abci/cmd/abci-cli/abci-cli.go)
+[command implementation](../../abci/cmd/abci-cli/abci-cli.go)
 when constructing application-specific tests. The standalone `prepare_proposal`
 command requires a transaction; an empty proposal can be sent through `batch`.
 
@@ -127,5 +127,5 @@ modes. Query flags such as `--height`, `--path` and `--prove` apply to standalon
 `query` commands; flags inside console or batch input are not applied.
 
 Use an ABCI implementation compatible with your Tenderdash release. See the
-[current application interface](https://github.com/dashpay/tenderdash/blob/master/abci/types/application.go)
-and [protobuf definitions](https://github.com/dashpay/tenderdash/blob/master/proto/tendermint/abci/types.proto).
+[current application interface](../../abci/types/application.go)
+and [protobuf definitions](../../proto/tendermint/abci/types.proto).

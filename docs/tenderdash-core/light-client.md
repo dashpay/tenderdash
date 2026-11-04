@@ -4,6 +4,9 @@ order: 13
 
 # Light Client
 
+> **Unsupported.** The Tenderdash light client is currently unsupported.
+> The implementation details below are provided for reference.
+
 A light client verifies block headers and commits without running a full
 application replica. Application state can then be verified through proofs
 bound to the verified chain state, provided the application supplies compatible
@@ -20,5 +23,5 @@ and correct quorum verification remain part of the security model. A successful
 RPC response without a verified proof does not establish application-state integrity.
 
 For the exact verification path, see the
-[client implementation](https://github.com/dashpay/tenderdash/blob/master/light/client.go).
+[client implementation](../../light/client.go).
 For running the proxy, see [Configure a Light Client](../nodes/light-client.md).

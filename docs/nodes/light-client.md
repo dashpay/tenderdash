@@ -4,6 +4,9 @@ order: 6
 
 # Configure a Light Client
 
+> **Unsupported.** The Tenderdash light client is currently unsupported.
+> The implementation details below are provided for reference.
+
 Tenderdash includes a `tenderdash light` command that runs an RPC proxy backed by
 a verifying light client. Requests with supported proofs can be checked before
 results are returned. Other RPC methods do not automatically gain proof verification.
@@ -28,6 +31,6 @@ application's query proof format is compatible with the proxy before relying
 on `/abci_query` verification.
 
 See the [light client overview](../tenderdash-core/light-client.md),
-[command implementation](https://github.com/dashpay/tenderdash/blob/master/cmd/tenderdash/commands/light.go)
-and [client implementation](https://github.com/dashpay/tenderdash/blob/master/light/client.go)
+[command implementation](../../cmd/tenderdash/commands/light.go)
+and [client implementation](../../light/client.go)
 for the supported configuration and verification behavior.

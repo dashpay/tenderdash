@@ -7,7 +7,7 @@ title: Tenderdash's expected behavior
 
 ## Valid method call sequences
 
-Tenderdash initiates ABCI++ requests and the Application responds. The
+Tenderdash initiates ABCI requests and the Application responds. The
 [consensus protocol](../consensus/consensus.md) specifies the implemented order,
 including guards, quorum/recovery thresholds and failure paths. Its
 [system model](../consensus/consensus.md#system-model-as-enforced-by-the-code)
@@ -42,7 +42,7 @@ a held-block commit does not itself advance the round; a future-round commit who
 block is absent can already advance the round before application validation.
 The full branch rules are in
 [Commits received from peers](../consensus/consensus-commit.md#commits-received-from-peers)
-and the [VerifyVoteExtension contract](./abci++_methods.md#verifyvoteextension).
+and the [VerifyVoteExtension contract](methods.md#verifyvoteextension).
 
 An Application must handle these repeated calls deterministically for the block,
 round, and last committed state. It must not treat an abbreviated normal-round
@@ -66,25 +66,24 @@ snapshots. `Echo` and `Flush` serve client/debugging purposes. `Info` can also s
 RPC queries independently of startup. These methods are not bounded by the normal
 height's consensus callback count.
 
-## Adapting existing Applications that use ABCI
+## Application execution requirements
 
 Tenderdash requires same-block execution: `ResponsePrepareProposal` and
 `ResponseProcessProposal` supply the current block's application hash and
 transaction results before it is decided. Returning only a boolean acceptance or
 waiting until `FinalizeBlock` to compute those commitments is insufficient.
-Use the current [method schemas and requirements](./abci++_methods.md), rather
-than legacy `BeginBlock`/`DeliverTx`/`EndBlock` response shapes.
+Use the current [method schemas and requirements](methods.md).
 
 Keep speculative execution as candidate state; publish and persist it only when
 `FinalizeBlock` selects that block and the round processed last. There is no ABCI
-`Commit` method: legacy persistence logic belongs in `FinalizeBlock`.
+`Commit` method; persistence belongs in `FinalizeBlock`.
 `ResponseFinalizeBlock` has only `retain_height` and
 `propose_next_block_immediately`; it returns neither `AppHash`, transaction results,
 nor events. Block/transaction events belong to `ProcessProposal` results; see
-[Events](./abci++_basic_concepts.md#events).
+[Events](basic-concepts.md#events).
 
 An Application returning no vote extensions must accept an empty expected commit
 vector and reject a nonempty one at commit-level verification. Other Applications
 must compare the ordered threshold-recoverable subset they expect for that block
 and round; independently valid signatures do not establish the vector's identity,
-count and order. See [VerifyVoteExtension](./abci++_methods.md#verifyvoteextension).
+count and order. See [VerifyVoteExtension](methods.md#verifyvoteextension).

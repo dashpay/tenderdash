@@ -16,6 +16,11 @@ and [proposer selection](../../spec/consensus/proposer-selection.md).
 
 ## Becoming a Validator
 
+On Dash Platform, becoming a validator requires operating an evonode with
+4,000 DASH collateral and registering it with a ProTx transaction. Follow the
+[Dash evonode setup and registration guide](https://docs.dash.org/en/stable/docs/user/masternodes/setup-evonode.html)
+for the current operator requirements and setup procedure.
+
 The initial validator set comes from genesis and ABCI `InitChain`. On a running
 chain, the application supplies validator-set updates in `PrepareProposal` and
 `ProcessProposal`; changes agreed in block H take effect at H+1. Joining the P2P

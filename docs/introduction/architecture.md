@@ -6,7 +6,7 @@ order: false
 
 A Tenderdash node combines peer networking, consensus, transaction admission,
 block storage and an ABCI connection to the application. The
-[`node` package](https://github.com/dashpay/tenderdash/tree/master/node)
+[`node` package](../../node)
 constructs these services and manages their lifecycle.
 
 ## Communication

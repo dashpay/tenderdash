@@ -156,12 +156,12 @@ proto-check-breaking: check-proto-deps
 .PHONY: proto-check-breaking
 
 proto-doc:
-	@echo Generating Protobuf API specification: spec/abci++/api.md
+	@echo Generating Protobuf API specification: spec/abci/api.md
 	@protoc \
 		-I $(realpath .)/proto \
 		-I "$(GOGOPROTO_PATH)" \
 		--doc_opt=markdown,api.md \
-		--doc_out=spec/abci++ \
+		--doc_out=spec/abci \
 		tendermint/abci/types.proto
 
 ###############################################################################

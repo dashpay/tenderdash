@@ -6,7 +6,7 @@ order: 1
 
 An external ABCI application runs separately from the Tenderdash node. The node
 connects to its socket or gRPC server and sends requests using the
-[ABCI application interface](https://github.com/dashpay/tenderdash/blob/master/abci/types/application.go).
+[ABCI application interface](../../abci/types/application.go).
 Use the application interface and protobuf definitions from your Tenderdash release.
 
 ## Start with the example application
@@ -37,7 +37,7 @@ ABCI endpoint lets callers bypass the node's consensus lifecycle.
 
 ## Implement your application
 
-Study the [key-value application source](https://github.com/dashpay/tenderdash/blob/master/abci/example/kvstore/kvstore.go)
+Study the [key-value application source](../../abci/example/kvstore/kvstore.go)
 and its tests. It provides working examples of transaction checking, proposal
 handling, block finalization, queries and snapshots.
 
@@ -66,8 +66,8 @@ application hash, validation and recovery behavior your application requires.
 Create the server with
 `server.NewServer(logger, address, transport, app)`, then start the returned
 service with a context. Stop and wait for the service during shutdown. See the
-[server package](https://github.com/dashpay/tenderdash/tree/master/abci/server)
-and [ABCI CLI implementation](https://github.com/dashpay/tenderdash/blob/master/abci/cmd/abci-cli/abci-cli.go)
+[server package](../../abci/server)
+and [ABCI CLI implementation](../../abci/cmd/abci-cli/abci-cli.go)
 for lifecycle handling.
 
 ## Submit and query transactions

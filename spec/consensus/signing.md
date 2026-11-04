@@ -31,9 +31,10 @@ All signed messages must correspond to one of these types.
 
 Votes carry no timestamp. A proposal's `Timestamp` must equal the proposed
 block's `Header.Time`, which the proposer takes from its local clock (the
-genesis time for the initial block); validators prevote the block only if the
-proposal is *timely* with respect to its receive time and the chain's
-`SynchronyParams`. The rules are specified in
+genesis time for the initial block). Fresh proposals must be *timely* with respect
+to their receive time and the chain's `SynchronyParams` before a validator
+prevotes their block. The timeliness check is skipped for a locally recorded
+valid block and during replay. The rules are specified in
 [Proposal timestamps and time rules](./consensus-alternative-flows.md#proposal-timestamps-and-time-rules)
 and the prevote decision in
 [Transitions and decision rules](./consensus-transitions.md#prevote-decision-prevoterdo).

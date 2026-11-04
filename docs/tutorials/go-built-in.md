@@ -15,8 +15,8 @@ Build against `github.com/dashpay/tenderdash` at the release used by your networ
 Tenderdash includes a native BLS dependency; follow the
 [build instructions](../introduction/install.md) when preparing your toolchain.
 
-Implement the [ABCI application interface](https://github.com/dashpay/tenderdash/blob/master/abci/types/application.go).
-Use the [key-value application](https://github.com/dashpay/tenderdash/blob/master/abci/example/kvstore/kvstore.go)
+Implement the [ABCI application interface](../../abci/types/application.go).
+Use the [key-value application](../../abci/example/kvstore/kvstore.go)
 as a reference for the full lifecycle, including `PrepareProposal`,
 `ProcessProposal`, `FinalizeBlock`, queries and snapshots.
 
@@ -60,8 +60,8 @@ Initialize the node's configuration and genesis with `tenderdash init validator`
 before starting it. Passing `nil` as the final `node.New` argument loads genesis
 from the configured file.
 
-The [node constructor](https://github.com/dashpay/tenderdash/blob/master/node/public.go)
-and [local client](https://github.com/dashpay/tenderdash/blob/master/abci/client/local_client.go)
+The [node constructor](../../node/public.go)
+and [local client](../../abci/client/local_client.go)
 are the source of truth for the API signatures in your release.
 
 ## Concurrency and recovery
