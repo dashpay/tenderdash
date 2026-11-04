@@ -416,8 +416,8 @@ func (l *proposerLiveness) armLocked() {
 
 func (l *proposerLiveness) fire(arm uint64) {
 	l.mtx.Lock()
+	defer l.mtx.Unlock()
 	if arm != l.arm || l.target == nil || l.announcing {
-		l.mtx.Unlock()
 		return
 	}
 	event := proposerSilence{
@@ -426,10 +426,13 @@ func (l *proposerLiveness) fire(arm uint64) {
 		Proposer: l.target.proposer.ProTxHash,
 		arm:      arm,
 	}
-	l.mtx.Unlock()
 
 	// The channel holds one event. One still unread is older than this and
-	// would be dropped by the reader anyway, so it gives way.
+	// would be dropped by the reader anyway, so it gives way. That holds only
+	// because the event is sent under the lock its arm was checked under: a
+	// callback that checked an earlier arm and sent after this one would put a
+	// stale event in place of the only current one, and nothing would arm the
+	// timer again. The reader only takes events, so neither loop blocks.
 	for {
 		select {
 		case l.silentCh <- event:

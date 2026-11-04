@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -653,6 +655,38 @@ func TestProposerLivenessRearm(t *testing.T) {
 		assert.Equal(t, arm, f.liveness.arm, "a stale report must not restart the timer")
 		f.liveness.mtx.Unlock()
 	})
+}
+
+// A timer callback that checked its arm just before a heartbeat re-armed the
+// watch must not put its stale report in place of the one the new timer
+// raises: the reader drops the stale report, and nothing arms the timer again.
+// The race needs the two callbacks to run at once, so it is tried many times.
+func TestProposerLivenessStaleTimerKeepsTheCurrentReport(t *testing.T) {
+	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(8))
+	for trial := 0; trial < 200_000; trial++ {
+		l := &proposerLiveness{
+			target:   &livenessTarget{height: 1, round: 0, proposer: &types.Validator{}},
+			arm:      1,
+			silentCh: make(chan proposerSilence, 1),
+		}
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			l.fire(1)
+		}()
+		go func() {
+			defer wg.Done()
+			l.mtx.Lock()
+			l.arm = 2
+			l.mtx.Unlock()
+			l.fire(2)
+		}()
+		wg.Wait()
+		if report := <-l.silentCh; report.arm != 2 {
+			t.Fatalf("trial %d: the report of arm %d displaced that of the current arm 2", trial, report.arm)
+		}
+	}
 }
 
 func TestProposerReady(t *testing.T) {
