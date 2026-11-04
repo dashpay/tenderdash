@@ -2,48 +2,201 @@
 order: 1
 ---
 
-# Getting Started with Application Development
+# Getting Started
 
-Tenderdash handles P2P communication, transaction gossip and consensus. Your
-ABCI application defines transaction validation, execution and application state.
-Start with the [application architecture guide](./app-architecture.md) and the
-[ABCI overview](../introduction/what-is-tenderdash.md#application-boundary).
+## First Tenderdash App
 
-## Run an example
+As a general purpose blockchain engine, Tenderdash is agnostic to the
+application you want to run. So, to run a complete blockchain that does
+something useful, you must start two programs: one is Tenderdash Core,
+the other is your application, which can be written in any programming
+language. Recall from [the intro to
+ABCI](../introduction/what-is-tenderdash.md#abci-overview) that Tenderdash Core handles all the p2p and consensus stuff, and just forwards transactions to the
+application when they need to be validated, or when they're ready to be
+committed to a block.
 
-[Install Tenderdash](../introduction/install.md) and initialize a local validator
-in a new directory:
+In this guide, we show you some examples of how to run an application
+using Tenderdash.
 
-```sh
-tenderdash init validator --home ./example-node
-tenderdash start --home ./example-node --proxy-app=kvstore
+### Install
+
+The first apps we will work with are written in Go. To install them, you
+need to [install Go](https://golang.org/doc/install), put
+`$GOPATH/bin` in your `$PATH` and enable go modules with these instructions:
+
+```bash
+echo export GOPATH=\"\$HOME/go\" >> ~/.bash_profile
+echo export PATH=\"\$PATH:\$GOPATH/bin\" >> ~/.bash_profile
 ```
 
-The built-in `kvstore` is an in-memory demonstration application. Do not use it
-as persistent production storage.
-
-Submit and query a key-value transaction:
+Then run
 
 ```sh
-curl -s 'localhost:26657/broadcast_tx_commit?tx="example=rocks"'
-curl -s 'localhost:26657/abci_query?data="example"'
+go get github.com/dashpay/tenderdash
+cd $GOPATH/src/github.com/dashpay/tenderdash
+make install_abci
 ```
 
-## Build your application
+Now you should have the `abci-cli` installed; you'll notice the `kvstore`
+command, an example application written
+in Go. See below for an application written in JavaScript.
 
-- [External Go application](../tutorials/go.md): run an ABCI server separately
-  from the node.
-- [Built-in Go application](../tutorials/go-built-in.md): use a local ABCI client
-  in the same process.
-- [ABCI CLI](./abci-cli.md): send requests directly to an application during
-  development and debugging.
+Now, let's run some apps!
 
-Applications in other languages must implement the protobuf messages and ABCI
-lifecycle for the Tenderdash release they target. Check compatibility before
-using a third-party ABCI library.
+## KVStore - A First Example
 
-Use the [application interface](https://github.com/dashpay/tenderdash/blob/master/abci/types/application.go),
-[protobuf definitions](https://github.com/dashpay/tenderdash/blob/master/proto/tendermint/abci/types.proto)
-and [ABCI specification](../../spec/abci/README.md) as the contract. Test
-transaction rejection, proposal processing, block finalization, deterministic
-state hashes and restart recovery before connecting to a live network.
+The kvstore app is a [Merkle
+tree](https://en.wikipedia.org/wiki/Merkle_tree) that just stores all
+transactions. If the transaction contains an `=`, e.g. `key=value`, then
+the `value` is stored under the `key` in the Merkle tree. Otherwise, the
+full transaction bytes are stored as the key and the value.
+
+Let's start a kvstore application.
+
+```sh
+abci-cli kvstore
+```
+
+In another terminal, we can start Tenderdash. You should already have the
+Tenderdash binary installed. If not, follow the steps from
+[here](../introduction/install.md). If you have never run Tenderdash
+before, use:
+
+```sh
+tenderdash init validator
+tenderdash start
+```
+
+If you have used Tenderdash, you may want to reset the data for a new
+blockchain by running `tenderdash unsafe-reset-all`. Then you can run
+`tenderdash start` to start Tenderdash, and connect to the app. For more
+details, see [the guide on using Tenderdash](../tenderdash-core/using-tenderdash.md).
+
+You should see Tenderdash making blocks! We can get the status of our
+Tenderdash node as follows:
+
+```sh
+curl -s localhost:26657/status
+```
+
+The `-s` just silences `curl`. For nicer output, pipe the result into a
+tool like [jq](https://stedolan.github.io/jq/) or `json_pp`.
+
+Now let's send some transactions to the kvstore.
+
+```sh
+curl -s 'localhost:26657/broadcast_tx_commit?tx="abcd"'
+```
+
+Note the single quote (`'`) around the url, which ensures that the
+double quotes (`"`) are not escaped by bash. This command sent a
+transaction with bytes `abcd`, so `abcd` will be stored as both the key
+and the value in the Merkle tree. The response should look something
+like:
+
+```json
+{
+  "check_tx": { ... },
+  "deliver_tx": {
+    "tags": [
+      {
+        "key": "YXBwLmNyZWF0b3I=",
+        "value": "amFl"
+      },
+      {
+        "key": "YXBwLmtleQ==",
+        "value": "YWJjZA=="
+      }
+    ]
+  },
+  "hash": "9DF66553F98DE3C26E3C3317A3E4CED54F714E39",
+  "height": 14
+}
+```
+
+We can confirm that our transaction worked and the value got stored by
+querying the app:
+
+```sh
+curl -s 'localhost:26657/abci_query?data="abcd"'
+```
+
+The result should look like:
+
+```json
+{
+  "response": {
+    "log": "exists",
+    "index": "-1",
+    "key": "YWJjZA==",
+    "value": "YWJjZA=="
+  }
+}
+```
+
+Note the `value` in the result (`YWJjZA==`); this is the base64-encoding
+of the ASCII of `abcd`. You can verify this in a python 2 shell by
+running `"YWJjZA==".decode('base64')` or in python 3 shell by running
+`import codecs; codecs.decode(b"YWJjZA==", 'base64').decode('ascii')`.
+Stay tuned for a future release that [makes this output more
+human-readable](https://github.com/tendermint/tendermint/issues/1794).
+
+Now let's try setting a different key and value:
+
+```sh
+curl -s 'localhost:26657/broadcast_tx_commit?tx="name=satoshi"'
+```
+
+Now if we query for `name`, we should get `satoshi`, or `c2F0b3NoaQ==`
+in base64:
+
+```sh
+curl -s 'localhost:26657/abci_query?data="name"'
+```
+
+Try some other transactions and queries to make sure everything is
+working!
+
+
+## CounterJS - Example in Another Language
+
+We also want to run applications in another language - in this case,
+we'll run a Javascript version of the `counter`. To run it, you'll need
+to [install node](https://nodejs.org/en/download/).
+
+You'll also need to fetch the relevant repository, from
+[here](https://github.com/tendermint/js-abci), then install it:
+
+```sh
+git clone https://github.com/tendermint/js-abci.git
+cd js-abci
+npm install abci
+```
+
+Kill the previous `counter` and `tenderdash` processes. Now run the app:
+
+```sh
+node example/counter.js
+```
+
+In another window, reset and start `tenderdash`:
+
+```sh
+tenderdash reset unsafe-all
+tenderdash start
+```
+
+Once again, you should see blocks streaming by - but now, our
+application is written in Javascript! Try sending some transactions, and
+like before - the results should be the same:
+
+```sh
+# ok
+curl localhost:26657/broadcast_tx_commit?tx=0x00
+# invalid nonce
+curl localhost:26657/broadcast_tx_commit?tx=0x05
+# ok
+curl localhost:26657/broadcast_tx_commit?tx=0x01
+```
+
+Neat, eh?

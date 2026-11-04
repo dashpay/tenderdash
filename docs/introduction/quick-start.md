@@ -88,8 +88,18 @@ where the value is returned in hex.
 
 ## Cluster of Nodes
 
-Prepare four hosts with [Tenderdash installed](./install.md). Use the same
-release and genesis on every node, and restrict administrative RPC access.
+First create four Ubuntu cloud machines. The following was tested on Digital
+Ocean Ubuntu 16.04 x64 (3GB/1CPU, 20GB SSD). We'll refer to their respective IP
+addresses below as IP1, IP2, IP3, IP4.
+
+Then, `ssh` into each machine, and execute [this script](https://git.io/fFfOR):
+
+```sh
+curl -L https://git.io/fFfOR | bash
+source ~/.profile
+```
+
+This will install `go` and other dependencies, get the Tenderdash source code, then compile the `tenderdash` binary.
 
 Next, use the `tenderdash testnet` command to create four directories of config files (found in `./mytestnet`) and copy each directory to the relevant machine in the cloud, so that each machine has `$HOME/mytestnet/node[0-3]` directory.
 

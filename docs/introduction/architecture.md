@@ -1,62 +1,135 @@
 ---
 order: false
 ---
-
 # Tenderdash Architectural Overview
 
-A Tenderdash node combines peer networking, consensus, transaction admission,
-block storage and an ABCI connection to the application. The
-[`node` package](https://github.com/dashpay/tenderdash/tree/master/node)
-constructs these services and manages their lifecycle.
+
+> **November 2019**
+
+Over the next few weeks, @brapse, @marbar3778 and I (@tessr) are having a series of meetings to go over the architecture of Tenderdash Core. These are my notes from these meetings, which will either serve as an artifact for onboarding future engineers; or will provide the basis for such a document.
 
 ## Communication
 
-- **Peer communication:** long-lived P2P connections exchange transactions,
-  blocks, votes, evidence and state-sync messages.
-- **Application communication:** ABCI requests validate transactions, prepare and
-  process proposals, finalize blocks and query application state. The application
-  can run in the same Go process or through an external ABCI connection.
-- **Client communication:** the RPC service accepts transactions, answers queries
-  and exposes events and node status. RPC access is separate from P2P networking.
-- **Dash Core communication:** quorum and ChainLock information connects Platform
-  consensus to Dash Core. Configure the appropriate Core RPC endpoint for your network.
+There are three forms of communication (e.g., requests, responses, connections) that can happen in Tenderdash Core: *internode communication*, *intranode communication*, and *client communication*.
 
-```mermaid
-flowchart TB
-    Clients[RPC clients] --> RPC[RPC service]
-    RPC --> Mempool[Mempool]
-    RPC --> Store[Block and state stores]
-    Peers[Peer nodes] <--> P2P[P2P networking]
-    P2P <--> Consensus[Consensus]
-    P2P <--> Mempool
-    P2P <--> Sync[Block sync and state sync]
-    Consensus --> Store
-    Consensus <--> ABCI[ABCI application]
-    Mempool <--> ABCI
-    Sync <--> ABCI
-    Core[Dash Core RPC] --> Consensus
+- Internode communication: Happens between a node and other peers. This kind of communication happens over TCP or HTTP. More on this below.
+- Intranode communication: Happens within the node itself (i.e., between reactors or other components). These are typically function or method calls, or occasionally happen through an event bus.
+
+- Client communication: Happens between a client (like a wallet or a browser) and a node on the network.
+
+### Internode Communication
+
+Internode communication can happen in two ways:
+
+1. TCP connections through the p2p package
+    - Most common form of internode communication
+    - Connections between nodes are persisted and shared across reactors, facilitated by the switch. (More on the switch below.)
+2. RPC over HTTP
+    - Reserved for short-lived, one-off requests
+    - Example: reactor-specific state, like height
+    - Also possible: web-sockets connected to channels for notifications (like new transactions)
+
+### P2P Business (the Switch, the PEX, and the Address Book)
+
+When writing a p2p service, there are two primary responsibilities:
+
+1. Routing: Who gets which messages?
+2. Peer management: Who can you talk to? What is their state? And how can you do peer discovery?
+
+The first responsibility is handled by the Switch:
+
+- Responsible for routing connections between peers
+- Notably _only handles TCP connections_; RPC/HTTP is separate
+- Is a dependency for every reactor; all reactors expose a function `setSwitch`
+- Holds onto channels (channels on the TCP connection--NOT Go channels) and uses them to route
+- Is a global object, with a global namespace for messages
+- Similar functionality to libp2p
+
+TODO: More information (maybe) on the implementation of the Switch.
+
+The second responsibility is handled by a combination of the PEX and the Address Book.
+
+ TODO: What is the PEX and the Address Book?
+
+#### The Nature of TCP, and Introduction to the `mconnection`
+
+Here are some relevant facts about TCP:
+
+1. All TCP connections have a "frame window size" which represents the packet size to the "confidence;" i.e., if you are sending packets along a new connection, you must start out with small packets. As the packets are received successfully, you can start to send larger and larger packets. (This curve is illustrated below.) This means that TCP connections are slow to spin up.
+2. The syn/ack process also means that there's a high overhead for small, frequent messages
+3. Sockets are represented by file descriptors.
+
+![tcp](../imgs/tcp-window.png)
+
+In order to have performant TCP connections under the conditions created in Tenderdash, we've created the `mconnection`, or the multiplexing connection. It is our own protocol built on top of TCP. It lets us reuse TCP connections to minimize overhead, and it keeps the window size high by sending auxiliary messages when necessary.
+
+The `mconnection` is represented by a struct, which contains a batch of messages, read and write buffers, and a map of channel IDs to reactors. It communicates with TCP via file descriptors, which it can write to. There is one `mconnection` per peer connection.
+
+The `mconnection` has two methods: `send`, which takes a raw handle to the socket and writes to it; and `trySend`, which writes to a different buffer. (TODO: which buffer?)
+
+The `mconnection` is owned by a peer, which is owned (potentially with many other peers) by a (global) transport, which is owned by the (global) switch:
+
+<!-- markdownlint-disable -->
 ```
+switch
+ transport
+  peer
+   mconnection
+  peer
+   mconnection
+  peer
+   mconnection
+```
+<!-- markdownlint-restore -->
 
-## Reactors and P2P services
+## node.go
 
-P2P services handle distinct message types: consensus votes and proposals,
-transaction gossip, block synchronization, evidence, peer exchange and state
-synchronization. Multiplexed channels share peer connections while separating
-these message flows. See the [P2P specification](../../spec/p2p/readme.md)
-for the transport and wire protocol.
+node.go is the entrypoint for running a node. It sets up reactors, sets up the switch, and registers all the RPC endpoints for a node.
 
-Block sync brings a node up to date by downloading and verifying blocks.
-State sync restores an application snapshot and the consensus state needed to
-resume processing. When caught up, a node participates in live consensus.
-See [block sync](../tenderdash-core/block-sync/README.md) and
-[state sync](../nodes/state-sync.md).
+## Types of Nodes
 
-## Node roles
 
-A **validator** holds consensus signing keys and votes when it belongs to the
-active validator set. A **full node** verifies and stores blocks without voting.
-A **seed node** helps other nodes discover peers. The role is configured by
-`mode` in `config.toml`; see [configuration](../nodes/configuration.md).
+1. Validator Node:
+2. Full Node:
+3. Seed Node:
 
-For the detailed consensus rules, read the
-[consensus specification](../../spec/consensus/consensus.md).
+TODO: Flesh out the differences between the types of nodes and how they're configured.
+
+## Reactors
+
+Here are some Reactor Facts:
+
+- Every reactor holds a pointer to the global switch (set through `SetSwitch()`)
+- The switch holds a pointer to every reactor (`addReactor()`)
+- Every reactor gets set up in node.go (and if you are using custom reactors, this is where you specify that)
+- `addReactor` is called by the switch; `addReactor` calls `setSwitch` for that reactor
+- There's an assumption that all the reactors are added before
+- Sometimes reactors talk to each other by fetching references to one another via the switch (which maintains a pointer to each reactor). **Question: Can reactors talk to each other in any other way?**
+
+Furthermore, all reactors expose:
+
+1. A TCP channel
+2. A `receive` method
+3. An `addReactor` call
+
+The `receive` method can be called many times by the mconnection. It has the same signature across all reactors.
+
+The `addReactor` call does a for loop over all the channels on the reactor and creates a map of channel IDs->reactors. The switch holds onto this map, and passes it to the _transport_, a thin wrapper around TCP connections.
+
+The following is an exhaustive (?) list of reactors:
+
+- Blockchain Reactor
+- Consensus Reactor
+- Evidence Reactor
+- Mempool Reactor
+- PEX Reactor
+
+Each of these will be discussed in more detail later.
+
+
+### Blockchain Reactor
+
+The blockchain reactor has two responsibilities:
+
+1. Serve blocks at the request of peers
+2. TODO: learn about the second responsibility of the blockchain reactor

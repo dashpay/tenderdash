@@ -12,7 +12,7 @@ For detailed instructions on how to set up a node using Dashmate, please refer t
 
 ## From Binary
 
-To download pre-built binaries, see the [releases page](https://github.com/dashpay/tenderdash/releases).
+To download pre-built binaries, see the [releases page](https://github.com/dashevo/tenderdash/releases).
 
 ## From Source
 
@@ -47,8 +47,7 @@ Get the source code:
   git submodule update
   ```
 
-Check out the release tag required by your network before building.
-Development branches may contain changes that are not compatible with a deployed network.
+The default `master` branch tracks the latest stable release.
 
 Build:
 
@@ -103,8 +102,12 @@ If you already have Tenderdash installed, and you make updates, simply
 make install
 ```
 
-To upgrade, fetch and check out the release tag required by your network, then
-run `make install`. Coordinate consensus and application upgrades with the network.
+To upgrade, run:
+
+```sh
+git pull origin master
+make install
+```
 
 ## Compile with CLevelDB support
 

@@ -16,7 +16,7 @@ The genesis file is the starting point of a chain. An application will populate 
         - `max_age_duration`: After this preset amount of time has passed a single piece of evidence is considered invalid.
         - `max_bytes`: The max amount of bytes of all evidence included in a block.
     - `validator`
-        - `pub_key_types`: Lists the validator consensus key types allowed by the chain. Recognized values are `ed25519`, `secp256k1`, and `bls12381`; the default allows only `bls12381` (BLS12-381).
+        - `pub_key_types`: Defines which curves are to be accepted as a valid validator consensus key. Tenderdash supports ed25519, sr25519 and secp256k1.
     - `version`
         - `app_version`: The version of the application. This is set by the application and is used to identify which version of the app a user should be using in order to operate a node.
     - `synchrony`

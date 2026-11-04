@@ -6,7 +6,7 @@ info:
 
     * URI over HTTP
     * JSON-RPC 2.0 over HTTP
-    * JSON-RPC 2.0 over websockets
+    * JSON-RPC 2.0 over websockets (deprecated)
 
     ## Configuration
 
@@ -39,7 +39,9 @@ info:
 
     ## JSONRPC/websockets
 
-    JSONRPC requests can also be made via websocket.
+    In Tenderdash v0.35 and earlier, JSONRPC requests can be also made via
+    websocket.  The websocket interface is deprecated in Tenderdash v0.36, and
+    will be removed in v0.37.
 
     The websocket endpoint is at `/websocket`, e.g. `localhost:26657/websocket`.
     The RPC methods for event subscription (`subscribe`, `unsubscribe`, and
@@ -49,10 +51,10 @@ info:
 
         ws ws://localhost:26657/websocket
         > { "jsonrpc": "2.0", "method": "subscribe", "params": ["tm.event='NewBlock'"], "id": 1 }
-  version: "v1.8-dev"
+  version: "Master"
   license:
     name: Apache 2.0
-    url: https://github.com/dashpay/tenderdash/blob/v1.8-dev/LICENSE
+    url: https://github.com/dashevo/tenderdash/blob/master/LICENSE
 servers:
   - url: http://localhost:26657
     description: Interact with the Tenderdash RPC locally on your device
@@ -80,16 +82,17 @@ paths:
         - Tx
       operationId: broadcast_tx_sync
       description: |
-        This method is deprecated. Use `broadcast_tx`, which has similar
+        This method is deprecated in Tenderdash v0.36, and will be
+        removed in v0.37. Use `broadcast_tx`, which has similar
         semantics.
 
         This method blocks until CheckTx returns and reports its result, but
         does not wait for the transaction to be included in a block. To know
         when the transaction is included in a block, check for the transaction
         event using JSON-RPC.  See
-        ../../docs/tenderdash-core/subscription.html
+        https://docs.tendermint.com/master/app-dev/subscribing-to-events-via-websocket.html
 
-        See ../../docs/tenderdash-core/using-tenderdash.html#formatting
+        See ../../docs/tenderdash-core/using-tenderdash.md#formatting
         for formatting/encoding rules.
       parameters:
         - in: query
@@ -123,9 +126,9 @@ paths:
         does not wait for the transaction to be included in a block. To know
         when the transaction is included in a block, check for the transaction
         event using JSON-RPC.  See
-        ../../docs/tenderdash-core/subscription.html
+        https://docs.tendermint.com/master/app-dev/subscribing-to-events-via-websocket.html
 
-        See ../../docs/tenderdash-core/using-tenderdash.html#formatting
+        See ../../docs/tenderdash-core/using-tenderdash.md#formatting
         for formatting/encoding rules.
       parameters:
         - in: query
@@ -156,13 +159,14 @@ paths:
         - Tx
       operationId: broadcast_tx_async
       description: |
-        This method is deprecated. Use `broadcast_tx`.
+        This method is deprecated in Tenderdash v0.36, and will be
+        removed in v0.37. Use `broadcast_tx`.
 
         This method submits the transaction and returns immediately without
         waiting for the transaction to be checked (CheckTx) or committed.  To
         know when the transaction is included in a block, you can check for the
         transaction event using JSON-RPC.  See
-        ../../docs/tenderdash-core/subscription.html
+        https://docs.tendermint.com/master/app-dev/subscribing-to-events-via-websocket.html
 
         Admission is bounded by `rpc.max-concurrent-broadcast-tx-async` (default
         100; zero selects the default). When full, the node returns JSON-RPC
@@ -171,7 +175,7 @@ paths:
         subject to `rpc.timeout-broadcast-tx` and node shutdown. A returned hash
         does not guarantee that the transaction passes CheckTx or is committed.
 
-        See ../../docs/tenderdash-core/using-tenderdash.html#formatting
+        See ../../docs/tenderdash-core/using-tenderdash.md#formatting
         for formatting/encoding rules.
       parameters:
         - in: query
@@ -213,9 +217,9 @@ paths:
 
         To know when a transaction is included in a block, check for the
         transaction event using JSON-RPC.  See
-        ../../docs/tenderdash-core/subscription.html
+        https://docs.tendermint.com/master/app-dev/subscribing-to-events-via-websocket.html
 
-        See ../../docs/tenderdash-core/using-tenderdash.html#formatting
+        See ../../docs/tenderdash-core/using-tenderdash.md#formatting
         for formatting/encoding rules.
       parameters:
         - in: query
@@ -248,7 +252,7 @@ paths:
         The transaction won\'t be added to the mempool.
 
         Please refer to
-        ../../docs/tenderdash-core/using-tenderdash.html#formatting
+        ../../docs/tenderdash-core/using-tenderdash.md#formatting
         for formatting/encoding rules.
       parameters:
         - in: query
@@ -306,7 +310,7 @@ paths:
         Fetch a batch of events posted by the consensus node and matching a
         specified query string.
 
-        The query grammar is defined in [pubsub/query/syntax](https://godoc.org/github.com/dashpay/tenderdash/internal/pubsub/query/syntax).
+        The query grammar is defined in [pubsub/query/syntax](https://godoc.org/github.com/tendermint/tendermint/internal/pubsub/query/syntax).
         An empty query matches all events; otherwise a query comprises one or
         more terms comparing event metadata to target values. For example, to
         select new block events:
@@ -482,13 +486,13 @@ paths:
         query.MustParse("tm.event = 'Tx' AND rewards.withdraw.source = 'W'")
 
         See list of all possible events here
-        https://godoc.org/github.com/dashpay/tenderdash/types#pkg-constants
+        https://godoc.org/github.com/tendermint/tendermint/types#pkg-constants
 
         For complete query syntax, check out
-        https://godoc.org/github.com/dashpay/tenderdash/libs/pubsub/query.
+        https://godoc.org/github.com/tendermint/tendermint/libs/pubsub/query.
 
         ```go
-        import rpchttp "github.com/dashpay/tenderdash/rpc/client/http"
+        import rpchttp "github.com/tendermint/rpc/client/http"
         import "github.com/dashpay/tenderdash/types"
 
         client, err := rpchttp.New("tcp://0.0.0.0:26657", "/websocket")
@@ -1120,7 +1124,7 @@ paths:
           description: |
             Complete consensus state.
 
-            See https://pkg.go.dev/github.com/dashpay/tenderdash/types?tab=doc#Vote.String for Vote string description.
+            See https://pkg.go.dev/github.com/tendermint/tendermint/types?tab=doc#Vote.String for Vote string description.
           content:
             application/json:
               schema:
@@ -3307,7 +3311,7 @@ components:
               example:
                 - "ed25519"
 
-    # Events in Tenderdash
+    # Events in tenderdash
     Event:
       type: object
       properties:
