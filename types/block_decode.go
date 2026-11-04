@@ -42,30 +42,28 @@ func UnmarshalBlockProto(bz []byte) (*tmproto.Block, error) {
 
 // dropMistypedLastCommitRandomness returns the block bytes bz without the occurrences of the
 // LastCommit beacon and app hash fields that do not have the bytes wire type, and whether there were
-// any. It returns false for bytes it cannot parse.
+// any. It splits the bytes into fields as the generated decoder does, and returns false where that
+// decoder fails.
 func dropMistypedLastCommitRandomness(bz []byte) ([]byte, bool) {
 	out := make([]byte, 0, len(bz))
 	dropped := false
 	for len(bz) > 0 {
-		num, typ, n := protowire.ConsumeTag(bz)
-		if n < 0 {
+		num, typ, n, ok := consumeGeneratedField(bz)
+		if !ok {
 			return nil, false
 		}
-		m := protowire.ConsumeFieldValue(num, typ, bz[n:])
-		if m < 0 {
-			return nil, false
-		}
-		field := bz[:n+m]
+		field := bz[:n]
 		if num == blockLastCommitField && typ == protowire.BytesType {
-			commit, _ := protowire.ConsumeBytes(bz[n:])
-			cleaned, ok := dropMistypedCommitRandomness(commit)
+			_, tagLen, _ := consumeGeneratedVarint(field)
+			_, lenLen, _ := consumeGeneratedVarint(field[tagLen:])
+			cleaned, ok := dropMistypedCommitRandomness(field[tagLen+lenLen:])
 			if ok {
 				dropped = true
 				field = protowire.AppendBytes(protowire.AppendTag(nil, num, typ), cleaned)
 			}
 		}
 		out = append(out, field...)
-		bz = bz[n+m:]
+		bz = bz[n:]
 	}
 	return out, dropped
 }
@@ -76,20 +74,106 @@ func dropMistypedCommitRandomness(bz []byte) ([]byte, bool) {
 	out := make([]byte, 0, len(bz))
 	dropped := false
 	for len(bz) > 0 {
-		num, typ, n := protowire.ConsumeTag(bz)
-		if n < 0 {
-			return nil, false
-		}
-		m := protowire.ConsumeFieldValue(num, typ, bz[n:])
-		if m < 0 {
+		num, typ, n, ok := consumeGeneratedField(bz)
+		if !ok {
 			return nil, false
 		}
 		if (num == commitBeaconField || num == commitAppHashField) && typ != commitRandomnessWType {
 			dropped = true
 		} else {
-			out = append(out, bz[:n+m]...)
+			out = append(out, bz[:n]...)
 		}
-		bz = bz[n+m:]
+		bz = bz[n:]
 	}
 	return out, dropped
+}
+
+// consumeGeneratedField returns the number, the wire type and the length, tag included, of the field at
+// the start of bz, as the Unmarshal methods that gogoproto generates read a field they skip: the
+// field number is the tag shifted right by 3 and truncated to 32 bits. It returns false where those
+// methods fail.
+//
+// Releases before the beacon skip fields 7 and 8 of a commit with these rules, which accept more than
+// protowire does, so the bytes must be split with the same rules to drop exactly those fields.
+func consumeGeneratedField(bz []byte) (protowire.Number, protowire.Type, int, bool) {
+	tag, _, ok := consumeGeneratedVarint(bz)
+	if !ok {
+		return 0, 0, 0, false
+	}
+	num, typ := protowire.Number(int32(tag>>3)), protowire.Type(tag&0x7)
+	if typ == protowire.EndGroupType || num <= 0 {
+		return 0, 0, 0, false
+	}
+	n, ok := skipGeneratedField(bz)
+	if !ok || n > len(bz) {
+		return 0, 0, 0, false
+	}
+	return num, typ, n, true
+}
+
+// skipGeneratedField returns the length, tag included, of the field at the start of bz, computed as
+// the skip functions that gogoproto generates compute it. The length may exceed len(bz), which the
+// caller checks. A group ends at the first end-group tag that brings the nesting depth back to zero,
+// whatever its field number.
+func skipGeneratedField(bz []byte) (int, bool) {
+	i, depth := 0, 0
+	for i < len(bz) {
+		tag, n, ok := consumeGeneratedVarint(bz[i:])
+		if !ok {
+			return 0, false
+		}
+		i += n
+		switch protowire.Type(tag & 0x7) {
+		case protowire.VarintType:
+			_, n, ok := consumeGeneratedVarint(bz[i:])
+			if !ok {
+				return 0, false
+			}
+			i += n
+		case protowire.Fixed64Type:
+			i += 8
+		case protowire.BytesType:
+			length, n, ok := consumeGeneratedVarint(bz[i:])
+			if !ok || int(length) < 0 {
+				return 0, false
+			}
+			i += n + int(length)
+		case protowire.StartGroupType:
+			depth++
+		case protowire.EndGroupType:
+			if depth == 0 {
+				return 0, false
+			}
+			depth--
+		case protowire.Fixed32Type:
+			i += 4
+		default:
+			return 0, false
+		}
+		if i < 0 {
+			return 0, false
+		}
+		if depth == 0 {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+// consumeGeneratedVarint reads the varint at the start of bz as the code that gogoproto generates
+// does, and returns it with its length. Unlike protowire, it drops the bits of a tenth byte past the
+// 64th instead of failing.
+func consumeGeneratedVarint(bz []byte) (uint64, int, bool) {
+	var v uint64
+	for i, shift := 0, uint(0); shift < 64; i, shift = i+1, shift+7 {
+		if i >= len(bz) {
+			return 0, 0, false
+		}
+		b := bz[i]
+		v |= uint64(b&0x7F) << shift
+		if b < 0x80 {
+			return v, i + 1, true
+		}
+	}
+	return 0, 0, false
 }

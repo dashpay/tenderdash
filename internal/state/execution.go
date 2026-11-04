@@ -861,12 +861,9 @@ func buildLastCommitInfo(block *types.Block, state State) abci.CommitInfo {
 		// return an empty value.
 		return abci.CommitInfo{}
 	}
-	info := abci.CommitInfo{
-		Round:                   block.LastCommit.Round,
-		QuorumHash:              block.LastCommit.QuorumHash,
-		BlockSignature:          block.LastCommit.ThresholdBlockSignature,
-		ThresholdVoteExtensions: block.LastCommit.ThresholdVoteExtensions,
-	}
+	info := block.LastCommit.ToCommitInfo()
+	// Never the proposer's copy.
+	info.Beacon, info.AppHash = nil, nil
 	if len(state.LastBlockBeacon) > 0 {
 		info.Beacon = bytes.Clone(state.LastBlockBeacon)
 		info.AppHash = bytes.Clone(state.LastAppHash)
