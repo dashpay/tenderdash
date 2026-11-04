@@ -397,10 +397,8 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProc
 			Status: abci.ResponseProcessProposal_REJECT,
 		}, err
 	}
-	if len(req.Hash) > 0 {
-		block := processedBlock{round: req.Round, hash: string(req.Hash)}
-		app.processedBlocks[block] = roundKey(roundState.GetAppHash(), roundState.GetHeight(), roundState.GetRound())
-	}
+	block := processedBlock{round: req.Round, hash: string(req.Hash)}
+	app.processedBlocks[block] = roundKey(roundState.GetAppHash(), roundState.GetHeight(), roundState.GetRound())
 
 	if req.Version.App != app.appVersionForHeight(req.Height) {
 		app.logger.Error("app version mismatch in process proposal request",
@@ -511,8 +509,8 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 }
 
 // ApplyBlockRandomness implements ABCI. The example application applies a toy translation: the app hash
-// after the randomness is the hash of the app hash that PrepareProposal or ProcessProposal left for the
-// block and round, followed by the beacon. It is deterministic, and always differs from the header's.
+// after the randomness is the hash of the app hash that ProcessProposal left for the block and
+// round, followed by the beacon. It is deterministic, and always differs from the header's.
 func (app *Application) ApplyBlockRandomness(_ context.Context, req *abci.RequestApplyBlockRandomness) (*abci.ResponseApplyBlockRandomness, error) {
 	app.mu.Lock()
 	defer app.mu.Unlock()
@@ -542,32 +540,14 @@ type processedBlock struct {
 }
 
 // processedRoundState returns the state ProcessProposal left for the block with the given hash at
-// the given height and round. Without a hash, it returns the only state executed at that height and
-// round, by PrepareProposal or ProcessProposal.
+// the given height and round.
 // Caller should lock the Application.
 func (app *Application) processedRoundState(hash []byte, height int64, round int32) (State, error) {
-	if len(hash) > 0 {
-		key, ok := app.processedBlocks[processedBlock{round: round, hash: string(hash)}]
-		state := app.roundStates[key]
-		if !ok || state == nil || state.GetHeight() != height {
-			return nil, fmt.Errorf("block not processed at height %d round %d", height, round)
-		}
-		return state, nil
+	state := app.roundStates[app.processedBlocks[processedBlock{round: round, hash: string(hash)}]]
+	if state == nil || state.GetHeight() != height {
+		return nil, fmt.Errorf("block not processed at height %d round %d", height, round)
 	}
-	var found State
-	for _, state := range app.roundStates {
-		if state.GetHeight() != height || state.GetRound() != round {
-			continue
-		}
-		if found != nil {
-			return nil, fmt.Errorf("more than one proposal executed at height %d round %d", height, round)
-		}
-		found = state
-	}
-	if found == nil {
-		return nil, fmt.Errorf("no proposal executed at height %d round %d", height, round)
-	}
-	return found, nil
+	return state, nil
 }
 
 // eventValUpdate generates an event that contains info about current validator set

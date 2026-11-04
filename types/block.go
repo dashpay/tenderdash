@@ -799,8 +799,9 @@ type Commit struct {
 	// Beacon is the threshold signature recovered from the prevotes of the commit round.
 	// Set from consensus version 2; empty before.
 	Beacon []byte `json:"beacon,omitempty"`
-	// AppHash is the app hash the precommits sign: the result of ApplyBlockRandomness for this
-	// block and round. Set from consensus version 2; empty before.
+	// AppHash is the result of ApplyBlockRandomness for this block and round. The precommits sign it
+	// only through BlockID.StateID, the hash of the header's state ID with this app hash: the field
+	// itself is not signed. Set from consensus version 2; empty before.
 	AppHash tmbytes.HexBytes `json:"app_hash,omitempty"`
 
 	// Memoized in first call to corresponding method.
@@ -947,8 +948,9 @@ func (commit *Commit) ValidateBasic() error {
 	}
 
 	// Neither field is covered by the commit hash or its threshold signature, so a peer can fill them
-	// in a commit it relays. Bounding them here refuses such a commit before it is stored or passed
-	// to the application, whatever the consensus version.
+	// in a commit it relays. Bounding them here refuses a commit with wrongly sized ones before it is
+	// stored or passed to the application, whatever the consensus version; before consensus version 2,
+	// nodes also drop well-sized ones where they adopt a commit (see WithoutRandomBeacon).
 	if !validRandomBeaconSizes(commit.Beacon, commit.AppHash) {
 		return fmt.Errorf("%w: beacon of %d bytes and app hash of %d bytes, expected both empty or %d and %d bytes",
 			ErrInvalidCommitRandomness, len(commit.Beacon), len(commit.AppHash), SignatureSize, crypto.DefaultAppHashSize)

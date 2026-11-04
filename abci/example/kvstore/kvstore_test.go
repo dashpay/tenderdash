@@ -691,7 +691,7 @@ func TestApplyBlockRandomness(t *testing.T) {
 	require.Equal(t, first.AppHash, again.AppHash)
 
 	_, err = app.ApplyBlockRandomness(ctx, &types.RequestApplyBlockRandomness{Height: height, Round: 0, Beacon: beacon})
-	require.ErrorContains(t, err, "no proposal executed")
+	require.ErrorContains(t, err, "block not processed")
 
 	finalize := func(appHash []byte) error {
 		reqFin := &types.RequestFinalizeBlock{

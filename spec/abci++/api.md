@@ -90,7 +90,7 @@
 | block_signature | [bytes](#bytes) |  |  |
 | threshold_vote_extensions | [tendermint.types.VoteExtension](#tendermint-types-VoteExtension) | repeated |  |
 | beacon | [bytes](#bytes) |  | Random beacon of the committed block: the threshold signature recovered from the prevotes of the commit round. Set from consensus version 2; empty before. |
-| app_hash | [bytes](#bytes) |  | App hash the commit signs: the result of `ApplyBlockRandomness` for the committed block and round. Set from consensus version 2; empty before. |
+| app_hash | [bytes](#bytes) |  | App hash after `ApplyBlockRandomness` for the committed block and round. The commit signs it through the state ID of its block ID, which Tenderdash checks before passing it on. Set from consensus version 2; empty before. |
 
 
 
@@ -289,6 +289,8 @@ Applies the block&#39;s randomness and returns the app hash the Precommit signs.
   and round MUST return the same `app_hash`.
 - Tenderdash may call it more than once for the same block, round and beacon; the Application MUST return
   the same `app_hash` each time.
+- It MUST NOT modify the committed state: Tenderdash may call it for a round that never commits, and
+  `FinalizeBlock` commits the state for the commit round.
 - An ABCI error is fatal, as for `ExtendVote`.
 
 #### When does Tenderdash call it?

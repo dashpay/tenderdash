@@ -970,12 +970,15 @@ func TestProposalRequestsCarryLastCommitRandomness(t *testing.T) {
 }
 
 // TestProposalDropsRelayedCommitRandomness is the regression test for a peer relaying a validly
-// signed commit with a correctly sized beacon and app hash added: neither is covered by the commit's
-// hash or threshold signature, so the commit is accepted and becomes the next proposal's LastCommit.
-// Releases before the beacon drop both fields when they decode a block, and block sync rebuilds the
-// parts of the block from what it decoded, so a proposal that kept them could not be block synced by
-// those releases. The proposer drops them instead, until the last block is committed with a beacon
-// from consensus version 2.
+// signed commit with a correctly sized beacon and app hash added, and for a proposer putting them in
+// its block's LastCommit: neither is covered by the commit's hash or threshold signature, and both are
+// empty before consensus version 2.
+//
+// Until the last block is committed with a beacon, from consensus version 2, the proposer drops them
+// from the commit it builds on. Releases before the beacon drop both fields when they decode a block,
+// and block sync rebuilds the parts of the block from what it decoded, so a proposal that kept them
+// could not be block synced by those releases. PrepareProposal and ProcessProposal pass the other
+// fields of the last commit to the application, without them.
 func TestProposalDropsRelayedCommitRandomness(t *testing.T) {
 	const height = 2
 	ctx, cancel := context.WithCancel(context.Background())
@@ -988,11 +991,18 @@ func TestProposalDropsRelayedCommitRandomness(t *testing.T) {
 	state, stateDB, privVals := makeState(t, 1, height)
 
 	var prepareReq *abci.RequestPrepareProposal
+	var processReq *abci.RequestProcessProposal
 	app := abcimocks.NewApplication(t)
 	app.On("PrepareProposal", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		prepareReq = args.Get(1).(*abci.RequestPrepareProposal)
 	}).Return(&abci.ResponsePrepareProposal{
 		AppHash: make([]byte, crypto.DefaultAppHashSize), AppVersion: 1,
+	}, nil)
+	app.On("ProcessProposal", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		processReq = args.Get(1).(*abci.RequestProcessProposal)
+	}).Return(&abci.ResponseProcessProposal{
+		AppHash: make([]byte, crypto.DefaultAppHashSize),
+		Status:  abci.ResponseProcessProposal_ACCEPT,
 	}, nil)
 	cc := abciclient.NewLocalClient(logger, app)
 	proxyApp := proxy.New(cc, logger, proxy.NopMetrics())
@@ -1010,29 +1020,48 @@ func TestProposalDropsRelayedCommitRandomness(t *testing.T) {
 	relayed, err := types.CommitFromProto(commit.ToProto())
 	require.NoError(t, err)
 	require.Equal(t, commit.Hash(), relayed.Hash(), "the beacon and app hash are not part of the commit hash")
+	expected := relayed.WithoutRandomBeacon().ToCommitInfo()
 
 	block, _, err := blockExec.CreateProposalBlock(ctx, height, 0, state, relayed, proposer.ProTxHash, 0)
 	require.NoError(t, err)
 	assert.Empty(t, block.LastCommit.Beacon)
 	assert.Empty(t, block.LastCommit.AppHash)
 	require.NotNil(t, prepareReq)
-	assert.Empty(t, prepareReq.LocalLastCommit.Beacon)
-	assert.Empty(t, prepareReq.LocalLastCommit.AppHash)
+	assert.Equal(t, expected, prepareReq.LocalLastCommit)
 	assert.Equal(t, beacon, relayed.Beacon, "the relayed commit is not changed")
 	assert.EqualValues(t, appHash, relayed.AppHash, "the relayed commit is not changed")
 
-	// A release before the beacon decodes the block without fields 7 and 8 of its LastCommit, and
-	// block sync checks the parts it rebuilds from that block against the next commit's BlockID.
-	parts, err := block.MakePartSet(types.BlockPartSizeBytes)
-	require.NoError(t, err)
+	// A block whose LastCommit keeps them, as a byzantine proposer can build.
 	pb, err := block.ToProto()
 	require.NoError(t, err)
-	pb.LastCommit.Beacon, pb.LastCommit.AppHash = nil, nil
-	legacy, err := types.BlockFromProto(pb)
+	pb.LastCommit = relayed.ToProto()
+	byzantine, err := types.BlockFromProto(pb)
 	require.NoError(t, err)
-	legacyParts, err := legacy.MakePartSet(types.BlockPartSizeBytes)
+	require.Equal(t, beacon, byzantine.LastCommit.Beacon)
+
+	// A release before the beacon decodes a block without fields 7 and 8 of its LastCommit, and block
+	// sync checks the parts it rebuilds from that block against the next commit's BlockID: they match
+	// for the proposal, and not for a block that kept the relayed fields.
+	partSetHeader := func(b *types.Block, legacy bool) types.PartSetHeader {
+		t.Helper()
+		pb, err := b.ToProto()
+		require.NoError(t, err)
+		if legacy {
+			pb.LastCommit.Beacon, pb.LastCommit.AppHash = nil, nil
+		}
+		decoded, err := types.BlockFromProto(pb)
+		require.NoError(t, err)
+		parts, err := decoded.MakePartSet(types.BlockPartSizeBytes)
+		require.NoError(t, err)
+		return parts.Header()
+	}
+	assert.Equal(t, partSetHeader(block, false), partSetHeader(block, true))
+	assert.NotEqual(t, partSetHeader(byzantine, false), partSetHeader(byzantine, true))
+
+	_, err = blockExec.ProcessProposal(ctx, byzantine, 0, state, false, types.VerifiedCommit{})
 	require.NoError(t, err)
-	assert.Equal(t, parts.Header(), legacyParts.Header())
+	require.NotNil(t, processReq)
+	assert.Equal(t, expected, processReq.ProposedLastCommit)
 }
 
 // TestPrepareProposalErrorOnNonExistingRemoved tests that the block creation logic returns

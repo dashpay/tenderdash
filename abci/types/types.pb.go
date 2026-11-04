@@ -2043,6 +2043,8 @@ func (m *RequestFinalizeBlock) GetBlockID() *types1.BlockID {
 //     and round MUST return the same `app_hash`.
 //   - Tenderdash may call it more than once for the same block, round and beacon; the Application MUST return
 //     the same `app_hash` each time.
+//   - It MUST NOT modify the committed state: Tenderdash may call it for a round that never commits, and
+//     `FinalizeBlock` commits the state for the commit round.
 //   - An ABCI error is fatal, as for `ExtendVote`.
 //
 // #### When does Tenderdash call it?
@@ -3615,8 +3617,9 @@ type CommitInfo struct {
 	// Random beacon of the committed block: the threshold signature recovered from the prevotes of
 	// the commit round. Set from consensus version 2; empty before.
 	Beacon []byte `protobuf:"bytes,5,opt,name=beacon,proto3" json:"beacon,omitempty"`
-	// App hash the commit signs: the result of `ApplyBlockRandomness` for the committed block and
-	// round. Set from consensus version 2; empty before.
+	// App hash after `ApplyBlockRandomness` for the committed block and round. The commit signs it
+	// through the state ID of its block ID, which Tenderdash checks before passing it on.
+	// Set from consensus version 2; empty before.
 	AppHash []byte `protobuf:"bytes,6,opt,name=app_hash,json=appHash,proto3" json:"app_hash,omitempty"`
 }
 
