@@ -1165,10 +1165,7 @@ func (r *Reactor) handleLightBlockMessage(ctx context.Context, envelope *p2p.Env
 			height = msg.LightBlock.SignedHeader.Header.Height
 		}
 		r.logger.Info("received light block response", "peer", envelope.From, "height", height)
-		if err := r.dispatcher.Respond(ctx, msg.LightBlock, envelope.From); err != nil {
-			if errors.Is(err, context.Canceled) {
-				return err
-			}
+		if err := r.dispatcher.Respond(msg.LightBlock, envelope.From); err != nil {
 			r.logger.Error("error processing light block response",
 				"height", height,
 				"error", err)

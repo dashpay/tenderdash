@@ -16,6 +16,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/libs/log"
 	ssproto "github.com/dashpay/tenderdash/proto/tendermint/statesync"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -81,7 +82,7 @@ func TestDispatcherReturnsNoBlock(t *testing.T) {
 
 	go func() {
 		<-chans.Out
-		require.NoError(t, d.Respond(ctx, nil, peer))
+		require.NoError(t, d.Respond(nil, peer))
 		cancel()
 	}()
 
@@ -117,7 +118,7 @@ func TestDispatcherDeliversUndecodableResponse(t *testing.T) {
 		// Survives ToProto and the header hashes, and is refused by the
 		// ValidatorSet.ValidateBasic that decoding runs.
 		block.ValidatorSet.QuorumType = int32(outOfRangeQuorumType)
-		require.Error(t, d.Respond(ctx, block, peer),
+		require.Error(t, d.Respond(block, peer),
 			"Respond must still report an undecodable response to its own caller")
 	}()
 
@@ -137,6 +138,59 @@ func TestDispatcherDeliversUndecodableResponse(t *testing.T) {
 	require.NotErrorIs(t, err, context.DeadlineExceeded)
 	require.Less(t, elapsed, deadline/2,
 		"the refusal must arrive when the response does, not when the caller gives up")
+}
+
+// TestDispatcherSurplusResponseDoesNotBlock pins that one request takes one answer.
+// Respond runs on the loop that handles every statesync channel and holds the
+// dispatcher lock, so a response with nowhere to go must be refused at once: waiting
+// for room would stall that loop, and would deadlock with the caller's cleanup, which
+// needs the same lock.
+func TestDispatcherSurplusResponseDoesNotBlock(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	peer := factory.NodeID(t, "a")
+	resp := mockLBResp(ctx, t, peer, 1, time.Now())
+	block, err := resp.block.ToProto()
+	require.NoError(t, err)
+	malformed, err := resp.block.ToProto()
+	require.NoError(t, err)
+	malformed.ValidatorSet.QuorumType = int32(outOfRangeQuorumType)
+
+	testCases := map[string]*tmproto.LightBlock{
+		"no block":  nil,
+		"block":     block,
+		"malformed": malformed,
+	}
+	for name, surplus := range testCases {
+		t.Run(name, func(t *testing.T) {
+			t.Cleanup(leaktest.Check(t))
+
+			ctx, cancel := context.WithCancel(ctx)
+			defer cancel()
+
+			_, ch := testChannel(1)
+			d := NewDispatcher(ch, log.NewTestingLogger(t))
+
+			callCh, err := d.dispatch(ctx, peer, 1)
+			require.NoError(t, err)
+			require.NoError(t, d.Respond(block, peer))
+
+			done := make(chan error, 1)
+			go func() { done <- d.Respond(surplus, peer) }()
+
+			select {
+			case err := <-done:
+				require.ErrorIs(t, err, errUnsolicitedResponse)
+			case <-time.After(5 * time.Second):
+				t.Fatal("a surplus response blocked the dispatcher")
+			}
+
+			result := <-callCh
+			require.NoError(t, result.err)
+			require.NotNil(t, result.block, "the first answer must survive the surplus one")
+		})
+	}
 }
 
 func TestDispatcherTimeOutWaitingOnLightBlock(t *testing.T) {
@@ -357,7 +411,7 @@ func handleRequests(ctx context.Context, t *testing.T, d *Dispatcher, ch chan p2
 			peer := request.To
 			resp := mockLBResp(ctx, t, peer, int64(height), time.Now())
 			block, _ := resp.block.ToProto()
-			require.NoError(t, d.Respond(ctx, block, resp.peer))
+			require.NoError(t, d.Respond(block, resp.peer))
 		case <-ctx.Done():
 			return
 		}
