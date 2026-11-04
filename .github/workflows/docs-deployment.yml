@@ -1,62 +1,85 @@
-# Build and deploy the docs.tendermint.com website content.
-# The static content is published to GitHub Pages.
-#
-# For documentation build info, see docs/DOCS_README.md.
-name: Build static documentation site
+name: Build and deploy documentation
+
 on:
-  workflow_dispatch:  # allow manual updates
+  pull_request:
+    paths:
+      - 'book/**'
+      - 'docs/**'
+      - 'spec/**'
+      - 'rpc/openapi/**'
+      - 'scripts/prepare-docs.py'
+      - 'scripts/check-docs.py'
+      - 'scripts/tests/test_prepare_docs.py'
+      - 'Makefile'
+      - '.github/workflows/docs-deployment.yml'
   push:
     branches:
-      - master
+      - '**'
     paths:
-      - docs/**
-      - spec/**
+      - 'book/**'
+      - 'docs/**'
+      - 'spec/**'
+      - 'rpc/openapi/**'
+      - 'scripts/prepare-docs.py'
+      - 'scripts/check-docs.py'
+      - 'scripts/tests/test_prepare_docs.py'
+      - 'Makefile'
+      - '.github/workflows/docs-deployment.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  # This is split into two jobs so that the build, which runs npm, does not
-  # have write access to anything. The deploy requires write access to publish
-  # to the branch used by GitHub Pages, however, so we can't just make the
-  # whole workflow read-only.
   build:
-    name: VuePress build
-    runs-on: ubuntu-latest
-    container:
-      image: alpine:latest
-    permissions:
-      contents: read
+    if: github.event_name != 'push' || github.ref_name == github.event.repository.default_branch
+    name: Build mdBook and RPC documentation
+    runs-on: ubuntu-26.04
     steps:
-      - name: Install generator dependencies
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Install mdBook (same version as Platform)
         run: |
-          apk add --no-cache make bash git npm
-      - uses: actions/checkout@v7
-        with:
-          # We need to fetch full history so the backport branches for previous
-          # versions will be available for the build.
-          fetch-depth: 0
+          curl --fail --location --silent --show-error \
+            https://github.com/rust-lang/mdBook/releases/download/v0.4.40/mdbook-v0.4.40-x86_64-unknown-linux-gnu.tar.gz \
+            --output "$RUNNER_TEMP/mdbook.tar.gz"
+          echo "9ef07fd288ba58ff3b99d1c94e6d414d431c9a61fdb20348e5beb74b823d546b  $RUNNER_TEMP/mdbook.tar.gz" | sha256sum --check
+          mkdir -p "$HOME/.local/bin"
+          tar -xzf "$RUNNER_TEMP/mdbook.tar.gz" -C "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Test documentation staging
+        run: python3 -m unittest discover -s scripts/tests -p test_prepare_docs.py
       - name: Build documentation
-        run: |
-          git config --global --add safe.directory "$PWD"
-          make build-docs
-      - uses: actions/upload-artifact@v7
+        run: make build-docs
+      - name: Upload preview
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: build-output
-          path: ~/output/
+          name: documentation-preview
+          path: book/book
+          retention-days: 14
+          if-no-files-found: error
+      - name: Upload Pages artifact
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_name == github.event.repository.default_branch)
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
+        with:
+          path: book/book
 
   deploy:
     name: Deploy to GitHub Pages
-    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_name == github.event.repository.default_branch)
     needs: build
+    runs-on: ubuntu-slim
+    timeout-minutes: 15
     permissions:
-      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
-        with:
-          name: build-output
-          path: ~/output
-      - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
-        with:
-          branch: 'docs-tendermint-com'
-          folder: ~/output
-          single-commit: true
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5

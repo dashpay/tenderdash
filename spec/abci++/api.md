@@ -355,7 +355,7 @@ Check if transaction is valid.
   signatures and account balances, but does not apply any of the state changes described in the transaction.
 - Transactions where ResponseCheckTx.Code != 0 will be rejected - they will not be broadcast to other nodes
   or included in a proposal block.
-- Tendermint attributes no other value to the response code
+- Tenderdash attributes no other value to the response code
 
 
 | Field | Type | Label | Description |

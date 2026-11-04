@@ -2,7 +2,7 @@ openapi: 3.0.0
 info:
   title: Tenderdash RPC
   description: |
-    Tendermint supports the following RPC protocols:
+    Tenderdash supports the following RPC protocols:
 
     * URI over HTTP
     * JSON-RPC 2.0 over HTTP
@@ -39,8 +39,8 @@ info:
 
     ## JSONRPC/websockets
 
-    In Tendermint v0.35 and earlier, JSONRPC requests can be also made via
-    websocket.  The websocket interface is deprecated in Tendermint v0.36, and
+    In Tenderdash v0.35 and earlier, JSONRPC requests can be also made via
+    websocket.  The websocket interface is deprecated in Tenderdash v0.36, and
     will be removed in v0.37.
 
     The websocket endpoint is at `/websocket`, e.g. `localhost:26657/websocket`.
@@ -82,7 +82,7 @@ paths:
         - Tx
       operationId: broadcast_tx_sync
       description: |
-        This method is deprecated in Tendermint v0.36, and will be
+        This method is deprecated in Tenderdash v0.36, and will be
         removed in v0.37. Use `broadcast_tx`, which has similar
         semantics.
 
@@ -92,8 +92,7 @@ paths:
         event using JSON-RPC.  See
         https://docs.tendermint.com/master/app-dev/subscribing-to-events-via-websocket.html
 
-        See https://docs.tendermint.com/master/tendermint-core/using-tendermint.html#formatting
-        for formatting/encoding rules.
+        See [formatting/encoding rules](../../docs/tenderdash-core/using-tenderdash.html#formatting).
       parameters:
         - in: query
           name: tx
@@ -128,8 +127,7 @@ paths:
         event using JSON-RPC.  See
         https://docs.tendermint.com/master/app-dev/subscribing-to-events-via-websocket.html
 
-        See https://docs.tendermint.com/master/tendermint-core/using-tendermint.html#formatting
-        for formatting/encoding rules.
+        See [formatting/encoding rules](../../docs/tenderdash-core/using-tenderdash.html#formatting).
       parameters:
         - in: query
           name: tx
@@ -159,7 +157,7 @@ paths:
         - Tx
       operationId: broadcast_tx_async
       description: |
-        This method is deprecated in Tendermint v0.36, and will be
+        This method is deprecated in Tenderdash v0.36, and will be
         removed in v0.37. Use `broadcast_tx`.
 
         This method submits the transaction and returns immediately without
@@ -175,8 +173,7 @@ paths:
         subject to `rpc.timeout-broadcast-tx` and node shutdown. A returned hash
         does not guarantee that the transaction passes CheckTx or is committed.
 
-        See https://docs.tendermint.com/master/tendermint-core/using-tendermint.html#formatting
-        for formatting/encoding rules.
+        See [formatting/encoding rules](../../docs/tenderdash-core/using-tenderdash.html#formatting).
       parameters:
         - in: query
           name: tx
@@ -219,8 +216,7 @@ paths:
         transaction event using JSON-RPC.  See
         https://docs.tendermint.com/master/app-dev/subscribing-to-events-via-websocket.html
 
-        See https://docs.tendermint.com/master/tendermint-core/using-tendermint.html#formatting
-        for formatting/encoding rules.
+        See [formatting/encoding rules](../../docs/tenderdash-core/using-tenderdash.html#formatting).
       parameters:
         - in: query
           name: tx
@@ -251,9 +247,7 @@ paths:
       description: |
         The transaction won\'t be added to the mempool.
 
-        Please refer to
-        https://docs.tendermint.com/master/tendermint-core/using-tendermint.html#formatting
-        for formatting/encoding rules.
+        See [formatting/encoding rules](../../docs/tenderdash-core/using-tenderdash.html#formatting).
       parameters:
         - in: query
           name: tx
@@ -327,7 +321,7 @@ paths:
         or timestamps. In addition, the `EXISTS` operator allows you to check
         for the presence of an attribute regardless of its value.
 
-        Tendermint defines a `tm.event` attribute for all events. Transactions
+        Tenderdash defines a `tm.event` attribute for all events. Transactions
         are also assigned `tx.hash` and `tx.height` attributes. Other attributes
         are provided by the application as ABCI Event records. The name of the
         event in the query is formed by combining the type and attribute key
@@ -413,13 +407,13 @@ paths:
               tm.event = 'Tx' AND tx.height = 5   # all txs of the fifth block
               tx.height = 5                       # all txs of the fifth block
 
-        Tendermint provides a few predefined keys: tm.event, tx.hash and tx.height.
+        Tenderdash provides a few predefined keys: tm.event, tx.hash and tx.height.
         Note for transactions, you can define additional keys by providing events with
         DeliverTx response.
 
         import (
-            abci "github.com/tendermint/tendermint/abci/types"
-            "github.com/tendermint/tendermint/libs/pubsub/query"
+            abci "github.com/dashpay/tenderdash/abci/types"
+            "github.com/dashpay/tenderdash/libs/pubsub/query"
         )
 
         abci.ResponseDeliverTx{
@@ -492,8 +486,8 @@ paths:
         https://godoc.org/github.com/tendermint/tendermint/libs/pubsub/query.
 
         ```go
-        import rpchttp "github.com/tendermint/rpc/client/http"
-        import "github.com/tendermint/tendermint/types"
+        import rpchttp "github.com/dashpay/tenderdash/rpc/client/http"
+        import "github.com/dashpay/tenderdash/types"
 
         client, err := rpchttp.New("tcp://0.0.0.0:26657", "/websocket")
         if err != nil {
@@ -520,7 +514,7 @@ paths:
         }()
         ```
 
-        NOTE: if you're not reading events fast enough, Tendermint might
+        NOTE: if you're not reading events fast enough, Tenderdash might
         terminate the subscription.
       parameters:
         - in: query
@@ -649,7 +643,7 @@ paths:
       tags:
         - Info
       description: |
-        Get Tendermint status including node info, pubkey, latest block hash, app hash, block height, current max peer height, and time.
+        Get Tenderdash status including node info, pubkey, latest block hash, app hash, block height, current max peer height, and time.
       responses:
         "200":
           description: Status of the node
@@ -3311,7 +3305,7 @@ components:
               example:
                 - "ed25519"
 
-    # Events in tendermint
+    # Events in tenderdash
     Event:
       type: object
       properties:

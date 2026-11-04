@@ -6,11 +6,11 @@ parent:
   order: 7
 ---
 
-# Tendermint Specifications
+# Tenderdash Specifications
 
-This directory hosts the canonical Markdown specifications of the Tendermint Protocol.
+This directory hosts the canonical Markdown specifications of the Tenderdash Protocol.
 
-It shall be used to describe protocol semantics, namely the BFT consensus engine, leader election, block propagation and light client verification. The specification includes encoding descriptions used in interprocess communication to comply with the protocol. It defines the interface between the application and Tendermint. The english specifications are often accompanies with a TLA+ specification.
+It shall be used to describe protocol semantics, namely the BFT consensus engine, leader election, block propagation and light client verification. The specification includes encoding descriptions used in interprocess communication to comply with the protocol. It defines the interface between the application and Tenderdash. The english specifications are often accompanies with a TLA+ specification.
 
 ## Table of Contents
 
@@ -33,29 +33,30 @@ It shall be used to describe protocol semantics, namely the BFT consensus engine
 
 Contributions are welcome.
 
-Proposals at an early stage can first be drafted as Github issues. To progress, a proposal will often need to be written out and approved as a [Request For Comment (RFC)](../docs/rfc/README.md).
+Proposals at an early stage can first be drafted as Github issues. To progress, a proposal will often need to be written out and approved as a [Request For Comment (RFC)](https://github.com/dashpay/tenderdash/tree/v1.9-dev/docs/rfc).
 
 The standard language for coding blocks is Golang.
 
 If you find discrepancies between the spec and the code that
 do not have an associated issue or pull request on github,
-please submit them to our [bug bounty](https://tendermint.com/security)!
+please report them in the [Tenderdash issue tracker](https://github.com/dashpay/tenderdash/issues).
+Report security vulnerabilities privately through the repository's [security policy](../SECURITY.md).
 
 ## Overview
 
-Tendermint provides Byzantine Fault Tolerant State Machine Replication using
+Tenderdash provides Byzantine Fault Tolerant State Machine Replication using
 hash-linked batches of transactions. Such transaction batches are called "blocks".
-Hence, Tendermint defines a "blockchain".
+Hence, Tenderdash defines a "blockchain".
 
-Each block in Tendermint has a unique index - its Height.
+Each block in Tenderdash has a unique index - its Height.
 Height's in the blockchain are monotonic.
 Each block is committed by a known set of weighted Validators.
 Membership and weighting within this validator set may change over time.
-Tendermint guarantees the safety and liveness of the blockchain
+Tenderdash guarantees the safety and liveness of the blockchain
 so long as less than 1/3 of the total weight of the Validator set
 is malicious or faulty.
 
-A commit in Tendermint is a set of signed messages from more than 2/3 of
+A commit in Tenderdash is a set of signed messages from more than 2/3 of
 the total weight of the current Validator set. Validators take turns proposing
 blocks and voting on them. Once enough votes are received, the block is considered
 committed. These votes are included in the _next_ block as proof that the previous block
@@ -67,7 +68,7 @@ The application returns results for each of the transactions in the block.
 The application can also return changes to be made to the validator set,
 as well as a cryptographic digest of its latest state.
 
-Tendermint is designed to enable efficient verification and authentication
+Tenderdash is designed to enable efficient verification and authentication
 of the latest state of the blockchain. To achieve this, it embeds
 cryptographic commitments to certain information in the block "header".
 This information includes the contents of the block (eg. the transactions),

@@ -1,5 +1,9 @@
 # Proposer-Based Timestamps (PBTS)
 
+> **Historical design material.** These proposals describe changes to the original
+> Tendermint algorithm. For Tenderdash behavior, see
+> [Proposal timestamps and time rules](../consensus-alternative-flows.md#proposal-timestamps-and-time-rules).
+
 This section describes a version of the Tendermint consensus protocol
 that uses proposer-based timestamps.
 
@@ -146,7 +150,7 @@ The full solution is detailed and formalized in the [Protocol Specification][alg
 
 [proposertla]: ./tla/TendermintPBT_001_draft.tla
 
-[bfttime]: https://github.com/tendermint/tendermint/blob/master/spec/consensus/bft-time.md
+[bfttime]: ../bft-time.md
 [arXiv]: https://arxiv.org/pdf/1807.04938.pdf
 
 [issue353]: https://github.com/tendermint/spec/issues/353

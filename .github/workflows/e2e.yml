@@ -12,7 +12,7 @@ on:
 
 jobs:
   e2e-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: true
       matrix:
@@ -32,6 +32,10 @@ jobs:
       - uses: technote-space/get-diff-action@v6
         with:
           PATTERNS: |
+            .github/workflows/e2e.yml
+            .github/actions/bls/**
+            third_party/bls-signatures/**
+            Makefile
             **/Dockerfile
             **/**.go
           FILES: |
