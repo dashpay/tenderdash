@@ -233,6 +233,11 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	maxBytes := state.ConsensusParams.Block.MaxBytes
 	maxGas := state.ConsensusParams.Block.MaxGas
 
+	// The commit may come from a peer, which can set its beacon and app hash: they are empty before
+	// consensus version 2, and releases before them drop them when they decode a block, so block sync
+	// on those releases would rebuild a block that carried them into parts the next commit does not sign.
+	commit = commit.WithoutRandomBeacon()
+
 	evidence, evSize := blockExec.evpool.PendingEvidence(state.ConsensusParams.Evidence.MaxBytes)
 
 	// Fetch a limited amount of valid txs

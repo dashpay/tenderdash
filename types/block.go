@@ -839,6 +839,20 @@ func (commit *Commit) ToCommitInfo() types.CommitInfo {
 	}
 }
 
+// WithoutRandomBeacon returns commit without its random beacon and app hash. Before consensus version 2
+// both fields must be empty, but neither is covered by the commit's threshold signature, so a peer could
+// fill them; nodes drop them from commits of such heights instead of storing or passing them on. It
+// returns commit itself when both are already empty.
+func (commit *Commit) WithoutRandomBeacon() *Commit {
+	if commit == nil || (len(commit.Beacon) == 0 && len(commit.AppHash) == 0) {
+		return commit
+	}
+	stripped := *commit
+	stripped.Beacon = nil
+	stripped.AppHash = nil
+	return &stripped
+}
+
 // GetCanonicalVote returns the message that is being voted on in the form of a vote without signatures.
 // It returns an error if the commit carries a vote extension of an unknown type.
 func (commit *Commit) GetCanonicalVote() (*Vote, error) {
