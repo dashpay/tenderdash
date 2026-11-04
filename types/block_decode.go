@@ -100,7 +100,7 @@ func consumeGeneratedField(bz []byte) (protowire.Number, protowire.Type, int, bo
 	if !ok {
 		return 0, 0, 0, false
 	}
-	num, typ := protowire.Number(int32(tag>>3)), protowire.Type(tag&0x7)
+	num, typ := protowire.Number(int32(tag>>3)), protowire.Type(tag&0x7) //nolint:gosec // truncated as generated code does
 	if typ == protowire.EndGroupType || num <= 0 {
 		return 0, 0, 0, false
 	}
@@ -134,10 +134,11 @@ func skipGeneratedField(bz []byte) (int, bool) {
 			i += 8
 		case protowire.BytesType:
 			length, n, ok := consumeGeneratedVarint(bz[i:])
-			if !ok || int(length) < 0 {
+			size := int(length) //nolint:gosec // wraps as the int length of generated code does
+			if !ok || size < 0 {
 				return 0, false
 			}
-			i += n + int(length)
+			i += n + size
 		case protowire.StartGroupType:
 			depth++
 		case protowire.EndGroupType:
