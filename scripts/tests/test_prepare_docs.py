@@ -105,5 +105,34 @@ class PrepareDocsTests(unittest.TestCase):
         self.assertFalse((self.root / "book/src/stale.md").exists())
 
 
+class CheckDocsTests(unittest.TestCase):
+    def setUp(self):
+        path = Path(__file__).resolve().parents[1] / "check-docs.py"
+        spec = importlib.util.spec_from_file_location("check_docs", path)
+        self.module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.module)
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        (self.root / "api/rpc").mkdir(parents=True)
+        (self.root / "docs").mkdir()
+        (self.root / "index.html").write_text("<h1>Book</h1>")
+        (self.root / "docs/guide.html").write_text("<h1>Guide</h1>")
+
+    def test_rejects_source_markdown_link_in_openapi_description(self):
+        (self.root / "api/rpc/openapi.yaml").write_text(
+            "description: |\n  See [guide](../../docs/guide.md).\n"
+        )
+        with self.assertRaisesRegex(ValueError, "1 missing local references"):
+            self.module.check(self.root)
+
+    def test_accepts_rendered_and_external_links_in_openapi_description(self):
+        (self.root / "api/rpc/openapi.yaml").write_text(
+            "description: |\n  See [guide](../../docs/guide.html#formatting)\n"
+            "  and [external](https://example.com/guide.md).\n"
+        )
+        self.module.check(self.root)
+
+
 if __name__ == "__main__":
     unittest.main()
