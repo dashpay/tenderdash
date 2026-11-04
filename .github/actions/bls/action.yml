@@ -9,11 +9,11 @@ inputs:
 outputs:
   bls_cache_key:
     description: Key used by BLS cache
-    value: ${{ runner.os }}-${{ inputs.arch }}-bls-${{ steps.bls-revision.outputs.hash }}
+    value: ${{ steps.bls-revision.outputs.cache_key }}
 runs:
   using: composite
   steps:
-    - uses: actions/setup-go@v2
+    - uses: actions/setup-go@v7.0.0
       with:
         go-version: "1.27.3"
     - uses: actions/checkout@v6
@@ -22,13 +22,14 @@ runs:
     - name: Get BLS library revision
       id: bls-revision
       run: |
-        echo "::set-output name=hash::$(git --git-dir=third_party/bls-signatures/src/.git rev-parse HEAD)"
+        revision=$(git -C third_party/bls-signatures/src rev-parse HEAD)
+        echo "cache_key=${{ runner.os }}-${ImageOS}-${{ inputs.arch }}-bls-${revision}-${{ hashFiles('third_party/bls-signatures/build.sh', '.github/actions/bls/action.yml') }}" >> "$GITHUB_OUTPUT"
       shell: bash
     - uses: actions/cache@v4
       id: bls-cache
       with:
         path: ~/bls-cache
-        key: ${{ runner.os }}-${{ inputs.arch }}-bls-${{ steps.bls-revision.outputs.hash }}
+        key: ${{ steps.bls-revision.outputs.cache_key }}
     - name: install bls deps
       run: sudo apt-get update -qq && sudo apt-get install -qq --yes libgmp-dev
       shell: bash
@@ -52,7 +53,7 @@ runs:
     - uses: actions/cache@v4
       with:
         path: ~/bls-cache
-        key: ${{ runner.os }}-${{ inputs.arch }}-bls-${{ steps.bls-revision.outputs.hash }}
+        key: ${{ steps.bls-revision.outputs.cache_key }}
       if: steps.bls-cache.outputs.cache-hit != 'true'
     - name: Install BLS library
       run: |
