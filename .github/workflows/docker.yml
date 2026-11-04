@@ -60,10 +60,13 @@ jobs:
       - name: Determine TENDERMINT_BUILD_OPTIONS
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd  # v8.0.0
         id: TENDERMINT_BUILD_OPTIONS
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
         with:
           result-encoding: string
           script: |
-            if ('${{ github.ref_type }}' == 'tag' && ! '${{ github.ref_name }}'.includes('-dev')) {
+            if (process.env.REF_TYPE === 'tag' && !process.env.REF_NAME.includes('-dev')) {
               return 'tenderdash,stable'
             }
             return 'tenderdash,dev'
