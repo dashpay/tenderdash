@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   check-mocks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
 
@@ -62,7 +62,7 @@ jobs:
           fi
 
   check-proto:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
 
