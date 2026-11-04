@@ -3,6 +3,7 @@ package consensus
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 
 	"github.com/dashpay/tenderdash/dash"
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/libs/eventemitter"
 	"github.com/dashpay/tenderdash/libs/log"
@@ -115,6 +117,91 @@ func TestStateKeepsTheCertificateOfARoundItLeftByPrevotes(t *testing.T) {
 	})(ctx, stateData)
 	require.Len(t, sent, 1, "a peer still in round 0 is sent it")
 	assert.Equal(t, *certificate.ToProto(), sent[0].(*tmcons.RoundSkipCertificate).Certificate)
+}
+
+// A certificate hands the round over on the consensus goroutine, which
+// announces the new round to peers. That must not wait for the router, where a
+// peer that stops reading can hold up every send on the state channel. Nor may
+// the announcement be lost when the node has more to announce than the reactor
+// holds: peers send a node a proposal by the round they last heard it is in.
+func TestRoundSkipHandoffDoesNotWaitForTheStateChannel(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	ctx, cs, vss := newRoundSkipCatchupState(ctx, t)
+	stateData := cs.GetStateData()
+	height := stateData.Height
+	certificate := recoverRoundSkipCertificate(ctx, t, cs, vss, height, 0)
+
+	ch := newHeldChannel()
+	r := &Reactor{
+		logger:         log.NewNopLogger(),
+		state:          cs,
+		livenessOutbox: make(chan livenessSend, livenessOutboxSize),
+		stateOutbox:    make(chan proto.Message, stateOutboxSize),
+	}
+	r.subscribeToBroadcastEvents()
+	go r.sendState(ctx, ch)
+
+	handedOver := make(chan error, 1)
+	go func() {
+		// More votes to announce than the reactor holds, so the new round's
+		// announcement finds no room either.
+		for i := 0; i <= stateOutboxSize+1; i++ {
+			cs.emitter.Emit(types.EventVoteValue, &types.Vote{
+				Height: height, Type: tmproto.PrevoteType, ValidatorIndex: int32(i % len(vss)),
+			})
+		}
+		handedOver <- cs.msgDispatcher.dispatch(ctx, &stateData,
+			msgInfo{Msg: &RoundSkipCertificateMessage{Certificate: certificate}, PeerID: "peer"})
+	}()
+	select {
+	case err := <-handedOver:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("the round handoff waited for the state channel")
+	}
+	require.Equal(t, int32(1), stateData.Round)
+	require.Equal(t, int32(1), cs.GetStateData().Round)
+
+	close(ch.release)
+	require.Eventually(t, func() bool {
+		step, ok := ch.last().(*tmcons.NewRoundStep)
+		return ok && step.Height == height && step.Round == 1
+	}, 10*time.Second, 10*time.Millisecond, "peers hear of the new round once the channel takes messages again")
+}
+
+// heldChannel is a p2p.Channel that takes nothing until it is released, as the
+// router's channel does while a peer it queues for has stopped reading. Then it
+// records what it takes.
+type heldChannel struct {
+	p2p.Channel
+	release chan struct{}
+	mtx     sync.Mutex
+	sent    []proto.Message
+}
+
+func newHeldChannel() *heldChannel { return &heldChannel{release: make(chan struct{})} }
+
+func (ch *heldChannel) Send(ctx context.Context, envelope p2p.Envelope) error {
+	select {
+	case <-ch.release:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	ch.mtx.Lock()
+	defer ch.mtx.Unlock()
+	ch.sent = append(ch.sent, envelope.Message)
+	return nil
+}
+
+// last returns the last message the channel took, or nil.
+func (ch *heldChannel) last() proto.Message {
+	ch.mtx.Lock()
+	defer ch.mtx.Unlock()
+	if len(ch.sent) == 0 {
+		return nil
+	}
+	return ch.sent[len(ch.sent)-1]
 }
 
 // A peer that sent this node a certificate holds it, and is not sent it back.

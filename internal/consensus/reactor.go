@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
+	"sync/atomic"
 	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
@@ -278,6 +279,12 @@ type Reactor struct {
 	// livenessOutbox holds the liveness messages waiting for sendLiveness.
 	livenessOutbox chan livenessSend
 
+	// stateOutbox holds the consensus goroutine's state-channel broadcasts
+	// waiting for sendState.
+	stateOutbox chan proto.Message
+	// stateOutboxLost is set when one of them found no room (see sendState).
+	stateOutboxLost atomic.Bool
+
 	// Context for controlling reactor goroutines
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -308,6 +315,7 @@ func NewReactor(
 		readySignal:    make(chan struct{}),
 		clock:          clockwork.NewRealClock(),
 		livenessOutbox: make(chan livenessSend, livenessOutboxSize),
+		stateOutbox:    make(chan proto.Message, stateOutboxSize),
 	}
 	r.BaseService = *service.NewBaseService(logger, "Consensus", r)
 
@@ -403,7 +411,8 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	go r.peerErrorRoutine(r.ctx, chBundle.state)
 
 	go r.sendLiveness(r.ctx, chBundle.state)
-	r.subscribeToBroadcastEvents(r.ctx, chBundle.state)
+	go r.sendState(r.ctx, chBundle.state)
+	r.subscribeToBroadcastEvents()
 
 	if !r.WaitSync() {
 		if err := r.state.Start(r.ctx); err != nil {
@@ -560,16 +569,17 @@ func (r *Reactor) GetPeerState(peerID types.NodeID) (*PeerState, bool) {
 // subscribeToBroadcastEvents subscribes for new round steps and votes using the
 // internal pubsub defined in the consensus state to broadcast them to peers
 // upon receiving.
-func (r *Reactor) subscribeToBroadcastEvents(ctx context.Context, stateCh p2p.Channel) {
+//
+// The listeners run on the consensus goroutine, which must never wait on the
+// router: with the fifo or priority queues one peer that stops reading can
+// hold up every send on the channel. They hand their messages to the reactor's
+// senders instead (queueState, queueLiveness).
+func (r *Reactor) subscribeToBroadcastEvents() {
 	r.state.emitter.AddListener(
 		types.EventNewRoundStepValue,
 		func(data eventemitter.EventData) error {
 			rs := data.(*cstypes.RoundState)
-			err := r.broadcast(ctx, stateCh, rs.NewRoundStepMessage())
-			if err != nil {
-				return err
-			}
-			r.logResult(err, r.logger, "broadcasting round step message", "height", rs.Height, "round", rs.Round)
+			r.queueState(rs.NewRoundStepMessage())
 			return nil
 		},
 	)
@@ -578,9 +588,8 @@ func (r *Reactor) subscribeToBroadcastEvents(ctx context.Context, stateCh p2p.Ch
 		types.EventValidBlockValue,
 		func(data eventemitter.EventData) error {
 			rs := data.(*cstypes.RoundState)
-			err := r.broadcast(ctx, stateCh, rs.NewValidBlockMessage())
-			r.logResult(err, r.logger, "broadcasting new valid block message", "height", rs.Height, "round", rs.Round)
-			return err
+			r.queueState(rs.NewValidBlockMessage())
+			return nil
 		},
 	)
 
@@ -588,9 +597,8 @@ func (r *Reactor) subscribeToBroadcastEvents(ctx context.Context, stateCh p2p.Ch
 		types.EventVoteValue,
 		func(data eventemitter.EventData) error {
 			vote := data.(*types.Vote)
-			err := r.broadcast(ctx, stateCh, vote.HasVoteMessage())
-			r.logResult(err, r.logger, "broadcasting HasVote message", "height", vote.Height, "round", vote.Round)
-			return err
+			r.queueState(vote.HasVoteMessage())
+			return nil
 		},
 	)
 
@@ -644,11 +652,77 @@ func (r *Reactor) subscribeToBroadcastEvents(ctx context.Context, stateCh p2p.Ch
 	r.state.emitter.AddListener(types.EventCommitValue,
 		func(data eventemitter.EventData) error {
 			commit := data.(*types.Commit)
-			err := r.broadcast(ctx, stateCh, commit.HasCommitMessage())
-			r.logResult(err, r.logger, "broadcasting HasVote message", "height", commit.Height, "round", commit.Round)
-			return err
+			r.queueState(commit.HasCommitMessage())
+			return nil
 		},
 	)
+}
+
+// stateOutboxSize is how many of the consensus goroutine's state-channel
+// broadcasts may wait for the reactor's state sender. A round of a 400-member
+// quorum announces up to 800 votes, so this holds more than a round's worth.
+// It fills only when the router has stopped taking messages, and then what
+// peers need once it takes them again is the node's current round state, which
+// sendState sends after any loss.
+const stateOutboxSize = 1024
+
+// queueState hands a state-channel broadcast of the consensus goroutine (a
+// round step, target block, HasVote or HasCommit) to the reactor's state
+// sender (sendState) without waiting. A message the sender has no room for is
+// dropped, and the sender makes up for it.
+func (r *Reactor) queueState(msg proto.Message) {
+	select {
+	case r.stateOutbox <- msg:
+	default:
+		r.stateOutboxLost.Store(true)
+		r.logger.Debug("dropping state message the state sender has no room for",
+			"msg_type", fmt.Sprintf("%T", msg))
+	}
+}
+
+// sendState broadcasts what queueState queued, in the order it was queued: a
+// peer must hear of a new round before the target block announced in it, which
+// its new-round reset would otherwise clear. It may wait as long as the router
+// takes, since nothing waits on it.
+//
+// Once it has caught up after a message was dropped, it broadcasts the node's
+// current round step again, and the round's block parts if it has any. The
+// dropped message may have been either, and peers decide what to send this
+// node by what they last heard of its round.
+func (r *Reactor) sendState(ctx context.Context, stateCh p2p.Channel) {
+	for {
+		var msg proto.Message
+		select {
+		case <-ctx.Done():
+			return
+		case msg = <-r.stateOutbox:
+		default:
+			if r.stateOutboxLost.Swap(false) {
+				r.resendRoundState(ctx, stateCh)
+				continue
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case msg = <-r.stateOutbox:
+			}
+		}
+		err := r.broadcast(ctx, stateCh, msg)
+		r.logResult(err, r.logger, "broadcasting state message", "msg_type", fmt.Sprintf("%T", msg))
+	}
+}
+
+// resendRoundState broadcasts the node's current round step and, if the round
+// has block parts, which of them it holds.
+func (r *Reactor) resendRoundState(ctx context.Context, stateCh p2p.Channel) {
+	rs := r.state.GetStateData().RoundState
+	err := r.broadcast(ctx, stateCh, rs.NewRoundStepMessage())
+	r.logResult(err, r.logger, "broadcasting round step message again", "height", rs.Height, "round", rs.Round)
+	if rs.ProposalBlockParts == nil {
+		return
+	}
+	err = r.broadcast(ctx, stateCh, rs.NewValidBlockMessage())
+	r.logResult(err, r.logger, "broadcasting new valid block message again", "height", rs.Height, "round", rs.Round)
 }
 
 // broadcast sends a broadcast message to all peers connected to the `channel`.
