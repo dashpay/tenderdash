@@ -18,7 +18,7 @@ on:
 jobs:
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -32,6 +32,9 @@ jobs:
       - uses: technote-space/get-diff-action@v6
         with:
           PATTERNS: |
+            .github/workflows/build.yml
+            .github/actions/bls/**
+            third_party/bls-signatures/**
             **/**.go
             "!test/"
             go.mod
@@ -59,7 +62,7 @@ jobs:
         shell: bash
 
   test_abci_cli:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: build
     timeout-minutes: 5
     steps:
@@ -67,6 +70,9 @@ jobs:
       - uses: technote-space/get-diff-action@v6
         with:
           PATTERNS: |
+            .github/workflows/build.yml
+            .github/actions/bls/**
+            third_party/bls-signatures/**
             **/**.go
             go.mod
             go.sum
@@ -88,7 +94,7 @@ jobs:
         if: "env.GIT_DIFF != ''"
 
   test_apps:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: build
     timeout-minutes: 5
     steps:
@@ -96,6 +102,9 @@ jobs:
       - uses: technote-space/get-diff-action@v6
         with:
           PATTERNS: |
+            .github/workflows/build.yml
+            .github/actions/bls/**
+            third_party/bls-signatures/**
             **/**.go
             go.mod
             go.sum

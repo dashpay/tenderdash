@@ -38,7 +38,7 @@ jobs:
   build:
     if: github.event_name != 'push' || github.ref_name == github.event.repository.default_branch
     name: Build mdBook and RPC documentation
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Install mdBook (same version as Platform)
@@ -71,7 +71,8 @@ jobs:
     name: Deploy to GitHub Pages
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_name == github.event.repository.default_branch)
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-slim
+    timeout-minutes: 15
     permissions:
       pages: write
       id-token: write
