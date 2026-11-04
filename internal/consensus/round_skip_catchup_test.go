@@ -154,14 +154,16 @@ func TestReplayKeepsTheCertificateOfASkippedRound(t *testing.T) {
 	height := original.Height
 	certificate := recoverRoundSkipCertificate(ctx, t, source, vss, height, 0)
 
-	wal := []any{
+	prevotes := nilPrevotes(ctx, t, source, vss, 1)
+	wal := make([]any, 0, 5+len(prevotes))
+	wal = append(wal,
 		EndHeightMessage{Height: height - 1},
 		newEventDataRoundState(height, 0, cstypes.RoundStepNewHeight),
 		msgInfo{Msg: &RoundSkipCertificateMessage{Certificate: certificate}, PeerID: "peer"},
 		newEventDataRoundState(height, 1, cstypes.RoundStepNewRound),
 		newEventDataRoundState(height, 1, cstypes.RoundStepPropose),
-	}
-	for _, vote := range nilPrevotes(ctx, t, source, vss, 1) {
+	)
+	for _, vote := range prevotes {
 		wal = append(wal, msgInfo{Msg: &VoteMessage{Vote: vote}, PeerID: "peer"})
 	}
 
