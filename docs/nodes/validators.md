@@ -9,26 +9,20 @@ These validators participate in the consensus protocol by broadcasting
 _votes_ which contain cryptographic signatures signed by each
 validator's private key.
 
-Some Proof-of-Stake consensus algorithms aim to create a "completely"
-decentralized system where all stakeholders (even those who are not
-always available online) participate in the committing of blocks.
-Tenderdash has a different approach to block creation. Validators are
-expected to be online, and the set of validators is permissioned/curated
-by some external process. Proof-of-stake is not required, but can be
-implemented on top of Tenderdash consensus. That is, validators may be
-required to post collateral on-chain, off-chain, or may not be required
-to post any collateral at all.
-
-Validators have a cryptographic key-pair and an associated amount of
-"voting power". Voting power need not be the same.
+The active validator set is a Dash quorum. Each validator has voting power
+`100`; membership and quorum keys determine participation. See the
+[validator-set terminology](../../spec/consensus/consensus.md#terminology)
+and [proposer selection](../../spec/consensus/proposer-selection.md).
 
 ## Becoming a Validator
 
-There are two ways to become validator.
+The initial validator set comes from genesis and ABCI `InitChain`. On a running
+chain, the application supplies validator-set updates in `PrepareProposal` and
+`ProcessProposal`; changes agreed in block H take effect at H+1. Joining the P2P
+network or editing a local genesis file does not add a validator to a live chain.
 
-1. They can be pre-established in the [genesis state](../tenderdash-core/using-tenderdash.md#genesis)
-2. The ABCI app returns validator-set updates through the proposal and
-   finalization lifecycle. See the [ABCI specification](../../spec/abci/README.md).
+See [validator-set and parameter changes](../../spec/consensus/consensus-alternative-flows.md#validator-set-and-parameter-changes)
+and the [startup handshake](../../spec/consensus/consensus-recovery.md#start-up-abci-handshake).
 
 ## Setting up a Validator
 
@@ -54,7 +48,7 @@ A more persistent solution (not detailed on the diagram) is to have multiple dir
 
 The validator will only talk to the sentry that are provided, the sentry nodes will communicate to the validator via a secret connection and the rest of the network through a normal connection. The sentry nodes do have the option of communicating with each other as well.
 
-When initializing nodes there are five parameters in the `config.toml` that may need to be altered.
+When initializing nodes there are several parameters in the `config.toml` that may need to be altered.
 
 - `mode:` (full | validator | seed) Mode of node (default: 'full'). If you want to run the node as validator, change it to 'validator'.
 - `pex:` boolean. This turns the peer exchange reactor on or off for a node. When `pex=false`, only the `persistent-peers` list is available for connection.
@@ -62,7 +56,6 @@ When initializing nodes there are five parameters in the `config.toml` that may 
 - `unconditional-peer-ids:` comma separated list of nodeID's. These nodes will be connected to no matter the limits of inbound and outbound peers. This is useful for when sentry nodes have full address books.
 - `private-peer-ids:` comma separated list of nodeID's. These nodes will not be gossiped to the network. This is an important field as you do not want your validator IP gossiped to the network.
 - `addr-book-strict:` boolean. By default nodes with a routable address will be considered for connection. If this setting is turned off (false), non-routable IP addresses, like addresses in a private network can be added to the address book.
-- `double-sign-check-height` int64 height.  How many blocks to look back to check existence of the node's consensus votes before joining consensus When non-zero, the node will panic upon restart if the same consensus key was used to sign {double_sign_check_height} last blocks. So, validators should stop the state machine, wait for some blocks, and then restart the state machine to avoid panic.
 
 #### Validator Node Configuration
 
@@ -74,7 +67,6 @@ When initializing nodes there are five parameters in the `config.toml` that may 
 | private-peer-ids         | none                       |
 | unconditional-peer-ids   | optionally sentry node IDs |
 | addr-book-strict         | false                      |
-| double-sign-check-height | 10                         |
 
 To run the node as validator ensure `mode=validator`. The validator node should have `pex=false` so it does not gossip to the entire network. The persistent peers will be your sentry nodes. Private peers can be left empty as the validator is not trying to hide who it is communicating with. Setting unconditional peers is optional for a validator because they will not have a full address books.
 
@@ -112,12 +104,12 @@ See [remote signers](./remote-signer.md) and the
 
 ## Committing a Block
 
-> **+2/3 is short for "more than 2/3"**
+Tenderdash commits contain a recovered BLS threshold block signature and
+threshold vote-extension signatures, rather than individual validator
+signatures. The configurable voting threshold and the quorum's signature
+recovery threshold are distinct; the label "+2/3" in consensus code does not
+always mean a strict two-thirds count.
 
-A block is committed when +2/3 of the validator set sign [precommit
-votes](https://github.com/tendermint/tendermint/blob/953523c3cb99fdb8c8f7a2d21e3a99094279e9de/spec/blockchain/blockchain.md#vote) for that block at the same `round`.
-The +2/3 set of precommit votes is called a
-[_commit_](https://github.com/tendermint/tendermint/blob/953523c3cb99fdb8c8f7a2d21e3a99094279e9de/spec/blockchain/blockchain.md#commit). While any +2/3 set of
-precommits for the same block at the same height&round can serve as
-validation, the canonical commit is included in the next block (see
-[LastCommit](https://github.com/tendermint/tendermint/blob/953523c3cb99fdb8c8f7a2d21e3a99094279e9de/spec/blockchain/blockchain.md#lastcommit)).
+Use the canonical [threshold definitions](../../spec/consensus/consensus.md#terminology),
+[threshold recovery procedure](../../spec/consensus/consensus.md#threshold-recovery)
+and [commit handling rules](../../spec/consensus/consensus-commit.md).

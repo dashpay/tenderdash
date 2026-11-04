@@ -40,97 +40,21 @@ tenderdash testnet --help
 
 ### Genesis
 
-The `genesis.json` file in `$TMHOME/config/` defines the initial
-TenderdashCore state upon genesis of the blockchain ([see
-definition](https://github.com/tenderdash/tenderdash/blob/master/types/genesis.go)).
+`genesis.json` in the node's `config` directory defines the initial chain ID,
+height, time, consensus parameters, application state and validator quorum.
+Use a unique chain ID of at most 50 bytes, and use the same genesis on every
+node in the network.
 
-#### Fields
+For a local development chain, `tenderdash init validator` writes a complete
+genesis and matching signing files. Do not construct a production quorum by
+copying keys from an example. The current
+[GenesisDoc definition](https://github.com/dashpay/tenderdash/blob/master/types/genesis.go)
+describes the supported fields, including validator pro-tx-hashes, quorum hash,
+quorum type and threshold public key.
 
-- `genesis_time`: Official time of blockchain start.
-- `chain_id`: ID of the blockchain. **This must be unique for
-  every blockchain.** If your testnet blockchains do not have unique
-  chain IDs, you will have a bad time. The ChainID must be less than 50 symbols.
-- `initial_height`: Height at which Tenderdash should begin. If a blockchain is conducting a network upgrade,
-    starting from the stopped height brings uniqueness to previous heights.
-- `consensus_params` [spec](https://github.com/dashpay/tenderdash/blob/master/spec/core/state.md#consensusparams)
-    - `block`
-        - `max_bytes`: Max block size, in bytes.
-        - `max_gas`: Max gas per block.
-        - `time_iota_ms`: Unused. This has been deprecated and will be removed in a future version.
-    - `evidence`
-        - `max_age_num_blocks`: Max age of evidence, in blocks. The basic formula
-      for calculating this is: MaxAgeDuration / {average block time}.
-        - `max_age_duration`: Max age of evidence, in time. It should correspond
-      with an app's "unbonding period" or other similar mechanism for handling
-      [Nothing-At-Stake
-      attacks](https://ethereum.org/en/developers/docs/consensus-mechanisms/pos/faqs/).
-        - `max_num`: This sets the maximum number of evidence that can be committed
-      in a single block. and should fall comfortably under the max block
-      bytes when we consider the size of each evidence.
-    - `validator`
-        - `pub_key_types`: Public key types validators can use.
-    - `version`
-        - `app_version`: ABCI application version.
-- `validators`: List of initial validators. Note this may be overridden entirely by the
-  application, and may be left empty to make explicit that the
-  application will initialize the validator set with ResponseInitChain.
-    - `pub_key`: The first element specifies the `pub_key` type. 1
-    == bls12381. The second element are the pubkey bytes.
-    - `power`: The validator's voting power.
-    - `name`: Name of the validator (optional).
-- `app_hash`: The expected application hash (as returned by the
-  `ResponseInfo` ABCI message) upon genesis. If the app's hash does
-  not match, Tenderdash will panic.
-- `app_state`: The application state (e.g. initial distribution
-  of tokens).
-
-> :warning: **ChainID must be unique to every blockchain. Reusing old chainID can cause issues**
-
-#### Sample genesis.json
-
-```json
-{
-  "genesis_time": "2020-04-21T11:17:42.341Z",
-  "chain_id": "test-chain-ROp9KF",
-  "initial_height": "0",
-  "initial_core_chain_locked_height": 1,
-  "consensus_params": {
-    "block": {
-      "max_bytes": "22020096",
-      "max_gas": "-1",
-      "time_iota_ms": "1000"
-    },
-    "evidence": {
-      "max_age_num_blocks": "100000",
-      "max_age_duration": "172800000000000",
-      "max_num": 50
-    },
-    "validator": {
-      "pub_key_types": [
-        "bls12381"
-      ]
-    }
-  },
-  "validators": [
-    {
-      "address": "B547AB87E79F75A4A3198C57A8C2FDAF8628CB47",
-      "pub_key": {
-        "type": "tendermint/PubKeyBLS12381",
-        "value": "rK8dtUyUYi5wCgjEFL2t8AKRfhbVnCu2C3cchusRyWfkapjRX6Wc2FL5fvJkahq6"
-      },
-      "power": "100",
-      "name": "",
-      "pro_tx_hash": "4F01160F58390DA57FE7FE1CCE4DDE452A448E90F4B560C0D788DCEEAD5B5E69"
-    }
-  ],
-  "validator_quorum_hash": "444F39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C433",
-  "validator_quorum_threshold_public_key": {
-    "type": "tendermint/PubKeyBLS12381",
-    "value": "rK8dtUyUYi5wCgjEFL2t8AKRfhbVnCu2C3cchusRyWfkapjRX6Wc2FL5fvJkahq6"
-  },
-  "app_hash": ""
-}
-```
+The application may initialize the validator set and consensus parameters via
+`InitChain`. See the canonical [startup handshake](../../spec/consensus/consensus-recovery.md#start-up-abci-handshake)
+and [validator-set rules](../../spec/consensus/consensus-alternative-flows.md#validator-set-and-parameter-changes).
 
 ## Run
 
@@ -284,54 +208,22 @@ Some fields from the config file can be overwritten with flags.
 
 ## No Empty Blocks
 
-While the default behavior of `tenderdash` is still to create blocks
-approximately once per second, it is possible to disable empty blocks or
-set a block creation interval. In the former case, blocks will be
-created when there are new transactions or when the AppHash changes.
+Configure `create-empty-blocks` and `create-empty-blocks-interval` in
+`config.toml` to control waiting for transactions at round 0. The application
+can request an immediate next block through `ResponseFinalizeBlock`.
+An app hash change does not itself require an extra block: Tenderdash uses
+same-block execution.
 
-To configure Tenderdash to not produce empty blocks unless there are
-transactions or the app hash changes, run Tenderdash with this
-additional flag:
-
-```sh
-tenderdash start --consensus.create_empty_blocks=false
-```
-
-or set the configuration via the `config.toml` file:
-
-```toml
-[consensus]
-create_empty_blocks = false
-```
-
-Remember: because the default is to _create empty blocks_, avoiding
-empty blocks requires the config option to be set to `false`.
-
-The block interval setting allows for a delay (in time.Duration format [ParseDuration](https://golang.org/pkg/time/#ParseDuration)) between the
-creation of each new empty block. It can be set with this additional flag:
-
-```sh
---consensus.create_empty_blocks_interval="5s"
-```
-
-or set the configuration via the `config.toml` file:
-
-```toml
-[consensus]
-create_empty_blocks_interval = "5s"
-```
-
-With this setting, empty blocks will be produced every 5s if no block
-has been produced otherwise, regardless of the value of
-`create_empty_blocks`.
+See the [configuration guide](../nodes/configuration.md#empty-blocks) and the
+canonical [empty-block rules](../../spec/consensus/consensus-alternative-flows.md#mempool-and-empty-blocks).
 
 ## Broadcast API
 
 Earlier, we used the `broadcast_tx_commit` endpoint to send a
 transaction. When a transaction is sent to a Tenderdash node, it will
 run via `CheckTx` against the application. If it passes `CheckTx`, it
-will be included in the mempool, broadcasted to other peers, and
-eventually included in a block.
+can be admitted to the mempool and gossiped to peers. Admission does not
+guarantee later inclusion in a block.
 
 Since there are multiple phases to processing a transaction, we offer
 multiple endpoints to broadcast a transaction:
@@ -350,88 +242,36 @@ running the transaction through `CheckTx`. Using `broadcast_tx_commit`
 will wait until the transaction is committed in a block or until some
 timeout is reached, but will return right away if the transaction does
 not pass `CheckTx`. The return value for `broadcast_tx_commit` includes
-two fields, `check_tx` and `deliver_tx`, pertaining to the result of
-running the transaction through those ABCI messages.
+`check_tx` for mempool validation and `tx_result` for the committed
+transaction execution result.
 
 The benefit of using `broadcast_tx_commit` is that the request returns
-after the transaction is committed (i.e. included in a block), but that
-can take on the order of a second. For a quick result, use
+after the transaction is committed (i.e. included in a block). For a quick result, use
 `broadcast_tx_sync`, but the transaction will not be committed until
 later, and by that point its effect on the state may change.
 
 Note the mempool does not provide strong guarantees - just because a tx passed
 CheckTx (ie. was accepted into the mempool), doesn't mean it will be committed,
 as nodes with the tx in their mempool may crash before they get to propose.
-For more information, see the [mempool
-write-ahead-log](../tenderdash-core/running-in-production.md#mempool-wal)
+For more information, see the [mempool guide](./mempool/README.md).
 
 ## Tenderdash Networks
 
-When `tenderdash init` is run, both a `genesis.json` and
-`priv_validator_key.json` are created in `~/.tenderdash/config`. The
-`genesis.json` might look like:
+All nodes joining a network must use its agreed genesis and compatible software.
+For a local development chain, initialize files with `tenderdash init validator`;
+for a deployed network, obtain its genesis and validator/quorum configuration
+through the network's deployment process.
 
-```json
-{
-  "validators" : [
-    {
-      "pub_key" : {
-        "value" : "h3hk+QE8c6QLTySp8TcfzclJw/BG79ziGB/pIA+DfPE=",
-        "type" : "tendermint/PubKeyEd25519"
-      },
-      "power" : 10,
-      "name" : ""
-    }
-  ],
-  "app_hash" : "",
-  "chain_id" : "test-chain-rDlYSN",
-  "genesis_time" : "0001-01-01T00:00:00Z"
-}
-```
+`priv_validator_key.json` contains secret signing material. Protect both keys and
+signing state; never copy a live consensus identity to a second active signer.
+See [validator keys](../nodes/validators.md#validator-keys) and
+[recovery](../../spec/consensus/consensus-recovery.md).
 
-And the `priv_validator_key.json`:
-
-```json
-{
-  "last_step" : 0,
-  "last_round" : "0",
-  "address" : "B788DEDE4F50AD8BC9462DE76741CCAFF87D51E2",
-  "pub_key" : {
-    "value" : "h3hk+QE8c6QLTySp8TcfzclJw/BG79ziGB/pIA+DfPE=",
-    "type" : "tendermint/PubKeyEd25519"
-  },
-  "last_height" : "0",
-  "priv_key" : {
-    "value" : "JPivl82x+LfVkp8i3ztoTjY6c6GJ4pBxQexErOCyhwqHeGT5ATxzpAtPJKnxNx/NyUnD8Ebv3OIYH+kgD4N88Q==",
-    "type" : "tendermint/PrivKeyEd25519"
-  }
-}
-```
-
-The `priv_validator_key.json` actually contains a private key, and should
-thus be kept absolutely secret; for now we work with the plain text.
-Note the `last_` fields, which are used to prevent us from signing
-conflicting messages.
-
-Note also that the `pub_key` (the public key) in the
-`priv_validator_key.json` is also present in the `genesis.json`.
-
-The genesis file contains the list of public keys which may participate
-in the consensus, and their corresponding voting power. Greater than 2/3
-of the voting power must be active (i.e. the corresponding private keys
-must be producing signatures) for the consensus to make progress. In our
-case, the genesis file contains the public key of our
-`priv_validator_key.json`, so a Tenderdash node started with the default
-root directory will be able to make progress. Voting power uses an int64
-but must be positive, thus the range is: 0 through 9223372036854775807.
-Because of how the current proposer selection algorithm works, we do not
-recommend having voting powers greater than 10\^12 (ie. 1 trillion).
-
-If we want to add more nodes to the network, we have two choices: we can
-add a new validator node, who will also participate in the consensus by
-proposing blocks and voting on them, or we can add a new non-validator
-node, who will not participate directly, but will verify and keep up
-with the consensus protocol.
+A validator signs only when it belongs to the active quorum. A non-validator
+full node follows committed blocks without voting. See the
+[validator guide](../nodes/validators.md) for membership updates and
+[proposer selection](../../spec/consensus/proposer-selection.md) for the
+versioned, equal-power rotation rules.
 
 ### Peers
 
@@ -505,85 +345,11 @@ not connected to the other peer.
 
 ### Adding a Validator
 
-The easiest way to add new validators is to do it in the `genesis.json`,
-before starting the network. For instance, we could make a new
-`priv_validator_key.json`, and copy it's `pub_key` into the above genesis.
-
-We can generate a new `priv_validator_key.json` with the command:
-
-```sh
-tenderdash gen_validator
-```
-
-Now we can update our genesis file. For instance, if the new
-`priv_validator_key.json` looks like:
-
-```json
-{
-  "address" : "5AF49D2A2D4F5AD4C7C8C4CC2FB020131E9C4902",
-  "pub_key" : {
-    "value" : "l9X9+fjkeBzDfPGbUM7AMIRE6uJN78zN5+lk5OYotek=",
-    "type" : "tendermint/PubKeyEd25519"
-  },
-  "priv_key" : {
-    "value" : "EDJY9W6zlAw+su6ITgTKg2nTZcHAH1NMTW5iwlgmNDuX1f35+OR4HMN88ZtQzsAwhETq4k3vzM3n6WTk5ii16Q==",
-    "type" : "tendermint/PrivKeyEd25519"
-  },
-  "last_step" : 0,
-  "last_round" : "0",
-  "last_height" : "0"
-}
-```
-
-then the new `genesis.json` will be:
-
-```json
-{
-  "validators" : [
-    {
-      "pub_key" : {
-        "value" : "DBPbXPvwnlId5bBdsTYvjTGnpGe7HHAaOkEXn4yrHHgbzz/pfxNgCoASf9l1v5tg",
-        "type" : "tendermint/PubKeyBLS12381"
-      },
-      "power" : 100,
-      "name" : "",
-      "pro_tx_hash": "F4406D978AE15B97976411212E3ABD66515A285D901ACE06758DC1012030DA08"
-    },
-    {
-      "pub_key" : {
-        "value" : "Dn8Pcl4jm+yRHPDOzCAbYKLc+HB13QKYNjyk73wHLu25MXvif/BmoIz4Rz0mbxRw",
-        "type" : "tendermint/PubKeyBLS12381"
-      },
-      "power" : 100,
-      "name" : "",
-      "pro_tx_hash": "4F01160F58390DA57FE7FE1CCE4DDE452A448E90F4B560C0D788DCEEAD5B5E69"
-    }
-  ],
-  "threshold_public_key": {
-    "type": "tendermint/PubKeyBLS12381",
-    "value": "rK8dtUyUYi5wCgjEFL2t8AKRfhbVnCu2C3cchusRyWfkapjRX6Wc2FL5fvJkahq6"
-  },
-  "app_hash" : "",
-  "chain_id" : "test-chain-rDlYSN",
-  "genesis_time" : "0001-01-01T00:00:00Z"
-}
-```
-
-Update the `genesis.json` in `~/.tenderdash/config`. Copy the genesis
-file and the new `priv_validator_key.json` to the `~/.tenderdash/config` on
-a new machine.
-
-Now run `tenderdash start` on both machines, and use either
-`--p2p.persistent-peers` or the `/dial_peers` to get them to peer up.
-
-They should start making blocks, and will only continue to do so as long
-as both of them are online.
-
-To make a Tenderdash network that can tolerate one of the validators
-failing, you need at least four validator nodes (e.g., 2/3).
-
-Updating validators in a live network is supported but must be
-explicitly programmed by the application developer.
+Editing a local genesis file does not change the validator set of a running
+network. Initial validators are established through genesis and `InitChain`;
+later changes come from the application and take effect at the next height.
+Follow the network's quorum deployment process and the canonical
+[validator-set update rules](../../spec/consensus/consensus-alternative-flows.md#validator-set-and-parameter-changes).
 
 ### Local Network
 
