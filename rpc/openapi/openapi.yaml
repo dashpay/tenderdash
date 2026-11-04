@@ -92,8 +92,7 @@ paths:
         event using JSON-RPC.  See
         https://docs.tendermint.com/master/app-dev/subscribing-to-events-via-websocket.html
 
-        See ../../docs/tenderdash-core/using-tenderdash.md#formatting
-        for formatting/encoding rules.
+        See [formatting/encoding rules](../../docs/tenderdash-core/using-tenderdash.html#formatting).
       parameters:
         - in: query
           name: tx
@@ -128,8 +127,7 @@ paths:
         event using JSON-RPC.  See
         https://docs.tendermint.com/master/app-dev/subscribing-to-events-via-websocket.html
 
-        See ../../docs/tenderdash-core/using-tenderdash.md#formatting
-        for formatting/encoding rules.
+        See [formatting/encoding rules](../../docs/tenderdash-core/using-tenderdash.html#formatting).
       parameters:
         - in: query
           name: tx
@@ -175,8 +173,7 @@ paths:
         subject to `rpc.timeout-broadcast-tx` and node shutdown. A returned hash
         does not guarantee that the transaction passes CheckTx or is committed.
 
-        See ../../docs/tenderdash-core/using-tenderdash.md#formatting
-        for formatting/encoding rules.
+        See [formatting/encoding rules](../../docs/tenderdash-core/using-tenderdash.html#formatting).
       parameters:
         - in: query
           name: tx
@@ -219,8 +216,7 @@ paths:
         transaction event using JSON-RPC.  See
         https://docs.tendermint.com/master/app-dev/subscribing-to-events-via-websocket.html
 
-        See ../../docs/tenderdash-core/using-tenderdash.md#formatting
-        for formatting/encoding rules.
+        See [formatting/encoding rules](../../docs/tenderdash-core/using-tenderdash.html#formatting).
       parameters:
         - in: query
           name: tx
@@ -251,9 +247,7 @@ paths:
       description: |
         The transaction won\'t be added to the mempool.
 
-        Please refer to
-        ../../docs/tenderdash-core/using-tenderdash.md#formatting
-        for formatting/encoding rules.
+        See [formatting/encoding rules](../../docs/tenderdash-core/using-tenderdash.html#formatting).
       parameters:
         - in: query
           name: tx
@@ -492,7 +486,7 @@ paths:
         https://godoc.org/github.com/tendermint/tendermint/libs/pubsub/query.
 
         ```go
-        import rpchttp "github.com/tendermint/rpc/client/http"
+        import rpchttp "github.com/dashpay/tenderdash/rpc/client/http"
         import "github.com/dashpay/tenderdash/types"
 
         client, err := rpchttp.New("tcp://0.0.0.0:26657", "/websocket")

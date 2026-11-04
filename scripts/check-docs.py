@@ -3,8 +3,11 @@
 
 from html.parser import HTMLParser
 from pathlib import Path
+import re
 import sys
 from urllib.parse import unquote, urlsplit
+
+MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\((<?[^\s)>]+>?)\)")
 
 
 class Links(HTMLParser):
@@ -23,13 +26,21 @@ class Links(HTMLParser):
 def check(root):
     missing = set()
     pages = list(root.rglob("*.html"))
-    for page in pages:
+    openapi = root / "api/rpc/openapi.yaml"
+    resources = pages + ([openapi] if openapi.is_file() else [])
+    for page in resources:
         # mdBook assembles the print view from chapters with different base paths.
         if page.name == "print.html":
             continue
-        parser = Links()
-        parser.feed(page.read_text())
-        for target in parser.targets:
+        if page.suffix == ".html":
+            parser = Links()
+            parser.feed(page.read_text())
+            targets = parser.targets
+        else:
+            targets = [
+                match.strip("<>") for match in MARKDOWN_LINK.findall(page.read_text())
+            ]
+        for target in targets:
             url = urlsplit(target)
             if url.scheme or url.netloc or not url.path:
                 continue

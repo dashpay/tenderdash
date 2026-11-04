@@ -4,18 +4,24 @@ order: 2
 
 # Creating a built-in application in Go
 
+> **Historical upstream tutorial.** The examples target Tendermint `v0.35.8`,
+> not the current Tenderdash API. For Tenderdash, use the
+> [current application interface](../../abci/types/application.go)
+> and [ABCI call sequence](../../spec/consensus/consensus-happy-path.md#abci-calls-per-height-on-the-happy-path).
+> These legacy examples have not been verified to compile against this checkout.
+
 ## Guide assumptions
 
-This guide is designed for beginners who want to get started with a Tenderdash
+This guide is designed for beginners who want to get started with a Tendermint
 Core application from scratch. It does not assume that you have any prior
-experience with Tenderdash Core.
+experience with Tendermint Core.
 
-Tenderdash Core is a service that provides a Byzantine fault tolerant consensus engine
+Tendermint Core is a service that provides a Byzantine fault tolerant consensus engine
 for state-machine replication. The replicated state-machine, or "application", can be written
 in any language that can send and receive protocol buffer messages.
 
-This tutorial is written for Go and uses Tenderdash as a library, but applications not
-written in Go can use Tenderdash to drive state-machine replication in a client-server
+This tutorial is written for Go and uses Tendermint as a library, but applications not
+written in Go can use Tendermint to drive state-machine replication in a client-server
 model.
 
 This tutorial expects some understanding of the Go programming language.
@@ -23,15 +29,15 @@ If you have never written Go, you may want to go through [Learn X in Y minutes
 Where X=Go](https://learnxinyminutes.com/docs/go/) first to familiarize
 yourself with the syntax.
 
-By following along with this guide, you'll create a Tenderdash Core application
+By following along with this guide, you'll create a Tendermint Core application
 called kvstore, a (very) simple distributed BFT key-value store.
 
 ## Built-in app vs external app
 
-Running your application inside the same process as Tenderdash Core will give
+Running your application inside the same process as Tendermint Core will give
 you the best possible performance.
 
-For other languages, your application have to communicate with Tenderdash Core
+For other languages, your application have to communicate with Tendermint Core
 through a TCP, Unix domain socket or gRPC.
 
 ## 1.1 Installing Go
@@ -69,23 +75,23 @@ import (
 )
 
 func main() {
- fmt.Println("Hello, Tenderdash Core")
+ fmt.Println("Hello, Tendermint Core")
 }
 ```
 
-When run, this should print "Hello, Tenderdash Core" to the standard output.
+When run, this should print "Hello, Tendermint Core" to the standard output.
 
 ```sh
 $ go run main.go
-Hello, Tenderdash Core
+Hello, Tendermint Core
 ```
 
-## 1.3 Writing a Tenderdash Core application
+## 1.3 Writing a Tendermint Core application
 
-Tenderdash Core communicates with an application through the Application
-BlockChain Interface (ABCI) protocol. All of the message types Tenderdash uses for
+Tendermint Core communicates with an application through the Application
+BlockChain Interface (ABCI) protocol. All of the message types Tendermint uses for
 communicating with the application can be found in the ABCI [protobuf
-file](https://github.com/tendermint/spec/blob/b695d30aae69933bc0e630da14949207d18ae02c/proto/tendermint/abci/types.proto).
+file](https://github.com/tendermint/tendermint/blob/v0.35.8/proto/tendermint/abci/types.proto).
 
 We will begin by creating the basic scaffolding for an ABCI application in
 a new `app.go` file. The first step is to create a new type, `KVStoreApplication`
@@ -97,7 +103,7 @@ Create a file called `app.go` and add the following contents:
 package main
 
 import (
- abcitypes "github.com/dashpay/tenderdash/abci/types"
+ abcitypes "github.com/tendermint/tendermint/abci/types"
 )
 
 type KVStoreApplication struct {}
@@ -186,7 +192,7 @@ func NewKVStoreApplication(db *badger.DB) *KVStoreApplication {
 
 ### 1.3.2 CheckTx
 
-When a new transaction is added to the Tenderdash Core, it will ask the application to check it (validate the format, signatures, etc.).
+When a new transaction is added to the Tendermint Core, it will ask the application to check it (validate the format, signatures, etc.).
 
 ```go
 import (
@@ -212,10 +218,10 @@ func (app *KVStoreApplication) CheckTx(req abcitypes.RequestCheckTx) abcitypes.R
 }
 ```
 
-Any response with a non-zero code will be considered invalid by Tenderdash.
-Our `CheckTx` logic returns `0` to Tenderdash when a transaction passes
-its validation checks. The specific value of the code is meaningless to Tenderdash.
-Non-zero codes are logged by Tenderdash so applications can provide more specific
+Any response with a non-zero code will be considered invalid by Tendermint.
+Our `CheckTx` logic returns `0` to Tendermint when a transaction passes
+its validation checks. The specific value of the code is meaningless to Tendermint.
+Non-zero codes are logged by Tendermint so applications can provide more specific
 information on why the transaction was rejected.
 
 Note that `CheckTx` _does not execute_ the transaction, it only verifies that that the
@@ -224,11 +230,11 @@ agreed to accept this transaction into a block.
 
 Valid transactions will eventually be committed given they are not too big and
 have enough gas. To learn more about gas, check out ["the
-specification"](https://github.com/dashpay/tenderdash/blob/master/spec/abci/apps.md#gas).
+specification"](https://github.com/tendermint/spec/blob/b695d30aae69933bc0e630da14949207d18ae02c/spec/abci/apps.md#gas).
 
 ### 1.3.3 BeginBlock -> DeliverTx -> EndBlock -> Commit
 
-When the Tenderdash consensus engine has decided on the block, the block is transferred to the
+When the Tendermint consensus engine has decided on the block, the block is transferred to the
 application over three ABCI method calls: `BeginBlock`, `DeliverTx`, and `EndBlock`.
 
 `BeginBlock` is called once to indicate to the application that it is about to
@@ -300,7 +306,7 @@ func (app *KVStoreApplication) Commit() abcitypes.ResponseCommit {
 ### 1.3.4 Query
 
 	"github.com/dgraph-io/badger/v3"
-	abcitypes "github.com/dashpay/tenderdash/abci/types"
+	abcitypes "github.com/tendermint/tendermint/abci/types"
 )
 
 ```
@@ -343,9 +349,9 @@ func (app *KVStoreApplication) Query(req abcitypes.RequestQuery) abcitypes.Respo
 ```
 
 The complete specification can be found
-[here](https://github.com/dashpay/tenderdash/tree/master/spec/abci/).
+[here](https://github.com/tendermint/spec/tree/b695d30aae69933bc0e630da14949207d18ae02c/spec/abci/).
 
-## 1.4 Starting an application and a Tenderdash Core instance in the same process
+## 1.4 Starting an application and a Tendermint Core instance in the same process
 
 Now that we have the basic functionality of our application in place, let's put it
 all together inside of our `main.go` file.
@@ -367,24 +373,24 @@ import (
  "github.com/dgraph-io/badger/v3"
  "github.com/spf13/viper"
 
-  abciclient "github.com/dashpay/tenderdash/abci/client"
-  abcitypes "github.com/dashpay/tenderdash/abci/types"
-  tmconfig "github.com/dashpay/tenderdash/config"
-  tmlog "github.com/dashpay/tenderdash/libs/log"
-  tmservice "github.com/dashpay/tenderdash/libs/service"
-  tmnode "github.com/dashpay/tenderdash/node"
+  abciclient "github.com/tendermint/tendermint/abci/client"
+  abcitypes "github.com/tendermint/tendermint/abci/types"
+  tmconfig "github.com/tendermint/tendermint/config"
+  tmlog "github.com/tendermint/tendermint/libs/log"
+  tmservice "github.com/tendermint/tendermint/libs/service"
+  tmnode "github.com/tendermint/tendermint/node"
 )
 
 var homeDir string
 
 func init() {
-	flag.StringVar(&homeDir, "tm-home", "", "Path to the tenderdash config directory (if empty, uses $HOME/.tenderdash)")
+	flag.StringVar(&homeDir, "tm-home", "", "Path to the tendermint config directory (if empty, uses $HOME/.tendermint)")
 }
 
 func main() {
 	flag.Parse()
 	if homeDir == "" {
-		homeDir = os.ExpandEnv("$HOME/.tenderdash")
+		homeDir = os.ExpandEnv("$HOME/.tendermint")
 	}
 	config := cfg.DefaultValidatorConfig()
 
@@ -468,7 +474,7 @@ func newTendermint(app abcitypes.Application, configFile string) (tmservice.Serv
 		nil,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create new Tenderdash node: %w", err)
+		return nil, fmt.Errorf("failed to create new Tendermint node: %w", err)
 	}
 
 	return node, nil
@@ -503,7 +509,7 @@ Then we construct a logger:
 ...
 ```
 
-Then we use it to create a Tenderdash Core [Service](https://github.com/dashpay/tenderdash/blob/v0.35.8/libs/service/service.go#L24) instance:
+Then we use it to create a Tendermint Core [Service](https://github.com/tendermint/tendermint/blob/v0.35.8/libs/service/service.go#L24) instance:
 
 ```go
 ...
@@ -516,16 +522,16 @@ node, err := tmnode.New(
   nil,
 )
 if err != nil {
-  return nil, fmt.Errorf("failed to create new Tenderdash node: %w", err)
+  return nil, fmt.Errorf("failed to create new Tendermint node: %w", err)
 }
 ```
 
-[tmnode.New](https://github.com/dashpay/tenderdash/blob/v0.35.8/node/public.go#L29) requires a few things including a configuration file, a logger and a few others in order to construct the full node.
+[tmnode.New](https://github.com/tendermint/tendermint/blob/v0.35.8/node/public.go#L29) requires a few things including a configuration file, a logger and a few others in order to construct the full node.
 
-Note that we use [abciclient.NewLocalCreator](https://github.com/dashpay/tenderdash/blob/v0.35.8/abci/client/creators.go#L15) here to create a local client instead of one communicating through a socket or gRPC.
+Note that we use [abciclient.NewLocalCreator](https://github.com/tendermint/tendermint/blob/v0.35.8/abci/client/creators.go#L15) here to create a local client instead of one communicating through a socket or gRPC.
 
 [viper](https://github.com/spf13/viper) is being used for reading the config,
-which we will generate later using the `tenderdash init` command.
+which we will generate later using the `tendermint init` command.
 
 ```go
 // read config
@@ -584,14 +590,14 @@ $ go mod tidy
 ...
 ```
 
-Let's make sure we're using the latest version of Tenderdash (currently `v0.35.8`).
+This historical example uses upstream Tendermint `v0.35.8`.
 
 ```sh
-$ go get github.com/dashpay/tenderdash@latest
+$ go get github.com/tendermint/tendermint@v0.35.8
 ...
 ```
 
-This will populate the `go.mod` with a release number followed by a hash for Tenderdash.
+This adds the pinned upstream release to `go.mod`.
 
 ```go
 module github.com/<username>/kvstore
@@ -600,7 +606,7 @@ go 1.27.3
 
 require (
  github.com/dgraph-io/badger/v3 v3.2103.2
- github.com/dashpay/tenderdash v0.35.8
+ github.com/tendermint/tendermint v0.35.8
  ...
 )
 ```
@@ -616,7 +622,7 @@ Everything is now in place to run your application.
 
 ```sh
 $ rm -rf /tmp/kvstore /tmp/badger
-$ TMHOME="/tmp/kvstore" tenderdash init validator
+$ TMHOME="/tmp/kvstore" tendermint init validator
 
 2022-07-20T17:04:41+08:00 INFO Generated private validator keyFile=/tmp/kvstore/config/priv_validator_key.json module=main stateFile=/tmp/kvstore/data/priv_validator_state.json
 2022-07-20T17:04:41+08:00 INFO Generated node key module=main path=/tmp/kvstore/config/node_key.json
@@ -647,14 +653,14 @@ badger 2022/07/16 13:55:59 DEBUG: Value log discard stats empty
 2022-07-16T13:55:59+08:00 INFO starting service impl=IndexerService module=txindex service=IndexerService
 2022-07-16T13:55:59+08:00 INFO ABCI Handshake App Info hash= height=0 module=consensus protocol-version=0 software-version=
 2022-07-16T13:55:59+08:00 INFO ABCI Replay Blocks appHeight=0 module=consensus stateHeight=0 storeHeight=0
-2022-07-16T13:55:59+08:00 INFO Completed ABCI Handshake - Tenderdash and App are synced appHash= appHeight=0 module=consensus
+2022-07-16T13:55:59+08:00 INFO Completed ABCI Handshake - Tendermint and App are synced appHash= appHeight=0 module=consensus
 2022-07-16T13:55:59+08:00 INFO Version info block=11 mode=validator p2p=8 tmVersion=0.35.8
 ```
 
 Let's try sending a transaction. Open another terminal and execute the below command.
 
 ```sh
-$ curl -s 'localhost:26657/broadcast_tx_commit?tx="tenderdash=rocks"'
+$ curl -s 'localhost:26657/broadcast_tx_commit?tx="tendermint=rocks"'
 {
   ...
   "result": {
@@ -676,7 +682,7 @@ transaction was included in the blockchain.
 Let's check if the given key now exists and its value:
 
 ```sh
-$ curl -s 'localhost:26657/abci_query?data="tenderdash"'
+$ curl -s 'localhost:26657/abci_query?data="tendermint"'
 {
   ...
   "result": {
@@ -696,11 +702,11 @@ $ curl -s 'localhost:26657/abci_query?data="tenderdash"'
 ```
 
 `dGVuZGVybWludA==` and `cm9ja3M=` are the base64-encoding of the ASCII of
-"tenderdash" and "rocks" accordingly.
+"tendermint" and "rocks" accordingly.
 
 ## Outro
 
 I hope everything went smoothly and your first, but hopefully not the last,
-Tenderdash Core application is up and running. If not, please [open an issue on
-Github](https://github.com/dashevo/tenderdash/issues/new/choose). To dig
+Tendermint Core application is up and running. If not, please [open an issue on
+Github](https://github.com/tendermint/tendermint/issues/new/choose). To dig
 deeper, read [the docs](../README.md).

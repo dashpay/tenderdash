@@ -76,43 +76,43 @@ Tenderdash is in essence similar software, but with two key differences:
 
 ### Bitcoin, Ethereum, etc
 
-Tenderdash emerged in the tradition of cryptocurrencies like Bitcoin,
+The project history and examples below refer to upstream Tendermint.
+
+Tendermint emerged in the tradition of cryptocurrencies like Bitcoin,
 Ethereum, etc. with the goal of providing a more efficient and secure
 consensus algorithm than Bitcoin's Proof of Work. In the early days,
-Tenderdash had a simple currency built in, and to participate in
+Tendermint had a simple currency built in, and to participate in
 consensus, users had to "bond" units of the currency into a security
 deposit which could be revoked if they misbehaved -this is what made
-Tenderdash a Proof-of-Stake algorithm.
+Tendermint a Proof-of-Stake algorithm.
 
-Since then, Tenderdash has evolved to be a general purpose blockchain
+Since then, Tendermint has evolved to be a general purpose blockchain
 consensus engine that can host arbitrary application states. That means
 it can be used as a plug-and-play replacement for the consensus engines
 of other blockchain software. So one can take the current Ethereum code
 base, whether in Rust, or Go, or Haskell, and run it as a ABCI
-application using Tenderdash consensus. Indeed, [we did that with
-Ethereum](https://github.com/cosmos/ethermint). And we plan to do
-the same for Bitcoin, ZCash, and various other deterministic
-applications as well.
+application using Tendermint consensus. The upstream project demonstrated
+this with [Ethermint](https://github.com/cosmos/ethermint).
 
-Another example of a cryptocurrency application built on Tenderdash is
+Another example of a cryptocurrency application built on Tendermint is
 [the Cosmos network](http://cosmos.network).
 
 ### Other Blockchain Projects
 
 [Fabric](https://github.com/hyperledger/fabric) takes a similar approach
-to Tenderdash, but is more opinionated about how the state is managed,
+to Tendermint, but is more opinionated about how the state is managed,
 and requires that all application behaviour runs in potentially many
 docker containers, modules it calls "chaincode". It uses an
 implementation of [PBFT](http://pmg.csail.mit.edu/papers/osdi99.pdf)
 from a team at IBM that is augmented to handle potentially non-deterministic
 chaincode. It is possible to implement this docker-based behaviour as a ABCI app
-in Tenderdash, though extending Tenderdash to handle non-determinism remains
+in Tendermint, though extending Tendermint to handle non-determinism remains
 for future work.
 
 [Burrow](https://github.com/hyperledger/burrow) is an implementation of
 the Ethereum Virtual Machine and Ethereum transaction mechanics, with
 additional features for a name-registry, permissions, and native
-contracts, and an alternative blockchain API. It uses Tenderdash as its
+contracts, and an alternative blockchain API. It uses Tendermint as its
 consensus engine, and provides a particular application state.
 
 ## ABCI Overview
