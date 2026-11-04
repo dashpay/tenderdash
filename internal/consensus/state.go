@@ -204,8 +204,10 @@ type State struct {
 	// sends or watches proposer heartbeats while the node waits for transactions
 	liveness *proposerLiveness
 	// gathers the votes to skip a round whose proposer went silent
-	roundSkips     *roundSkipCollector
-	msgMiddlewares []msgMiddlewareFunc
+	roundSkips *roundSkipCollector
+	// signs this validator's votes to skip a round, off the consensus goroutine
+	roundSkipSigner *roundSkipSigner
+	msgMiddlewares  []msgMiddlewareFunc
 
 	stopFn func(cs *State) bool
 }
@@ -315,6 +317,7 @@ func NewState(
 
 	cs.liveness = newProposerLiveness(cs.logger, cs.metrics, cs.emitter, cs.proposerReady, cs.verificationBudget)
 	cs.roundSkips = newRoundSkipCollector(cs.logger, cs.verificationBudget)
+	cs.roundSkipSigner = newRoundSkipSigner()
 
 	cs.stateDataStore = NewStateDataStore(cs.metrics, logger, cfg, cs.emitter)
 	wal := &wrapWAL{getter: func() WALWriteFlusher { return cs.wal }}
@@ -813,6 +816,13 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 			if err != nil {
 				cs.logger.Error("failed update state-data", "err", err)
 			}
+		case signed := <-cs.roundSkipSigner.signed():
+			stateData := cs.stateDataStore.Get()
+			cs.handleSignedRoundSkipVote(ctx, &stateData, signed)
+			err := stateData.Save()
+			if err != nil {
+				cs.logger.Error("failed update state-data", "err", err)
+			}
 		case <-ctx.Done():
 			return
 
@@ -956,9 +966,9 @@ func (cs *State) handleProposerSilence(ctx context.Context, stateData *StateData
 	cs.voteToSkipRound(ctx, stateData, silence)
 }
 
-// voteToSkipRound signs this validator's vote to skip the round it waits in,
-// counts it, and hands it to the reactor to broadcast. If the vote completes
-// +2/3, the certificate goes to the state machine like one from a peer.
+// voteToSkipRound has this validator's vote to skip the round it waits in
+// signed, off the consensus goroutine (see roundSkipSigner). The signed vote
+// comes back to handleSignedRoundSkipVote.
 func (cs *State) voteToSkipRound(ctx context.Context, stateData *StateData, silence proposerSilence) {
 	pv := cs.privValidator
 	index, val := stateData.Validators.GetByProTxHash(pv.ProTxHash)
@@ -981,19 +991,41 @@ func (cs *State) voteToSkipRound(ctx context.Context, stateData *StateData, sile
 		ValidatorIndex:     index,
 	}
 	timeouts := stateData.state.ConsensusParams.Timeout.TimeoutParamsOrDefaults()
-	signCtx, cancel := context.WithTimeout(ctx, timeouts.ProposerSilenceTimeout(stateData.Round))
-	defer cancel()
-	err := pv.SignRoundSkipVote(signCtx, stateData.state.ChainID,
-		stateData.Validators.QuorumType, stateData.Validators.QuorumHash, pb)
-	if errors.Is(err, types.ErrSigningNotSupported) {
+	started := cs.roundSkipSigner.sign(ctx, pv, stateData.state.ChainID,
+		stateData.Validators.QuorumType, stateData.Validators.QuorumHash, pb,
+		timeouts.ProposerSilenceTimeout(stateData.Round), silence)
+	if !started {
+		// The signer has yet to return the vote for an earlier round. Rather
+		// than wait for it, this one is tried again after the silence timeout.
+		cs.logger.Debug("still signing an earlier round skip vote; trying again after the silence timeout",
+			"height", pb.Height, "round", pb.Round)
+		cs.liveness.rearm(silence)
+	}
+}
+
+// handleSignedRoundSkipVote takes this validator's vote to skip a round from
+// the signer, counts it, and hands it to the reactor to broadcast. If the vote
+// completes +2/3, the certificate goes to the state machine like one from a
+// peer.
+func (cs *State) handleSignedRoundSkipVote(ctx context.Context, stateData *StateData, signed signedRoundSkipVote) {
+	cs.roundSkipSigner.done()
+	pb, silence := signed.vote, signed.silence
+	// The node went on taking messages while the vote was signed. It may have
+	// left the round since, or heard from the proposer, which re-armed the
+	// watch: it votes again if the proposer goes silent again.
+	if pb.Height != stateData.Height || pb.Round != stateData.Round || !waitingRound(stateData) ||
+		!cs.liveness.current(silence) {
+		return
+	}
+	if errors.Is(signed.err, types.ErrSigningNotSupported) {
 		cs.logger.Debug("this node's signer cannot sign round skip votes", "height", pb.Height, "round", pb.Round)
 		return
 	}
-	if err != nil {
+	if signed.err != nil {
 		// The silence still stands, so the vote is tried again after another
 		// silence timeout rather than never.
 		cs.logger.Error("cannot sign round skip vote; trying again after the silence timeout",
-			"height", pb.Height, "round", pb.Round, "err", err)
+			"height", pb.Height, "round", pb.Round, "err", signed.err)
 		cs.liveness.rearm(silence)
 		return
 	}

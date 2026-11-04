@@ -363,6 +363,58 @@ func TestStateRoundSkipVoteRetriedAfterSigningFails(t *testing.T) {
 	assert.Equal(t, int32(2), signer.skipVotes.Load(), "one failed attempt, then the vote")
 }
 
+// A signer that does not answer holds up this validator's skip vote, not the
+// consensus goroutine: the others' votes still move the node on. It is asked
+// for one vote at a time, and its late answer for a round the node left is
+// dropped; the next silent round gets its vote once it answers again.
+func TestStateRoundSkipVoteSignedOffTheConsensusGoroutine(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	signer := &stalledSkipVoteSigner{release: make(chan struct{})}
+	test := newRoundSkipTest(ctx, t, "consensus_round_skip_stalled_signer_test", func(pv types.PrivValidator) types.PrivValidator {
+		signer.PrivValidator = pv
+		return signer
+	})
+
+	require.Eventually(t, func() bool { return signer.skipVotes.Load() == 1 }, 5*time.Second, 10*time.Millisecond,
+		"the silence of round 0 asks for a vote")
+	for _, vs := range test.vss[1:] {
+		deliverRoundSkipVote(ctx, t, test.cs, signRoundSkipVote(ctx, t, test.cs, vs, 2, 0))
+	}
+	ensureNewRound(t, test.newRoundCh, 2, 1)
+
+	// Round 1 goes silent too, while the signer still works on round 0.
+	silence := test.cs.GetStateData().state.ConsensusParams.Timeout.TimeoutParamsOrDefaults().ProposerSilenceTimeout(1)
+	time.Sleep(3 * silence)
+	assert.Equal(t, int32(1), signer.skipVotes.Load(), "one vote at a time")
+
+	// The vote for round 0 comes back after the node left the round, and is
+	// not broadcast: the first own vote out is round 1's.
+	close(signer.release)
+	test.ownSkipVote(t, 1)
+	assert.Equal(t, int32(2), signer.skipVotes.Load())
+}
+
+// stalledSkipVoteSigner signs skip votes once release is closed, and counts
+// them.
+type stalledSkipVoteSigner struct {
+	types.PrivValidator
+	release   chan struct{}
+	skipVotes atomic.Int32
+}
+
+func (pv *stalledSkipVoteSigner) SignRoundSkipVote(
+	ctx context.Context,
+	chainID string,
+	quorumType btcjson.LLMQType,
+	quorumHash crypto.QuorumHash,
+	vote *tmproto.RoundSkipVote,
+) error {
+	pv.skipVotes.Add(1)
+	<-pv.release
+	return pv.PrivValidator.SignRoundSkipVote(ctx, chainID, quorumType, quorumHash, vote)
+}
+
 // countingSkipVoteSigner counts the skip votes it is asked to sign, and fails
 // the first failures of them.
 type countingSkipVoteSigner struct {
