@@ -5,6 +5,11 @@ title: Applications
 
 # Applications
 
+> **Legacy ABCI reference.** This page includes the historical
+> `BeginBlock`/`DeliverTx`/`EndBlock`/`Commit` lifecycle. For current Tenderdash,
+> use the [ABCI++ specification](../abci++/README.md) and
+> [source-derived consensus flow](../consensus/consensus-happy-path.md).
+
 Please ensure you've first read the spec for [ABCI Methods and Types](abci.md)
 
 Here we cover the following components of ABCI applications:

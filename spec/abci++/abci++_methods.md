@@ -38,22 +38,23 @@ title: Methods
 
 * **Response**:
 
-    | Name                | Type   | Description                                      | Field Number |
-    |---------------------|--------|--------------------------------------------------|--------------|
-    | data                | string | Some arbitrary information                       | 1            |
-    | version             | string | The application software semantic version        | 2            |
-    | app_version         | uint64 | The application protocol version                 | 3            |
-    | last_block_height   | int64  | Latest block for which the app has called Commit | 4            |
-    | last_block_app_hash | bytes  | Latest result of Commit                          | 5            |
+    | Name                | Type   | Description                                             | Field Number |
+    | ------------------- | ------ | ------------------------------------------------------- | ------------ |
+    | data                | string | Some arbitrary information                              | 1            |
+    | version             | string | The application software semantic version               | 2            |
+    | app_version         | uint64 | The application protocol version                        | 3            |
+    | last_block_height   | int64  | Latest block finalized and persisted by the application | 4            |
+    | last_block_app_hash | bytes  | Application hash of that finalized block                | 5            |
 
 * **Usage**:
     * Return information about the application state.
     * Used to sync Tenderdash with the application during a handshake
     that happens on startup.
     * The returned `app_version` will be included in the Header of every block.
-    * Tenderdash expects `last_block_app_hash` and `last_block_height` to
-    be updated during `Commit`, ensuring that `Commit` is never
-    called twice for the same block height.
+    * `last_block_app_hash` and `last_block_height` describe the state persisted by
+      `FinalizeBlock`; there is no ABCI `Commit` method. See
+      [ABCI handshake](../consensus/consensus-recovery.md#start-up-abci-handshake)
+      for replay and crash-recovery behavior.
 
 > Note: Semantic version is a reference to [semantic versioning](https://semver.org/). Semantic versions in info will be displayed as X.X.x.
 
@@ -290,40 +291,36 @@ title: Methods
 
 #### Usage
 
-    * The first six parameters of `RequestPrepareProposal` are the same as `RequestProcessProposal`
-      and `RequestFinalizeBlock`.
+    * Use the linked request/response schemas for field names and numbers;
+      proposal preparation, processing and finalization have different request shapes.
     * The height and time values match the values from the header of the proposed block.
     * `RequestPrepareProposal` contains a preliminary set of transactions `txs` that Tenderdash considers to be a good block proposal, called _raw proposal_. The Application can modify this set via `ResponsePrepareProposal.tx_records` (see [TxRecord](#txrecord)).
         * The Application _can_ reorder, remove or add transactions to the raw proposal. Let `tx` be a transaction in `txs`:
             * If the Application considers that `tx` should not be proposed in this block, e.g., there are other transactions with higher priority, then it should not include it in `tx_records`. In this case, Tenderdash won't remove `tx` from the mempool. The Application should be extra-careful, as abusing this feature may cause transactions to stay forever in the mempool.
             * If the Application considers that a `tx` should not be included in the proposal and removed from the mempool, then the Application should include it in `tx_records` and _mark_ it as `REMOVED`. In this case, Tenderdash will remove `tx` from the mempool.
-            * If the Application wants to add a new transaction, then the Application should include it in `tx_records` and _mark_ it as `ADD`. In this case, Tenderdash will add it to the mempool.
+            * If the Application wants to add a new transaction, then the Application should include it in `tx_records` and _mark_ it as `ADDED`. In this case, Tenderdash will add it to the mempool.
         * The Application should be aware that removing and adding transactions may compromise _traceability_.
           > Consider the following example: the Application transforms a client-submitted transaction `t1` into a second transaction `t2`, i.e., the Application asks Tenderdash to remove `t1` and add `t2` to the mempool. If a client wants to eventually check what happened to `t1`, it will discover that `t_1` is not in the mempool or in a committed block, getting the wrong idea that `t_1` did not make it into a block. Note that `t_2` _will be_ in a committed block, but unless the Application tracks this information, no component will be aware of it. Thus, if the Application wants traceability, it is its responsability to support it. For instance, the Application could attach to a transformed transaction a list with the hashes of the transactions it derives from.
     * Tenderdash MAY include a list of transactions in `RequestPrepareProposal.txs` whose total size in bytes exceeds `RequestPrepareProposal.max_tx_bytes`.
       Therefore, if the size of `RequestPrepareProposal.txs` is greater than `RequestPrepareProposal.max_tx_bytes`, the Application MUST make sure that the
       `RequestPrepareProposal.max_tx_bytes` limit is respected by those transaction records returned in `ResponsePrepareProposal.tx_records` that are marked as `UNMODIFIED` or `ADDED`.
-    * In same-block execution mode, the Application must provide values for `ResponsePrepareProposal.app_hash`,
-      `ResponsePrepareProposal.tx_results`, `ResponsePrepareProposal.validator_updates`, `ResponsePrepareProposal.core_chain_lock_update` and
+    * Tenderdash uses same-block execution. The Application must provide values for `ResponsePrepareProposal.app_hash`,
+      `ResponsePrepareProposal.tx_results`, `ResponsePrepareProposal.validator_set_update`, `ResponsePrepareProposal.core_chain_lock_update` and
       `ResponsePrepareProposal.consensus_param_updates`, as a result of fully executing the block.
-        * The values for `ResponsePrepareProposal.validator_updates`, `ResponsePrepareProposal.core_chain_lock_update` or
+        * The values for `ResponsePrepareProposal.validator_set_update`, `ResponsePrepareProposal.core_chain_lock_update` or
           `ResponsePrepareProposal.consensus_param_updates` may be empty. In this case, Tenderdash will keep
           the current values.
-        * `ResponsePrepareProposal.validator_updates`, triggered by block `H`, affect validation
-          for blocks `H+1`, and `H+2`. Heights following a validator update are affected in the following way:
-            * `H`: `NextValidatorsHash` includes the new `validator_updates` value.
-            * `H+1`: The validator set change takes effect and `ValidatorsHash` is updated.
-            * `H+2`: `local_last_commit` now includes the altered validator set.
-        * `ResponseFinalizeBlock.consensus_param_updates` returned for block `H` apply to the consensus
-          params for block `H+1` even if the change is agreed in block `H`.
-          For more information on the consensus parameters,
-          see the [application spec entry on consensus parameters](../abci/apps.md#consensus-parameters).
+        * Validator changes from block `H` are committed by `NextValidatorsHash`
+          and become active at `H+1`. See
+          [Validator-set and parameter changes](../consensus/consensus-alternative-flows.md#validator-set-and-parameter-changes).
+        * Consensus parameter changes from `PrepareProposal`/`ProcessProposal` for block
+          `H` take effect at `H+1`; `ResponseFinalizeBlock` has no parameter-update field.
+          See [Validator-set and parameter changes](../consensus/consensus-alternative-flows.md#validator-set-and-parameter-changes).
         * It is the responsibility of the Application to set the right value for _TimeoutPropose_ so that
           the (synchronous) execution of the block does not cause other processes to prevote `nil` because
           their propose timeout goes off.
-    * As a result of executing the prepared proposal, the Application may produce header events or transaction events.
-      The Application must keep those events until a block is decided and then pass them on to Tenderdash via
-      `ResponseFinalizeBlock`.
+    * Block and transaction events are returned with `ProcessProposal`, not
+      `ResponseFinalizeBlock`; see [Events](./abci++_basic_concepts.md#events).
     * As a sanity check, Tenderdash will check the returned parameters for validity if the Application modified them.
       In particular, `ResponsePrepareProposal.tx_records` will be deemed invalid if
         * There is a duplicate transaction in the list.
@@ -337,37 +334,12 @@ title: Methods
 
 #### When does Tenderdash call it?
 
-When a validator _p_ enters Tenderdash consensus round _r_, height _h_, in which _p_ is the proposer,
-and _p_'s _validValue_ is `nil`:
-
-1. _p_'s Tenderdash collects outstanding transactions from the mempool
-    * The transactions will be collected in order of priority
-    * Let $C$ the list of currently collected transactions
-    * The collection stops when any of the following conditions are met
-        * the mempool is empty
-        * the total size of transactions $\in C$ is greater than or equal to `consensusParams.block.max_bytes`
-        * the sum of `GasWanted` field of transactions $\in C$ is greater than or equal to
-          `consensusParams.block.max_gas`
-    * _p_'s Tenderdash creates a block header.
-2. _p_'s Tenderdash calls `RequestPrepareProposal` with the newly generated block.
-   The call is synchronous: Tenderdash's execution will block until the Application returns from the call.
-3. The Application checks the block (hashes, transactions, commit info, misbehavior). Besides,
-    * in same-block execution mode, the Application can (and should) provide `ResponsePrepareProposal.app_hash`,
-      `ResponsePrepareProposal.validator_updates`, or
-      `ResponsePrepareProposal.consensus_param_updates`.
-    * the Application can manipulate transactions
-        * leave transactions untouched - `TxAction = UNMODIFIED`
-        * add new transactions directly to the proposal - `TxAction = ADDED`
-        * remove transactions (invalid) from the proposal and from the mempool - `TxAction = REMOVED`
-        * remove transactions from the proposal but not from the mempool (effectively _delaying_ them) - the
-          Application removes the transaction from the list
-        * modify transactions (e.g. aggregate them) - `TxAction = ADDED` followed by `TxAction = REMOVED`. As explained above, this compromises client traceability, unless it is implemented at the Application level.
-        * reorder transactions - the Application reorders transactions in the list
-4. If the block is modified, the Application includes the modified block in the return parameters (see the rules in section _Usage_).
-   The Application returns from the call.
-5. _p_'s Tenderdash uses the (possibly) modified block as _p_'s proposal in round _r_, height _h_.
-
-Note that, if _p_ has a non-`nil` _validValue_, Tenderdash will use it as proposal and will not call `RequestPrepareProposal`.
+Tenderdash calls `PrepareProposal` when creating a fresh proposal, after selecting
+transactions within the block's byte/gas budget. A valid block is reused only when
+`checkValidBlock` permits it; otherwise a fresh block is prepared even if a
+`ValidBlock` is recorded. The exact transaction-space calculation, response
+validation and reuse rules are in
+[Creating the proposal](../consensus/consensus-happy-path.md#3a-creating-the-proposal-proposer-only).
 
 ### ProcessProposal
 
@@ -386,9 +358,9 @@ Note that, if _p_ has a non-`nil` _validValue_, Tenderdash will use it as propos
     * The height and timestamp values match the values from the header of the proposed block.
     * If `ResponseProcessProposal.status` is `REJECT`, Tenderdash assumes the proposal received
       is not valid.
-    * In same-block execution mode, the Application is required to fully execute the block and provide values
+    * Tenderdash requires the current block's execution commitments. The Application must provide values
       for parameters `ResponseProcessProposal.app_hash`, `ResponseProcessProposal.tx_results`,
-      `ResponseProcessProposal.validator_updates`, and `ResponseProcessProposal.consensus_param_updates`,
+      `ResponseProcessProposal.validator_set_update`, and `ResponseProcessProposal.consensus_param_updates`,
       so that Tenderdash can then verify the hashes in the block's header are correct.
       If the hashes mismatch, Tenderdash will reject the block even if `ResponseProcessProposal.status`
       was set to `ACCEPT`.
@@ -406,23 +378,17 @@ Note that, if _p_ has a non-`nil` _validValue_, Tenderdash will use it as propos
 
 #### When does Tenderdash call it?
 
-When a validator _p_ enters Tenderdash consensus round _r_, height _h_, in which _q_ is the proposer (possibly _p_ = _q_):
+`ensureProcess` processes the held block for the round being checked unless the
+same block/round result is already current. It runs before the prevote lock rules,
+so a locked validator can process another block and still prevote nil. A
+well-formed application rejection or block/header mismatch produces a nil prevote;
+unknown status, malformed results and transport errors are fatal on this path.
+See the exact [prevote decision](../consensus/consensus-transitions.md#prevote-decision-prevoterdo).
 
-1. _p_ sets up timer `ProposeTimeout`.
-2. If _p_ is the proposer, _p_ executes steps 1-6 in [PrepareProposal](#prepareproposal).
-3. Upon reception of Proposal message (which contains the header) for round _r_, height _h_ from _q_, _p_'s Tenderdash verifies the block header.
-4. Upon reception of Proposal message, along with all the block parts, for round _r_, height _h_ from _q_, _p_'s Tenderdash follows its algorithm
-   to check whether it should prevote for the block just received, or `nil`
-5. If Tenderdash should prevote for the block just received
-    1. Tenderdash calls `RequestProcessProposal` with the block. The call is synchronous.
-    2. The Application checks/processes the proposed block, which is read-only, and returns true (_accept_) or false (_reject_) in `ResponseProcessProposal.accept`.
-       * The Application, depending on its needs, may call `ResponseProcessProposal`
-         * either after it has completely processed the block (the simpler case),
-         * or immediately (after doing some basic checks), and process the block asynchronously. In this case the Application will
-           not be able to reject the block, or force prevote/precommit `nil` afterwards.
-    3. If the returned value is
-         * _accept_, Tenderdash prevotes on this proposal for round _r_, height _h_.
-         * _reject_, Tenderdash prevotes `nil`.
+Processing also occurs for commit application and can repeat after another round
+changed the execution context; see
+[Commit handling](../consensus/consensus-commit.md) and
+[expected call sequences](./abci++_tmint_expected_behavior.md#valid-method-call-sequences).
 
 ### ExtendVote
 
@@ -431,9 +397,10 @@ When a validator _p_ enters Tenderdash consensus round _r_, height _h_, in which
 * **Request**:
 
     | Name   | Type  | Description                                                                    | Field Number |
-    |--------|-------|--------------------------------------------------------------------------------|--------------|
+    | ------ | ----- | ------------------------------------------------------------------------------ | ------------ |
     | hash   | bytes | The header hash of the proposed block that the vote extensions is to refer to. | 1            |
     | height | int64 | Height of the proposed block (for sanity check).                               | 2            |
+    | round  | int32 | Round for the block and its application execution context.                     | 3            |
 
 * **Response**:
 
@@ -462,34 +429,15 @@ When a validator _p_ enters Tenderdash consensus round _r_, height _h_, in which
 
 #### When does Tenderdash call it?
 
-When a validator _p_ is in Tenderdash consensus state _prevote_ of round _r_, height _h_, in which _q_ is the proposer; and _p_ has received
+The normal call is inside signing a non-nil precommit, after the block was
+processed for that round. The proposal, lock and polka requirements are in the
+[precommit decision](../consensus/consensus-transitions.md#precommit-decision-enterprecommitactionexecute).
+Nil precommits do not call `ExtendVote` for signing.
 
-* the Proposal message _v_ for round _r_, height _h_, along with all the block parts, from _q_,
-* `Prevote` messages from _2f + 1_ validators' voting power for round _r_, height _h_, prevoting for the same block _id(v)_,
-
-then _p_'s Tenderdash locks _v_  and sends a Precommit message in the following way
-
-1. _p_'s Tenderdash sets _lockedValue_ and _validValue_ to _v_, and sets _lockedRound_ and _validRound_ to _r_
-2. _p_'s Tenderdash calls `RequestExtendVote` with _id(v)_ (`RequestExtendVote.hash`). The call is synchronous.
-3. The Application optionally returns an array of bytes, `ResponseExtendVote.extension`. Tenderdash does not interpret
-   it, except that it compares the threshold-recoverable subset with the extension vectors of commits (see below).
-4. _p_'s Tenderdash includes `ResponseExtendVote.extension` in a field of type [CanonicalVoteExtension](#canonicalvoteextension),
-   it then populates the other fields in [CanonicalVoteExtension](#canonicalvoteextension), and signs the populated
-   data structure.
-5. _p_'s Tenderdash constructs and signs the [CanonicalVote](../core/data_structures.md#canonicalvote) structure.
-6. _p_'s Tenderdash constructs the Precommit message (i.e. [Vote](../core/data_structures.md#vote) structure)
-   using [CanonicalVoteExtension](#canonicalvoteextension) and [CanonicalVote](../core/data_structures.md#canonicalvote).
-7. _p_'s Tenderdash broadcasts the Precommit message.
-
-In the cases when _p_'s Tenderdash is to broadcast `precommit nil` messages (either _2f+1_ `prevote nil` messages received,
-or _timeoutPrevote_ triggered), _p_'s Tenderdash does **not** call `RequestExtendVote` and will not include
-a [CanonicalVoteExtension](#canonicalvoteextension) field in the `precommit nil` message.
-
-Tenderdash also calls `RequestExtendVote` on any process, a non-validator included, when the
-Application rejects a commit in a commit-level `RequestVerifyVoteExtension` that follows
-`ProcessProposal` of the committed block for the commit round, unless it already knows the vector
-for that block and round. Tenderdash neither signs nor broadcasts that response: it compares the
-threshold-recoverable subset with later commits of the block and round.
+After rejecting a commit's extensions, Tenderdash can also call `ExtendVote` on
+any node to learn the expected recoverable vector for the processed block and
+commit round. That response is neither signed nor broadcast; see
+[Parked commits and replacement candidates](../consensus/consensus-commit.md#parked-commit-and-replacement-candidates).
 
 ### VerifyVoteExtension
 
@@ -565,22 +513,17 @@ Tenderdash calls `VerifyVoteExtension` for two kinds of request, told apart by
 
 #### When does Tenderdash call it?
 
-When a validator _p_ is in Tenderdash consensus height _h_ and receives, from another validator _q_,
-a Precommit message for a block (not `nil`) at height _h_:
+For a peer's non-nil precommit, Tenderdash verifies its block and extension
+signatures, restores its own processed round if needed, then calls the Application
+with the validator's pro-tx-hash. A rejected vote is not stored and may be
+redelivered. Own votes skip this Application check; see
+[Vote admission](../consensus/consensus-transitions.md#admission-addvotevalidatevotemw-heightvotesetaddvote-votesetaddvote).
 
-1. If the Precommit message does not contain a vote extensions with a valid signature, Tenderdash discards the message as invalid.
-   * a 0-length vote extensions is valid as long as its accompanying signature is also valid.
-2. Else, _p_'s Tenderdash calls `RequestVerifyVoteExtension`.
-3. The Application returns _accept_ or _reject_ via `ResponseVerifyVoteExtension.status`.
-4. If the Application returns
-   * _accept_, _p_'s Tenderdash will keep the received vote, together with its corresponding
-     vote extension in its internal data structures. It will be used to populate the [ExtendedCommitInfo](#extendedcommitinfo)
-     structure in calls to `RequestPrepareProposal`, in rounds of height _h + 1_ where _p_ is the proposer.
-   * _reject_, _p_'s Tenderdash will deem the Precommit message invalid and discard it.
-
-Whenever a process is about to save a block and its commit, in consensus, block sync or replay, it
-first calls `RequestVerifyVoteExtension` for the commit, once `ProcessProposal` has processed the
-block. This includes commits the process assembled from its own +2/3 precommits.
+For a commit, Tenderdash processes the block for `commit.Round` and verifies the
+recovered extension vector with an empty validator pro-tx-hash. Live consensus
+requires acceptance before saving/finalizing the block. Replacement candidates and
+stored-block replay have different retry behavior, as described in the usage
+contract above and [Commit handling](../consensus/consensus-commit.md).
 
 ### FinalizeBlock
 
@@ -595,12 +538,15 @@ block. This includes commits the process assembled from its own +2/3 precommits.
 
     * Contains the fields of the newly decided block.
     * The height and timestamp values match the values from the header of the proposed block.
-    * The Application can use `RequestFinalizeBlock.decided_last_commit` and `RequestFinalizeBlock.byzantine_validators`
-      to determine rewards and punishments for the validators.
-    * The application must execute the transactions in full, in the order they appear in `RequestFinalizeBlock.txs`,
-      before returning control to Tenderdash. Alternatively, it can commit the candidate state corresponding to the same block
-      previously executed via `PrepareProposal` or `ProcessProposal`.
-    * `ResponseFinalizeBlock.tx_results[i].Code == 0` only if the _i_-th transaction is fully valid.
+    * `RequestFinalizeBlock.commit` and `RequestFinalizeBlock.misbehavior` carry
+      commit and misbehavior information; see the linked request schema.
+    * The Application persists the state corresponding to `RequestFinalizeBlock.block`
+      and the round processed last, whose execution commitments were already supplied
+      through `PrepareProposal`/`ProcessProposal`. It may reuse that candidate rather
+      than execute the block again.
+    * Transaction results and events are returned during `ProcessProposal`;
+      `ResponseFinalizeBlock` returns only `retain_height` and
+      `propose_next_block_immediately`, with no application hash or events.
     * Application is expected to persist its state at the end of this call, before calling `ResponseFinalizeBlock`.
     * Later calls to `Query` can return proofs about the application state anchored
       in this Merkle root hash.
@@ -618,30 +564,18 @@ block. This includes commits the process assembled from its own +2/3 precommits.
       making the Application's state evolve in the context of state machine replication.
     * Currently, Tenderdash will fill up all fields in `RequestFinalizeBlock`, even if they were
       already passed on to the Application via `RequestPrepareProposal` or `RequestProcessProposal`.
-      If the Application is in same-block execution mode, it applies the right candidate state here
-      (rather than executing the whole block). In this case the Application disregards all parameters in
-      `RequestFinalizeBlock` except `RequestFinalizeBlock.hash`.
+      The Application must select the candidate matching the finalized block and
+      the round processed last; a block hash alone does not identify a round's
+      execution context. See [Commit validity depends on the application](../consensus/consensus-commit.md#commit-validity-depends-on-the-application).
 
 #### When does Tenderdash call it?
 
-When a validator _p_ is in Tenderdash consensus height _h_, and _p_ receives
-
-* the Proposal message with block _v_ for a round _r_, along with all its block parts, from _q_,
-  which is the proposer of round _r_, height _h_,
-* `Precommit` messages from _2f + 1_ validators' voting power for round _r_, height _h_,
-  precommitting the same block _id(v)_,
-
-then _p_'s Tenderdash decides block _v_ and finalizes consensus for height _h_ in the following way
-
-1. _p_'s Tenderdash calls `RequestVerifyVoteExtension` for the commit (empty `validator_pro_tx_hash`)
-   and requires _accept_; see [VerifyVoteExtension](#verifyvoteextension).
-2. _p_'s Tenderdash persists _v_ as decision for height _h_.
-3. _p_'s Tenderdash locks the mempool -- no calls to checkTx on new transactions.
-4. _p_'s Tenderdash calls `RequestFinalizeBlock` with _id(v)_. The call is synchronous.
-5. _p_'s Application processes block _v_, received in the latest call to `RequestProcessProposal`.
-6. _p_'s Application commits and persists the state resulting from processing the block.
-7. _p_'s Tenderdash unlocks the mempool -- newly received transactions can now be checked.
-8. _p_'s starts consensus for a new height _h+1_, round 0
+Tenderdash finalizes a held block after validating its complete block ID,
+processing it for the commit round, and accepting the recovered commit's
+extensions. The commit can come from local precommits or a peer; it does not
+require receipt of every original vote or proposal. See
+[Commit handling](../consensus/consensus-commit.md) and the exact persistence order
+in [Commit and apply](../consensus/consensus-happy-path.md#9-commit-and-apply).
 
 ## Data Types existing in ABCI
 
@@ -658,9 +592,8 @@ Most of the data structures used in ABCI are shared [common data structures](../
 
 * **Usage**:
     * Validator identified by ProTxHash
-    * Used in RequestBeginBlock as part of VoteInfo
-    * Does not include PubKey to avoid sending potentially large quantum pubkeys
-    over the ABCI
+    * Used by `Misbehavior.validator` to identify an offending validator.
+    * Public keys are carried separately by validator-set update messages.
 
 ### ValidatorUpdate
 

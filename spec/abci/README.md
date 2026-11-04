@@ -7,6 +7,11 @@ parent:
 
 # ABCI
 
+> **Legacy ABCI reference.** This page includes the historical
+> `BeginBlock`/`DeliverTx`/`EndBlock`/`Commit` lifecycle. For current Tenderdash,
+> use the [ABCI++ specification](../abci++/README.md) and
+> [source-derived consensus flow](../consensus/consensus-happy-path.md).
+
 ABCI stands for "**A**pplication **B**lock**c**hain **I**nterface".
 ABCI is the interface between Tenderdash (a state-machine replication engine)
 and your application (the actual state machine). It consists of a set of

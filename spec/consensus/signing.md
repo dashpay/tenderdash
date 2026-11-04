@@ -4,7 +4,7 @@ Here we specify the rules for validating a proposal and vote before signing.
 When a validator signs each message, and what it signs, is specified by the
 [consensus protocol](./consensus.md).
 First we include some general notes on validating data structures common to both types.
-We then provide specific validation rules for each. Finally, we include validation rules to prevent double-sigining.
+We then provide specific validation rules for each. Finally, we include validation rules to prevent double-signing.
 
 ## SignedMsgType
 
@@ -47,52 +47,11 @@ and to only sign votes and proposals corresponding to that ChainID.
 
 ## BlockID
 
-BlockID is the structure used to represent the block:
-
-```go
-type BlockID struct {
-	Hash          []byte
-	PartSetHeader PartSetHeader
-	StateID       []byte
-}
-
-type PartSetHeader struct {
- Hash  []byte
- Total int
-}
-
-type StateID struct {
-	AppVersion            uint64
-	Height                uint64 
-	AppHash               []byte
-	CoreChainLockedHeight uint32 
-	Time                  int64
-}
-```
-
-To be included in a valid vote or proposal, BlockID must either represent a `nil` block, or a complete one.
-We introduce two methods, `BlockID.IsNil()` and `BlockID.IsComplete()` for these cases, respectively.
-
-`BlockID.IsNil()` returns true for BlockID `b` if each of the following
-are true:
-
-```go
-b.Hash == nil
-b.PartsHeader.Total == 0
-b.PartsHeader.Hash == nil
-b.StateID == nil
-```
-
-`BlockID.IsComplete()` returns true for BlockID `b` if each of the following
-are true:
-
-```go
-
-len(b.Hash) == 32
-b.PartsHeader.Total > 0
-len(b.PartsHeader.Hash) == 32
-len(b.StateID) == 32
-```
+`BlockID` contains the block-header hash, `PartSetHeader` (part count and Merkle
+root of serialized block parts), and the state-ID hash. A nil vote has all three
+empty. A complete ID has 32-byte block, part-set and state hashes and a positive
+part count. Proposals require a complete ID; votes allow nil or complete IDs.
+See [BlockID](../core/data_structures.md#blockid) and the `StateID` schema below.
 
 ## Proposals
 
@@ -104,13 +63,20 @@ type CanonicalProposal struct {
  Height    int64         `binary:"fixed64"`
  Round     int64         `binary:"fixed64"`
  POLRound  int64         `binary:"fixed64"`
- BlockID   BlockID
+ BlockID   CanonicalBlockID
  Timestamp time.Time
  ChainID   string
 }
 ```
 
-A proposal is valid if each of the following lines evaluates to true for proposal `p`:
+`CanonicalBlockID` contains the block hash and canonical part-set header; it
+excludes `BlockID.StateID`. The proposal signature also excludes
+`CoreChainLockedHeight`. The exact signature-covered fields and replacement of
+unsigned fields from assembled block bytes are specified in
+[Creating the proposal](./consensus-happy-path.md#3a-creating-the-proposal-proposer-only)
+and [Receiving the proposal and block](./consensus-happy-path.md#4-receiving-the-proposal-and-block).
+
+The basic structural checks on the proposal before canonicalization include:
 
 ```go
 p.Type == 0x20
@@ -128,7 +94,10 @@ non-negative round, a POLRound not less than -1, and a complete BlockID.
 
 Sign bytes for votes are defined as `CanonicalVote` struct.
 
-`CanonicalVoteID` is a sha256 checksum of `CanonicalVote` encoded using **protobuf encoding**:
+The canonical message is encoded using Protobuf. Its checksum is one input to
+the quorum signing digest, not the complete digest verified by BLS; see
+[Block signature verification on light client](#block-signature-verification-on-light-client).
+The schema is:
 
 ```go
 message CanonicalVote {
@@ -143,7 +112,7 @@ message CanonicalVote {
 }
 ```
 
-`block_id` is a sha256 checksum of Protobuf-encoded [`CanonicalBlockID` message:
+`block_id` is a sha256 checksum of Protobuf-encoded `CanonicalBlockID` message:
 
 ```go
 message CanonicalBlockID {
@@ -189,121 +158,95 @@ non-negative round, and an empty or valid BlockID.
 
 ### Block signature verification on light client
 
-Block signature is threshold-recovered signature of commit votes.
+The block signature in a commit is threshold-recovered from precommit shares
+and verified with the quorum's `ThresholdPublicKey`. Its signing context includes
+`ChainID`, the commit height and round, full `BlockID`, `QuorumType`, and
+`QuorumHash`.
 
-In a typical light client use case, light client wants to verify
-app state using vote signature. Data needed to do the verification is:
+Use `MakeBlockSignItem` or `VoteBlockSignID` in
+[`types/quorum_sign_data.go`](../../types/quorum_sign_data.go) and
+[`types/vote.go`](../../types/vote.go) to construct the digest:
 
-* Chain ID
-* Commit information:
-    * Type (constant, always Precommit)
-    * Height
-    * Round
-* Hash of CanonicalBlockID
-* State ID data:
-    * AppVersion
-    * Height
-    * AppHash
-    * CoreChainLockedHeight
-    * Time
+1. Build the precommit's canonical vote, including the canonical-block-ID checksum
+   and state-ID hash.
+2. `MakeBlockSignItem` hashes the canonical vote sign bytes and derives
+   `BlockRequestID(height, round)` using the `dpbvote` domain.
+3. `SignItem.UpdateSignHash` uses the quorum type, quorum hash, request ID and
+   message hash to construct the Dash BLS signing hash, with the helper's byte-order
+   conversions. Verify the signature against that digest and the threshold key.
 
-Verification algorithm can be described as follows:
+Proposal signing uses `ProposalBlockSignID` and its own `dpproposal` request-ID
+domain, likewise bound to height, round and quorum context
+([`types/proposal.go`](../../types/proposal.go)). Vote extensions have separate
+sign items; application-supplied raw-extension request IDs need not bind height
+and round. See [Vote extensions](./consensus-alternative-flows.md#vote-extensions).
 
-1. Build `StateID` message and encode it using Protobuf encoding.
-2. Calculate checksum (SHA256) of encoded `StateID`.
-3. Retrieve or calculate SHA256 checksum of `CanonicalBlockID`
-4. Build `CanonicalVote` message and encode it using Protobuf.
-5. Calculate SHA256 checksum of encoded `CanonicalVote`.
-6. Verify that block signature matches calculated checksum.
+This describes digest construction, not a complete light-client trust algorithm.
+Full-node commit acceptance also verifies every extension threshold signature,
+checks the held block's complete ID, and requires the application's verdict on
+the ordered commit extension vector; see
+[Commit verification](./consensus-commit.md#commit-verification) and
+[Commit validity depends on the application](./consensus-commit.md#commit-validity-depends-on-the-application).
+A valid block signature does not authenticate that vector's count and order.
 
 ## Invalid Votes and Proposals
 
-Votes and proposals which do not satisfy the above rules are considered invalid.
-Peers gossipping invalid votes and proposals may be disconnected from other peers on the network.
-Note, however, that there is not currently any explicit mechanism to punish validators signing votes or proposals that fail
-these basic validation rules.
+Basic structure, signature verification and consensus admissibility are separate
+checks. Proposal verification failures do not automatically evict their sender;
+received commits evict only on `ErrInvalidCommitSignature`, and replay never
+evicts. Budget exhaustion is a local processing limit, not proof of peer fault.
+The exact policies are in [Proposal acceptance](./consensus-transitions.md#proposal-acceptance-proposalerset),
+[Vote admission](./consensus-transitions.md#admission-addvotevalidatevotemw-heightvotesetaddvote-votesetaddvote),
+and [Commit verification](./consensus-commit.md#commit-verification).
 
 ## Double Signing
 
 Signers must be careful not to sign conflicting messages, also known as "double signing" or "equivocating".
 Tenderdash has mechanisms to publish evidence of validators that signed conflicting votes, so they can be punished
-by the application. Note Tenderdash does not currently handle evidence of conflciting proposals, though it may in the future.
+by the application. Note Tenderdash does not currently handle evidence of conflicting proposals, though it may in the future.
 
 ### State
 
-To prevent such double signing, signers must track the height, round, and type of the last message signed.
-Assume the signer keeps the following state, `s`:
-
-```go
-type LastSigned struct {
- Height int64
- Round int64
- Type SignedMsgType // byte
-}
-```
-
-After signing a vote or proposal `m`, the signer sets:
-
-```go
-s.Height = m.Height
-s.Round = m.Round
-s.Type = m.Type
-```
+`FilePV` persists height, round, internal signing step, block sign bytes and
+block signature (`FilePVLastSignState` in [`privval/file.go`](../../privval/file.go)).
+Its ordered steps are proposal, prevote and precommit; these are not the numeric
+`SignedMsgType` values. `checkHRS` rejects regressions and permits a matching
+height/round/step only for comparison with the persisted sign bytes.
 
 ### Proposals
 
-A signer should only sign a proposal `p` if any of the following lines are true:
-
-```go
-p.Height > s.Height
-p.Height == s.Height && p.Round > s.Round
-```
-
-In other words, a proposal should only be signed if it's at a higher height, or a higher round for the same height.
-Once a proposal or vote has been signed for a given height and round, a proposal should never be signed for the same height and round.
+A new proposal signing request must pass the height/round/step checks. Conflicting
+canonical bytes at the same height/round/proposal step are refused. The current
+repeated-proposal return path has a documented
+[signature-field discrepancy](./consensus-known-issues.md#filepv-repeated-proposal-returns-sign-bytes-as-the-signature);
+it must not be assumed to return a valid reused signature.
 
 ### Votes
 
-A signer should only sign a vote `v` if any of the following lines are true:
+For a new height or round, or a later internal step in the same height/round,
+`FilePV` can sign and persist the vote. For identical block sign bytes at an
+already-signed height/round/step, it reuses the stored block signature; different
+bytes are refused. Precommit extension signatures are regenerated, since the
+extensions are not part of the canonical block vote.
 
-```go
-v.Height > s.Height
-v.Height == s.Height && v.Round > s.Round
-v.Height == s.Height && v.Round == s.Round && v.Step == 0x1 && s.Step == 0x20
-v.Height == s.Height && v.Round == s.Round && v.Step == 0x2 && s.Step != 0x2
-```
-
-In other words, a vote should only be signed if it's:
-
-* at a higher height
-* at a higher round for the same height
-* a prevote for the same height and round where we haven't signed a prevote or precommit (but have signed a proposal)
-* a precommit for the same height and round where we haven't signed a precommit (but have signed a proposal and/or a prevote)
-
-This means that once a validator signs a prevote for a given height and round, the only other message it can sign for that height and round is a precommit.
-And once a validator signs a precommit for a given height and round, it must not sign any other message for that same height and round.
-
-Note this includes votes for `nil`, ie. where `BlockID.IsNil()` is true. If a
-signer has already signed a vote where `BlockID.IsNil()` is true, it cannot
-sign another vote with the same type for the same height and round where
-`BlockID.IsComplete()` is true. Thus only a single vote of a particular type
-(ie. 0x01 or 0x02) can be signed for the same height and round.
+Nil and non-nil block IDs are different sign bytes: a signer cannot replace its
+nil vote with a block vote of the same type at the same height and round.
+The block-signature reuse rule permits recovery of an identical vote, not a second
+conflicting vote. See [WAL catch-up](./consensus-recovery.md#start-up-wal-catch-up).
+`DashCoreSignerClient` does not maintain FilePV's persisted state inside
+Tenderdash; signer-side protection must not be inferred from the presence of the
+client alone.
 
 ### Other Rules
 
-According to the rules of Tenderdash consensus, once a validator precommits for
-a block, they become "locked" on that block, which means they can't prevote for
-another block unless they see sufficient justification (ie. a polka from a
-higher round). For the rules as implemented, see
-[Locking](./consensus-alternative-flows.md#locking); for the algorithm, see the
-[consensus paper](https://arxiv.org/abs/1807.04938).
+Signer height/round/step protection does not establish lock eligibility. The
+consensus state machine decides whether a block may be prevoted or precommitted;
+see [Locking](./consensus-alternative-flows.md#locking) and the
+[precommit decision](./consensus-transitions.md#precommit-decision-enterprecommitactionexecute).
+A nil polka does not unlock within a height, and relocking a block requires this
+round's proposal and application processing context.
 
-Violating this rule is known as "amnesia". In contrast to equivocation,
-which is easy to detect, amnesia is difficult to detect without access to votes
-from all the validators, as this is what constitutes the justification for
-"unlocking". Hence, amnesia is not punished within the protocol, and cannot
-easily be prevented by a signer. If enough validators simultaneously commit an
-amnesia attack, they may cause a fork of the blockchain, at which point an
-off-chain protocol must be engaged to collect votes from all the validators and
-determine who misbehaved. For more details, see [fork
-detection](https://github.com/tendermint/tendermint/pull/3978).
+Historical Tendermint discussions call unjustified lock changes “amnesia”; see
+the original [fork-detection discussion](https://github.com/tendermint/tendermint/pull/3978).
+That history does not introduce an unlock transition or additional signer
+protection into the current implementation.

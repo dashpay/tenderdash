@@ -7,238 +7,84 @@ title: Tenderdash's expected behavior
 
 ## Valid method call sequences
 
-This section describes what the Application can expect from Tenderdash.
+Tenderdash initiates ABCI++ requests and the Application responds. The
+[consensus protocol](../consensus/consensus.md) specifies the implemented order,
+including guards, quorum/recovery thresholds and failure paths. Its
+[system model](../consensus/consensus.md#system-model-as-enforced-by-the-code)
+states the safety assumptions; a configurable threshold must not be assumed to
+satisfy the strict BFT floor in every supported configuration.
 
-The Tenderdash consensus algorithm is designed to protect safety under any network conditions, as long as
-less than 1/3 of validators' voting power is byzantine. Most of the time, though, the network will behave
-synchronously, no process will fall behind, and there will be no byzantine process. The following describes
-what will happen during a block height _h_ in these frequent, benign conditions:
+The [primary flow](../consensus/consensus-happy-path.md) describes a height that
+succeeds in round zero. Its ordinary application calls are:
 
-* Tenderdash will decide in round 0, for height _h_;
-* `PrepareProposal` will be called exactly once at the proposer process of round 0, height _h_;
-* `ProcessProposal` will be called exactly once at all processes, and
-  will return _accept_ in its `Response*`;
-* `ExtendVote` will be called exactly once at each validator process (it is called only when a
-  validator precommits a non-nil block);
-* `VerifyVoteExtension` will be called exactly _n-1_ times at each validator process, where _n_ is
-  the number of validators, to verify the other validators' precommits, plus once at all processes
-  to verify the commit's extensions before `FinalizeBlock`, and will always return _accept_ in its
-  `Response*`; and
-* `FinalizeBlock` will be called exactly once at all processes, conveying the same prepared
-  block that all calls to `PrepareProposal` and `ProcessProposal` had previously reported for
-  height _h_.
+| Role or purpose | Calls |
+| --- | --- |
+| Proposer creating a fresh block | `PrepareProposal` supplies transactions, same-block application/results hashes and next-state changes. A reused valid block does not require another `PrepareProposal`. |
+| Processing before voting or commit application | `ProcessProposal` for the block and the round being checked, unless that exact result is already current. |
+| Validator signing a non-nil precommit | `ExtendVote` after processing for that round. Nil precommits and prevotes carry no extensions. |
+| Peer non-nil precommit | `VerifyVoteExtension` with the validator's pro-tx-hash, after signature verification. |
+| Commit, on any full node | `VerifyVoteExtension` with an empty validator pro-tx-hash, after processing for the commit round. |
+| Accepted decided block | `FinalizeBlock` persists the candidate corresponding to that block and round. |
 
-There is no `Commit` method in Tenderdash's ABCI++: the application persists its state as part of
-`FinalizeBlock`. The consensus-side view of the same sequence, including the
-alternative paths that produce the other call orders below, is specified in the
-[consensus protocol](../consensus/consensus.md) (see in particular
-[ABCI calls per height](../consensus/consensus-happy-path.md#abci-calls-per-height-on-the-happy-path)).
+These are not exact per-height callback counts. A node can finish on a commit
+without receiving every individual precommit. `ProcessProposal` can run again for
+the same block/round after a different round has replaced the Application's
+execution context. Commit checks can process a foreign round and then restore the
+node's own round before checking an individual precommit. See
+[Commit handling](../consensus/consensus-commit.md) and
+[ABCI calls per height](../consensus/consensus-happy-path.md#abci-calls-per-height-on-the-happy-path).
 
-However, the Application logic must be ready to cope with any possible run of Tenderdash for a given
-height, including bad periods (byzantine proposers, network being asynchronous).
-In these cases, the sequence of calls to ABCI++ methods may not be so straighforward, but
-the Application should still be able to handle them, e.g., without crashing.
-The purpose of this section is to define what these sequences look like an a precise way.
+After commit-level `VerifyVoteExtension` rejects a vector, Tenderdash can call
+`ExtendVote` for that processed block and commit round to learn the expected
+vector. This call can occur on an observer and does not sign or broadcast a vote.
+A replacement commit can require further verification and processing. Rejection of
+a held-block commit does not itself advance the round; a future-round commit whose
+block is absent can already advance the round before application validation.
+The full branch rules are in
+[Commits received from peers](../consensus/consensus-commit.md#commits-received-from-peers)
+and the [VerifyVoteExtension contract](./abci++_methods.md#verifyvoteextension).
 
-As mentioned in the [Basic Concepts](./abci%2B%2B_basic_concepts.md) section, Tenderdash
-acts as a client of ABCI++ and the Application acts as a server. Thus, it is up to Tenderdash to
-determine when and in which order the different ABCI++ methods will be called. A well-written
-Application design should consider _any_ of these possible sequences.
+An Application must handle these repeated calls deterministically for the block,
+round, and last committed state. It must not treat an abbreviated normal-round
+sequence as an at-most-once guarantee. A successfully completed live height calls
+`FinalizeBlock` only after accepting the commit vector. Rejection while replaying
+an already-stored commit during startup instead terminates replay before
+`FinalizeBlock`; see [Recovery and synchronisation](../consensus/consensus-recovery.md).
 
-The following grammar, written in case-sensitive Augmented Backus–Naur form (ABNF, specified
-in [IETF rfc7405](https://datatracker.ietf.org/doc/html/rfc7405)), specifies all possible
-sequences of calls to ABCI++, taken by a correct process, across all heights from the genesis block,
-including recovery runs, from the point of view of the Application.
+### Startup and methods outside block execution
 
-```abnf
-start               = clean-start / recovery
+Startup uses `Info` to reconcile application and Tenderdash state and `InitChain`
+when the Application is at height zero; the exact cases, replay calls and crash
+windows are in [ABCI handshake](../consensus/consensus-recovery.md#start-up-abci-handshake).
+Snapshot restoration can attempt `OfferSnapshot`/`ApplySnapshotChunk` before a
+successful restore and `Info`; these are synchronization boundaries rather than
+ordinary voting rounds.
 
-clean-start         = init-chain [state-sync] consensus-exec
-state-sync          = *state-sync-attempt success-sync info
-state-sync-attempt  = offer-snapshot *apply-chunk
-success-sync        = offer-snapshot 1*apply-chunk
-
-recovery            = info consensus-exec
-
-consensus-exec      = (inf)consensus-height
-consensus-height    = *consensus-round 1*verify-commit decide
-consensus-round     = proposer / non-proposer
-
-proposer            = *got-vote prepare-proposal *got-vote process-proposal [extend]
-extend              = *got-vote extend-vote *got-vote
-non-proposer        = *got-vote [process-proposal] [extend]
-
-init-chain          = %s"<InitChain>"
-offer-snapshot      = %s"<OfferSnapshot>"
-apply-chunk         = %s"<ApplySnapshotChunk>"
-info                = %s"<Info>"
-prepare-proposal    = %s"<PrepareProposal>"
-process-proposal    = %s"<ProcessProposal>"
-extend-vote         = %s"<ExtendVote>"
-got-vote            = %s"<VerifyVoteExtension>"
-verify-commit       = %s"<VerifyVoteExtension>"
-decide              = %s"<FinalizeBlock>"
-```
-
-We have kept some ABCI methods out of the grammar, in order to keep it as clear and concise as possible.
-A common reason for keeping all these methods out is that they all can be called at any point in a sequence defined
-by the grammar above. Other reasons depend on the method in question:
-
-* `Echo` and `Flush` are only used for debugging purposes. Further, their handling by the Application should be trivial.
-* `CheckTx` is detached from the main method call sequence that drives block execution.
-* `Query` provides read-only access to the current Application state, so handling it should also be independent from
-  block execution.
-* Similarly, `ListSnapshots` and `LoadSnapshotChunk` provide read-only access to the Application's previously created
-  snapshots (if any), and help populate the parameters of `OfferSnapshot` and `ApplySnapshotChunk` at a process performing
-  state-sync while bootstrapping. Unlike `ListSnapshots` and `LoadSnapshotChunk`, both `OfferSnapshot`
-  and `ApplySnapshotChunk` _are_ included in the grammar.
-
-Finally, method `Info` is a special case. The method's purpose is three-fold, it can be used
-
-1. as part of handling an RPC call from an external client,
-2. as a handshake between Tenderdash and the Application upon recovery to check whether any blocks need
-   to be replayed, and
-3. at the end of _state-sync_ to verify that the correct state has been reached.
-
-We have left `Info`'s first purpose out of the grammar for the same reasons as all the others: it can happen
-at any time, and has nothing to do with the block execution sequence. The second and third purposes, on the other
-hand, are present in the grammar.
-
-Let us now examine the grammar line by line, providing further details.
-
-* When a process starts, it may do so for the first time or after a crash (it is recovering).
-
->```abnf
->start               = clean-start / recovery
->```
-
-* If the process is starting from scratch, Tenderdash first calls `InitChain`, then it may optionally
-  start a _state-sync_ mechanism to catch up with other processes. Finally, it enters normal
-  consensus execution.
-
->```abnf
->clean-start         = init-chain [state-sync] consensus-exec
->```
-
-* In _state-sync_ mode, Tenderdash makes one or more attempts at synchronizing the Application's state.
-  At the beginning of each attempt, it offers the Application a snapshot found at another process.
-  If the Application accepts the snapshot, a sequence of calls to `ApplySnapshotChunk` method follow
-  to provide the Application with all the snapshots needed, in order to reconstruct the state locally.
-  A successful attempt must provide at least one chunk via `ApplySnapshotChunk`.
-  At the end of a successful attempt, Tenderdash calls `Info` to make sure the recontructed state's
-  _AppHash_ matches the one in the block header at the corresponding height.
-
->```abnf
->state-sync          = *state-sync-attempt success-sync info
->state-sync-attempt  = offer-snapshot *apply-chunk
->success-sync        = offer-snapshot 1*apply-chunk
->```
-
-* In recovery mode, Tenderdash first calls `Info` to know from which height it needs to replay decisions
-  to the Application. After this, Tenderdash enters nomal consensus execution.
-
->```abnf
->recovery            = info consensus-exec
->```
-
-* The non-terminal `consensus-exec` is a key point in this grammar. It is an infinite sequence of
-  consensus heights. The grammar is thus an
-  [omega-grammar](https://dl.acm.org/doi/10.5555/2361476.2361481), since it produces infinite
-  sequences of terminals (i.e., the API calls).
-
->```abnf
->consensus-exec      = (inf)consensus-height
->```
-
-* A consensus height consists of zero or more rounds before deciding and executing via a call to
-  `FinalizeBlock`. In each round, the sequence of method calls
-  depends on whether the local process is the proposer or not. Note that, if a height contains zero
-  rounds, this means the process is replaying an already decided value (catch-up mode).
-  Before `FinalizeBlock`, the commit's extensions are verified by a call to `VerifyVoteExtension`
-  with an empty `validator_pro_tx_hash` (`verify-commit`). If the Application rejects them, it
-  is called again for a replacement commit, possibly after further rounds reached through ordinary
-  timeouts; for simplicity, the grammar does not show those rounds. After such a rejection,
-  Tenderdash may also call `ExtendVote` once for the rejected commit's block and round, on any
-  node, to learn the vector it expects; the grammar does not show that call either. This production describes a height that
-  completes successfully. During startup replay/catch-up, rejection of a stored
-  commit instead terminates the run before `FinalizeBlock`, without
-  retry; see the [VerifyVoteExtension REJECT paths](abci++_methods.md#verifyvoteextension).
-
->```abnf
->consensus-height    = *consensus-round 1*verify-commit decide
->consensus-round     = proposer / non-proposer
->```
-
-* For every round, if the local process is the proposer of the current round, Tenderdash starts by
-  calling `PrepareProposal`, followed by `ProcessProposal`. Then, optionally, the Application is
-  asked to extend its vote for that round. Calls to `VerifyVoteExtension` can come at any time: the
-  local process may be slightly late in the current round, or votes may come from a future round
-  of this height.
-
->```abnf
->proposer            = *got-vote prepare-proposal *got-vote process-proposal [extend]
->extend              = *got-vote extend-vote *got-vote
->```
-
-* Also for every round, if the local process is _not_ the proposer of the current round, Tenderdash
-  will call `ProcessProposal` at most once. At most one call to `ExtendVote` may occur only after
-  `ProcessProposal` is called. A number of calls to `VerifyVoteExtension` can occur in any order
-  with respect to `ProcessProposal` and `ExtendVote` throughout the round. The reasons are the same
-  as above, namely, the process running slightly late in the current round, or votes from future
-  rounds of this height received.
-
->```abnf
->non-proposer        = *got-vote [process-proposal] [extend]
->```
-
-* Finally, the grammar describes all its terminal symbols, which denote the different ABCI++ method calls that
-  may appear in a sequence.
-
->```abnf
->init-chain          = %s"<InitChain>"
->offer-snapshot      = %s"<OfferSnapshot>"
->apply-chunk         = %s"<ApplySnapshotChunk>"
->info                = %s"<Info>"
->prepare-proposal    = %s"<PrepareProposal>"
->process-proposal    = %s"<ProcessProposal>"
->extend-vote         = %s"<ExtendVote>"
->got-vote            = %s"<VerifyVoteExtension>"
->verify-commit       = %s"<VerifyVoteExtension>"
->decide              = %s"<FinalizeBlock>"
->```
+`CheckTx` controls mempool admission separately from the block execution sequence.
+`Query`, `ListSnapshots` and `LoadSnapshotChunk` read application state or existing
+snapshots. `Echo` and `Flush` serve client/debugging purposes. `Info` can also serve
+RPC queries independently of startup. These methods are not bounded by the normal
+height's consensus callback count.
 
 ## Adapting existing Applications that use ABCI
 
-In some cases, an existing Application using the legacy ABCI may need to be adapted to work with ABCI++
-with as minimal changes as possible. In this case, of course, ABCI++ will not provide any advange with respect
-to the existing implementation, but will keep the same guarantees already provided by ABCI.
-Here is how ABCI++ methods should be implemented.
+Tenderdash requires same-block execution: `ResponsePrepareProposal` and
+`ResponseProcessProposal` supply the current block's application hash and
+transaction results before it is decided. Returning only a boolean acceptance or
+waiting until `FinalizeBlock` to compute those commitments is insufficient.
+Use the current [method schemas and requirements](./abci++_methods.md), rather
+than legacy `BeginBlock`/`DeliverTx`/`EndBlock` response shapes.
 
-First of all, all the methods that did not change from ABCI to ABCI++, namely `Echo`, `Flush`, `Info`, `InitChain`,
-`Query`, `CheckTx`, `ListSnapshots`, `LoadSnapshotChunk`, `OfferSnapshot`, and `ApplySnapshotChunk`, do not need
-to undergo any changes in their implementation.
+Keep speculative execution as candidate state; publish and persist it only when
+`FinalizeBlock` selects that block and the round processed last. There is no ABCI
+`Commit` method: legacy persistence logic belongs in `FinalizeBlock`.
+`ResponseFinalizeBlock` has only `retain_height` and
+`propose_next_block_immediately`; it returns neither `AppHash`, transaction results,
+nor events. Block/transaction events belong to `ProcessProposal` results; see
+[Events](./abci++_basic_concepts.md#events).
 
-As for the new methods:
-
-* `PrepareProposal` must create a list of [TxRecord](./abci++_methods.md#txrecord) each containing
-  a transaction passed in `RequestPrepareProposal.txs`, in the same other. The field `action` must
-  be set to `UNMODIFIED` for all [TxRecord](./abci++_methods.md#txrecord) elements in the list.
-  The Application must check whether the size of all transactions exceeds the byte limit
-  (`RequestPrepareProposal.max_tx_bytes`). If so, the Application must remove transactions at the
-  end of the list until the total byte size is at or below the limit.
-* `ProcessProposal` must set `ResponseProcessProposal.accept` to _true_ and return.
-* `ExtendVote` is to set `ResponseExtendVote.extension` to an empty byte array and return.
-* `VerifyVoteExtension` must set `ResponseVerifyVoteExtension.status` to `ACCEPT` if the extension
-  list is empty and to `REJECT` otherwise, then return. This holds for commit verification too
-  (empty `validator_pro_tx_hash`): an application whose `ExtendVote` returns no extensions expects
-  an empty commit vector.
-* `FinalizeBlock` is to coalesce the implementation of methods `BeginBlock`, `DeliverTx`, and
-  `EndBlock`. Legacy applications looking to reuse old code that implemented `DeliverTx` should
-  wrap the legacy `DeliverTx` logic in a loop that executes one transaction iteration per
-  transaction in `RequestFinalizeBlock.tx`.
-
-Finally, there is no `Commit` method: the Application persists its state as part of
-`FinalizeBlock`, so the old `Commit` implementation must be folded into `FinalizeBlock`.
-`ResponseFinalizeBlock` carries no `AppHash` (its only fields are `retain_height` and
-`propose_next_block_immediately`); the `AppHash` is returned earlier, in
-`ResponsePrepareProposal`/`ResponseProcessProposal`, and is already part of the decided block.
+An Application returning no vote extensions must accept an empty expected commit
+vector and reject a nonempty one at commit-level verification. Other Applications
+must compare the ordered threshold-recoverable subset they expect for that block
+and round; independently valid signatures do not establish the vector's identity,
+count and order. See [VerifyVoteExtension](./abci++_methods.md#verifyvoteextension).

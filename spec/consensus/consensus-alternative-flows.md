@@ -189,9 +189,12 @@ on another block prevotes nil for it; see
   `r + 1`. A precommit majority for a block at **any** round (including a
   round below the current one) → `EnterCommit` with that round
   (`TestCommitFromPreviousRound`).
-- **Future-round commit.** A verified `CommitMessage` for `commit.Round > r`
-  → `EnterNewRound(commit.Round)` then application
-  ([Commit handling](./consensus-commit.md#commit-for-a-later-round)).
+- **Future-round commit.** If its block is already held, a verified
+  `CommitMessage` for `commit.Round > r` is checked against the block and
+  application before advancing the round; rejection does not move the round.
+  If the block is absent, signature verification can park the commit and advance
+  to its round before the later application check. See
+  [Commit handling](./consensus-commit.md#commit-for-a-later-round).
 - **Round bookkeeping.** `HeightVoteSet` keeps vote sets for rounds
   `0 .. Round + 1` (`SetRound(round + 1)` in `EnterNewRoundAction`) plus at
   most two "catch-up" rounds per validator pro-tx-hash

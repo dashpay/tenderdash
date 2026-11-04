@@ -17,7 +17,7 @@ title: Overview and basic concepts
 5. [Determinism](#determinism)
 6. [Errors](#errors)
    1. [`CheckTx`](#checktx)
-   2. [`TxResult` (as part of `FinalizeBlock`)](#txresult-as-part-of-finalizeblock)
+   2. [`ExecTxResult`](#exectxresult-prepareproposal-and-processproposal)
    3. [`Query`](#query)
 7. [Events](#events)
 8. [Evidence](#evidence)
@@ -83,8 +83,7 @@ Tenderdash also calls it, with an empty `validator_pro_tx_hash`, to verify a com
 threshold-recovered extensions before `FinalizeBlock`; that check must reject a vector the
 Application did not expect.
 
-* [**FinalizeBlock:**](./abci++_methods.md#finalizeblock) It delivers a decided block to the Application. The Application must execute the transactions in the block in order and update its state accordingly. Cryptographic commitments to the block and transaction results, via the corresponding
-parameters in `ResponseFinalizeBlock`, are included in the header of the next block. Tenderdash calls it when a new block is decided.
+* [**FinalizeBlock:**](./abci++_methods.md#finalizeblock) It delivers a decided block to the Application to persist the candidate for the block and round processed last. The current block's application and result hashes were returned by `PrepareProposal`/`ProcessProposal` and are already in its header. `ResponseFinalizeBlock` returns only retention and next-block scheduling hints, not execution results or events. See [Commit and apply](../consensus/consensus-happy-path.md#9-commit-and-apply).
 
 ### Mempool methods
 
@@ -141,86 +140,42 @@ More details on managing state across connections can be found in the section on
 
 [&uparrow; Back to Outline](#outline)
 
-In the original ABCI protocol, the only moment when the Application had access to a
-block was after it was decided. This led to a block execution model, called _next-block
-execution_, where some fields hashed in a block header refer to the execution of the
-previous block, namely:
+Tenderdash uses same-block execution: `PrepareProposal` and `ProcessProposal`
+return the application hash and transaction results for the block being proposed.
+Those commitments are included in that block's header. Validator-set and
+parameter changes from height `h` take effect at `h + 1`.
 
-* the Merkle root of the Application's state
-* the transaction results
-* the consensus parameter updates
-* the validator updates
-
-With ABCI++, new methods introduced, `PrepareProposal` and `ProcessProposal` allow
-for a new execution model, called _same-block execution_. An Application implementing
-this execution model, upon receiving a raw proposal via `RequestPrepareProposal`
-and potentially modifying its transaction list,
-fully executes the resulting prepared proposal as though it was the decided block.
-The results of the block execution are used as follows:
-
-* The block execution may generate a set of events. The Application should store these events and return them back to Tenderdash during the `FinalizeBlock` call if the block is finally decided.
-* The Merkle root resulting from executing the prepared proposal is provided in
-  `ResponsePrepareProposal` and thus refers to the **current block**. Tenderdash
-  will use it in the prepared proposal's header.
-* likewise, the transaction results from executing the prepared proposal are
-  provided in `ResponsePrepareProposal` and refer to the transactions in the
-  **current block**. Tenderdash will use them to calculate the results hash
-  in the prepared proposal's header.
-* The consensus parameter updates and validator updates are also provided in
-  `ResponsePrepareProposal` and reflect the result of the prepared proposal's
-  execution. They come into force in height H+1 (as opposed to the H+2 rule
-  in next-block execution model).
+The legacy next-block execution model is historical background, not an alternate
+live mode of this implementation. The authoritative lifecycle is the
+[primary consensus flow](../consensus/consensus-happy-path.md) and
+[validator/parameter transition](../consensus/consensus-alternative-flows.md#validator-set-and-parameter-changes).
 
 ### Tenderdash timeouts in same-block execution
 
-The new same-block execution mode requires the Application to fully execute the
-prepared block at `PrepareProposal` time. This execution is synchronous, so
-Tenderdash cannot make progress until the Application returns from `PrepareProposal`.
-This stands on Tenderdash's critical path: if the Application takes a long time
-executing the block, the default value of _TimeoutPropose_ might not be sufficient
-to accommodate the long block execution time and non-proposer processes might time
-out and prevote `nil`, thus starting a further round unnecessarily.
-
-The Application is the best suited to provide a value for _TimeoutPropose_ so
-that the block execution time upon `PrepareProposal` fits well in the propose
-timeout interval.
-
-Currently, the Application can override the value of _TimeoutPropose_ via the
-`config.toml` file. In the future, `ConsensusParams` will have an extra field
-with the current _TimeoutPropose_ value so that the Application can adapt it at every height.
+Proposal preparation and processing are synchronous and consume the round's
+proposal-time budget. Slow execution can cause other validators to prevote nil.
+Timeouts are already consensus parameters in `ConsensusParams.Timeout`; updates
+from a block apply at the next height. Local unsafe overrides can desynchronize
+nodes. See [Timeouts and consensus parameters](../consensus/consensus.md#timeouts-and-consensus-parameters)
+for the actual fields, defaults and scheduling rules.
 
 ## Determinism
 
 [&uparrow; Back to Outline](#outline)
 
-ABCI++ applications must implement deterministic finite-state machines to be
-securely replicated by the Tenderdash consensus engine. This means block execution
-over the Consensus Connection must be strictly deterministic: given the same
-ordered set of transactions, all nodes will compute identical responses, for all
-successive `FinalizeBlock` calls. This is critical because the
-responses are included in the header of the next block, either via a Merkle root
-or directly, so all nodes must agree on exactly what they are.
+Application processing must produce deterministic consensus commitments for a
+block, round and last committed state. `PrepareProposal` constructs a candidate;
+`ProcessProposal` verifies its current-block application/results hashes and
+next-state commitments. Candidate changes must not replace committed application
+state until `FinalizeBlock` persists the decided candidate. There is no subsequent
+ABCI `Commit` call.
 
-For this reason, it is recommended that application state is not exposed to any
-external user or process except via the ABCI connections to a consensus engine
-like Tenderdash. The Application must only change its state based on input
-from block execution (`FinalizeBlock` calls), and not through
-any other kind of request. This is the only way to ensure all nodes see the same
-transactions and compute the same results.
-
-Some Applications may choose to execute the blocks that are about to be proposed
-(via `PrepareProposal`), or those that the Application is asked to validate
-(via `ProcessProposal`). However, the state changes caused by processing those
-proposed blocks must never replace the previous state until `FinalizeBlock` and `Commit` confirms
-the block decided.
-
-Additionally, vote extensions or the validation thereof (via `ExtendVote` or
-`VerifyVoteExtension`) must _never_ have side effects on the current state.
-They can only be used when their data is provided in a `RequestPrepareProposal` call.
-
-If there is some non-determinism in the state machine, consensus will eventually
-fail as nodes disagree over the correct values for the block header. The
-non-determinism must be fixed and the nodes restarted.
+Processing can revisit the same block and round after another execution context
+has replaced it. Commit verification can also call `ExtendVote` without signing
+to discover an expected vector after rejection. These calls must not be treated as
+once-per-height callbacks; see
+[expected call sequences](./abci++_tmint_expected_behavior.md#valid-method-call-sequences).
+Extension generation and verification must not mutate committed application state.
 
 Sources of non-determinism in applications may include:
 
@@ -241,42 +196,25 @@ Sources of non-determinism in applications may include:
 
 See [#56](https://github.com/tendermint/abci/issues/56) for original discussion.
 
-Note that some methods (`Query, CheckTx, FinalizeBlock`) return
-explicitly non-deterministic data in the form of `Info` and `Log` fields. The `Log` is
-intended for the literal output from the Application's logger, while the
-`Info` is any additional info that should be returned. These are the only fields
-that are not included in block header computations, so we don't need agreement
-on them. All other fields in the `Response*` must be strictly deterministic.
+Consensus commits only the consensus-relevant subset of transaction results:
+`Code`, `Data` and `GasUsed` form `ResultsHash`. Events and diagnostic fields are
+not part of that hash. See [Header](../core/data_structures.md#header) and
+[Events](#events); `ResponseFinalizeBlock` has no transaction results or events.
 
 ## Errors
 
 [&uparrow; Back to Outline](#outline)
 
-The `Query`, and `CheckTx` methods include a `Code` field in their `Response*`.
-The `Code` field is also included in type `TxResult`, used by
-method `FinalizeBlock`'s `Response*`.
-Field `Code` is meant to contain an application-specific response code.
-A response code of `0` indicates no error.  Any other response code
-indicates to Tenderdash that an error occurred.
+`Query` and `CheckTx` responses and `ExecTxResult` entries carry application
+`Code`/`Codespace` values. Code zero means successful application processing;
+a nonzero transaction code is not the same as rejecting a whole proposal.
 
-These methods also return a `Codespace` string to Tenderdash. This field is
-used to disambiguate `Code` values returned by different domains of the
-Application. The `Codespace` is a namespace for the `Code`.
-
-Methods `Echo`, `Info`, and `InitChain` do not return errors.
-An error in any of these methods represents a critical issue that Tenderdash
-has no reasonable way to handle. If there is an error in one
-of these methods, the Application must crash to ensure that the error is safely
-handled by an operator.
-
-Method `FinalizeBlock` is a special case. It contains a number of
-`Code` and `Codespace` fields as part of type `TxResult`. Each of
-these codes reports errors related to the transaction it is attached to.
-However, `FinalizeBlock` does not return errors at the top level, so the
-same considerations on critical issues made for `Echo`, `Info`, and
-`InitChain` also apply here.
-
-The handling of non-zero response codes by Tenderdash is described below
+`ProcessProposal.status` controls proposal acceptance, while
+`VerifyVoteExtension.status` controls vote/commit-vector acceptance. The
+[nil-vote versus panic distinction](../consensus/consensus-transitions.md#prevote-decision-prevoterdo)
+and [commit rejection paths](./abci++_methods.md#verifyvoteextension) are part of
+the consensus contract. ABCI transport errors and malformed responses must not be
+assumed to act like a nonzero transaction code.
 
 ### `CheckTx`
 
@@ -284,13 +222,16 @@ When Tenderdash receives a `ResponseCheckTx` with a non-zero `Code`, the associa
 transaction will not be added to Tenderdash's mempool or it will be removed if
 it is already included.
 
-### `TxResult` (as part of `FinalizeBlock`)
+<!-- markdownlint-disable-next-line MD033 -->
+<a id="txresult-as-part-of-finalizeblock"></a>
 
-The `TxResult` type delivers transactions from Tenderdash to the Application.
-When Tenderdash receives a `ResponseFinalizeBlock` containing a `TxResult`
-with a non-zero `Code`, the response code is logged.
-The transaction was already included in a block, so the `Code` does not influence
-Tenderdash consensus.
+### `ExecTxResult` (PrepareProposal and ProcessProposal)
+
+`ResponsePrepareProposal.tx_results` and `ResponseProcessProposal.tx_results`
+contain one result for each included transaction. The consensus-relevant result
+fields contribute to the current block's `ResultsHash`, which is checked against
+the Application's answer before voting. `ResponseFinalizeBlock` has no
+`tx_results` field. See [ExecTxResult](./abci++_methods.md#exectxresult).
 
 ### `Query`
 
@@ -301,9 +242,10 @@ returned directly to the client that initiated the query.
 
 [&uparrow; Back to Outline](#outline)
 
-Method `CheckTx` includes an `Events` field in its `Response*`.
-Method `FinalizeBlock` includes an `Events` field at the top level in its
-`Response*`, and one `events` field per transaction included in the block.
+`ResponseCheckTx` can contain events. For block execution,
+`ResponseProcessProposal.events` contains block events and each `ExecTxResult`
+can contain transaction events. These results are retained for publication when
+the block is finalized; `ResponseFinalizeBlock` has no events field.
 Applications may respond to these ABCI++ methods with a set of events.
 Events allow applications to associate metadata about ABCI++ method execution with the
 transactions and blocks this metadata relates to.

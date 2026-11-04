@@ -5,6 +5,11 @@ title: Client and Server
 
 # Client and Server
 
+> **Legacy ABCI reference.** This page includes the historical
+> `BeginBlock`/`DeliverTx`/`EndBlock`/`Commit` lifecycle. For current Tenderdash,
+> use the [ABCI++ specification](../abci++/README.md) and
+> [source-derived consensus flow](../consensus/consensus-happy-path.md).
+
 This section is for those looking to implement their own ABCI Server, perhaps in
 a new programming language.
 

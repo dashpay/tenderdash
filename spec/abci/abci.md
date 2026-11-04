@@ -5,6 +5,11 @@ title: Method and Types
 
 # Methods and Types
 
+> **Legacy ABCI reference.** This page includes the historical
+> `BeginBlock`/`DeliverTx`/`EndBlock`/`Commit` lifecycle. For current Tenderdash,
+> use the [ABCI++ specification](../abci++/README.md) and
+> [source-derived consensus flow](../consensus/consensus-happy-path.md).
+
 ## Connections
 
 ABCI applications can run either within the _same_ process as the Tenderdash
