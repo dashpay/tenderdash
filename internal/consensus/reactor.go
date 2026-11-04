@@ -1624,8 +1624,10 @@ func (r *Reactor) processMsgCh(ctx context.Context, msgCh p2p.Channel, chBundle 
 			// large, so echoing it turns a flood of unprocessable messages into a
 			// log-amplification vector. Log errors an unprivileged peer can trigger
 			// at will at debug; anything not positively matched stays at Error so a
-			// real fault is not hidden.
-			if isPeerFloodableError(err) {
+			// real fault is not hidden. The router logs the peer error raised
+			// below as well, and is told which kind it is.
+			floodable := isPeerFloodableError(err)
+			if floodable {
 				r.logger.Debug("rejected peer message", "ch_id", envelope.ChannelID, "peer", envelope.From, "err", err)
 			} else {
 				r.logger.Error("failed to process message", "ch_id", envelope.ChannelID, "peer", envelope.From, "err", err)
@@ -1641,8 +1643,9 @@ func (r *Reactor) processMsgCh(ctx context.Context, msgCh p2p.Channel, chBundle 
 				continue
 			}
 			if serr := msgCh.SendError(ctx, p2p.PeerError{
-				NodeID: envelope.From,
-				Err:    err,
+				NodeID:    envelope.From,
+				Err:       err,
+				Floodable: floodable,
 			}); serr != nil {
 				return
 			}

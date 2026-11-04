@@ -382,7 +382,11 @@ func (r *Router) routeChannel(
 
 		case peerError := <-errCh:
 			disconnect := r.peerManager.ShouldDisconnectOnError(peerError.NodeID, peerError.Fatal)
-			r.logger.Error("peer error",
+			logPeerError := r.logger.Error
+			if peerError.Floodable {
+				logPeerError = r.logger.Debug
+			}
+			logPeerError("peer error",
 				"peer", peerError.NodeID,
 				"err", peerError.Err,
 				"disconnecting", disconnect,

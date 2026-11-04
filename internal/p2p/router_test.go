@@ -1,7 +1,9 @@
 package p2p_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -290,6 +292,65 @@ func TestRouter_Channel_Error(t *testing.T) {
 		{NodeID: bID, Status: p2p.PeerStatusDown},
 		{NodeID: bID, Status: p2p.PeerStatusUp},
 	})
+}
+
+// A peer error marked floodable is one the peer can cause for nothing, so the
+// router logs it at Debug, and any other at Error. Both cost the peer the same.
+func TestRouter_Channel_FloodableErrorIsLoggedAtDebug(t *testing.T) {
+	t.Cleanup(leaktest.Check(t))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	logs := &lockedBuffer{}
+	logger, err := log.NewLogger(log.LogLevelDebug, logs)
+	require.NoError(t, err)
+	network := p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{NumNodes: 3}, logger)
+	network.Start(ctx, t)
+
+	ids := network.NodeIDs()
+	aID, bID := ids[0], ids[1]
+	a := network.MakeChannels(ctx, t, chDesc)[aID]
+	sub := network.Nodes[aID].MakePeerUpdates(ctx, t)
+
+	for _, peerError := range []p2p.PeerError{
+		{NodeID: bID, Err: errors.New("floodable"), Floodable: true},
+		{NodeID: bID, Err: errors.New("internal")},
+	} {
+		p2ptest.RequireError(ctx, t, a, peerError)
+		p2ptest.RequireUpdates(t, sub, []p2p.PeerUpdate{
+			{NodeID: bID, Status: p2p.PeerStatusDown},
+			{NodeID: bID, Status: p2p.PeerStatusUp},
+		})
+	}
+
+	levels := map[string]string{}
+	for _, line := range bytes.Split(logs.Bytes(), []byte("\n")) {
+		var entry struct{ Level, Message, Err string }
+		if json.Unmarshal(line, &entry) == nil && entry.Message == "peer error" {
+			levels[entry.Err] = entry.Level
+		}
+	}
+	assert.Equal(t, map[string]string{"floodable": "debug", "internal": "error"}, levels)
+}
+
+// lockedBuffer is a bytes.Buffer that the router's goroutines write while the
+// test reads it.
+type lockedBuffer struct {
+	mtx sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mtx.Lock()
+	defer b.mtx.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) Bytes() []byte {
+	b.mtx.Lock()
+	defer b.mtx.Unlock()
+	return bytes.Clone(b.buf.Bytes())
 }
 
 func TestRouter_AcceptPeers(t *testing.T) {

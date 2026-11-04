@@ -317,6 +317,31 @@ func TestReactorTakesUnseenSkipVotesBehindRepeatedCopies(t *testing.T) {
 	assert.Equal(t, round, f.stateData.RoundSkip.Round)
 }
 
+// The router logs every peer error it is sent, so it is told which ones a peer
+// can cause for nothing: a liveness message that does not decode is reported
+// as one.
+func TestReactorReportsMalformedLivenessMessagesAsFloodable(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	f := newLivenessReactorFixture(ctx, t)
+
+	for _, msg := range []proto.Message{
+		&tmcons.ProposerHeartbeat{},
+		&tmcons.RoundSkipVote{},
+		&tmcons.RoundSkipCertificate{},
+	} {
+		f.send(msg)
+		select {
+		case reported := <-f.errCh:
+			assert.Equal(t, livenessTestPeer, reported.NodeID)
+			assert.ErrorIs(t, reported.Err, errMalformedLivenessMessage, "%T", msg)
+			assert.True(t, reported.Floodable, "%T", msg)
+		case <-time.After(30 * time.Second):
+			t.Fatalf("the malformed %T was not reported", msg)
+		}
+	}
+}
+
 // The liveness listeners run on the consensus goroutine and on the proposer's
 // heartbeat sender, so handing a message to the reactor's liveness sender must
 // never wait, however far behind that sender is.

@@ -260,6 +260,11 @@ type PeerError struct {
 	NodeID types.NodeID
 	Err    error
 	Fatal  bool
+	// Floodable marks an error the peer can cause at will and for nothing,
+	// such as a message that does not decode. The router scores the peer for it
+	// as for any other error, but logs it at Debug: a line at Error for each
+	// would let any connected peer flood the log.
+	Floodable bool
 }
 
 func (pe PeerError) Error() string { return fmt.Sprintf("peer=%q: %s", pe.NodeID, pe.Err.Error()) }
