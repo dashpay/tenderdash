@@ -466,8 +466,8 @@ func (params ConsensusParams) HashConsensusParams() tmbytes.HexBytes {
 	// its params from a peer (state sync) gets them authenticated. The values
 	// in effect are hashed, not the stored ones, so a zero meaning the default
 	// hashes like the default, as /consensus_params reports it. That holds
-	// under later updates too, as UpdateConsensusParams sets the pair from the
-	// update alone.
+	// under later updates too, including the one that turns proposer liveness
+	// on, as UpdateConsensusParams sets the pair from the update alone.
 	if params.Version.ProposerLivenessEnabled() {
 		timeouts := params.Timeout.TimeoutParamsOrDefaults()
 		hp.ProposerHeartbeatNs = timeouts.ProposerHeartbeat.Nanoseconds()
@@ -541,22 +541,28 @@ func (params ConsensusParams) UpdateConsensusParams(params2 *tmproto.ConsensusPa
 		if params2.Timeout.VoteDelta != nil {
 			res.Timeout.VoteDelta = *params2.Timeout.GetVoteDelta()
 		}
-		// The proposer liveness timeouts are updated as a pair: one named alone
-		// clears the other, which is then derived from it again (see
-		// TimeoutParamsOrDefaults), whatever it was. What they become depends
-		// on the update alone, so params that hash alike stay alike. A node
-		// that took its params from /consensus_params, which reports both filled
-		// in, holds as explicit values what the chain may hold unset, and a
-		// later update naming only one must leave it where it leaves the chain.
-		heartbeat, silence := params2.Timeout.GetProposerHeartbeat(), params2.Timeout.GetProposerSilence()
-		if heartbeat != nil || silence != nil {
-			res.Timeout.ProposerHeartbeat, res.Timeout.ProposerSilence = 0, 0
-			if heartbeat != nil {
-				res.Timeout.ProposerHeartbeat = *heartbeat
-			}
-			if silence != nil {
-				res.Timeout.ProposerSilence = *silence
-			}
+	}
+	// The proposer liveness timeouts are set as a pair, from the update alone:
+	// one named alone clears the other, which is then derived from it again
+	// (see TimeoutParamsOrDefaults), whatever it was. So params that hash alike
+	// stay alike. A node that took its params from /consensus_params, which
+	// reports both filled in, holds as explicit values what the chain may hold
+	// unset, and a later update naming only one must leave it where it leaves
+	// the chain.
+	//
+	// The update that turns proposer liveness on sets them the same way, named
+	// or not. Before it the hash does not cover them, so a node that
+	// state-synced may hold whatever its provider gave it, and they must not
+	// reach the hash from there.
+	heartbeat, silence := params2.GetTimeout().GetProposerHeartbeat(), params2.GetTimeout().GetProposerSilence()
+	activating := !params.Version.ProposerLivenessEnabled() && res.Version.ProposerLivenessEnabled()
+	if heartbeat != nil || silence != nil || activating {
+		res.Timeout.ProposerHeartbeat, res.Timeout.ProposerSilence = 0, 0
+		if heartbeat != nil {
+			res.Timeout.ProposerHeartbeat = *heartbeat
+		}
+		if silence != nil {
+			res.Timeout.ProposerSilence = *silence
 		}
 	}
 	if params2.Abci != nil {

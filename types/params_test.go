@@ -521,6 +521,42 @@ func TestProposerLivenessTimeouts(t *testing.T) {
 		}
 	})
 
+	// Before consensus version 2 the hash does not cover the liveness timeouts,
+	// so a node that state-synced holds whatever its provider gave it. The
+	// update that turns version 2 on must start both nodes from the same pair.
+	t.Run("should start the liveness timeouts from the update that turns version 2 on", func(t *testing.T) {
+		chain := *DefaultConsensusParams()
+		chain.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_1)
+		synced := chain
+		synced.Timeout.ProposerHeartbeat, synced.Timeout.ProposerSilence = 2*time.Second, 10*time.Second
+		require.NoError(t, synced.ValidateConsensusParams())
+		require.Equal(t, chain.HashConsensusParams(), synced.HashConsensusParams(),
+			"version 1 authenticates neither timeout, so a provider may substitute them")
+
+		version2 := tmproto.VersionParams{ConsensusVersion: tmproto.VersionParams_CONSENSUS_VERSION_2}
+		heartbeat := 3 * time.Second
+		for name, update := range map[string]*tmproto.ConsensusParams{
+			"version only":     {Version: &version2},
+			"with a heartbeat": {Version: &version2, Timeout: &tmproto.TimeoutParams{ProposerHeartbeat: &heartbeat}},
+		} {
+			t.Run(name, func(t *testing.T) {
+				fromChain := chain.UpdateConsensusParams(update)
+				fromSynced := synced.UpdateConsensusParams(update)
+				require.True(t, fromChain.Version.ProposerLivenessEnabled())
+				require.NoError(t, fromChain.ValidateConsensusParams())
+				require.NoError(t, fromSynced.ValidateConsensusParams())
+				assert.Equal(t, fromChain.HashConsensusParams(), fromSynced.HashConsensusParams())
+				assert.Equal(t, fromChain.Timeout.TimeoutParamsOrDefaults(), fromSynced.Timeout.TimeoutParamsOrDefaults())
+			})
+		}
+
+		kept := chain
+		kept.Version.ConsensusVersion = int32(version2.ConsensusVersion)
+		kept.Timeout.ProposerHeartbeat, kept.Timeout.ProposerSilence = 2*time.Second, 10*time.Second
+		later := kept.UpdateConsensusParams(&tmproto.ConsensusParams{Version: &version2})
+		assert.Equal(t, kept.Timeout, later.Timeout, "an update that leaves version 2 on keeps the pair")
+	})
+
 	t.Run("should refuse a pair that cannot work", func(t *testing.T) {
 		testCases := map[string]TimeoutParams{
 			"negative heartbeat":              {ProposerHeartbeat: -time.Second},
