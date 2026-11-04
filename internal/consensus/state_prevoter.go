@@ -113,7 +113,7 @@ func (p *prevoter) checkProposalBlock(rs cstypes.RoundState) bool {
 		p.logger.Debug("prevote step: ProposalBlock is valid and there is no locked block; prevoting the proposal")
 		return true
 	}
-	if rs.ProposalBlock.HashesTo(rs.LockedBlock.Hash()) {
+	if rs.ProposalBlock.BlockID(rs.ProposalBlockParts).Equals(rs.LockedBlock.BlockID(rs.LockedBlockParts)) {
 		p.logger.Debug("prevote step: ProposalBlock is valid and matches our locked block; prevoting the proposal")
 		return true
 	}
@@ -149,7 +149,7 @@ func (p *prevoter) checkPrevoteMaj23(rs cstypes.RoundState) bool {
 		p.logger.Trace("prevote step: no 2/3 majority for proposal block", "POLRound", rs.Proposal.POLRound)
 		return false
 	}
-	if !rs.ProposalBlock.HashesTo(blockID.Hash) {
+	if !rs.ProposalBlock.BlockID(rs.ProposalBlockParts).Equals(blockID) {
 		p.logger.Trace("prevote step: proposal block does not match 2/3 majority", "POLRound", rs.Proposal.POLRound,
 			"proposal_block_hash", rs.ProposalBlock.Hash(),
 			"majority_block_hash", blockID.Hash)
@@ -168,7 +168,7 @@ func (p *prevoter) checkPrevoteMaj23(rs cstypes.RoundState) bool {
 			"outcome", "prevoting the proposal")
 		return true
 	}
-	if rs.ProposalBlock.HashesTo(rs.LockedBlock.Hash()) {
+	if rs.ProposalBlock.BlockID(rs.ProposalBlockParts).Equals(rs.LockedBlock.BlockID(rs.LockedBlockParts)) {
 		p.logger.Debug("prevote step: ProposalBlock is valid and matches our locked block",
 			"outcome", "prevoting the proposal")
 		return true

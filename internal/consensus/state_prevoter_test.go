@@ -229,13 +229,18 @@ func (suite *PrevoterTestSuite) TestDoProposerProTxHash() {
 				size := int32(suite.valSet.Size())
 				stateData.ProposalBlock.ProposerProTxHash = suite.valSet.GetByIndex((index + size - 1) % size).ProTxHash
 			}
-			stateData.Proposal.BlockID = types.BlockID{Hash: stateData.ProposalBlock.Hash()}
+			stateData.ProposalBlockParts, err = stateData.ProposalBlock.MakePartSet(types.BlockPartSizeBytes)
+			suite.Require().NoError(err)
+			stateData.Proposal.BlockID = stateData.ProposalBlock.BlockID(stateData.ProposalBlockParts)
 			if tc.pol {
 				stateData.Votes = suite.makeHeightVoteSetMaj23(stateData, tc.polRound)
 			}
 			if tc.otherBlock {
+				// Keep the POL for the original block while proposing a different complete identity.
 				stateData.ProposalBlock.ProposedAppVersion++
-				stateData.Proposal.BlockID = types.BlockID{Hash: stateData.ProposalBlock.Hash()}
+				stateData.ProposalBlockParts, err = stateData.ProposalBlock.MakePartSet(types.BlockPartSizeBytes)
+				suite.Require().NoError(err)
+				stateData.Proposal.BlockID = stateData.ProposalBlock.BlockID(stateData.ProposalBlockParts)
 			}
 			rejectBeforeProcess := tc.wrong && tc.polRound == -1
 			if !rejectBeforeProcess {
@@ -374,7 +379,7 @@ func (suite *PrevoterTestSuite) makeValidStateData() StateData {
 		},
 		LastCommit: &types.Commit{},
 	}
-	validBlockID := types.BlockID{Hash: block.Hash()}
+	validBlockID := block.BlockID(nil)
 	validRoundState := cstypes.RoundState{
 		Height:        1000,
 		ProposalBlock: block,
@@ -396,4 +401,27 @@ func (suite *PrevoterTestSuite) makeValidStateData() StateData {
 		state:      validState,
 		RoundState: validRoundState,
 	}
+}
+
+func (suite *PrevoterTestSuite) TestCompleteLockedBlockIdentity() {
+	for _, polRound := range []int32{-1, 0} {
+		suite.Run(fmt.Sprintf("POL round %d", polRound), func() {
+			sd := suite.makeValidStateData()
+			sd.Round, sd.LockedRound, sd.Proposal.POLRound = 2, 1, polRound
+			sd.Votes = suite.makeHeightVoteSetMaj23(sd, 0)
+			sd.LockedBlock = &types.Block{Header: sd.ProposalBlock.Header, Data: sd.ProposalBlock.Data, LastCommit: sd.ProposalBlock.LastCommit}
+			sd.LockedBlock.CoreChainLockedHeight++
+			suite.Equal(sd.ProposalBlock.Hash(), sd.LockedBlock.Hash())
+			suite.False(suite.prevoter.shouldVoteBeSent(sd.RoundState), "a matching legacy hash does not release a different lock")
+		})
+	}
+}
+
+func (suite *PrevoterTestSuite) TestCompletePolkaIdentity() {
+	sd := suite.makeValidStateData()
+	sd.Round, sd.Proposal.POLRound = 1, 0
+	sd.Votes = suite.makeHeightVoteSetMaj23(sd, 0)
+	sd.ProposalBlock.CoreChainLockedHeight++
+	suite.Equal(sd.Proposal.BlockID.Hash, sd.ProposalBlock.Hash())
+	suite.False(suite.prevoter.checkPrevoteMaj23(sd.RoundState), "the polka must attest the complete proposed value")
 }

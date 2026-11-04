@@ -158,3 +158,52 @@ type handoverStopHook struct{ fn func() }
 
 func (*handoverStopHook) OnStart(context.Context) error { return nil }
 func (h *handoverStopHook) OnStop()                     { h.fn() }
+
+// Node cancellation stops the reactor and its synchronizer concurrently. When the
+// synchronizer's own stop wins, the reactor must still join its application drain,
+// including after poolRoutine has already handed over and cleared the sync flag.
+func TestReactorWaitJoinsSynchronizerDrain(t *testing.T) {
+	for _, handover := range []bool{false, true} {
+		t.Run(map[bool]string{false: "syncing", true: "after handover"}[handover], func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			draining, releaseApply := make(chan struct{}), make(chan struct{})
+			var applyReturned atomic.Bool
+			applier := newBlockApplier(nil, nil, applierWithState(sm.State{LastBlockHeight: 1}))
+			synchronizer := NewSynchronizer(2, nil, applier)
+			// Stands in for Synchronizer.OnStop blocked on consumerDone during Apply.
+			synchronizer.BaseService = *service.NewBaseService(log.NewNopLogger(), "synchronizer",
+				&handoverStopHook{fn: func() { close(draining); <-releaseApply; applyReturned.Store(true) }})
+			require.NoError(t, synchronizer.Start(ctx))
+			reactor := &Reactor{executor: applier, synchronizer: synchronizer, blockSyncFlag: new(atomic.Bool)}
+			reactor.blockSyncFlag.Store(true)
+			reactor.BaseService = *service.NewBaseService(log.NewNopLogger(), "BlockSync",
+				&handoverStopHook{fn: reactor.OnStop})
+			require.NoError(t, reactor.Start(ctx))
+
+			// The synchronizer's own stop wins and holds its drain open.
+			go synchronizer.Stop()
+			<-draining
+			if handover {
+				// Parent cancellation releases poolRoutine from WaitForSync; its Stop
+				// returns early and it clears the flag before reactor OnStop runs.
+				poolCtx, cancelPool := context.WithCancel(ctx)
+				cancelPool()
+				reactor.poolRoutine(poolCtx, false)
+				require.False(t, reactor.blockSyncFlag.Load())
+			}
+			cancel()
+			waited := make(chan struct{})
+			go func() { reactor.Wait(); close(waited) }()
+			select {
+			case <-waited:
+				t.Fatal("reactor Wait returned while synchronizer application was still running")
+			case <-time.After(100 * time.Millisecond):
+			}
+			close(releaseApply)
+			<-waited
+			require.True(t, applyReturned.Load())
+			synchronizer.Wait()
+		})
+	}
+}

@@ -191,9 +191,6 @@ type State struct {
 	// proposer's latest available app protocol version that goes to block header
 	proposedAppVersion uint64
 
-	// wait the channel event happening for shutting down the state gracefully
-	onStopCh chan *cstypes.RoundState
-
 	msgInfoQueue   *msgInfoQueue
 	msgDispatcher  *msgInfoDispatcher
 	blockExecutor  *blockExecutor
@@ -285,7 +282,6 @@ func NewState(
 		evpool:       evpool,
 		emitter:      eventemitter.New(eventemitter.WithLogger(logger)),
 		metrics:      NopMetrics(),
-		onStopCh:     make(chan *cstypes.RoundState),
 		verificationBudget: newVerificationBudget(
 			cfg.VerificationRateLimit,
 		),
@@ -469,9 +465,29 @@ func (cs *State) SetPrivValidator(ctx context.Context, priv types.PrivValidator)
 	}
 }
 
+type processingContextKey struct{}
+
+// Start preserves the parent's lifetime for in-flight processing during manual Stop.
+func (cs *State) Start(ctx context.Context) error {
+	return cs.BaseService.Start(context.WithValue(ctx, processingContextKey{}, ctx))
+}
+
 // OnStart loads the latest state via the WAL, and starts the timeout and
 // receive routines.
-func (cs *State) OnStart(ctx context.Context) error {
+func (cs *State) OnStart(ctx context.Context) (err error) {
+	defer func() {
+		if err != nil {
+			cs.wal.Stop()
+			cs.wal.Wait()
+			cs.wal = nilWAL{}
+			cs.timeoutTicker.Stop()
+			cs.timeoutTicker.Wait()
+			if _, ok := cs.timeoutTicker.(*timeoutTicker); ok {
+				cs.timeoutTicker = NewTimeoutTicker(cs.logger)
+				cs.roundScheduler.timeoutTicker = cs.timeoutTicker
+			}
+		}
+	}()
 	if err := cs.updateStateFromStore(); err != nil {
 		return err
 	}
@@ -518,6 +534,7 @@ func (cs *State) OnStart(ctx context.Context) error {
 
 			// 1) prep work
 			cs.wal.Stop()
+			cs.wal.Wait()
 
 			repairAttempted = true
 
@@ -545,7 +562,9 @@ func (cs *State) OnStart(ctx context.Context) error {
 	}
 
 	// now start the receiveRoutine
-	go cs.receiveRoutine(ctx, cs.stopFn)
+	if !cs.Go(ctx, func(ctx context.Context) { cs.receiveRoutine(ctx, cs.stopFn) }) {
+		return context.Canceled
+	}
 
 	// schedule the first round!
 	// use GetRoundState so we don't race the receiveRoutine for access
@@ -556,7 +575,8 @@ func (cs *State) OnStart(ctx context.Context) error {
 
 // loadWalFile loads WAL data from file. It overwrites cs.wal.
 func (cs *State) loadWalFile(ctx context.Context) error {
-	wal, err := cs.OpenWAL(ctx, cs.config.WalFile())
+	// receiveRoutine owns the WAL until its final write and explicit Stop/Wait.
+	wal, err := cs.OpenWAL(context.WithoutCancel(ctx), cs.config.WalFile())
 	if err != nil {
 		cs.logger.Error("failed to load state WAL", "err", err)
 		return err
@@ -566,31 +586,11 @@ func (cs *State) loadWalFile(ctx context.Context) error {
 	return nil
 }
 
-func (cs *State) getOnStopCh() chan *cstypes.RoundState {
-	cs.mtx.RLock()
-	defer cs.mtx.RUnlock()
+// OnStop requests timeout worker shutdown. Wait also joins receiveRoutine.
+func (cs *State) OnStop() { cs.timeoutTicker.Stop() }
 
-	return cs.onStopCh
-}
-
-// OnStop implements service.Service.
-func (cs *State) OnStop() {
-	stateData := cs.stateDataStore.Get()
-	// If the node is committing a new block, wait until it is finished!
-	if cs.GetRoundState().Step == cstypes.RoundStepApplyCommit {
-		select {
-		case <-cs.getOnStopCh():
-		case <-time.After(stateData.state.ConsensusParams.Timeout.Vote):
-			// we wait vote timeout, just in case
-			cs.logger.Error("OnStop: timeout waiting for commit to finish", "time", stateData.state.ConsensusParams.Timeout.Vote)
-		}
-	}
-
-	if cs.timeoutTicker.IsRunning() {
-		cs.timeoutTicker.Stop()
-	}
-	// WAL is stopped in receiveRoutine.
-}
+// OnDrain joins the timeout worker before callers release consensus stores.
+func (cs *State) OnDrain() { cs.timeoutTicker.Wait() }
 
 // OpenWAL opens a file to log all consensus messages and timeouts for
 // deterministic accountability.
@@ -603,6 +603,7 @@ func (cs *State) OpenWAL(ctx context.Context, walFile string) (WAL, error) {
 
 	if err := wal.Start(ctx); err != nil {
 		cs.logger.Error("failed to start WAL", "err", err)
+		wal.Group().Close()
 		return nil, err
 	}
 
@@ -685,6 +686,10 @@ func (cs *State) loadLastCommit(lastBlockHeight int64) (*types.Commit, error) {
 // Updates (state transitions) happen on timeouts, complete proposals, and 2/3 majorities.
 // State must be locked before any internal state is updated.
 func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
+	processCtx, ok := ctx.Value(processingContextKey{}).(context.Context)
+	if !ok {
+		processCtx = ctx
+	}
 	onExit := func(cs *State) {
 		// NOTE: the internalMsgQueue may have signed messages from our
 		// priv_val that haven't hit the WAL, but its ok because
@@ -699,12 +704,6 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 	defer func() {
 		if r := recover(); r != nil {
 			cs.logger.Error("CONSENSUS FAILURE!!!", "err", r, "stack", string(debug.Stack()))
-
-			// Make a best-effort attempt to close the WAL, but otherwise do not
-			// attempt to gracefully terminate. Once consensus has irrecoverably
-			// failed, any additional progress we permit the node to make may
-			// complicate diagnosing and recovering from the failure.
-			onExit(cs)
 
 			// There are a couple of cases where the we
 			// panic with an error from deeper within the
@@ -739,9 +738,17 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 		}
 	}()
 
-	go cs.msgInfoQueue.fanIn(ctx)
+	queueDone := make(chan struct{})
+	go func() {
+		defer close(queueDone)
+		cs.msgInfoQueue.fanIn(ctx)
+	}()
+	defer func() { onExit(cs); <-queueDone }()
 
 	for {
+		if ctx.Err() != nil {
+			return
+		}
 		if stopFn != nil && stopFn(cs) {
 			return
 		}
@@ -749,14 +756,14 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 		select {
 		case <-cs.txNotifier.TxsAvailable():
 			stateData := cs.stateDataStore.Get()
-			cs.handleTxsAvailable(ctx, &stateData)
+			cs.handleTxsAvailable(processCtx, &stateData)
 			err := stateData.Save()
 			if err != nil {
 				cs.logger.Error("failed update state-data", "err", err)
 			}
 		case mi := <-cs.msgInfoQueue.read():
 			stateData := cs.stateDataStore.Get()
-			err := cs.msgDispatcher.dispatch(ctx, &stateData, mi)
+			err := cs.msgDispatcher.dispatch(processCtx, &stateData, mi)
 			if mi.PeerID != "" {
 				// The peer scheduler makes room in the verification budget for a
 				// message before handing it over, which is only sound if what it
@@ -769,7 +776,6 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 			if err != nil {
 				// Leaving without this would strand the queue's reader
 				// goroutines: nothing else ever tells them to stop.
-				onExit(cs)
 				return
 			}
 			err = stateData.Save()
@@ -784,13 +790,12 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 
 			// if the timeout is relevant to the rs
 			// go to the next step
-			cs.handleTimeout(ctx, ti, &stateData)
+			cs.handleTimeout(processCtx, ti, &stateData)
 			err := cs.stateDataStore.Update(stateData)
 			if err != nil {
 				cs.logger.Error("failed update state-data", "err", err)
 			}
 		case <-ctx.Done():
-			onExit(cs)
 			return
 
 		}

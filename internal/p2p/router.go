@@ -722,7 +722,7 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 	connID := r.peerManager.Ready(ctx, peerID, channels)
 
 	// we use context to manage the lifecycle of the peer
-	// note that original ctx will be used in cleanup
+	// Peer-manager cleanup uses ctx; shutdown notifications are best effort.
 	ioCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 

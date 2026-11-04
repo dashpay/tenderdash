@@ -21,6 +21,11 @@ import (
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
+// ErrEvidenceDisabled is returned when the chain disables evidence submissions.
+var ErrEvidenceDisabled = errors.New(
+	"evidence is disabled by consensus parameters (evidence.max_bytes = 0)",
+)
+
 // Evidence represents any provable malicious activity by a validator.
 // Verification logic for each evidence is part of the evidence module.
 type Evidence interface {

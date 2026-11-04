@@ -1193,6 +1193,7 @@ type mockTicker struct {
 }
 
 func (m *mockTicker) Start(context.Context) error { return nil }
+func (m *mockTicker) Wait()                       {}
 func (m *mockTicker) Stop()                       {}
 func (m *mockTicker) IsRunning() bool             { return false }
 

@@ -7,12 +7,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/internal/p2p/client"
 	"github.com/dashpay/tenderdash/internal/p2p/client/mocks"
+	p2pmocks "github.com/dashpay/tenderdash/internal/p2p/mocks"
 	statefactory "github.com/dashpay/tenderdash/internal/state/test/factory"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	tmrequire "github.com/dashpay/tenderdash/internal/test/require"
@@ -361,4 +364,59 @@ func (suite *BlockFetchJobTestSuite) TestJobGeneratorPushBackOrdersLowestFirst()
 	// duplicates are still skipped across a batch
 	jobGen.pushBack(20, 40, 20)
 	suite.Require().Equal([]int64{20, 30, 40}, jobGen.pushedBack)
+}
+
+// A valid answer just before the deadline must not win every subsequent height
+// merely because success clears the hard-failure counter.
+func (suite *BlockFetchJobTestSuite) TestSlowSuccessPrefersAnotherPeer() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	clock := clockwork.NewFakeClock()
+	sent := make(chan p2p.Envelope, 1)
+	responses := make(chan p2p.Envelope, 1)
+	channel := p2pmocks.NewChannel(suite.T())
+	channel.On("Send", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		sent <- args.Get(1).(p2p.Envelope)
+	}).Return(nil)
+	channel.On("Receive", mock.Anything).Return(p2p.NewChannelIterator(responses))
+	blockClient := client.New(map[p2p.ChannelID]*p2p.ChannelDescriptor{
+		p2p.BlockSyncChannel: {ID: p2p.BlockSyncChannel, Name: "blocksync"},
+	}, func(context.Context, *p2p.ChannelDescriptor) (p2p.Channel, error) { return channel, nil }, client.WithClock(clock))
+	consumed := make(chan error, 1)
+	go func() {
+		consumed <- blockClient.Consume(ctx, client.ConsumerParams{
+			ReadChannels: []p2p.ChannelID{p2p.BlockSyncChannel}, Handler: droppedRequestHandler{},
+		})
+	}()
+	defer func() { cancel(); suite.Require().NoError(<-consumed) }()
+	syncer := NewSynchronizer(1, blockClient, nil, WithClock(clock))
+	syncer.AddPeer(newPeerData("slow", 1, 100))
+	syncer.AddPeer(newPeerData("fast", 1, 100))
+	peer, ok := syncer.peerStore.FindPeer(1)
+	suite.Require().True(ok)
+	suite.Require().Equal(types.NodeID("slow"), peer.peerID)
+	syncer.peerStore.Update(peer.peerID, AddNumPending(1))
+	done := make(chan workerpool.Result, 1)
+	go func() { done <- blockFetchJobHandler(blockClient, peer, 1)(ctx) }()
+	request := <-sent
+	wait, stop := context.WithTimeout(ctx, time.Second)
+	defer stop()
+	suite.Require().NoError(clock.BlockUntilContext(wait, 1))
+	clock.Advance(59 * time.Second)
+	responses <- p2p.Envelope{From: peer.peerID, ChannelID: p2p.BlockSyncChannel,
+		Attributes: map[string]string{client.ResponseIDAttribute: request.Attributes[client.RequestIDAttribute]},
+		Message:    suite.responses[0]}
+	select {
+	case result := <-done:
+		suite.Require().NoError(result.Err)
+	case <-time.After(time.Second):
+		suite.FailNow("valid response did not complete")
+	}
+	syncer.peerStore.Update(peer.peerID, AddNumPending(-1), ResetFailures())
+	selected, ok := syncer.peerStore.FindPeer(2)
+	suite.Require().True(ok)
+	suite.Require().Equal(types.NodeID("fast"), selected.peerID,
+		"slow success must reduce future preference without disconnecting the source")
+	suite.Require().True(syncer.peerStore.HasPeerForHeight(2))
+	suite.Require().Equal(2, syncer.peerStore.Len())
 }

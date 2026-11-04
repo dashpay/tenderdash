@@ -22,31 +22,35 @@ on:
     types:
       - published
 
+# Docker Hub auth uses repository secrets; GITHUB_TOKEN only needs to read the repo.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-22.04
     env:
       PLATFORMS: ${{ github.event_name == 'release' && 'linux/amd64,linux/arm64' || github.event.inputs.platforms }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@master
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1  # v4.4.0
         with:
           platforms: all
 
       - name: Set up Docker Build
-        uses: docker/setup-buildx-action@v4.4.1
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
       - name: Login to DockerHub
         if: ${{ github.event_name != 'pull_request' }}
-        uses: docker/login-action@v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6  # v4.7.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Set suffix to Docker tags
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd  # v8.0.0
         id: suffix
         if: ${{ github.event.release != null }}
         with:
@@ -54,19 +58,22 @@ jobs:
           script: "return (context.payload.release.tag_name.includes('-dev') ? '-dev' : '');"
 
       - name: Determine TENDERMINT_BUILD_OPTIONS
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd  # v8.0.0
         id: TENDERMINT_BUILD_OPTIONS
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
         with:
           result-encoding: string
           script: |
-            if ('${{ github.ref_type }}' == 'tag' && ! '${{ github.ref_name }}'.includes('-dev')) {
+            if (process.env.REF_TYPE === 'tag' && !process.env.REF_NAME.includes('-dev')) {
               return 'tenderdash,stable'
             }
             return 'tenderdash,dev'
 
       - name: Set Docker tags and labels
         id: docker_meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
         with:
           images: dashpay/tenderdash
           tags: |
@@ -86,7 +93,7 @@ jobs:
       # on Docker Hub, as Github caches are not available for other branches.
       - name: Build and cache image with dependencies
         id: docker_bls
-        uses: docker/build-push-action@v7.4.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
         with:
           context: .
           file: ./DOCKER/Dockerfile
@@ -102,7 +109,7 @@ jobs:
 
       - name: Publish to Docker Hub
         id: docker_build
-        uses: docker/build-push-action@v7.4.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
         with:
           context: .
           file: ./DOCKER/Dockerfile

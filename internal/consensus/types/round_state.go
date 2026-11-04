@@ -115,6 +115,9 @@ type RoundState struct {
 	// Consumed once and not persisted, so a restart falls back to the configured wait.
 	ProposeNextBlockImmediately bool `json:"propose_next_block_immediately"`
 
+	// ProcessedBlockID identifies the successful ProcessProposal behind CurrentRoundState.
+	ProcessedBlockID types.BlockID `json:"-"`
+
 	sm.CurrentRoundState `json:"uncommitted_state"`
 }
 

@@ -4,6 +4,12 @@ order: 2
 
 # Creating a built-in application in Go
 
+> **Historical upstream tutorial.** The examples target Tendermint `v0.35.8`,
+> not the current Tenderdash API. For Tenderdash, use the
+> [current application interface](../../abci/types/application.go)
+> and [ABCI call sequence](../../spec/consensus/consensus-happy-path.md#abci-calls-per-height-on-the-happy-path).
+> These legacy examples have not been verified to compile against this checkout.
+
 ## Guide assumptions
 
 This guide is designed for beginners who want to get started with a Tendermint
@@ -85,7 +91,7 @@ Hello, Tendermint Core
 Tendermint Core communicates with an application through the Application
 BlockChain Interface (ABCI) protocol. All of the message types Tendermint uses for
 communicating with the application can be found in the ABCI [protobuf
-file](https://github.com/tendermint/spec/blob/b695d30aae69933bc0e630da14949207d18ae02c/proto/tendermint/abci/types.proto).
+file](https://github.com/tendermint/tendermint/blob/v0.35.8/proto/tendermint/abci/types.proto).
 
 We will begin by creating the basic scaffolding for an ABCI application in
 a new `app.go` file. The first step is to create a new type, `KVStoreApplication`
@@ -224,7 +230,7 @@ agreed to accept this transaction into a block.
 
 Valid transactions will eventually be committed given they are not too big and
 have enough gas. To learn more about gas, check out ["the
-specification"](https://github.com/tendermint/tendermint/blob/master/spec/abci/apps.md#gas).
+specification"](https://github.com/tendermint/spec/blob/b695d30aae69933bc0e630da14949207d18ae02c/spec/abci/apps.md#gas).
 
 ### 1.3.3 BeginBlock -> DeliverTx -> EndBlock -> Commit
 
@@ -343,7 +349,7 @@ func (app *KVStoreApplication) Query(req abcitypes.RequestQuery) abcitypes.Respo
 ```
 
 The complete specification can be found
-[here](https://github.com/tendermint/tendermint/tree/master/spec/abci/).
+[here](https://github.com/tendermint/spec/tree/b695d30aae69933bc0e630da14949207d18ae02c/spec/abci/).
 
 ## 1.4 Starting an application and a Tendermint Core instance in the same process
 
@@ -584,19 +590,19 @@ $ go mod tidy
 ...
 ```
 
-Let's make sure we're using the latest version of Tendermint (currently `v0.35.8`).
+This historical example uses upstream Tendermint `v0.35.8`.
 
 ```sh
-$ go get github.com/tendermint/tendermint@latest
+$ go get github.com/tendermint/tendermint@v0.35.8
 ...
 ```
 
-This will populate the `go.mod` with a release number followed by a hash for Tendermint.
+This adds the pinned upstream release to `go.mod`.
 
 ```go
 module github.com/<username>/kvstore
 
-go 1.27.2
+go 1.27.3
 
 require (
  github.com/dgraph-io/badger/v3 v3.2103.2
@@ -626,7 +632,7 @@ $ TMHOME="/tmp/kvstore" tendermint init validator
 
 Feel free to explore the generated files, which can be found at
 `/tmp/kvstore/config` directory. Documentation on the config can be found
-[here](https://docs.tendermint.com/master/tendermint-core/configuration.html).
+[here](../tenderdash-core/configuration.md).
 
 We are ready to start our application:
 
@@ -702,5 +708,5 @@ $ curl -s 'localhost:26657/abci_query?data="tendermint"'
 
 I hope everything went smoothly and your first, but hopefully not the last,
 Tendermint Core application is up and running. If not, please [open an issue on
-Github](https://github.com/dashevo/tenderdash/issues/new/choose). To dig
-deeper, read [the docs](https://docs.tendermint.com/master/).
+Github](https://github.com/tendermint/tendermint/issues/new/choose). To dig
+deeper, read [the docs](../README.md).
