@@ -83,8 +83,8 @@ make format
 - PR descriptions: read `.github/PULL_REQUEST_TEMPLATE.md`, fill in every
   section, base content on the full diff against the target branch.
 - AI code review (`.github/workflows/claude-code-review.yml`) is opt-in:
-  maintainers trigger it via the `claudius-review` label or by requesting
-  `Claudius-Maginificent` as reviewer. See `CONTRIBUTING.md`.
+  maintainers trigger it via the `claudius-review` label.
+  See `CONTRIBUTING.md` for the review process.
 
 
 ## Security and Privacy (secrets, keys, logs)
