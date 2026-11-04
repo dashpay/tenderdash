@@ -13,7 +13,9 @@ cargo install mdbook --version 0.4.40 --locked
 make build-docs
 ```
 
-Open `book/book/index.html`, or run `make serve-docs` to start the local server.
+Run `make serve-docs` and open `http://localhost:3000/`. To serve an existing
+build, run `python3 -m http.server 8000 --directory book/book` and open
+`http://localhost:8000/`. Use HTTP so the RPC reference can fetch its schema.
 `MDBOOK=/path/to/mdbook make build-docs` selects a particular binary.
 For guides and specifications, edit their canonical files in `docs/` or `spec/`,
 then run the build again. When using the server, rerun `make prepare-docs` after
@@ -42,14 +44,22 @@ local full-text search without an external search service.
 ## Preview and publishing
 
 `.github/workflows/docs-deployment.yml` builds pull requests and uploads a
-`documentation-preview` artifact. Download it, extract it, and open `index.html`.
+`documentation-preview` artifact. Download it and extract it, then run
+`python3 -m http.server 8000` from the extracted directory and open
+`http://localhost:8000/`. The RPC reference requires HTTP serving.
 Pull requests have read-only repository permissions and cannot deploy.
 
-Pushes to `v1.8-dev` and manual runs on that branch publish the same output using
-GitHub Pages artifacts and the `github-pages` environment, like Platform. In the
-repository's **Settings → Pages**, select **GitHub Actions** as the build source
-and allow `v1.8-dev` in the environment's deployment branch rules. The workflow
-reports the deployed URL. Builds of other branches remain previews.
+Pushes to the repository's default branch publish the same output using GitHub
+Pages artifacts and the `github-pages` environment, like Platform. This follows
+default-branch changes without editing the workflow.
+
+To publish another branch manually, open the workflow in **Actions**, choose
+**Run workflow**, and select the branch. The workflow must exist on the default
+branch for GitHub to show that control. In **Settings → Pages**, select **GitHub
+Actions** as the build source. The `github-pages` environment's deployment rules
+must permit the default branch and any branches selected for manual publication.
+The workflow reports the deployed URL. Ordinary pushes to other branches do not
+publish; pull requests remain previews.
 
 ## Naming and attribution
 

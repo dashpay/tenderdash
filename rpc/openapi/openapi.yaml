@@ -87,10 +87,9 @@ paths:
         does not wait for the transaction to be included in a block. To know
         when the transaction is included in a block, check for the transaction
         event using JSON-RPC.  See
-        ../../docs/tenderdash-core/subscription.html
+        [transaction event subscriptions](../../docs/tenderdash-core/subscription.html).
 
-        See ../../docs/tenderdash-core/using-tenderdash.html#formatting
-        for formatting/encoding rules.
+        See [formatting/encoding rules](../../docs/tenderdash-core/using-tenderdash.html#formatting).
       parameters:
         - in: query
           name: tx
@@ -123,10 +122,9 @@ paths:
         does not wait for the transaction to be included in a block. To know
         when the transaction is included in a block, check for the transaction
         event using JSON-RPC.  See
-        ../../docs/tenderdash-core/subscription.html
+        [transaction event subscriptions](../../docs/tenderdash-core/subscription.html).
 
-        See ../../docs/tenderdash-core/using-tenderdash.html#formatting
-        for formatting/encoding rules.
+        See [formatting/encoding rules](../../docs/tenderdash-core/using-tenderdash.html#formatting).
       parameters:
         - in: query
           name: tx
@@ -162,7 +160,7 @@ paths:
         waiting for the transaction to be checked (CheckTx) or committed.  To
         know when the transaction is included in a block, you can check for the
         transaction event using JSON-RPC.  See
-        ../../docs/tenderdash-core/subscription.html
+        [transaction event subscriptions](../../docs/tenderdash-core/subscription.html).
 
         Admission is bounded by `rpc.max-concurrent-broadcast-tx-async` (default
         100; zero selects the default). When full, the node returns JSON-RPC
@@ -171,8 +169,7 @@ paths:
         subject to `rpc.timeout-broadcast-tx` and node shutdown. A returned hash
         does not guarantee that the transaction passes CheckTx or is committed.
 
-        See ../../docs/tenderdash-core/using-tenderdash.html#formatting
-        for formatting/encoding rules.
+        See [formatting/encoding rules](../../docs/tenderdash-core/using-tenderdash.html#formatting).
       parameters:
         - in: query
           name: tx
@@ -213,10 +210,9 @@ paths:
 
         To know when a transaction is included in a block, check for the
         transaction event using JSON-RPC.  See
-        ../../docs/tenderdash-core/subscription.html
+        [transaction event subscriptions](../../docs/tenderdash-core/subscription.html).
 
-        See ../../docs/tenderdash-core/using-tenderdash.html#formatting
-        for formatting/encoding rules.
+        See [formatting/encoding rules](../../docs/tenderdash-core/using-tenderdash.html#formatting).
       parameters:
         - in: query
           name: tx
@@ -247,9 +243,7 @@ paths:
       description: |
         The transaction won\'t be added to the mempool.
 
-        Please refer to
-        ../../docs/tenderdash-core/using-tenderdash.html#formatting
-        for formatting/encoding rules.
+        See [formatting/encoding rules](../../docs/tenderdash-core/using-tenderdash.html#formatting).
       parameters:
         - in: query
           name: tx

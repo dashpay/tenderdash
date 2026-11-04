@@ -1,5 +1,12 @@
 # PBTS: System Model and Properties
 
+> **Historical and outdated.** This Tendermint research draft is retained for
+> its clock model and temporal analysis, which have no complete replacement in
+> the implementation specification. Its guarantees do not describe current
+> Tenderdash. Use the [consensus system model](../consensus.md#system-model-as-enforced-by-the-code)
+> and [proposal timestamps and time rules](../consensus-alternative-flows.md#proposal-timestamps-and-time-rules)
+> for the implemented behavior.
+
 ## Outline
 
  - [System model](#system-model)

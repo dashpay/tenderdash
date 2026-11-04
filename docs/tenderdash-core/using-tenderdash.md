@@ -115,7 +115,7 @@ endpoints. Some take no arguments (like `/status`), while others specify
 the argument name and use `_` as a placeholder.
 
 
-> TIP: Find the RPC Documentation [here](https://docs.tenderdash.com/master/rpc/)
+> TIP: See the [RPC API reference](../../api/rpc/index.html).
 
 ### Formatting
 

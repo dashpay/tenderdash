@@ -14,7 +14,7 @@ on:
       - '.github/workflows/docs-deployment.yml'
   push:
     branches:
-      - v1.8-dev
+      - '**'
     paths:
       - 'book/**'
       - 'docs/**'
@@ -36,6 +36,7 @@ concurrency:
 
 jobs:
   build:
+    if: github.event_name != 'push' || github.ref_name == github.event.repository.default_branch
     name: Build mdBook and RPC documentation
     runs-on: ubuntu-24.04
     steps:
@@ -61,14 +62,14 @@ jobs:
           retention-days: 14
           if-no-files-found: error
       - name: Upload Pages artifact
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/v1.8-dev'
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_name == github.event.repository.default_branch)
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
           path: book/book
 
   deploy:
     name: Deploy to GitHub Pages
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/v1.8-dev'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_name == github.event.repository.default_branch)
     needs: build
     runs-on: ubuntu-24.04
     permissions:
