@@ -25,7 +25,7 @@ After providing the [problem statement](#Part-I---Basics-and-Definition-of-the-P
 
 # Part I - Basics and Definition of the Problem
 
-For definitions of data structures used here, in particular LightBlocks [[LCV-DATA-LIGHTBLOCK.1]](https://github.com/tendermint/spec/blob/master/rust-spec/lightclient/verification/verification_002_draft.md#lcv-data-lightblock1), we refer to the specification of [Light Client Verification][verification].
+For definitions of data structures used here, in particular LightBlocks [[LCV-DATA-LIGHTBLOCK.1]](../verification/verification_002_draft.md#lcv-data-lightblock1), we refer to the specification of [Light Client Verification][verification].
 
 The specification of the [detection mechanism][detection] describes
 
@@ -188,7 +188,7 @@ The main function `isolateMisbehavingProcesses` distinguishes three kinds of wro
 The question is whether this captures all attacks.
 First observe that the first check in `isolateMisbehavingProcesses` is `violatesTMValidity`. It takes care of lunatic attacks. If this check passes, that is, if `violatesTMValidity` returns `FALSE` this means that [[LCAI-NONVALID-OUTPUT.1]](#LCAI-FUNC-NONVALID1]) evaluates to false, which implies that `ref.ValidatorsHash = ev.ValidatorsHash`. Hence, after `violatesTMValidity`, all the involved validators are the ones from the blockchain. It is thus sufficient to analyze one instance of Tendermint consensus with a fixed group membership (set of validators). Also, as we have two different blocks for the same height, it is sufficient to consider two different valid consensus values, that is, binary consensus.
 
-For this fixed group membership, we have analyzed the attacks using the TLA+ specification of [Tendermint Consensus in TLA+][tendermint-accountability]. We checked that indeed the only possible scenarios that can lead to violation of agreement are **equivocation** and **amnesia**. An independent study by Galois of the protocol based on [Ivy proofs](https://github.com/tendermint/spec/tree/master/ivy-proofs) led to the same conclusion.
+For this fixed group membership, we have analyzed the attacks using the TLA+ specification of [Tendermint Consensus in TLA+][tendermint-accountability]. We checked that indeed the only possible scenarios that can lead to violation of agreement are **equivocation** and **amnesia**. An independent study by Galois of the protocol based on [Ivy proofs](../../ivy-proofs/README.md) led to the same conclusion.
 
 # References
 
@@ -201,25 +201,25 @@ For this fixed group membership, we have analyzed the attacks using the TLA+ spe
 [[tendermint-accountability]]: TLA+ specification to check the types of attacks
 
 [tendermint-accountability]:
-https://github.com/tendermint/spec/blob/master/rust-spec/tendermint-accountability/README.md
+../accountability/README.md
 
 [supervisor]:
-https://github.com/tendermint/spec/blob/master/rust-spec/lightclient/supervisor/supervisor_001_draft.md
+../supervisor/supervisor_001_draft.md
 
-[verification]: https://github.com/tendermint/spec/blob/master/rust-spec/lightclient/verification/verification_002_draft.md
+[verification]: ../verification/verification_002_draft.md
 
 [detection]:
-https://github.com/tendermint/spec/blob/master/rust-spec/lightclient/detection/detection_003_reviewed.md
+../detection/detection_003_reviewed.md
 
 [LC-DATA-EVIDENCE-link]:
-https://github.com/tendermint/spec/blob/master/rust-spec/lightclient/detection/detection_003_reviewed.md#lc-data-evidence1
+../detection/detection_003_reviewed.md#lc-data-evidence1
 
 [TMBC-LC-EVIDENCE-DATA-link]:
-https://github.com/tendermint/spec/blob/master/rust-spec/lightclient/detection/detection_003_reviewed.md#tmbc-lc-evidence-data1
+../detection/detection_003_reviewed.md#tmbc-lc-evidence-data1
 
 [node-based-attack-characterization]:
-https://github.com/tendermint/spec/blob/master/rust-spec/lightclient/detection/detection_003_reviewed.md#node-based-characterization-of-attacks
+../detection/detection_003_reviewed.md#node-based-characterization-of-attacks
 
-[TMBC-FM-2THIRDS-link]: https://github.com/tendermint/spec/blob/master/rust-spec/lightclient/verification/verification_002_draft.md#tmbc-fm-2thirds1
+[TMBC-FM-2THIRDS-link]: ../verification/verification_002_draft.md#tmbc-fm-2thirds1
 
-[LCV-FUNC-VALID.link]: https://github.com/tendermint/spec/blob/master/rust-spec/lightclient/verification/verification_002_draft.md#lcv-func-valid2
+[LCV-FUNC-VALID.link]: ../verification/verification_002_draft.md#lcv-func-valid2

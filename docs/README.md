@@ -1,33 +1,19 @@
----
-title: Tendermint Core Documentation
-description: Tendermint Core is a blockchain application platform.
-footer:
-  newsletter: false
----
+# Tenderdash
 
-# Tendermint
+Tenderdash is the Byzantine Fault Tolerant consensus engine used by Dash Platform.
+It replicates application state across validators and connects to the application
+through the Application Blockchain Interface (ABCI++).
 
-Welcome to the Tendermint Core documentation!
+- [Introduction](introduction/README.md) and [installation](introduction/install.md)
+- [Operating a node](nodes/README.md)
+- [Application development](app-dev/readme.md)
+- [Core components](tenderdash-core/README.md)
+- [Protocol specifications](../spec/README.md)
+- [Consensus protocol](../spec/consensus/consensus.md): primary flow, transitions,
+  alternative flows, commit handling, recovery, and known discrepancies
+- [RPC API](../api/rpc/index.html) (available in the generated site)
+- [Building and contributing to these docs](DOCS_README.md)
 
-Tendermint Core is a blockchain application platform; it provides the equivalent
-of a web-server, database, and supporting libraries for blockchain applications
-written in any programming language. Like a web-server serving web applications,
-Tendermint serves blockchain applications.
-
-More formally, Tendermint Core performs Byzantine Fault Tolerant (BFT)
-State Machine Replication (SMR) for arbitrary deterministic, finite state machines.
-For more background, see [What is
-Tendermint?](introduction/what-is-tendermint.md).
-
-To get started quickly with an example application, see the [quick start guide](introduction/quick-start.md).
-
-To learn about application development on Tendermint, see the [Application Blockchain Interface](../spec/abci).
-
-For more details on using Tendermint, see the respective documentation for
-[Tendermint Core](tendermint-core/), [benchmarking and monitoring](tools/), and [network deployments](nodes/).
-
-To find out about the Tendermint ecosystem you can go [here](https://github.com/tendermint/awesome#ecosystem). If you are a project that is using Tendermint you are welcome to make a PR to add your project to the list.
-
-## Contribute
-
-To contribute to the documentation, see [this file](https://github.com/tendermint/tendermint/blob/master/docs/DOCS_README.md) for details of the build process and considerations when making changes.
+The protocol specification describes the implementation on this branch and links
+to the functions that define each rule. Historical research and design documents
+remain available alongside it.

@@ -55,7 +55,7 @@ and the block part.
 ### NewRoundStep
 
 NewRoundStep is sent for every step transition during the core consensus algorithm execution.
-It is used in the gossip part of the Tendermint protocol to inform peers about a current
+It is used in the gossip part of the Tenderdash protocol to inform peers about a current
 height/round/step a process is in.
 
 | Name                     | Type   | Description                            | Field Number |

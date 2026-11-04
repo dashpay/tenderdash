@@ -1,5 +1,8 @@
 # RFC 009 : Consensus Parameter Upgrade Considerations
 
+> Inherited design record. This proposal provides design context, not a guarantee
+> of current behavior. See the [current protocol specification](../../spec/README.md).
+
 ## Changelog
 
 - 06-Jan-2011: Initial draft (@williambanfield).
@@ -7,29 +10,29 @@
 ## Abstract
 
 This document discusses the challenges of adding additional consensus parameters
-to Tendermint and proposes a few solutions that can enable addition of consensus
+to Tenderdash and proposes a few solutions that can enable addition of consensus
 parameters in a backwards-compatible way.
 
 ## Background
 
 This section provides an overview of the issues of adding consensus parameters
-to Tendermint.
+to Tenderdash.
 
 ### Hash Compatibility
 
-Tendermint produces a hash of a subset of the consensus parameters. The values
+Tenderdash produces a hash of a subset of the consensus parameters. The values
 that are hashed currently are the `BlockMaxGas` and the `BlockMaxSize`. These
 are currently in the [HashedParams struct][hashed-params]. This hash is included
 in the block and validators use it to validate that their local view of the consensus
 parameters matches what the rest of the network is configured with.
 
-Any new consensus parameters added to Tendermint should be included in this
+Any new consensus parameters added to Tenderdash should be included in this
 hash. This presents a challenge for verification of historical blocks when consensus
-parameters are added. If a network produced blocks with a version of Tendermint that
+parameters are added. If a network produced blocks with a version of Tenderdash that
 did not yet have the new consensus parameters, the parameter hash it produced will
 not reference the new parameters. Any nodes joining the network with the newer
-version of Tendermint will have the new consensus parameters. Tendermint will need
-to handle this case so that new versions of Tendermint with new consensus parameters
+version of Tenderdash will have the new consensus parameters. Tenderdash will need
+to handle this case so that new versions of Tenderdash with new consensus parameters
 can still validate old blocks correctly without having to do anything overly complex
 or hacky.
 
@@ -39,7 +42,7 @@ When new consensus parameters are added, application developers may wish to set
 values for them so that the developer-defined values may be used as soon as the
 software upgrades. We do not currently have a clean mechanism for handling this.
 
-Consensus parameter updates are communicated from the application to Tendermint
+Consensus parameter updates are communicated from the application to Tenderdash
 within `EndBlock` of some height `H` and take effect at the next height, `H+1`.
 This means that for updates that add a consensus parameter, there is a single
 height where the new parameters cannot take effect. The parameters did not exist
@@ -59,7 +62,7 @@ of hashed parameters while adding new parameters.
 One solution to the problem of backwards-compatibility is to never include parameters
 in the hash if the are using the default value. This means that blocks produced
 before the parameters existed will have implicitly been created with the defaults.
-This works because any software with newer versions of Tendermint must be using the
+This works because any software with newer versions of Tenderdash must be using the
 defaults for new parameters when validating old blocks since the defaults can not
 have been updated until a height at which the parameters existed.
 
@@ -67,7 +70,7 @@ have been updated until a height at which the parameters existed.
 
 An alternate solution to never hashing defaults is to not update the hashed
 parameters on non-hash-breaking releases. This means that when new consensus 
-parameters are added to Tendermint, there may be a release that makes use of the
+parameters are added to Tenderdash, there may be a release that makes use of the
 parameters but does not verify that they are the same across all validators by
 referencing them in the hash. This seems reasonably safe given the fact that
 only a very far subset of the consensus parameters are currently verified at all.
@@ -98,7 +101,7 @@ This poses a few difficulties. Nodes replaying old blocks while running new
 software do not ever call `InitChain` after the initial time. They will therefore
 not have a way to determine that the parameters changed at some height by using a
 call to `InitChain`. The `EndBlock` response is how parameter changes at a height
-are currently communicated to Tendermint and conflating these cases seems risky.
+are currently communicated to Tenderdash and conflating these cases seems risky.
 
 #### Force Defaults For Single Height
 
