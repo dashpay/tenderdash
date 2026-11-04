@@ -134,10 +134,11 @@ func TestRoundSkipHandoffDoesNotWaitForTheStateChannel(t *testing.T) {
 
 	ch := newHeldChannel()
 	r := &Reactor{
-		logger:         log.NewNopLogger(),
-		state:          cs,
-		livenessOutbox: make(chan livenessSend, livenessOutboxSize),
-		stateOutbox:    make(chan proto.Message, stateOutboxSize),
+		logger:          log.NewNopLogger(),
+		state:           cs,
+		livenessOutbox:  make(chan livenessSend, livenessOutboxSize),
+		stateOutbox:     make(chan proto.Message, stateOutboxSize),
+		stateOutboxWake: make(chan struct{}, 1),
 	}
 	r.subscribeToBroadcastEvents()
 	go r.sendState(ctx, ch)
@@ -170,6 +171,39 @@ func TestRoundSkipHandoffDoesNotWaitForTheStateChannel(t *testing.T) {
 	}, 10*time.Second, 10*time.Millisecond, "peers hear of the new round once the channel takes messages again")
 }
 
+// A broadcast that finds the outbox full is recorded as dropped after the
+// failed send, and the sender may have caught up and gone to sleep in between.
+// The record must wake it with nothing else queued: the dropped message may
+// have been the last round step before an idle wait.
+func TestStateSenderWakesForADropRecordedAfterItCaughtUp(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	ctx, cs, _ := newRoundSkipCatchupState(ctx, t)
+	height := cs.GetStateData().Height
+
+	ch := newHeldChannel()
+	close(ch.release)
+	r := &Reactor{
+		logger:          log.NewNopLogger(),
+		state:           cs,
+		stateOutbox:     make(chan proto.Message, 1),
+		stateOutboxWake: make(chan struct{}, 1),
+	}
+	go r.sendState(ctx, ch)
+
+	r.queueState(&tmcons.HasVote{Height: height})
+	require.Eventually(t, func() bool { return ch.len() == 1 }, 10*time.Second, time.Millisecond,
+		"the sender took what was queued")
+	// Long enough for the sender to find the outbox empty and go to sleep.
+	time.Sleep(50 * time.Millisecond)
+
+	r.recordStateDrop()
+	require.Eventually(t, func() bool {
+		step, ok := ch.last().(*tmcons.NewRoundStep)
+		return ok && step.Height == height
+	}, 10*time.Second, time.Millisecond, "the sender woke and sent the round step again")
+}
+
 // heldChannel is a p2p.Channel that takes nothing until it is released, as the
 // router's channel does while a peer it queues for has stopped reading. Then it
 // records what it takes.
@@ -192,6 +226,13 @@ func (ch *heldChannel) Send(ctx context.Context, envelope p2p.Envelope) error {
 	defer ch.mtx.Unlock()
 	ch.sent = append(ch.sent, envelope.Message)
 	return nil
+}
+
+// len returns how many messages the channel took.
+func (ch *heldChannel) len() int {
+	ch.mtx.Lock()
+	defer ch.mtx.Unlock()
+	return len(ch.sent)
 }
 
 // last returns the last message the channel took, or nil.

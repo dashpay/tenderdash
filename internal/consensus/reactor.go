@@ -284,6 +284,8 @@ type Reactor struct {
 	stateOutbox chan proto.Message
 	// stateOutboxLost is set when one of them found no room (see sendState).
 	stateOutboxLost atomic.Bool
+	// stateOutboxWake wakes sendState to look at stateOutboxLost.
+	stateOutboxWake chan struct{}
 
 	// Context for controlling reactor goroutines
 	ctx    context.Context
@@ -304,18 +306,19 @@ func NewReactor(
 	metrics *Metrics,
 ) *Reactor {
 	r := &Reactor{
-		logger:         logger,
-		state:          cs,
-		waitSync:       waitSync,
-		peers:          make(map[types.NodeID]*PeerState),
-		eventBus:       eventBus,
-		Metrics:        metrics,
-		peerEvents:     peerEvents,
-		chCreator:      channelCreator,
-		readySignal:    make(chan struct{}),
-		clock:          clockwork.NewRealClock(),
-		livenessOutbox: make(chan livenessSend, livenessOutboxSize),
-		stateOutbox:    make(chan proto.Message, stateOutboxSize),
+		logger:          logger,
+		state:           cs,
+		waitSync:        waitSync,
+		peers:           make(map[types.NodeID]*PeerState),
+		eventBus:        eventBus,
+		Metrics:         metrics,
+		peerEvents:      peerEvents,
+		chCreator:       channelCreator,
+		readySignal:     make(chan struct{}),
+		clock:           clockwork.NewRealClock(),
+		livenessOutbox:  make(chan livenessSend, livenessOutboxSize),
+		stateOutbox:     make(chan proto.Message, stateOutboxSize),
+		stateOutboxWake: make(chan struct{}, 1),
 	}
 	r.BaseService = *service.NewBaseService(logger, "Consensus", r)
 
@@ -674,9 +677,22 @@ func (r *Reactor) queueState(msg proto.Message) {
 	select {
 	case r.stateOutbox <- msg:
 	default:
-		r.stateOutboxLost.Store(true)
 		r.logger.Debug("dropping state message the state sender has no room for",
 			"msg_type", fmt.Sprintf("%T", msg))
+		r.recordStateDrop()
+	}
+}
+
+// recordStateDrop has sendState make up for a dropped message. By the time it
+// runs, the sender may have caught up and gone to sleep, and the dropped
+// message may have been the last round step before an idle wait, so nothing
+// else would come to wake it.
+func (r *Reactor) recordStateDrop() {
+	r.stateOutboxLost.Store(true)
+	select {
+	case r.stateOutboxWake <- struct{}{}:
+	default:
+		// A wake is already pending, and comes after this drop.
 	}
 }
 
@@ -704,6 +720,8 @@ func (r *Reactor) sendState(ctx context.Context, stateCh p2p.Channel) {
 			select {
 			case <-ctx.Done():
 				return
+			case <-r.stateOutboxWake:
+				continue
 			case msg = <-r.stateOutbox:
 			}
 		}
