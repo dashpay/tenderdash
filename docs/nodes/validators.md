@@ -27,8 +27,8 @@ Validators have a cryptographic key-pair and an associated amount of
 There are two ways to become validator.
 
 1. They can be pre-established in the [genesis state](../tenderdash-core/using-tenderdash.md#genesis)
-2. The ABCI app responds to the EndBlock message with changes to the
-   existing validator set.
+2. The ABCI app returns validator-set updates through the proposal and
+   finalization lifecycle. See the [ABCI specification](../../spec/abci/README.md).
 
 ## Setting up a Validator
 
@@ -100,18 +100,24 @@ More Information can be found at these links:
 
 ### Validator keys
 
-Protecting a validator's consensus key is the most important factor to take in when designing your setup. The key that a validator is given upon creation of the node is called a consensus key, it has to be online at all times in order to vote on blocks. It is **not recommended** to merely hold your private key in the default json file (`priv_validator_key.json`). Fortunately, the [Interchain Foundation](https://interchain.io/) has worked with a team to build a key management server for validators. You can find documentation on how to use it [here](https://github.com/iqlusioninc/tmkms), it is used extensively in production. You are not limited to using this tool, there are also [HSMs](https://safenet.gemalto.com/data-encryption/hardware-security-modules-hsms/), there is not a recommended HSM.
+Tenderdash validators use BLS consensus keys and Dash quorum information. Protect
+both the private key and the signing state that prevents conflicting votes.
+Never run two active signers with the same consensus identity.
 
-Currently Tenderdash uses [Ed25519](https://ed25519.cr.yp.to/) keys which are widely supported across the security sector and HSMs.
+A remote signer must support Tenderdash's BLS keys and quorum-aware signing
+requests. Check compatibility before choosing a key management server or HSM;
+support for Ed25519 in another consensus system does not establish compatibility.
+See [remote signers](./remote-signer.md) and the
+[signing specification](../../spec/consensus/signing.md).
 
 ## Committing a Block
 
 > **+2/3 is short for "more than 2/3"**
 
 A block is committed when +2/3 of the validator set sign [precommit
-votes](https://github.com/dashpay/tenderdash/blob/953523c3cb99fdb8c8f7a2d21e3a99094279e9de/spec/blockchain/blockchain.md#vote) for that block at the same `round`.
+votes](https://github.com/tendermint/tendermint/blob/953523c3cb99fdb8c8f7a2d21e3a99094279e9de/spec/blockchain/blockchain.md#vote) for that block at the same `round`.
 The +2/3 set of precommit votes is called a
-[_commit_](https://github.com/dashpay/tenderdash/blob/953523c3cb99fdb8c8f7a2d21e3a99094279e9de/spec/blockchain/blockchain.md#commit). While any +2/3 set of
+[_commit_](https://github.com/tendermint/tendermint/blob/953523c3cb99fdb8c8f7a2d21e3a99094279e9de/spec/blockchain/blockchain.md#commit). While any +2/3 set of
 precommits for the same block at the same height&round can serve as
 validation, the canonical commit is included in the next block (see
-[LastCommit](https://github.com/dashpay/tenderdash/blob/953523c3cb99fdb8c8f7a2d21e3a99094279e9de/spec/blockchain/blockchain.md#lastcommit)).
+[LastCommit](https://github.com/tendermint/tendermint/blob/953523c3cb99fdb8c8f7a2d21e3a99094279e9de/spec/blockchain/blockchain.md#lastcommit)).
