@@ -4,24 +4,23 @@ order: 7
 
 # Subscribing to Events
 
-A Tendermint node emits events about important state transitions during
+A Tenderdash node emits events about important state transitions during
 consensus. These events can be queried by clients via the [RPC interface][rpc]
 on nodes that enable it. The [list of supported event types][event-types] can
-be found in the tendermint/types Go package.
+be found in the `github.com/dashpay/tenderdash/types` Go package.
 
-In Tendermint v0.36 there are two APIs to query events:
+There are two APIs to query events:
 
 - The [**legacy streaming API**](#legacy-streaming-api), comprising the
   `subscribe`, `unsubscribe`, and `unsubscribe_all` RPC methods over websocket.
 
 - The [**event log API**](#event-log-api), comprising the `events` RPC method.
 
-The legacy streaming API is deprecated in Tendermint v0.36, and will be removed
-in Tendermint v0.37. Clients are strongly encouraged to migrate to the new
-event log API as soon as is practical.
+The event log API supports polling and pagination. Use the API supported by
+your node and client; the sections below describe both interfaces.
 
-[rpc]: https://docs.tendermint.com/master/rpc
-[event-types]: https://godoc.org/github.com/tendermint/tendermint/types#EventNewBlockValue
+[rpc]: rpc.md
+[event-types]: https://godoc.org/github.com/dashpay/tenderdash/types#EventNewBlockValue
 
 ## Filter Queries
 
@@ -52,11 +51,11 @@ of an attribute regardless of its value.
 
 ### Attributes
 
-Tendermint implicitly defines a string-valued `tm.event` attribute for all
+Tenderdash implicitly defines a string-valued `tm.event` attribute for all
 event types. Transaction items (type `Tx`) are also assigned `tx.hash`
 (string), giving the hash of the transaction, and and `tx.height` (number)
 giving the height of the block containing the transaction.  For `NewBlock` and
-`NewBlockHeader` events, Tendermint defines a `block.height` attribute giving
+`NewBlockHeader` events, Tenderdash defines a `block.height` attribute giving
 the height of the block.
 
 Additional attributes can be provided by the application as [ABCI `Event`
@@ -70,7 +69,7 @@ For example, given the events
 []abci.Event{{
     Type: "reward",
     Attributes: []abci.EventAttribute{
-        {Key: "address", Value: "cosmos1xyz012pdq"},
+        {Key: "address", Value: "example-address"},
         {Key: "amount", Value: "45.62"},
         {Key: "balance", Value: "100.390001"},
     },
@@ -86,12 +85,12 @@ reward.address EXISTS AND reward.balance > 45
 Certain application-specific metadata are also indexed for offline queries.
 See [Indexing transactions](../app-dev/indexing-transactions.md) for more details.
 
-[query]: https://godoc.org/github.com/tendermint/tendermint/internal/pubsub/query/syntax
-[abci-event]: https://github.com/tendermint/tendermint/blob/master/proto/tendermint/abci/types.proto#L397
+[query]: https://godoc.org/github.com/dashpay/tenderdash/internal/pubsub/query/syntax
+[abci-event]: https://github.com/dashpay/tenderdash/blob/master/proto/tendermint/abci/types.proto#L397
 
 ## Event Log API
 
-Starting in Tendermint v0.36, when the `rpc.event-log-window-size`
+When the `rpc.event-log-window-size`
 configuration is enabled, the node maintains maintains a log of all events
 within this operator-defined time window. This API supersedes the websocket
 subscription API described below.
@@ -142,7 +141,7 @@ will return a result similar to the following:
                   "attributes": [
                     {
                       "key": "creator",
-                      "value": "Cosmoshi Netowoko",
+                      "value": "Example User",
                       "index": true
                     },
                     {
@@ -186,14 +185,13 @@ Go clients can use the [`eventstream`][eventstream] package to simplify the use
 of this method. The `eventstream.Stream` automatically handles polling for new
 events, updating the cursor, and reporting any missed events.
 
-[reqevents]: https://pkg.go.dev/github.com/tendermint/tendermint@master/rpc/coretypes#RequestEvents
-[eventstream]: https://godoc.org/github.com/tendermint/tendermint/rpc/client/eventstream
+[reqevents]: https://pkg.go.dev/github.com/dashpay/tenderdash/rpc/coretypes#RequestEvents
+[eventstream]: https://godoc.org/github.com/dashpay/tenderdash/rpc/client/eventstream
 
 ## Legacy Streaming API
 
-- **Note:** This API is deprecated in Tendermint v0.36, and will be removed in
-  Tendermint v0.37. New clients and existing use should use the [event log
-  API](#event-log-api) instead. See [ADR 075][adr075] for more details.
+For a polling interface, use the [event log API](#event-log-api). See
+[ADR 075][adr075] for design context.
 
 To subscribe to events in the streaming API, you must connect to the node RPC
 service using a [websocket][ws]. From the command line you can use a tool such

@@ -21,11 +21,11 @@ consensus gossip protocol.
 
 ## Using Block Sync
 
-To support faster syncing, Tendermint offers a `blocksync` mode, which
+To support faster syncing, Tenderdash offers a `blocksync` mode, which
 is enabled by default, and can be toggled in the `config.toml` or via
 `--blocksync.enable=false`.
 
-In this mode, the Tendermint daemon will sync hundreds of times faster
+In this mode, the Tenderdash daemon will sync hundreds of times faster
 than if it used the real-time consensus process. Once caught up, the
 daemon will switch out of Block Sync and into the normal consensus mode.
 After running for some time, the node is considered `caught up` if it
@@ -57,14 +57,14 @@ If we're lagging sufficiently, we should go back to block syncing, but
 this is an [open issue](https://github.com/tendermint/tendermint/issues/129).
 
 ## The Block Sync event
-When the tendermint blockchain core launches, it might switch to the `block-sync`
+When the tenderdash blockchain core launches, it might switch to the `block-sync`
 mode to catch up the states to the current network best height. the core will emits
 a fast-sync event to expose the current status and the sync height. Once it catched
 the network best height, it will switches to the state sync mechanism and then emit
 another event for exposing the fast-sync `complete` status and the state `height`.
 
 The user can query the events by subscribing `EventQueryBlockSyncStatus`
-Please check [types](https://pkg.go.dev/github.com/tendermint/tendermint/types?utm_source=godoc#pkg-constants) for the details.
+Please check [types](https://pkg.go.dev/github.com/dashpay/tenderdash/types?utm_source=godoc#pkg-constants) for the details.
 
 ## Implementation
 

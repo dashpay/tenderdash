@@ -1,5 +1,8 @@
 # RFC 012: Event Indexing Revisited
 
+> Inherited design record. This proposal provides design context, not a guarantee
+> of current behavior. See the [current protocol specification](../../spec/README.md).
+
 ## Changelog
 
 - 11-Feb-2022: Add terminological notes.
@@ -8,8 +11,8 @@
 
 ## Abstract
 
-A Tendermint node allows ABCI events associated with block and transaction
-processing to be "indexed" into persistent storage.  The original Tendermint
+A Tenderdash node allows ABCI events associated with block and transaction
+processing to be "indexed" into persistent storage.  The original Tenderdash
 implementation provided a fixed, built-in [proprietary indexer][kv-index] for
 such events.
 
@@ -29,14 +32,14 @@ meant to unify and focus some of the disparate discussions of the topic.
 ## Background
 
 We begin with some important terminological context.  The term "event" in
-Tendermint can be confusing, as the same word is used for multiple related but
+Tenderdash can be confusing, as the same word is used for multiple related but
 distinct concepts:
 
 1. **ABCI Events** refer to the key-value metadata attached to blocks and
    transactions by the application. These values are represented by the ABCI
    `Event` protobuf message type.
 
-2. **Consensus Events** refer to the data published by the Tendermint node to
+2. **Consensus Events** refer to the data published by the Tenderdash node to
    its pubsub bus in response to various consensus state transitions and other
    important activities, such as round updates, votes, transaction delivery,
    and block completion.
@@ -66,7 +69,7 @@ operator.
 
 ### History
 
-The [original indexer][kv-index] built in to Tendermint stored index data in an
+The [original indexer][kv-index] built in to Tenderdash stored index data in an
 embedded [`tm-db` database][tmdb] with a proprietary key layout.
 In [ADR 065][adr065], we noted that this implementation has both performance
 and scaling problems under load.  Moreover, the only practical way to query the
@@ -93,21 +96,21 @@ The `EventSink` interface supports multiple implementations, but plugging in
 implementations still requires tight integration with the node. In particular:
 
 - Any custom indexer must either be written in Go and compiled in to the
-  Tendermint binary, or the developer must write a Go shim to communicate with
-  the implementation and build that into the Tendermint binary.
+  Tenderdash binary, or the developer must write a Go shim to communicate with
+  the implementation and build that into the Tenderdash binary.
 
 - This means to support a custom indexer, it either has to be integrated into
-  the Tendermint core repository, or every installation that uses that indexer
-  must fetch or build a patched version of Tendermint.
+  the Tenderdash core repository, or every installation that uses that indexer
+  must fetch or build a patched version of Tenderdash.
 
-The problem with integrating indexers into Tendermint Core is that every user
-of Tendermint Core takes a dependency on all supported indexers, including
+The problem with integrating indexers into Tenderdash Core is that every user
+of Tenderdash Core takes a dependency on all supported indexers, including
 those they never use. Even if the unused code is disabled with build tags,
 users have to remember to do this or potentially be exposed to security issues
-that may arise in any of the custom indexers. This is a risk for Tendermint,
+that may arise in any of the custom indexers. This is a risk for Tenderdash,
 which is a trust-critical component of all applications built on it.
 
-The problem with _not_ integrating indexers into Tendermint Core is that any
+The problem with _not_ integrating indexers into Tenderdash Core is that any
 developer who wants to use a particular indexer must now fetch or build a
 patched version of the core code that includes the custom indexer. Besides
 being inconvenient, this makes it harder for users to upgrade their node, since
@@ -198,7 +201,7 @@ be done without an indexer, since it does not depend on application metadata.
 Inevitably, a question will arise whether we could implement both strategies
 and toggle between them with a flag. That would be a worst-case scenario,
 requiring us to maintain the complexity of two very-different operational
-concerns.  If our goal is that Tendermint should be as simple, efficient, and
+concerns.  If our goal is that Tenderdash should be as simple, efficient, and
 trustworthy as posible, there is not a strong case for making these options
 configurable: We should pick a side and commit to it.
 
@@ -207,9 +210,9 @@ configurable: We should pick a side and commit to it.
 Although there is no unique "best" solution to the issues described above,
 there are some specific principles that a solution should include:
 
-1. **A custom indexer should not require integration into Tendermint core.** A
+1. **A custom indexer should not require integration into Tenderdash core.** A
    developer or node operator can create, build, deploy, and use a custom
-   indexer with a stock build of the Tendermint consensus node.
+   indexer with a stock build of the Tenderdash consensus node.
 
 2. **Custom indexers cannot stall consensus.** An indexer that is slow or
    stalls cannot slow down or prevent core consensus from making progress.
@@ -286,7 +289,7 @@ must answer to guide any specific changes:
 ### Informal Design Intent
 
 The design principles described above implicate several components of the
-Tendermint node, beyond just the indexer. In the context of [ADR 075][adr075],
+Tenderdash node, beyond just the indexer. In the context of [ADR 075][adr075],
 we are re-working the RPC event subscription API to improve some of the UX
 issues discussed above for RPC clients. It is our expectation that a solution
 for pluggable custom indexing will take advantage of some of the same work.
@@ -303,7 +306,7 @@ something like this (subject to refinement):
    interface anyway, that should not increase complexity for the node.
 
 3. The existing PostgreSQL indexer gets reworked to have this form, and no
-   longer built as part of the Tendermint core binary.
+   longer built as part of the Tenderdash core binary.
 
    We can retain the code in the core repository as a proof-of-concept, or
    perhaps create a separate repository with contributed indexers and move it
@@ -337,15 +340,15 @@ something like this (subject to refinement):
 - [`tm-db` library][tmdb]
 
 [adr065]: https://github.com/tendermint/tendermint/blob/master/docs/architecture/adr-065-custom-event-indexing.md
-[adr075]: https://github.com/tendermint/tendermint/blob/master/docs/architecture/adr-075-rpc-subscription.md
-[esink]: https://pkg.go.dev/github.com/tendermint/tendermint/internal/state/indexer#EventSink
-[event-rpc]: https://docs.tendermint.com/master/rpc/#/Websocket/subscribe
+[adr075]: https://github.com/dashpay/tenderdash/blob/master/docs/architecture/adr-075-rpc-subscription.md
+[esink]: https://pkg.go.dev/github.com/dashpay/tenderdash/internal/state/indexer#EventSink
+[event-rpc]: ../tenderdash-core/rpc.md#/Websocket/subscribe
 [i1161]: https://github.com/tendermint/tendermint/issues/1161
 [i7135]: https://github.com/tendermint/tendermint/issues/7135
 [i7247]: https://github.com/tendermint/tendermint/issues/7247
-[kv-index]: https://github.com/tendermint/tendermint/blob/master/internal/state/indexer/tx/kv
+[kv-index]: https://github.com/dashpay/tenderdash/blob/master/internal/state/indexer/tx/kv
 [postgres]: https://postgresql.org/
 [psql]: https://github.com/tendermint/tendermint/blob/master/internal/state/indexer/sink/psql
-[query]: https://pkg.go.dev/github.com/tendermint/tendermint/internal/pubsub/query/syntax
+[query]: https://pkg.go.dev/github.com/dashpay/tenderdash/internal/pubsub/query/syntax
 [sdk]: https://github.com/cosmos/cosmos-sdk
 [tmdb]: https://pkg.go.dev/github.com/cometbft/cometbft-db#DB

@@ -1,15 +1,15 @@
 ---
 order: 1
 parent:
-  title: Understanding Tendermint
+  title: Understanding Tenderdash
   order: 5
 ---
 
 # Overview
 
-This section dives into the internals of Go-Tendermint.
+This section dives into the internals of Tenderdash.
 
-- [Using Tendermint](./using-tendermint.md)
+- [Using Tenderdash](./using-tenderdash.md)
 - [Subscribing to events](./subscription.md)
 - [Block Structure](./block-structure.md)
 - [RPC](./rpc.md)
@@ -21,4 +21,4 @@ This section dives into the internals of Go-Tendermint.
 - [Peer Exchange (PEX)](./pex/README.md)
 - [Evidence](./evidence/README.md)
 
-For full specifications refer to the [spec repo](https://github.com/tendermint/spec).
+For full specifications refer to the [protocol specification](../../spec/README.md).

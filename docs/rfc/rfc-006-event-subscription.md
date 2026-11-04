@@ -1,12 +1,15 @@
 # RFC 006: Event Subscription
 
+> Inherited design record. This proposal provides design context, not a guarantee
+> of current behavior. See the [current protocol specification](../../spec/README.md).
+
 ## Changelog
 
 - 30-Oct-2021: Initial draft (@creachadair)
 
 ## Abstract
 
-The Tendermint consensus node allows clients to subscribe to its event stream
+The Tenderdash consensus node allows clients to subscribe to its event stream
 via methods on its RPC service.  The ability to view the event stream is
 valuable for clients, but the current implementation has some deficiencies that
 make it difficult for some clients to use effectively. This RFC documents these
@@ -15,7 +18,7 @@ issues and discusses possible approaches to solving them.
 
 ## Background
 
-A running Tendermint consensus node exports a [JSON-RPC service][rpc-service]
+A running Tenderdash consensus node exports a [JSON-RPC service][rpc-service]
 that provides a [large set of methods][rpc-methods] for inspecting and
 interacting with the node.  One important cluster of these methods are the
 `subscribe`, `unsubscribe`, and `unsubscribe_all` methods, which permit clients
@@ -52,7 +55,7 @@ subscription in the RPC service:
   already completed.  In practice, this means that general-purpose JSON-RPC
   libraries cannot use this method correctly -- it requires a custom client.
 
-  The Go RPC client from the Tendermint core can support this case, but clients
+  The Go RPC client from the Tenderdash core can support this case, but clients
   in other languages have no easy solution.
 
   This is the cause of issue [#2949][issue2949].
@@ -75,8 +78,8 @@ subscription in the RPC service:
   connection is dropped.  Apart from being tedious, this is highly susceptible
   to CPU load.
 
-  The Tendermint Go implementation automatically sends and responds to pings.
-  Clients in other languages (or not wanting to use the Tendermint libraries)
+  The Tenderdash Go implementation automatically sends and responds to pings.
+  Clients in other languages (or not wanting to use the Tenderdash libraries)
   need to handle it explicitly.  This burdens the client for no practical
   benefit: A subscriber has no information about when matching events may be
   available, so it shouldn't have to participate in keeping the connection
@@ -187,17 +190,17 @@ mutually exclusive.
 
 ## References
 
-- [Tendermint RPC service][rpc-service]
-- [Tendermint RPC routes][rpc-methods]
+- [Tenderdash RPC service][rpc-service]
+- [Tenderdash RPC routes][rpc-methods]
 - [Discussion of the event system][events]
 - [Discussion about RPC transport options][rpc-transport] (from RFC 002)
 - [RFC 6455: The websocket protocol][ws]
 - [JSON-RPC 2.0 Specification](https://www.jsonrpc.org/specification)
 
-[rpc-service]: https://docs.tendermint.com/master/rpc/
-[rpc-methods]: https://github.com/tendermint/tendermint/blob/master/internal/rpc/core/routes.go#L12
-[events]: ./rfc-005-event-system.rst
-[rpc-transport]: ./rfc-002-ipc-ecosystem.md#rpc-transport
+[rpc-service]: ../tenderdash-core/rpc.md
+[rpc-methods]: https://github.com/dashpay/tenderdash/blob/master/internal/rpc/core/routes.go#L12
+[events]: https://github.com/tendermint/tendermint/blob/7cdf560173dee6773b80d1c574a06489d4c394fe/docs/rfc/rfc-005-event-system.rst
+[rpc-transport]: https://github.com/tendermint/tendermint/blob/7cdf560173dee6773b80d1c574a06489d4c394fe/docs/rfc/rfc-002-ipc-ecosystem.md#rpc-transport
 [ws]: https://datatracker.ietf.org/doc/html/rfc6455
 [json-response]: https://www.jsonrpc.org/specification#response_object
 [json-notify]: https://www.jsonrpc.org/specification#notification

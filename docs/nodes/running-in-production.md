@@ -4,17 +4,17 @@ order: 4
 
 # Running in production
 
-If you are building Tendermint from source for use in production, make sure to check out an appropriate Git tag instead of a branch.
+If you are building Tenderdash from source for use in production, make sure to check out an appropriate Git tag instead of a branch.
 
 ## Database
 
-By default, Tendermint uses the `syndtr/goleveldb` package for its in-process
+By default, Tenderdash uses the `syndtr/goleveldb` package for its in-process
 key-value database. If you want maximal performance, it may be best to install
-the real C-implementation of LevelDB and compile Tendermint to use that using
+the real C-implementation of LevelDB and compile Tenderdash to use that using
 `make build TENDERMINT_BUILD_OPTIONS=cleveldb`. See the [install
 instructions](../introduction/install.md) for details.
 
-Tendermint keeps multiple distinct databases in the `$TMROOT/data`:
+Tenderdash keeps multiple distinct databases in the `$TMROOT/data`:
 
 - `blockstore.db`: Keeps the entire blockchain - stores blocks,
   block commits, and block meta data, each indexed by height. Used to sync new
@@ -25,7 +25,7 @@ Tendermint keeps multiple distinct databases in the `$TMROOT/data`:
   used to temporarily store intermediate results during block processing.
 - `tx_index.db`: Indexes txs (and their results) by tx hash and by DeliverTx result events.
 
-By default, Tendermint will only index txs by their hash and height, not by their DeliverTx
+By default, Tenderdash will only index txs by their hash and height, not by their DeliverTx
 result events. See [indexing transactions](../app-dev/indexing-transactions.md) for
 details.
 
@@ -41,16 +41,16 @@ normal operation mode. Read [this
 post](https://blog.cosmos.network/one-of-the-exciting-new-features-in-0-10-0-release-is-smart-log-level-flag-e2506b4ab756)
 for details on how to configure `log-level` config variable. Some of the
 modules can be found [here](logging.md#list-of-modules). If
-you're trying to debug Tendermint or asked to provide logs with debug
-logging level, you can do so by running Tendermint with
+you're trying to debug Tenderdash or asked to provide logs with debug
+logging level, you can do so by running Tenderdash with
 `--log-level="debug"`.
 
 ### Consensus WAL
 
-Tendermint uses a write ahead log (WAL) for consensus. The `consensus.wal` is used to ensure we can recover from a crash at any point
+Tenderdash uses a write ahead log (WAL) for consensus. The `consensus.wal` is used to ensure we can recover from a crash at any point
 in the consensus state machine. It writes all consensus messages (timeouts, proposals, block part, or vote)
 to a single file, flushing to disk before processing messages from its own
-validator. Since Tendermint validators are expected to never sign a conflicting vote, the
+validator. Since Tenderdash validators are expected to never sign a conflicting vote, the
 WAL ensures we can always recover deterministically to the latest state of the consensus without
 using the network or re-signing any consensus messages. The consensus WAL max size of 1GB and is automatically rotated.
 
@@ -64,7 +64,7 @@ to prevent Denial-of-service attacks.
 
 ### P2P
 
-The core of the Tendermint peer-to-peer system is `MConnection`. Each
+The core of the Tenderdash peer-to-peer system is `MConnection`. Each
 connection has `MaxPacketMsgPayloadSize`, which is the maximum packet
 size and bounded send & receive queues. One can impose restrictions on
 send & receive rate per connection (`SendRate`, `RecvRate`).
@@ -77,7 +77,7 @@ mechanisms.
 ### RPC
 
 Endpoints returning multiple entries are limited by default to return 30
-elements (100 max). See the [RPC Documentation](https://docs.tendermint.com/master/rpc/)
+elements (100 max). See the [RPC Documentation](../tenderdash-core/rpc.md)
 for more information.
 
 Rate-limiting and authentication are another key aspects to help protect
@@ -86,9 +86,9 @@ against DOS attacks. Validators are supposed to use external tools like
 [traefik](https://doc.traefik.io/traefik/middlewares/http/ratelimit/)
 to achieve the same things.
 
-## Debugging Tendermint
+## Debugging Tenderdash
 
-If you ever have to debug Tendermint, the first thing you should probably do is
+If you ever have to debug Tenderdash, the first thing you should probably do is
 check out the logs. See [Logging](../nodes/logging.md), where we
 explain what certain log statements mean.
 
@@ -112,41 +112,41 @@ There is a reduced version of this endpoint - `/consensus_state`, which returns
 just the votes seen at the current height.
 
 If, after consulting with the logs and above endpoints, you still have no idea
-what's happening, consider using `tendermint debug kill` sub-command. This
+what's happening, consider using `tenderdash debug kill` sub-command. This
 command will scrap all the available info and kill the process. See
 [Debugging](../tools/debugging/README.md) for the exact format.
 
 You can inspect the resulting archive yourself or create an issue on
-[Github](https://github.com/tendermint/tendermint). Before opening an issue
+[GitHub](https://github.com/dashpay/tenderdash). Before opening an issue
 however, be sure to check if there's [no existing
-issue](https://github.com/tendermint/tendermint/issues) already.
+issue](https://github.com/dashpay/tenderdash/issues) already.
 
-## Monitoring Tendermint
+## Monitoring Tenderdash
 
-Each Tendermint instance has a standard `/health` RPC endpoint, which responds
+Each Tenderdash instance has a standard `/health` RPC endpoint, which responds
 with 200 (OK) if everything is fine and 500 (or no response) - if something is
 wrong.
 
 Other useful endpoints include mentioned earlier `/status`, `/net_info` and
 `/validators`.
 
-Tendermint also can report and serve Prometheus metrics. See
+Tenderdash also can report and serve Prometheus metrics. See
 [Metrics](./metrics.md).
 
-`tendermint debug dump` sub-command can be used to periodically dump useful
+`tenderdash debug dump` sub-command can be used to periodically dump useful
 information into an archive. See [Debugging](../tools/debugging/README.md) for more
 information.
 
 ## What happens when my app dies
 
-You are supposed to run Tendermint under a [process
+You are supposed to run Tenderdash under a [process
 supervisor](https://en.wikipedia.org/wiki/Process_supervision) (like
-systemd or runit). It will ensure Tendermint is always running (despite
+systemd or runit). It will ensure Tenderdash is always running (despite
 possible errors).
 
 Getting back to the original question, if your application dies,
-Tendermint will panic. After a process supervisor restarts your
-application, Tendermint should be able to reconnect successfully. The
+Tenderdash will panic. After a process supervisor restarts your
+application, Tenderdash should be able to reconnect successfully. The
 order of restart does not matter for it.
 
 ## Signal handling
@@ -158,7 +158,7 @@ programs](https://golang.org/pkg/os/signal/#hdr-Default_behavior_of_signals_in_G
 
 ## Corruption
 
-**NOTE:** Make sure you have a backup of the Tendermint data directory.
+**NOTE:** Make sure you have a backup of the Tenderdash data directory.
 
 ### Possible causes
 
@@ -174,20 +174,20 @@ Other causes can be:
 
 - Database systems configured with fsync=off and an OS crash or power loss
 - Filesystems configured to use write barriers plus a storage layer that ignores write barriers. LVM is a particular culprit.
-- Tendermint bugs
+- Tenderdash bugs
 - Operating system bugs
-- Admin error (e.g., directly modifying Tendermint data-directory contents)
+- Admin error (e.g., directly modifying Tenderdash data-directory contents)
 
 (Source: <https://wiki.postgresql.org/wiki/Corruption>)
 
 ### WAL Corruption
 
 If consensus WAL is corrupted at the latest height and you are trying to start
-Tendermint, replay will fail with panic.
+Tenderdash, replay will fail with panic.
 
 Recovering from data corruption can be hard and time-consuming. Here are two approaches you can take:
 
-1. Delete the WAL file and restart Tendermint. It will attempt to sync with other peers.
+1. Delete the WAL file and restart Tenderdash. It will attempt to sync with other peers.
 2. Try to repair the WAL file manually:
 
 1) Create a backup of the corrupted WAL file:
@@ -208,7 +208,7 @@ Recovering from data corruption can be hard and time-consuming. Here are two app
    messages are marked as corrupted too (this may happen if length header
    got corrupted or some writes did not make it to the WAL ~ truncation),
    then remove all the lines starting from the corrupted one and restart
-   Tendermint.
+   Tenderdash.
 
     ```sh
     $EDITOR /tmp/corrupted_wal
@@ -239,10 +239,9 @@ Recommended:
 - 100GB SSD
 - x64 2.0 GHz 2v CPU
 
-While for now, Tendermint stores all the history and it may require significant
-disk space over time, we are planning to implement state syncing (See [this
-issue](https://github.com/tendermint/tendermint/issues/828)). So, storing all
-the past blocks will not be necessary.
+Disk usage depends on retained block history and application state.
+[State sync](./state-sync.md) can bootstrap from an application snapshot;
+configure retention according to your recovery and archival requirements.
 
 ### Validator signing on 32 bit architectures (or ARM)
 
@@ -269,9 +268,9 @@ operating systems (like macOS).
 
 ### Miscellaneous
 
-NOTE: if you are going to use Tendermint in a public domain, make sure
-you read [hardware recommendations](https://cosmos.network/validators) for a validator in the
-Cosmos network.
+Size a production node for your Dash Platform network, application workload
+and retention policy. Measure disk growth, memory use and consensus latency
+under representative load before deployment.
 
 ## Configuration parameters
 
@@ -280,7 +279,7 @@ Cosmos network.
 - `p2p.send-rate`
 - `p2p.recv-rate`
 
-If you are going to use Tendermint in a private domain and you have a
+If you are going to use Tenderdash in a private domain and you have a
 private high-speed network among your peers, it makes sense to lower
 flush throttle timeout and increase other params.
 
@@ -305,7 +304,7 @@ theres something to send its peers.
 
 - `p2p.addr-book-strict`
 
-By default, Tendermint checks whenever a peer's address is routable before
+By default, Tenderdash checks whenever a peer's address is routable before
 saving it to the address book. The address is considered as routable if the IP
 is [valid and within allowed
 ranges](https://github.com/tendermint/tendermint/blob/27bd1deabe4ba6a2d9b463b8f3e3f1e31b993e61/p2p/netaddress.go#L209).

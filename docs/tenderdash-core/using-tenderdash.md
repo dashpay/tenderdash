@@ -4,6 +4,9 @@ order: 2
 
 # Using Tenderdash
 
+> Serialized key types such as `tendermint/PubKeyBLS12381` are protocol
+> identifiers. Keep those names unchanged when configuring Tenderdash.
+
 This is a guide to using the `tenderdash` program from the command line.
 It assumes only that you have the `tenderdash` binary installed and have
 some rudimentary idea of what Tenderdash and ABCI are.
@@ -21,7 +24,7 @@ this by setting the `TMHOME` environment variable.
 Initialize the root directory by running:
 
 ```sh
-tendermint init validator
+tenderdash init validator
 ```
 
 This will create a new private key (`priv_validator_key.json`), and a
@@ -49,7 +52,7 @@ definition](https://github.com/tenderdash/tenderdash/blob/master/types/genesis.g
   chain IDs, you will have a bad time. The ChainID must be less than 50 symbols.
 - `initial_height`: Height at which Tenderdash should begin. If a blockchain is conducting a network upgrade,
     starting from the stopped height brings uniqueness to previous heights.
-- `consensus_params` [spec](https://github.com/tendermint/tendermint/blob/master/spec/core/state.md#consensusparams)
+- `consensus_params` [spec](https://github.com/dashpay/tenderdash/blob/master/spec/core/state.md#consensusparams)
     - `block`
         - `max_bytes`: Max block size, in bytes.
         - `max_gas`: Max gas per block.
@@ -112,7 +115,7 @@ definition](https://github.com/tenderdash/tenderdash/blob/master/types/genesis.g
     {
       "address": "B547AB87E79F75A4A3198C57A8C2FDAF8628CB47",
       "pub_key": {
-        "type": "tenderdash/PubKeyBLS25519",
+        "type": "tendermint/PubKeyBLS12381",
         "value": "rK8dtUyUYi5wCgjEFL2t8AKRfhbVnCu2C3cchusRyWfkapjRX6Wc2FL5fvJkahq6"
       },
       "power": "100",
@@ -261,7 +264,7 @@ afford to lose all blockchain data!
 To reset a blockchain, stop the node and run:
 
 ```sh
-tendermint unsafe-reset-all
+tenderdash unsafe-reset-all
 ```
 
 This command will remove the data directory and reset private validator and
@@ -374,7 +377,7 @@ When `tenderdash init` is run, both a `genesis.json` and
     {
       "pub_key" : {
         "value" : "h3hk+QE8c6QLTySp8TcfzclJw/BG79ziGB/pIA+DfPE=",
-        "type" : "tenderdash/PubKeyEd25519"
+        "type" : "tendermint/PubKeyEd25519"
       },
       "power" : 10,
       "name" : ""
@@ -395,12 +398,12 @@ And the `priv_validator_key.json`:
   "address" : "B788DEDE4F50AD8BC9462DE76741CCAFF87D51E2",
   "pub_key" : {
     "value" : "h3hk+QE8c6QLTySp8TcfzclJw/BG79ziGB/pIA+DfPE=",
-    "type" : "tenderdash/PubKeyEd25519"
+    "type" : "tendermint/PubKeyEd25519"
   },
   "last_height" : "0",
   "priv_key" : {
     "value" : "JPivl82x+LfVkp8i3ztoTjY6c6GJ4pBxQexErOCyhwqHeGT5ATxzpAtPJKnxNx/NyUnD8Ebv3OIYH+kgD4N88Q==",
-    "type" : "tenderdash/PrivKeyEd25519"
+    "type" : "tendermint/PrivKeyEd25519"
   }
 }
 ```
@@ -520,11 +523,11 @@ Now we can update our genesis file. For instance, if the new
   "address" : "5AF49D2A2D4F5AD4C7C8C4CC2FB020131E9C4902",
   "pub_key" : {
     "value" : "l9X9+fjkeBzDfPGbUM7AMIRE6uJN78zN5+lk5OYotek=",
-    "type" : "tenderdash/PubKeyEd25519"
+    "type" : "tendermint/PubKeyEd25519"
   },
   "priv_key" : {
     "value" : "EDJY9W6zlAw+su6ITgTKg2nTZcHAH1NMTW5iwlgmNDuX1f35+OR4HMN88ZtQzsAwhETq4k3vzM3n6WTk5ii16Q==",
-    "type" : "tenderdash/PrivKeyEd25519"
+    "type" : "tendermint/PrivKeyEd25519"
   },
   "last_step" : 0,
   "last_round" : "0",
@@ -593,7 +596,7 @@ library will deny making connections to peers with the same IP address.
 ### Upgrading
 
 See the
-[UPGRADING.md](https://github.com/dashevo/tenderdash/blob/master/UPGRADING.md)
+[UPGRADING.md](https://github.com/dashpay/tenderdash/blob/master/UPGRADING.md)
 guide. You may need to reset your chain between major breaking releases.
 Although, we expect Tenderdash to have fewer breaking releases in the future
 (especially after 1.0 release).
