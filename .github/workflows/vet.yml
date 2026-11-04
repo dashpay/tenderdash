@@ -19,7 +19,7 @@ on:
 jobs:
   vet:
     name: go vet
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     env:
       CGO_LDFLAGS: "-L/usr/local/lib -ldashbls -lrelic_s -lmimalloc-secure -lgmp"

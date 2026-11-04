@@ -1,5 +1,8 @@
 # ADR 078: Non-Zero Genesis
 
+> Inherited design record. This proposal provides design context, not a guarantee
+> of current behavior. See the [current protocol specification](../../spec/README.md).
+
 ## Changelog
 
 - 2020-07-26: Initial draft (@erikgrinaker)
@@ -20,7 +23,7 @@ This is done by halting all validators at a predetermined height, exporting the 
 state via application-specific tooling, and creating an entirely new chain using the exported
 application state.
 
-As far as Tendermint is concerned, the upgraded chain is a completely separate chain, with e.g.
+As far as Tenderdash is concerned, the upgraded chain is a completely separate chain, with e.g.
 a new chain ID and genesis file. Notably, the new chain starts at height 1, and has none of the
 old chain's block history. This causes problems for integrators, e.g. coin exchanges and
 wallets, that assume a monotonically increasing height for a given blockchain. Users also find
@@ -38,11 +41,11 @@ last block header of the previous chain as well, but since the genesis file is n
 hashed (only specific fields are) this would not be trustworthy.
 
 External tooling will be required to map historical heights onto e.g. archive nodes that contain
-blocks from previous chain version. Tendermint will not include any such functionality.
+blocks from previous chain version. Tenderdash will not include any such functionality.
 
 ## Proposal
 
-Tendermint will allow chains to start from an arbitrary initial height:
+Tenderdash will allow chains to start from an arbitrary initial height:
 
 - A new field `initial_height` is added to the genesis file, defaulting to `1`. It can be set to any
 non-negative integer, and `0` is considered equivalent to `1`.

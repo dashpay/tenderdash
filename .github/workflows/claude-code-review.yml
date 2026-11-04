@@ -25,7 +25,7 @@ jobs:
     if: >
       (github.event.action == 'labeled' && github.event.label.name == 'claudius-review') ||
       (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'claudius-review'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 120
     permissions:
       actions: read
@@ -82,7 +82,7 @@ jobs:
   review:
     needs: wait-for-tests
     if: needs.wait-for-tests.outputs.green == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     permissions:
       contents: read

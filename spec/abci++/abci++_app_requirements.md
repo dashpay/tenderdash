@@ -5,16 +5,16 @@ title: Application Requirements
 
 # Application Requirements
 
-This section specifies what Tendermint expects from the Application. It is structured as a set
+This section specifies what Tenderdash expects from the Application. It is structured as a set
 of formal requirement that can be used for testing and verification of the Application's logic.
 
 Let $p$ and $q$ be two different correct proposers in rounds $r_p$ and $r_q$ respectively, in height $h$.
 Let $s_{p,h-1}$ be $p$'s Application's state committed for height $h-1$.
-Let $v_p$ (resp. $v_q$) be the block that $p$'s (resp. $q$'s) Tendermint passes on to the Application
+Let $v_p$ (resp. $v_q$) be the block that $p$'s (resp. $q$'s) Tenderdash passes on to the Application
 via `RequestPrepareProposal` as proposer of round $r_p$ (resp $r_q$), height $h$, also known as the
 raw proposal.
 Let $v'_p$ (resp. $v'_q$) the possibly modified block $p$'s (resp. $q$'s) Application returns via
-`ResponsePrepareProposal` to Tendermint, also known as the prepared proposal.
+`ResponsePrepareProposal` to Tenderdash, also known as the prepared proposal.
 
 Process $p$'s prepared proposal can differ in two different rounds where $p$ is the proposer.
 
@@ -24,10 +24,10 @@ Process $p$'s prepared proposal can differ in two different rounds where $p$ is 
   _ConsensusParams_ and _ValidatorSetUpdate_ MAY be empty to denote that the Application
   wishes to keep the current values.
 
-Parameters _AppHash_, _TxResults_, _ConsensusParams_, and _ValidatorSetUpdate_ are used by Tendermint to
+Parameters _AppHash_, _TxResults_, _ConsensusParams_, and _ValidatorSetUpdate_ are used by Tenderdash to
 compute various hashes in the block header that will finally be part of the proposal.
 
-In practical terms, Requirement 1 imply that Tendermint will panic if the Application is in
+In practical terms, Requirement 1 imply that Tenderdash will panic if the Application is in
 same-block execution mode and _does_ _not_ provide values for _AppHash_, _TxResults_, _ConsensusParams_,
 and _ValidatorSetUpdate_.
 
@@ -36,22 +36,22 @@ and _ValidatorSetUpdate_.
   the value of *TimeoutPropose* at $q$ must be such that $q$'s propose timer does not time out
   (which would result in $q$ prevoting *nil* in $r_p$).
 
-Full execution of blocks at `PrepareProposal` time stands on Tendermint's critical path. Thus,
+Full execution of blocks at `PrepareProposal` time stands on Tenderdash's critical path. Thus,
 Requirement 2 ensures the Application will set a value for _TimeoutPropose_ such that the time it takes
-to fully execute blocks in `PrepareProposal` does not interfere with Tendermint's propose timer.
+to fully execute blocks in `PrepareProposal` does not interfere with Tenderdash's propose timer.
 
 * Requirement 3 [`PrepareProposal`, tx-size] When $p$'s Application calls `ResponsePrepareProposal`, the
   total size in bytes of the transactions returned does not exceed `RequestPrepareProposal.max_tx_bytes`.
 
 Busy blockchains might seek to maximize the amount of transactions included in each block. Under those conditions,
-Tendermint might choose to increase the transactions passed to the Application via `RequestPrepareProposal.txs`
+Tenderdash might choose to increase the transactions passed to the Application via `RequestPrepareProposal.txs`
 beyond the `RequestPrepareProposal.max_tx_bytes` limit. The idea is that, if the Application drops some of
 those transactions, it can still return a transaction list whose byte size is as close to
 `RequestPrepareProposal.max_tx_bytes` as possible. Thus, Requirement 3 ensures that the size in bytes of the
 transaction list returned by the application will never cause the resulting block to go beyond its byte limit.
 
 * Requirement 4 [`PrepareProposal`, `ProcessProposal`, coherence]: For any two correct processes $p$ and $q$,
-  if $q$'s Tendermint calls `RequestProcessProposal` on $v'_p$,
+  if $q$'s Tenderdash calls `RequestProcessProposal` on $v'_p$,
   $q$'s Application returns Accept in `ResponseProcessProposal`.
 
 Requirement 4 makes sure that blocks proposed by correct processes _always_ pass the correct receiving process's
@@ -60,16 +60,16 @@ On the other hand, if there is a deterministic bug in `PrepareProposal` or `Proc
 strictly speaking, this makes all processes that hit the bug byzantine. This is a problem in practice,
 as very often validators are running the Application from the same codebase, so potentially _all_ would
 likely hit the bug at the same time. This would result in most (or all) processes prevoting `nil`, with the
-serious consequences on Tendermint's liveness that this entails. Due to its criticality, Requirement 4 is a
+serious consequences on Tenderdash's liveness that this entails. Due to its criticality, Requirement 4 is a
 target for extensive testing and automated verification.
 
 * Requirement 5 [`ProcessProposal`, determinism-1]: `ProcessProposal` is a (deterministic) function of the current
   state and the block that is about to be applied. In other words, for any correct process $p$, and any arbitrary block $v'$,
-  if $p$'s Tendermint calls `RequestProcessProposal` on $v'$ at height $h$,
+  if $p$'s Tenderdash calls `RequestProcessProposal` on $v'$ at height $h$,
   then $p$'s Application's acceptance or rejection **exclusively** depends on $v'$ and $s_{p,h-1}$.
 
 * Requirement 6 [`ProcessProposal`, determinism-2]: For any two correct processes $p$ and $q$, and any arbitrary block $v'$,
-  if $p$'s (resp. $q$'s) Tendermint calls `RequestProcessProposal` on $v'$ at height $h$,
+  if $p$'s (resp. $q$'s) Tenderdash calls `RequestProcessProposal` on $v'$ at height $h$,
   then $p$'s Application accepts $v'$ if and only if $q$'s Application accepts $v'$.
   Note that this requirement follows from Requirement 5 and the Agreement property of consensus.
 
@@ -77,17 +77,17 @@ Requirements 5 and 6 ensure that all correct processes will react in the same wa
 if the proposer is Byzantine. However, `ProcessProposal` may contain a bug that renders the
 acceptance or rejection of the block non-deterministic, and therefore prevents processes hitting
 the bug from fulfilling Requirements 5 or 6 (effectively making those processes Byzantine).
-In such a scenario, Tendermint's liveness cannot be guaranteed.
+In such a scenario, Tenderdash's liveness cannot be guaranteed.
 Again, this is a problem in practice if most validators are running the same software, as they are likely
 to hit the bug at the same point. There is currently no clear solution to help with this situation, so
 the Application designers/implementors must proceed very carefully with the logic/implementation
 of `ProcessProposal`. As a general rule `ProcessProposal` _should_ always accept the block.
 
-According to the Tendermint algorithm, a correct process can broadcast at most one precommit message in round $r$, height $h$.
-Since, as stated in the [Description](#description) section, `ResponseExtendVote` is only called when Tendermint
+According to the Tenderdash algorithm, a correct process can broadcast at most one precommit message in round $r$, height $h$.
+Since, as stated in the [Description](#description) section, `ResponseExtendVote` is only called when Tenderdash
 is about to broadcast a non-`nil` precommit message, a correct process can only produce one set of vote extensions in round $r$, height $h$.
 Let $e^r_p$ be the set of vote extensions that the Application of a correct process $p$ returns via `ResponseExtendVote` in round $r$, height $h$.
-Let $w^r_p$ be the proposed block that $p$'s Tendermint passes to the Application via `RequestExtendVote` in round $r$, height $h$.
+Let $w^r_p$ be the proposed block that $p$'s Tenderdash passes to the Application via `RequestExtendVote` in round $r$, height $h$.
 
 * Requirement 7 [`ExtendVote`, `VerifyVoteExtension`, coherence]: For any two correct processes $p$ and $q$, if $q$ receives $e^r_p$
   from $p$ in height $h$, $q$'s Application returns Accept in `ResponseVerifyVoteExtension`.
@@ -103,12 +103,12 @@ extensions will be discarded.
 * Requirement 8 [`VerifyVoteExtension`, determinism-1]: `VerifyVoteExtension` is a (deterministic) function of
   the current state, the vote extensions received, and the prepared proposal that the extensions refers to.
   In other words, for any correct process $p$, and any arbitrary vote extension $e$, and any arbitrary
-  block $w$, if $p$'s (resp. $q$'s) Tendermint calls `RequestVerifyVoteExtension` on $e$ and $w$ at height $h$,
+  block $w$, if $p$'s (resp. $q$'s) Tenderdash calls `RequestVerifyVoteExtension` on $e$ and $w$ at height $h$,
   then $p$'s Application's acceptance or rejection **exclusively** depends on $e$, $w$ and $s_{p,h-1}$.
 
 * Requirement 9 [`VerifyVoteExtension`, determinism-2]: For any two correct processes $p$ and $q$,
   and any arbitrary vote extensions $e$, and any arbitrary block $w$,
-  if $p$'s (resp. $q$'s) Tendermint calls `RequestVerifyVoteExtension` on $e$ and $w$ at height $h$,
+  if $p$'s (resp. $q$'s) Tenderdash calls `RequestVerifyVoteExtension` on $e$ and $w$ at height $h$,
   then $p$'s Application accepts $e$ if and only if $q$'s Application accepts $e$.
   Note that this requirement follows from Requirement 8 and the Agreement property of consensus.
 
@@ -132,7 +132,7 @@ Tenderdash does on each path when a commit is rejected.
 
 * Requirement 10 [_all_, no-side-effects]: $p$'s calls to `RequestPrepareProposal`,
   `RequestProcessProposal`, `RequestApplyBlockRandomness`, `RequestExtendVote`, and
-  `RequestVerifyVoteExtension` at height $h$ do not modify $s_{p,h-1}$. Tendermint may call
+  `RequestVerifyVoteExtension` at height $h$ do not modify $s_{p,h-1}$. Tenderdash may call
   `RequestApplyBlockRandomness` for a round that never commits, so the randomized state it produces
   stays a candidate until `FinalizeBlock` commits the one for the commit round.
 

@@ -1,5 +1,8 @@
 # ADR 74: Migrate Timeout Parameters to Consensus Parameters
 
+> Inherited design record. This proposal provides design context, not a guarantee
+> of current behavior. See the [current protocol specification](../../spec/README.md).
+
 ## Changelog
 
 - 03-Jan-2022: Initial draft (@williambanfield)
@@ -13,11 +16,11 @@ Proposed
 
 ### Background
 
-Tendermint's consensus timeout parameters are currently configured locally by each validator
+Tenderdash's consensus timeout parameters are currently configured locally by each validator
 in the validator's [config.toml][config-toml].
-This means that the validators on a Tendermint network may have different timeouts
+This means that the validators on a Tenderdash network may have different timeouts
 from each other. There is no reason for validators on the same network to configure
-different timeout values. Proper functioning of the Tendermint consensus algorithm
+different timeout values. Proper functioning of the Tenderdash consensus algorithm
 relies on these parameters being uniform across validators.
 
 The configurable values are as follows:
@@ -70,26 +73,25 @@ The 8 timeout parameters will be consolidated down to 6. These will be as follow
 * `BypassCommitTimeout`
 	* Same as current `SkipTimeoutCommit`, renamed for clarity.
 
-A safe default will be provided by Tendermint for each of these parameters and
+A safe default will be provided by Tenderdash for each of these parameters and
 networks will be able to update the parameters as they see fit. Local updates
 to these parameters will no longer be possible; instead, the application will control
 updating the parameters. Applications using the Cosmos SDK will be automatically be
 able to change the values of these consensus parameters [via a governance proposal][cosmos-sdk-consensus-params].
 
-This change is low-risk. While parameters are locally configurable, many running chains
-do not change them from their default values. For example, initializing
-a node on Osmosis, Terra, and the Cosmos Hub using the their `init` command produces
-a `config.toml` with Tendermint's default values for these parameters.
+The original proposal considered this change low-risk because many upstream
+networks used the default timeout values. This observation does not replace
+validation of the settings required by a Tenderdash network.
 
 ### Why this parameter consolidation?
 
 Reducing the number of parameters is good for UX. Fewer superfluous parameters makes
-running and operating a Tendermint network less confusing.
+running and operating a Tenderdash network less confusing.
 
 The Prevote and Precommit messages are both similar sizes, require similar amounts
 of processing so there is no strong need for them to be configured separately.
 
-The `TimeoutPropose` parameter governs how long Tendermint will wait for the proposed
+The `TimeoutPropose` parameter governs how long Tenderdash will wait for the proposed
 block to be gossiped. Blocks are much larger than votes and therefore tend to be
 gossiped much more slowly. It therefore makes sense to keep `TimeoutPropose` and
 the `TimeoutProposeDelta` as parameters separate from the vote timeouts.
@@ -106,25 +108,25 @@ completed execution of the block. Allowing the network to proceed as soon as the
 +2/3 completed execution would have a cumulative effect over heights, eventually
 leaving slower validators unable to participate in consensus at all. `TimeoutCommit`
 therefore allows networks to have greater variability in hardware. Additional
-discussion of this can be found in [tendermint issue 5911][tendermint-issue-5911-comment]
+discussion of this can be found in [upstream issue 5911][tendermint-issue-5911-comment]
 and [spec issue 359][spec-issue-359].
 
 ## Alternative Approaches
 
 ### Hardcode the parameters
 
-Many Tendermint networks run on similar cloud-hosted infrastructure. Therefore,
+Many Tenderdash networks run on similar cloud-hosted infrastructure. Therefore,
 they have similar bandwidth and machine resources. The timings for propagating votes
 and blocks are likely to be reasonably similar across networks. As a result, the
 timeout parameters are good candidates for being hardcoded. Hardcoding the timeouts
-in Tendermint would mean entirely removing these parameters from any configuration
+in Tenderdash would mean entirely removing these parameters from any configuration
 that could be altered by either an application or a node operator. Instead,
-Tendermint would ship with a set of timeouts and all applications using Tendermint
+Tenderdash would ship with a set of timeouts and all applications using Tenderdash
 would use this exact same set of values.
 
-While Tendermint nodes often run with similar bandwidth and on similar cloud-hosted
+While Tenderdash nodes often run with similar bandwidth and on similar cloud-hosted
 machines, there are enough points of variability to make configuring
-consensus timeouts meaningful. Namely, Tendermint network topologies are likely to be
+consensus timeouts meaningful. Namely, Tenderdash network topologies are likely to be
 very different from chain to chain. Additionally, applications may vary greatly in
 how long the `Commit` phase may take. Applications that perform more work during `Commit`
 require a longer `TimeoutCommit` to allow the application to complete its work
@@ -178,7 +180,7 @@ The specific mechanism for adding these parameters depends on work related to
 
 ### Positive
 
-* Timeout parameters will be equal across all of the validators in a Tendermint network.
+* Timeout parameters will be equal across all of the validators in a Tenderdash network.
 * Remove superfluous timeout parameters.
 
 ### Negative

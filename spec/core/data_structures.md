@@ -1,8 +1,8 @@
 # Data Structures
 
-Here we describe the data structures in the Tendermint blockchain and the rules for validating them.
+Here we describe the data structures in the Tenderdash blockchain and the rules for validating them.
 
-The Tendermint blockchains consists of a short list of data types:
+The Tenderdash blockchains consists of a short list of data types:
 
 - [Data Structures](#data-structures)
     - [ProTxHash](#protxhash)
@@ -53,7 +53,7 @@ and a list of evidence of malfeasance (ie. signing conflicting votes).
 | Name | Type | Description | Validation |
 | --- | --- | --- | --- |
 | Header | [Header](#header) | Header corresponding to the block. This field contains information used throughout consensus and other areas of the protocol. To find out what it contains, visit [header] (#header) | Must adhere to the validation rules of [header](#header) |
-| Data | [Data](#data) | Data contains a list of transactions. The contents of the transaction is unknown to Tendermint. | This field can be empty or populated, but no validation is performed. Applications can perform validation on individual transactions prior to block creation using [checkTx](../abci/abci.md#checktx). |
+| Data | [Data](#data) | Data contains a list of transactions. The contents of the transaction is unknown to Tenderdash. | This field can be empty or populated, but no validation is performed. Applications can perform validation on individual transactions prior to block creation using [checkTx](../abci/abci.md#checktx). |
 | Evidence | [EvidenceList](#evidencelist) | Evidence contains a list of infractions committed by validators. | Can be empty, but when populated the validations rules from [evidenceList](#evidencelist) apply |
 | LastCommit | [Commit](#commit) | The threshold-signed commit of the previous block. | Must not be nil, must carry no threshold block signature at the initial height, and must adhere to the validation rules of [commit](#commit), except for Beacon and AppHash: a LastCommit whose Beacon or AppHash breaks their rule, or does not have the bytes wire type, is read without both instead of refused, as releases that do not know the fields skip them. |
 | CoreChainLock | `CoreChainLock` (optional) | Core chain lock carried by the block. | When present, must pass `CoreChainLock.ValidateBasic`. |
@@ -174,7 +174,7 @@ See [MerkleRoot](./encoding.md#MerkleRoot) for details.
 
 ## Part
 
-Part defines a part of a block. In Tendermint blocks are broken into `parts` for gossip.
+Part defines a part of a block. In Tenderdash blocks are broken into `parts` for gossip.
 
 | Name  | Type            | Description                  | Validation                          |
 |-------|-----------------|------------------------------|-------------------------------------|
@@ -184,7 +184,7 @@ Part defines a part of a block. In Tendermint blocks are broken into `parts` for
 
 ## Time
 
-Tendermint uses the [Google.Protobuf.Timestamp](https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#google.protobuf.Timestamp)
+Tenderdash uses the [Google.Protobuf.Timestamp](https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#google.protobuf.Timestamp)
 format, which uses two integers, one 64 bit integer for Seconds and a 32 bit integer for Nanoseconds.
 
 ## Data
@@ -193,7 +193,7 @@ Data is just a wrapper for a list of transactions, where transactions are arbitr
 
 | Name | Type                       | Description            | Validation                                                                  |
 |------|----------------------------|------------------------|-----------------------------------------------------------------------------|
-| Txs  | Matrix of bytes ([][]byte) | Slice of transactions. | Validation does not occur on this field, this data is unknown to Tendermint |
+| Txs  | Matrix of bytes ([][]byte) | Slice of transactions. | Validation does not occur on this field, this data is unknown to Tenderdash |
 
 ## Commit
 
@@ -304,7 +304,7 @@ enum SignedMsgType {
 
 ## Signature
 
-Signatures in Tendermint are raw bytes representing the underlying signature. Consensus signatures are BLS12-381 signatures of 96 bytes (`types.SignatureSize`).
+Signatures in Tenderdash are raw bytes representing the underlying signature. Consensus signatures are BLS12-381 signatures of 96 bytes (`types.SignatureSize`).
 
 See the [signature spec](./encoding.md#key-types) for more.
 
@@ -318,9 +318,9 @@ EvidenceList is a simple wrapper for a list of evidence:
 
 ## Evidence
 
-Evidence in Tendermint is used to indicate breaches in the consensus by a validator.
+Evidence in Tenderdash is used to indicate breaches in the consensus by a validator.
 
-More information on how evidence works in Tendermint can be found [here](../consensus/evidence.md)
+More information on how evidence works in Tenderdash can be found [here](../consensus/evidence.md)
 
 ### DuplicateVoteEvidence
 

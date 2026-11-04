@@ -23,8 +23,9 @@ fi
 # Create folders for source and build data
 mkdir -p "${BUILD_PATH}"
 
-# Configurate the library build
+# Configure Relic and mimalloc with the minimum policy version CMake 4 supports.
 cmake \
+	-D CMAKE_POLICY_VERSION_MINIMUM=3.5 \
 	-D BUILD_BLS_PYTHON_BINDINGS=OFF \
 	-D BUILD_BLS_TESTS=OFF \
 	-D BUILD_BLS_BENCHMARKS=OFF \
@@ -34,7 +35,7 @@ cmake \
 cmake --build "${BUILD_PATH}" -- -j 6
 
 mkdir -p "${BUILD_PATH}/src/bls-dash"
-cp -r ${SRC_PATH}/src/* "${BUILD_PATH}/src/bls-dash"
+cp -r "${SRC_PATH}"/src/* "${BUILD_PATH}/src/bls-dash"
 
 popd
 
