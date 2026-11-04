@@ -42,7 +42,7 @@ The first time a new blockchain is started, Tendermint calls
 `InitChain`. From then on, method `FinalizeBlock` is executed at the end of each
 block, resulting in an updated Application state.
 During consensus execution of a block height, before method `FinalizeBlock` is
-called, methods `PrepareProposal`, `ProcessProposal`, `ExtendVote`, and
+called, methods `PrepareProposal`, `ProcessProposal`, `ApplyBlockRandomness`, `ExtendVote`, and
 `VerifyVoteExtension` may be called several times.
 See [Tendermint's expected behavior](abci++_tmint_expected_behavior.md)
 for details on the possible call sequences of these methods.
@@ -65,6 +65,8 @@ strong liveness implications for Tendermint. As a general rule, the Application
 SHOULD accept a prepared proposal passed via `ProcessProposal`, even if a part of
 the proposal is invalid (e.g., an invalid transaction); the Application can
 ignore the invalid part of the prepared proposal at block execution time.
+
+* [**ApplyBlockRandomness:**](./abci++_methods.md#applyblockrandomness) From consensus version 2, it hands the Application the random beacon of a block and round, recovered from the Prevotes, and the Application applies it to the candidate state that `ProcessProposal` left for that block and round. Tendermint calls it before `ExtendVote` and before signing a Precommit for the block, and may call it for rounds that never commit, so it must not modify the committed state.
 
 * [**ExtendVote:**](./abci++_methods.md#extendvote) It allows applications to force their validators to do more than just validate within consensus. `ExtendVote` allows applications to include deterministic and non-deterministic data, opaque to Tendermint, to precommit messages (the final round of voting.
 The data, called _vote extensions_, will also be made available to the
@@ -210,9 +212,9 @@ transactions and compute the same results.
 
 Some Applications may choose to execute the blocks that are about to be proposed
 (via `PrepareProposal`), or those that the Application is asked to validate
-(via `ProcessProposal`). However, the state changes caused by processing those
-proposed blocks must never replace the previous state until `FinalizeBlock` and `Commit` confirms
-the block decided.
+(via `ProcessProposal`), and apply their randomness (via `ApplyBlockRandomness`). However, the
+state changes caused by processing those proposed blocks must never replace the previous state
+until `FinalizeBlock` and `Commit` confirms the block decided.
 
 Additionally, vote extensions or the validation thereof (via `ExtendVote` or
 `VerifyVoteExtension`) must _never_ have side effects on the current state.

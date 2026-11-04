@@ -37,6 +37,24 @@ opening context or calling `Stop`/`Wait` alone does not close the head file.
 See [service lifecycle](docs/architecture/service-lifecycle.md) for ownership
 and migration boundaries.
 
+### ABCI: ApplyBlockRandomness and commit beacon fields
+
+The ABCI version is 1.5.0. The `Application` interface and the gRPC `ABCIApplication` service gain
+`ApplyBlockRandomness`, which hands the application a block's random beacon from consensus version 2.
+This release defines consensus versions 0 and 1 only and never calls it.
+
+- Go applications that do not embed `abci/types.BaseApplication` must implement the method to
+  compile. `BaseApplication.ApplyBlockRandomness` returns `ErrApplyBlockRandomnessNotImplemented`,
+  not an empty response, so an application must implement it before its chain moves to consensus
+  version 2.
+- With the routed ABCI transport, a method no routing rule names goes to the `*` client. Route
+  `ApplyBlockRandomness` to the client that runs `ProcessProposal`, since it answers for the state
+  `ProcessProposal` left.
+- `Commit` and `CommitInfo` gain `beacon` and `app_hash`. At every consensus version, a commit whose
+  beacon and app hash are not both empty, or exactly 96 and 32 bytes, is refused, and a block's
+  last commit is read without malformed ones. Before consensus version 2, nodes drop well-sized ones
+  from the commits they adopt and from the last commit they pass to the application.
+
 ### ABCI: commit vote-extension verification
 
 Tenderdash now calls `VerifyVoteExtension` after `ProcessProposal` and before it

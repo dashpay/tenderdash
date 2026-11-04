@@ -692,13 +692,15 @@ type Commit struct {
 	QuorumHash              []byte           `protobuf:"bytes,4,opt,name=quorum_hash,json=quorumHash,proto3" json:"quorum_hash,omitempty"`
 	ThresholdBlockSignature []byte           `protobuf:"bytes,5,opt,name=threshold_block_signature,json=thresholdBlockSignature,proto3" json:"threshold_block_signature,omitempty"`
 	ThresholdVoteExtensions []*VoteExtension `protobuf:"bytes,6,rep,name=threshold_vote_extensions,json=thresholdVoteExtensions,proto3" json:"threshold_vote_extensions,omitempty"`
-	// Random beacon: the threshold signature recovered from the prevotes of the commit round.
-	// Set from consensus version 2; empty before. Neither this field nor app_hash is covered by the
-	// commit's signature: a commit is refused unless both are empty or they are exactly 96 and 32
+	// Random beacon: the threshold signature recovered from the prevotes of the commit round, which
+	// verifies against their sign item and the quorum's threshold public key.
+	// Set from consensus version 2; empty before. The commit's signature covers neither this field
+	// nor app_hash as bytes: a commit is refused unless both are empty or they are exactly 96 and 32
 	// bytes, and a block's last commit is read without them when they are not.
 	Beacon []byte `protobuf:"bytes,7,opt,name=beacon,proto3" json:"beacon,omitempty"`
-	// App hash the precommits sign, returned by ApplyBlockRandomness for this block and round.
-	// Set from consensus version 2; empty before.
+	// App hash returned by ApplyBlockRandomness for this block and round. The precommits sign it only
+	// through block_id.state_id, the hash of the block header's state ID with its app hash replaced by
+	// this one: trust this field only once that hash matches. Set from consensus version 2; empty before.
 	AppHash []byte `protobuf:"bytes,8,opt,name=app_hash,json=appHash,proto3" json:"app_hash,omitempty"`
 }
 

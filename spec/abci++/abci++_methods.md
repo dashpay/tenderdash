@@ -607,6 +607,7 @@ block. This includes commits the process assembled from its own +2/3 precommits.
 
 * **Usage**:
     * Used from consensus version 2 (`VersionParams.consensus_version`). Before that, Tenderdash never calls it.
+      This release defines consensus versions 0 and 1 only, so it never calls it.
     * The beacon is the BLS threshold signature recovered from the Prevotes of round `round` for block `hash`.
       Every set of threshold shares recovers the same bytes, and nobody can compute them before the Prevotes exist.
       Tenderdash verifies the beacon against the quorum's threshold public key before the call.
@@ -624,6 +625,8 @@ block. This includes commits the process assembled from its own +2/3 precommits.
       see [ExtendVote](#extendvote).
     * The implementation MUST be deterministic, and MUST return the same `app_hash` when called again for the same
       block, round and beacon.
+    * It MUST NOT modify the committed state: Tenderdash may call it for a round that never commits, and
+      `FinalizeBlock` commits the state for the commit round.
     * An ABCI error is fatal, as for `ExtendVote`.
 
 #### When does Tenderdash call it?
@@ -871,7 +874,7 @@ enum VoteExtensionType {
     | block_signature           | bytes                                                             | Block signature.                                                                             | 3            |
     | threshold_vote_extensions | repeated [VoteExtension](../../proto/tendermint/types/dash.proto) | Threshold-recovered vote extensions of the commit.                                           | 4            |
     | beacon                    | bytes                                                             | Random beacon of the commit round. Set from consensus version 2; empty before.               | 5            |
-    | app_hash                  | bytes                                                             | App hash the commit signs, returned by `ApplyBlockRandomness`. From consensus version 2.     | 6            |
+    | app_hash                  | bytes                                                             | App hash returned by `ApplyBlockRandomness`, which the commit signs through the state ID of its block ID. Set from consensus version 2; empty before. | 6            |
 
 ### ExtendedCommitInfo
 

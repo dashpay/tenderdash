@@ -235,6 +235,8 @@ As for the new methods:
   (`RequestPrepareProposal.max_tx_bytes`). If so, the Application must remove transactions at the
   end of the list until the total byte size is at or below the limit.
 * `ProcessProposal` must set `ResponseProcessProposal.accept` to _true_ and return.
+* `ApplyBlockRandomness`, which uses no randomness in a legacy application, is to return the app hash
+  that `ProcessProposal` returned for the block and round, without changing any state.
 * `ExtendVote` is to set `ResponseExtendVote.extension` to an empty byte array and return.
 * `VerifyVoteExtension` must set `ResponseVerifyVoteExtension.status` to `ACCEPT` if the extension
   list is empty and to `REJECT` otherwise, then return. This holds for commit verification too
