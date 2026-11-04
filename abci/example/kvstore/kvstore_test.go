@@ -684,7 +684,7 @@ func TestApplyBlockRandomness(t *testing.T) {
 	require.Equal(t, first.AppHash, again.AppHash)
 
 	_, err = app.ApplyBlockRandomness(ctx, &types.RequestApplyBlockRandomness{Height: height, Round: 0})
-	require.ErrorContains(t, err, "no proposal executed")
+	require.ErrorContains(t, err, "block not processed")
 }
 
 // TestApplyBlockRandomnessEquivocation is the regression test for a node that executed two blocks of
