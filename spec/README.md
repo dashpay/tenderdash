@@ -20,6 +20,7 @@ It shall be used to describe protocol semantics, namely the BFT consensus engine
 - [Core Data Structures](./core/data_structures.md)
 - [State](./core/state.md)
 - [Consensus Algorithm](./consensus/consensus.md)
+- [Full Consensus Parameter Commitment (draft v2.0)](./consensus/consensus-params-v2.md)
 - [Creating a proposal](./consensus/creating-proposal.md)
 - [Time](./consensus/proposer-based-timestamp/README.md)
 - [Light Client](./consensus/light-client/README.md)

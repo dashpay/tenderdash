@@ -3,6 +3,10 @@ order: 1
 ---
 # Byzantine Consensus Algorithm
 
+For the proposed v2.0 parameter authentication change, see the
+[Full Consensus Parameter Commitment draft](consensus-params-v2.md).
+It defines a future schema and activation plan; current runtime behavior is unchanged.
+
 ## Terms
 
 - The network is composed of optionally connected _nodes_. Nodes

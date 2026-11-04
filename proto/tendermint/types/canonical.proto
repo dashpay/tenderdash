@@ -35,7 +35,8 @@ message CanonicalVote {
   SignedMsgType type   = 1;  // type alias for byte
   sfixed64      height = 2;  // canonicalization requires fixed size encoding here
   sfixed64      round  = 3;  // canonicalization requires fixed size encoding here
-  // block_id is a checksum (sha256) of CanonicalBlockID for the block being voted on
+  // block_id is a checksum (sha256) of CanonicalBlockID for the block being voted on.
+  // Its header hash binds current and next consensus parameter commitments.
   bytes block_id = 4 [(gogoproto.customname) = "BlockID"];
   // state_id is a checksum  (sha256) of StateID message for the block being voted on
   bytes state_id = 5 [(gogoproto.customname) = "StateID"];
