@@ -775,12 +775,7 @@ func buildLastCommitInfo(block *types.Block, initialHeight int64) abci.CommitInf
 		// return an empty value.
 		return abci.CommitInfo{}
 	}
-	return abci.CommitInfo{
-		Round:                   block.LastCommit.Round,
-		QuorumHash:              block.LastCommit.QuorumHash,
-		BlockSignature:          block.LastCommit.ThresholdBlockSignature,
-		ThresholdVoteExtensions: block.LastCommit.ThresholdVoteExtensions,
-	}
+	return block.LastCommit.ToCommitInfo()
 }
 
 // Update returns a copy of state with the fields set using the arguments passed in.
