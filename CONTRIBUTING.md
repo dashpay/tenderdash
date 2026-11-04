@@ -195,8 +195,8 @@ waits for the PR's Test workflow to succeed and can review drafts too. Follow it
 reported result, address verified findings and follow the maintainer review policy.
 
 Keep the PR target current and satisfy the required checks and review policy.
-A maintainer or permitted merge queue completes the merge under branch
-protections. Release promotions and stable synchronization follow their separate
+A maintainer with merge permission completes the merge under branch protections.
+Release promotions and stable synchronization follow their separate
 ancestry-preserving procedure.
 
 ## Releases and support
