@@ -33,7 +33,7 @@ It shall be used to describe protocol semantics, namely the BFT consensus engine
 
 Contributions are welcome.
 
-Proposals at an early stage can first be drafted as Github issues. To progress, a proposal will often need to be written out and approved as a [Request For Comment (RFC)](../docs/rfc/README.md).
+Proposals at an early stage can first be drafted as Github issues. To progress, a proposal will often need to be written out and approved as a [Request For Comment (RFC)](https://github.com/dashpay/tenderdash/tree/v1.9-dev/docs/rfc).
 
 The standard language for coding blocks is Golang.
 

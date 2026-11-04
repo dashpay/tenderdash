@@ -140,7 +140,7 @@ termination, which can be model checked with Apalache.
 The `LCD_MC*.tla` files contain concrete parameters for the
 [TLA+ specification](detection/LCDetector_003_draft.tla),
 in order to run the model checker.
-For instance, [LCD_MC4_4_faulty.tla](detection/MC4_4_faulty.tla)
+For instance, [LCD_MC4_4_faulty.tla](detection/LCD_MC4_4_faulty.tla)
 contains the following parameters
 for the nodes, heights, the trusting period, the clock drifts,
 correctness of the nodes, and the ratio of the faulty processes:

@@ -614,7 +614,7 @@ func (ls LightStore) TraceTo(lightBlock LightBlock) (LightBlock, LightStore)
     - returns a **trusted** lightblock `root` from the lightstore with a height
       less than `lightBlock`
     - returns a lightstore that contains lightblocks that constitute a
-      [verification trace](TODOlinkToDetectorSpecOnceThere) from
+      [verification trace](../detection/detection_003_reviewed.md#tmbc-skip-trace1) from
       `root` to `lightBlock` (including `lightBlock`)
 
 ### Inputs
@@ -929,7 +929,7 @@ For [IBC][ibc-rs] there are two additional challenges:
 
 1. it might be that some "older" header is needed, that is,
 *targetHeight < lightStore.LatestVerified()*.  The
-[supervisor](../supervisor/supervisor.md) checks whether it is in this
+[supervisor](../supervisor/supervisor_001_draft.md) checks whether it is in this
 case by calling `LatestPrevious` and `MinVerified` and if so it calls
 `Backwards`. All these functions are specified below.
 
