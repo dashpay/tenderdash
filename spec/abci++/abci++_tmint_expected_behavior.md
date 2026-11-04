@@ -1,41 +1,47 @@
 ---
 order: 4
-title: Tendermint's expected behavior
+title: Tenderdash's expected behavior
 ---
 
-# Tendermint's expected behavior
+# Tenderdash's expected behavior
 
 ## Valid method call sequences
 
-This section describes what the Application can expect from Tendermint.
+This section describes what the Application can expect from Tenderdash.
 
-The Tendermint consensus algorithm is designed to protect safety under any network conditions, as long as
+The Tenderdash consensus algorithm is designed to protect safety under any network conditions, as long as
 less than 1/3 of validators' voting power is byzantine. Most of the time, though, the network will behave
 synchronously, no process will fall behind, and there will be no byzantine process. The following describes
 what will happen during a block height _h_ in these frequent, benign conditions:
 
-* Tendermint will decide in round 0, for height _h_;
+* Tenderdash will decide in round 0, for height _h_;
 * `PrepareProposal` will be called exactly once at the proposer process of round 0, height _h_;
 * `ProcessProposal` will be called exactly once at all processes, and
   will return _accept_ in its `Response*`;
-* `ExtendVote` will be called exactly once at all processes;
+* `ExtendVote` will be called exactly once at each validator process (it is called only when a
+  validator precommits a non-nil block);
 * `VerifyVoteExtension` will be called exactly _n-1_ times at each validator process, where _n_ is
   the number of validators, to verify the other validators' precommits, plus once at all processes
   to verify the commit's extensions before `FinalizeBlock`, and will always return _accept_ in its
-  `Response*`;
+  `Response*`; and
 * `FinalizeBlock` will be called exactly once at all processes, conveying the same prepared
   block that all calls to `PrepareProposal` and `ProcessProposal` had previously reported for
-  height _h_; and
-* `Commit` will finally be called exactly once at all processes at the end of height _h_.
+  height _h_.
 
-However, the Application logic must be ready to cope with any possible run of Tendermint for a given
+There is no `Commit` method in Tenderdash's ABCI++: the application persists its state as part of
+`FinalizeBlock`. The consensus-side view of the same sequence, including the
+alternative paths that produce the other call orders below, is specified in the
+[consensus protocol](../consensus/consensus.md) (see in particular
+[ABCI calls per height](../consensus/consensus-happy-path.md#abci-calls-per-height-on-the-happy-path)).
+
+However, the Application logic must be ready to cope with any possible run of Tenderdash for a given
 height, including bad periods (byzantine proposers, network being asynchronous).
 In these cases, the sequence of calls to ABCI++ methods may not be so straighforward, but
 the Application should still be able to handle them, e.g., without crashing.
 The purpose of this section is to define what these sequences look like an a precise way.
 
-As mentioned in the [Basic Concepts](./abci%2B%2B_basic_concepts.md) section, Tendermint
-acts as a client of ABCI++ and the Application acts as a server. Thus, it is up to Tendermint to
+As mentioned in the [Basic Concepts](./abci%2B%2B_basic_concepts.md) section, Tenderdash
+acts as a client of ABCI++ and the Application acts as a server. Thus, it is up to Tenderdash to
 determine when and in which order the different ABCI++ methods will be called. A well-written
 Application design should consider _any_ of these possible sequences.
 
@@ -55,7 +61,7 @@ success-sync        = offer-snapshot 1*apply-chunk
 recovery            = info consensus-exec
 
 consensus-exec      = (inf)consensus-height
-consensus-height    = *consensus-round 1*verify-commit decide commit
+consensus-height    = *consensus-round 1*verify-commit decide
 consensus-round     = proposer / non-proposer
 
 proposer            = *got-vote prepare-proposal *got-vote process-proposal [extend]
@@ -72,7 +78,6 @@ extend-vote         = %s"<ExtendVote>"
 got-vote            = %s"<VerifyVoteExtension>"
 verify-commit       = %s"<VerifyVoteExtension>"
 decide              = %s"<FinalizeBlock>"
-commit              = %s"<Commit>"
 ```
 
 We have kept some ABCI methods out of the grammar, in order to keep it as clear and concise as possible.
@@ -91,7 +96,7 @@ by the grammar above. Other reasons depend on the method in question:
 Finally, method `Info` is a special case. The method's purpose is three-fold, it can be used
 
 1. as part of handling an RPC call from an external client,
-2. as a handshake between Tendermint and the Application upon recovery to check whether any blocks need
+2. as a handshake between Tenderdash and the Application upon recovery to check whether any blocks need
    to be replayed, and
 3. at the end of _state-sync_ to verify that the correct state has been reached.
 
@@ -107,7 +112,7 @@ Let us now examine the grammar line by line, providing further details.
 >start               = clean-start / recovery
 >```
 
-* If the process is starting from scratch, Tendermint first calls `InitChain`, then it may optionally
+* If the process is starting from scratch, Tenderdash first calls `InitChain`, then it may optionally
   start a _state-sync_ mechanism to catch up with other processes. Finally, it enters normal
   consensus execution.
 
@@ -115,12 +120,12 @@ Let us now examine the grammar line by line, providing further details.
 >clean-start         = init-chain [state-sync] consensus-exec
 >```
 
-* In _state-sync_ mode, Tendermint makes one or more attempts at synchronizing the Application's state.
+* In _state-sync_ mode, Tenderdash makes one or more attempts at synchronizing the Application's state.
   At the beginning of each attempt, it offers the Application a snapshot found at another process.
   If the Application accepts the snapshot, a sequence of calls to `ApplySnapshotChunk` method follow
   to provide the Application with all the snapshots needed, in order to reconstruct the state locally.
   A successful attempt must provide at least one chunk via `ApplySnapshotChunk`.
-  At the end of a successful attempt, Tendermint calls `Info` to make sure the recontructed state's
+  At the end of a successful attempt, Tenderdash calls `Info` to make sure the recontructed state's
   _AppHash_ matches the one in the block header at the corresponding height.
 
 >```abnf
@@ -129,8 +134,8 @@ Let us now examine the grammar line by line, providing further details.
 >success-sync        = offer-snapshot 1*apply-chunk
 >```
 
-* In recovery mode, Tendermint first calls `Info` to know from which height it needs to replay decisions
-  to the Application. After this, Tendermint enters nomal consensus execution.
+* In recovery mode, Tenderdash first calls `Info` to know from which height it needs to replay decisions
+  to the Application. After this, Tenderdash enters nomal consensus execution.
 
 >```abnf
 >recovery            = info consensus-exec
@@ -146,7 +151,7 @@ Let us now examine the grammar line by line, providing further details.
 >```
 
 * A consensus height consists of zero or more rounds before deciding and executing via a call to
-  `FinalizeBlock`, followed by a call to `Commit`. In each round, the sequence of method calls
+  `FinalizeBlock`. In each round, the sequence of method calls
   depends on whether the local process is the proposer or not. Note that, if a height contains zero
   rounds, this means the process is replaying an already decided value (catch-up mode).
   Before `FinalizeBlock`, the commit's extensions are verified by a call to `VerifyVoteExtension`
@@ -156,15 +161,15 @@ Let us now examine the grammar line by line, providing further details.
   Tenderdash may also call `ExtendVote` once for the rejected commit's block and round, on any
   node, to learn the vector it expects; the grammar does not show that call either. This production describes a height that
   completes successfully. During startup replay/catch-up, rejection of a stored
-  commit instead terminates the run before `FinalizeBlock` and `Commit`, without
+  commit instead terminates the run before `FinalizeBlock`, without
   retry; see the [VerifyVoteExtension REJECT paths](abci++_methods.md#verifyvoteextension).
 
 >```abnf
->consensus-height    = *consensus-round 1*verify-commit decide commit
+>consensus-height    = *consensus-round 1*verify-commit decide
 >consensus-round     = proposer / non-proposer
 >```
 
-* For every round, if the local process is the proposer of the current round, Tendermint starts by
+* For every round, if the local process is the proposer of the current round, Tenderdash starts by
   calling `PrepareProposal`, followed by `ProcessProposal`. Then, optionally, the Application is
   asked to extend its vote for that round. Calls to `VerifyVoteExtension` can come at any time: the
   local process may be slightly late in the current round, or votes may come from a future round
@@ -175,7 +180,7 @@ Let us now examine the grammar line by line, providing further details.
 >extend              = *got-vote extend-vote *got-vote
 >```
 
-* Also for every round, if the local process is _not_ the proposer of the current round, Tendermint
+* Also for every round, if the local process is _not_ the proposer of the current round, Tenderdash
   will call `ProcessProposal` at most once. At most one call to `ExtendVote` may occur only after
   `ProcessProposal` is called. A number of calls to `VerifyVoteExtension` can occur in any order
   with respect to `ProcessProposal` and `ExtendVote` throughout the round. The reasons are the same
@@ -200,7 +205,6 @@ Let us now examine the grammar line by line, providing further details.
 >got-vote            = %s"<VerifyVoteExtension>"
 >verify-commit       = %s"<VerifyVoteExtension>"
 >decide              = %s"<FinalizeBlock>"
->commit              = %s"<Commit>"
 >```
 
 ## Adapting existing Applications that use ABCI
@@ -233,6 +237,8 @@ As for the new methods:
   wrap the legacy `DeliverTx` logic in a loop that executes one transaction iteration per
   transaction in `RequestFinalizeBlock.tx`.
 
-Finally, `Commit`, which is kept in ABCI++, no longer returns the `AppHash`. It is now up to
-`FinalizeBlock` to do so. Thus, a slight refactoring of the old `Commit` implementation will be
-needed to move the return of `AppHash` to `FinalizeBlock`.
+Finally, there is no `Commit` method: the Application persists its state as part of
+`FinalizeBlock`, so the old `Commit` implementation must be folded into `FinalizeBlock`.
+`ResponseFinalizeBlock` carries no `AppHash` (its only fields are `retain_height` and
+`propose_next_block_immediately`); the `AppHash` is returned earlier, in
+`ResponsePrepareProposal`/`ResponseProcessProposal`, and is already part of the decided block.

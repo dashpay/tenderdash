@@ -23,11 +23,11 @@ This section will focus on how to operate full nodes, validators and light clien
 
 ## Node Types
 
-We will cover the various types of node types within Tendermint.
+We will cover the various types of node types within Tenderdash.
 
 ### Full Node
 
- A full node is a node that participates in the network but will not help secure it. Full nodes can be used to store the entire state of a blockchain. For Tendermint there are two forms of state. First, blockchain state, this represents the blocks of a blockchain.  Secondly, there is Application state, this represents the state that transactions modify. The knowledge of how a transaction can modify state is not held by Tendermint but rather the application on the other side of the ABCI boundary.
+ A full node is a node that participates in the network but will not help secure it. Full nodes can be used to store the entire state of a blockchain. For Tenderdash there are two forms of state. First, blockchain state, this represents the blocks of a blockchain.  Secondly, there is Application state, this represents the state that transactions modify. The knowledge of how a transaction can modify state is not held by Tenderdash but rather the application on the other side of the ABCI boundary.
 
  > Note: If you have not read about the seperation of consensus and application please take a few minutes to read up on it as it will provide a better understanding to many of the terms we use throughout the documentation. You can find more information on the ABCI [here](../app-dev/app-architecture.md).
 
@@ -43,6 +43,6 @@ We will cover the various types of node types within Tendermint.
 
 ### Validators
 
-Validators are nodes that participate in the security of a network. Validators have an associated power in Tendermint, this power can represent stake in a [proof of stake](https://en.wikipedia.org/wiki/Proof_of_stake) system, reputation in [proof of authority](https://en.wikipedia.org/wiki/Proof_of_authority) or any sort of measurable unit. Running a secure and consistently online validator is crucial to a networks health. A validator must be secure and fault tolerant, it is recommended to run your validator with 2 or more sentry nodes.
+Validators are nodes that participate in the security of a network. Validators have an associated power in Tenderdash, this power can represent stake in a [proof of stake](https://en.wikipedia.org/wiki/Proof_of_stake) system, reputation in [proof of authority](https://en.wikipedia.org/wiki/Proof_of_authority) or any sort of measurable unit. Running a secure and consistently online validator is crucial to a networks health. A validator must be secure and fault tolerant, it is recommended to run your validator with 2 or more sentry nodes.
 
-As a validator there is the potential to have your weight reduced, this is defined by the application. Tendermint is notified by the application if a validator should have their weight increased or reduced. Application have different types of malicious behavior which lead to slashing of the validators power. Please check the documentation of the application you will be running in order to find more information.
+As a validator there is the potential to have your weight reduced, this is defined by the application. Tenderdash is notified by the application if a validator should have their weight increased or reduced. Application have different types of malicious behavior which lead to slashing of the validators power. Please check the documentation of the application you will be running in order to find more information.

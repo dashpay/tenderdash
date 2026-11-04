@@ -15,8 +15,8 @@ Make sure you [have Go installed](https://golang.org/doc/install).
 Next, install the `abci-cli` tool and example applications:
 
 ```sh
-git clone https://github.com/tendermint/tendermint.git
-cd tendermint
+git clone https://github.com/dashpay/tenderdash.git
+cd tenderdash
 make install_abci
 ```
 
@@ -62,7 +62,7 @@ as `abci-cli` above. The kvstore just stores transactions in a merkle
 tree.
 
 Its code can be found
-[here](https://github.com/tendermint/tendermint/blob/v0.35.x/abci/cmd/abci-cli/abci-cli.go)
+[here](https://github.com/dashpay/tenderdash/blob/master/abci/cmd/abci-cli/abci-cli.go)
 and looks like:
 
 ```go
@@ -137,7 +137,7 @@ response.
 
 The server may be generic for a particular language, and we provide a
 [reference implementation in
-Golang](https://github.com/tendermint/tendermint/tree/master/abci/server). See the
+Golang](https://github.com/dashpay/tenderdash/tree/master/abci/server). See the
 [list of other ABCI implementations](https://github.com/tendermint/awesome#ecosystem) for servers in
 other languages.
 
@@ -243,18 +243,17 @@ we do `finalize_block "abc=efg" ...` it will store `(abc, efg)`.
 Similarly, you could put the commands in a file and run
 `abci-cli --verbose batch < myfile`.
 
-## Bounties
+## Other language implementations
 
-Want to write an app in your favorite language?! We'd be happy
-to add you to our [ecosystem](https://github.com/tendermint/awesome#ecosystem)!
-See [funding](https://github.com/interchainio/funding) opportunities from the
-[Interchain Foundation](https://interchain.io/) for implementations in new languages and more.
+An ABCI implementation must match the protobuf messages and application lifecycle
+of the Tenderdash release it targets. Verify compatibility before using an
+external library; a shared ABCI name does not guarantee compatible methods.
 
 The `abci-cli` is designed strictly for testing and debugging. In a real
-deployment, the role of sending messages is taken by Tendermint, which
+deployment, the role of sending messages is taken by Tenderdash, which
 connects to the app using three separate connections, each with its own
 pattern of messages.
 
 For examples of running an ABCI app with
-Tendermint, see the [getting started guide](./getting-started.md).
+Tenderdash, see the [getting started guide](./getting-started.md).
 Next is the ABCI specification.

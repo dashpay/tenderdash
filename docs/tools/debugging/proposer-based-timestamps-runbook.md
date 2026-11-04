@@ -4,8 +4,8 @@ order: 3
 
 # Proposer-Based Timestamps Runbook
 
-Version v0.36 of Tendermint added new constraints for the timestamps included in
-each block created by Tendermint. The new constraints mean that validators may
+Tenderdash constrains the timestamps included in each block. These
+constraints mean that validators may
 fail to produce valid blocks or may issue `nil` `prevotes` for proposed blocks
 depending on the configuration of the validator's local clock.
 
@@ -13,7 +13,7 @@ depending on the configuration of the validator's local clock.
 
 This document provides a set of actionable steps for application developers and
 node operators to diagnose and fix issues related to clock synchronization and
-configuration of the Proposer-Based Timestamps [SynchronyParams](https://github.com/tendermint/tendermint/blob/master/spec/core/data_structures.md#synchronyparams).
+configuration of the Proposer-Based Timestamps [SynchronyParams](https://github.com/dashpay/tenderdash/blob/master/spec/core/data_structures.md#synchronyparams).
 
 Use this runbook if you observe that validators are frequently voting `nil` for a block that the rest
 of the network votes for or if validators are frequently producing block proposals
@@ -21,11 +21,11 @@ that are not voted for by the rest of the network.
 
 ## Requirements
 
-To use this runbook, you must be running a node that has the [Prometheus metrics endpoint enabled](https://github.com/tendermint/tendermint/blob/master/docs/nodes/metrics.md)
-and the Tendermint RPC endpoint enabled and accessible.
+To use this runbook, you must be running a node that has the [Prometheus metrics endpoint enabled](https://github.com/dashpay/tenderdash/blob/master/docs/nodes/metrics.md)
+and the Tenderdash RPC endpoint enabled and accessible.
 
 It is strongly recommended to also run a Prometheus metrics collector to gather and
-analyze metrics from the Tendermint node.
+analyze metrics from the Tenderdash node.
 
 ## Debugging a Single Node
 
@@ -35,7 +35,7 @@ related to clock synchronization, use the following steps to debug and correct t
 
 ### Check Timely Metric
 
-Tendermint exposes a histogram metric for the difference between the timestamp in the proposal
+Tenderdash exposes a histogram metric for the difference between the timestamp in the proposal
 the and the time read from the node's local clock when the proposal is received.
 
 The histogram exposes multiple metrics on the Prometheus `/metrics` endpoint called
@@ -123,7 +123,7 @@ it may be related to clock synchronization, use the following steps to debug and
 
 ### Check Prevote Message Delay
 
-Tendermint exposes metrics that help determine how synchronized the clocks on a network are.
+Tenderdash exposes metrics that help determine how synchronized the clocks on a network are.
 
 These metrics are visible on the Prometheus `/metrics` endpoint and are called:
 * `tendermint_consensus_quorum_prevote_delay`
@@ -204,12 +204,8 @@ need to be modified to update the `SynchronyParams` to have larger values.
 ### Updating SynchronyParams
 
 The `SynchronyParams` are `ConsensusParameters` which means they are set and updated
-by the application running alongside Tendermint. Updates to these parameters must
-be passed to the application during the `FinalizeBlock` ABCI method call.
-
-If the application was built using the CosmosSDK, then these parameters can be updated
-programatically using a governance proposal. For more information, see the [CosmosSDK
-documentation](https://hub.cosmos.network/main/governance/submitting.html#sending-the-transaction-that-submits-your-governance-proposal).
+by the application running alongside Tenderdash. Coordinate parameter changes through the application and the network
+upgrade process. Check the application's supported parameter update mechanism.
 
 If the application does not implement a way to update the consensus parameters
 programatically, then the application itself must be updated to do so. More information on updating

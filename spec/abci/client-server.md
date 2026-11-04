@@ -28,9 +28,9 @@ responses.
 ## Server Implementations
 
 To use ABCI in your programming language of choice, there must be a ABCI
-server in that language. Tendermint supports three implementations of the ABCI, written in Go:
+server in that language. Tenderdash supports three implementations of the ABCI, written in Go:
 
-- In-process ([Golang](https://github.com/tendermint/tendermint/tree/master/abci), [Rust](https://github.com/tendermint/rust-abci))
+- In-process ([Golang](https://github.com/dashpay/tenderdash/tree/v1.9-dev/abci), [Rust](https://github.com/tendermint/rust-abci))
 - ABCI-socket
 - GRPC
 
@@ -38,7 +38,7 @@ The latter two can be tested using the `abci-cli` by setting the `--abci` flag
 appropriately (ie. to `socket` or `grpc`).
 
 See examples, in various stages of maintenance, in
-[Go](https://github.com/tendermint/tendermint/tree/master/abci/server),
+[Go](https://github.com/dashpay/tenderdash/tree/v1.9-dev/abci/server),
 [JavaScript](https://github.com/tendermint/js-abci),
 [C++](https://github.com/mdyring/cpp-tmsp), and
 [Java](https://github.com/jTendermint/jabci).
@@ -46,7 +46,7 @@ See examples, in various stages of maintenance, in
 ### In Process
 
 The simplest implementation uses function calls within Golang.
-This means ABCI applications written in Golang can be compiled with Tendermint Core and run as a single binary.
+This means ABCI applications written in Golang can be compiled with Tenderdash and run as a single binary.
 
 ### GRPC
 
@@ -66,12 +66,12 @@ Note the length-prefixing used in the socket implementation (TSP) does not apply
 
 ### TSP
 
-Tendermint Socket Protocol is an asynchronous, raw socket server which provides ordered message passing over unix or tcp.
+Tenderdash Socket Protocol is an asynchronous, raw socket server which provides ordered message passing over unix or tcp.
 Messages are serialized using Protobuf3 and length-prefixed with a [signed Varint](https://developers.google.com/protocol-buffers/docs/encoding?csw=1#signed-integers)
 
 If GRPC is not available in your language, or you require higher
 performance, or otherwise enjoy programming, you may implement your own
-ABCI server using the Tendermint Socket Protocol. The first step is still to auto-generate the relevant data
+ABCI server using the Tenderdash Socket Protocol. The first step is still to auto-generate the relevant data
 types and codec in your language using `protoc`. In addition to being proto3 encoded, messages coming over
 the socket are length-prefixed to facilitate use as a streaming protocol. proto3 doesn't have an
 official length-prefix standard, so we use our own. The first byte in
@@ -89,12 +89,12 @@ it is the standard way to encode integers in Protobuf. It is also generally shor
 As noted above, this prefixing does not apply for GRPC.
 
 An ABCI server must also be able to support multiple connections, as
-Tendermint uses four connections.
+Tenderdash uses four connections.
 
 ### Async vs Sync
 
 The main ABCI server (ie. non-GRPC) provides ordered asynchronous messages.
-This is useful for DeliverTx and CheckTx, since it allows Tendermint to forward
+This is useful for DeliverTx and CheckTx, since it allows Tenderdash to forward
 transactions to the app before it's finished processing previous ones.
 
 Thus, DeliverTx and CheckTx messages are sent asynchronously, while all other
@@ -104,10 +104,10 @@ messages are sent synchronously.
 
 There are currently two use-cases for an ABCI client. One is a testing
 tool, as in the `abci-cli`, which allows ABCI requests to be sent via
-command line. The other is a consensus engine, such as Tendermint Core,
+command line. The other is a consensus engine, such as Tenderdash,
 which makes requests to the application every time a new transaction is
 received or a block is committed.
 
 It is unlikely that you will need to implement a client. For details of
 our client, see
-[here](https://github.com/tendermint/tendermint/tree/master/abci/client).
+[here](https://github.com/dashpay/tenderdash/tree/v1.9-dev/abci/client).
