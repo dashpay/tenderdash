@@ -114,6 +114,14 @@ type proposerLiveness struct {
 	// before its signature is checked. The peer scheduler made room in it for
 	// the heartbeat before handing it over.
 	budget types.VerificationBudget
+	// signing holds the one heartbeat this node may be signing at a time,
+	// whatever round it is for. The signer can be Dash Core, over an RPC
+	// client whose calls cannot be interrupted: one outlives the sender that
+	// made it, and the round, for as long as Core takes to answer. The sender
+	// of a later round waits for it under its own context, so a signer that
+	// never answers holds one call, not one for every round this node
+	// proposes in.
+	signing chan struct{}
 
 	mtx        sync.Mutex
 	target     *livenessTarget
@@ -173,6 +181,7 @@ func newProposerLiveness(
 		emitter:  emitter,
 		ready:    ready,
 		budget:   budget,
+		signing:  make(chan struct{}, 1),
 		silentCh: make(chan proposerSilence, 1),
 	}
 }
@@ -625,13 +634,22 @@ func (l *proposerLiveness) sendHeartbeats(ctx context.Context, generation uint64
 
 // sendHeartbeat signs and emits one heartbeat for target, if this node could
 // propose now. It reports whether more should follow: not once the signer
-// turns out unable to sign heartbeats at all.
+// turns out unable to sign heartbeats at all, nor once the round has ended.
 func (l *proposerLiveness) sendHeartbeat(
 	ctx context.Context,
 	generation uint64,
 	target livenessTarget,
 	pv privValidator,
 ) bool {
+	// A heartbeat still being signed for an earlier round holds the signer
+	// (see signing). The round ending ends the wait.
+	select {
+	case l.signing <- struct{}{}:
+	case <-ctx.Done():
+		return false
+	}
+	defer func() { <-l.signing }()
+
 	ctx, cancel := context.WithTimeout(ctx, target.interval)
 	defer cancel()
 

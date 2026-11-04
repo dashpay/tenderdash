@@ -862,6 +862,78 @@ func (pv *hookedHeartbeatSigner) SignProposerHeartbeat(
 	return pv.PrivValidator.SignProposerHeartbeat(ctx, chainID, quorumType, quorumHash, hb)
 }
 
+// A signer that cannot be interrupted, such as Dash Core over its RPC client,
+// keeps signing a heartbeat after the round it was for has ended. The senders
+// of the rounds this node proposes in meanwhile wait for it, rather than each
+// leaving another call behind.
+func TestProposerLivenessSignsOneHeartbeatAtATime(t *testing.T) {
+	f := newLivenessFixture(t, nil)
+	sent := make(chan *types.ProposerHeartbeat, 1000)
+	f.emitter.AddListener(proposerHeartbeatEventName, func(data eventemitter.EventData) error {
+		sent <- data.(*types.ProposerHeartbeat)
+		return nil
+	})
+	proposer := f.valSet.Validators[0]
+	signer := &stuckHeartbeatSigner{PrivValidator: f.privVals[0], release: make(chan struct{})}
+	pv := privValidator{PrivValidator: signer, ProTxHash: proposer.ProTxHash}
+	target := f.target(proposer, 100*time.Millisecond)
+
+	f.liveness.announce(context.Background(), target, pv)
+	defer f.liveness.stop()
+	require.Eventually(t, func() bool { return signer.started.Load() == 1 }, 2*time.Second, time.Millisecond)
+	for round := int32(1); round <= 5; round++ {
+		target.round = round
+		f.liveness.announce(context.Background(), target, pv)
+		time.Sleep(3 * target.interval)
+	}
+	assert.Equal(t, int32(1), signer.started.Load(), "a later round's sender signs while the first call is outstanding")
+
+	// Once the signer answers, the round the node is in gets its heartbeats.
+	close(signer.release)
+	select {
+	case hb := <-sent:
+		assert.Equal(t, int32(5), hb.Round)
+	case <-time.After(2 * time.Second):
+		t.Fatal("no heartbeat sent once the signer answered")
+	}
+	time.Sleep(3 * target.interval)
+	f.liveness.stop()
+	for len(sent) > 0 {
+		assert.Equal(t, int32(5), (<-sent).Round, "a heartbeat went out for a round the node has left")
+	}
+	assert.Equal(t, int32(1), signer.maxOutstanding.Load(), "more than one heartbeat signed at a time")
+}
+
+// stuckHeartbeatSigner signs no heartbeat until release is closed, whatever its
+// context says, and records how many it was asked to sign at once.
+type stuckHeartbeatSigner struct {
+	types.PrivValidator
+	release        chan struct{}
+	started        atomic.Int32
+	outstanding    atomic.Int32
+	maxOutstanding atomic.Int32
+}
+
+func (pv *stuckHeartbeatSigner) SignProposerHeartbeat(
+	ctx context.Context,
+	chainID string,
+	quorumType btcjson.LLMQType,
+	quorumHash crypto.QuorumHash,
+	hb *tmproto.ProposerHeartbeat,
+) error {
+	pv.started.Add(1)
+	outstanding := pv.outstanding.Add(1)
+	defer pv.outstanding.Add(-1)
+	for {
+		most := pv.maxOutstanding.Load()
+		if outstanding <= most || pv.maxOutstanding.CompareAndSwap(most, outstanding) {
+			break
+		}
+	}
+	<-pv.release
+	return pv.PrivValidator.SignProposerHeartbeat(ctx, chainID, quorumType, quorumHash, hb)
+}
+
 func TestWantsHeartbeat(t *testing.T) {
 	valSet, _ := types.RandValidatorSet(4)
 	hb := &types.ProposerHeartbeat{Height: 7, Round: 5}
