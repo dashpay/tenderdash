@@ -113,14 +113,18 @@ const (
 	maj23TokenCost = 100
 
 	// livenessTokenCost is what one ProposerHeartbeat, RoundSkipVote or
-	// RoundSkipCertificate charges. Each that is new to this node costs a
-	// signature verification, so the weight bounds a forging sender to fifty
-	// verifications a second. An honest peer relays about one heartbeat a
-	// second, well inside that. The exception is a round whose proposer went
-	// silent: every peer relays every validator's skip vote at about the same
-	// time, N * 100 tokens, which takes the whole per-peer burst at about 100
-	// validators and exceeds it above. The excess is dropped; each vote also
-	// arrives through the node's other peers, so certificates still form.
+	// RoundSkipCertificate that is new to this node charges, on top of the 1
+	// every state message pays as it arrives (see chargeLivenessNews). Only a
+	// new one costs a signature verification, so the weight bounds a forging
+	// sender to about fifty verifications a second. An honest peer relays about
+	// one heartbeat a second, well inside that. The exception is a round whose
+	// proposer went silent: every peer relays every validator's skip vote at
+	// about the same time, N * 101 tokens, which takes the whole per-peer burst
+	// at about 100 validators and exceeds it above. The excess is dropped. The
+	// votes come again, as each validator sends its own every silence timeout
+	// and nodes relay the votes they counted again (see relayAgain), and the
+	// copies of those that got through cost 1 each, so the next refill carries
+	// the votes behind them.
 	livenessTokenCost = 100
 
 	// maj23ClaimsPerTick is how many majority claims a peer's gossip loop offers
@@ -968,7 +972,7 @@ func (r *Reactor) handleStateMessage(ctx context.Context, envelope *p2p.Envelope
 			return err
 		}
 		laneCtx, ok := r.laneCtx(ctx, ps, envelope)
-		if !ok {
+		if !ok || !r.chargeLivenessNews(ctx, envelope) {
 			return nil
 		}
 		return r.state.sendMessage(laneCtx, hbMsg, envelope.From)
@@ -989,7 +993,7 @@ func (r *Reactor) handleStateMessage(ctx context.Context, envelope *p2p.Envelope
 			return nil
 		}
 		laneCtx, ok := r.laneCtx(ctx, ps, envelope)
-		if !ok {
+		if !ok || !r.chargeLivenessNews(ctx, envelope) {
 			return nil
 		}
 		return r.state.sendMessage(laneCtx, voteMsg, envelope.From)
@@ -1007,7 +1011,7 @@ func (r *Reactor) handleStateMessage(ctx context.Context, envelope *p2p.Envelope
 			return nil
 		}
 		laneCtx, ok := r.laneCtx(ctx, ps, envelope)
-		if !ok {
+		if !ok || !r.chargeLivenessNews(ctx, envelope) {
 			return nil
 		}
 		return r.state.sendMessage(laneCtx, certMsg, envelope.From)
@@ -1438,17 +1442,30 @@ func newMaj23PeerShareLimiter(
 }
 
 // stateChannelMessageCost returns what a State- or VoteSetBits-channel message
-// charges. A VoteSetMaj23 asks this node to build and send a bit array over
-// every validator; everything else on these channels only updates a peer's
-// recorded round state.
+// charges as it arrives. A VoteSetMaj23 asks this node to build and send a bit
+// array over every validator. Everything else on these channels only updates a
+// peer's recorded round state, or is a liveness message that is charged more
+// only once it turns out to be new (see chargeLivenessNews).
 func stateChannelMessageCost(msg proto.Message) int {
-	switch msg.(type) {
-	case *tmcons.VoteSetMaj23:
+	if _, ok := msg.(*tmcons.VoteSetMaj23); ok {
 		return maj23TokenCost
-	case *tmcons.ProposerHeartbeat, *tmcons.RoundSkipVote, *tmcons.RoundSkipCertificate:
-		return livenessTokenCost
 	}
 	return 1
+}
+
+// chargeLivenessNews charges a heartbeat, skip vote or certificate that is new
+// to this node for the signature verification it is about to cost, and
+// reports whether it may go on to the consensus goroutine.
+//
+// It is charged after the checks that need no signature, not as it arrives. A
+// copy of one this node already has goes no further than those checks, and
+// charged the verification price it would spend its sender's allowance on
+// nothing. A peer that relays a quorum's skip votes again in the same order
+// would then spend each refill on the copies at the front, and the votes behind
+// them would never get through. That peer can be this node's only link to part
+// of the validator set.
+func (r *Reactor) chargeLivenessNews(ctx context.Context, envelope *p2p.Envelope) bool {
+	return r.chargeStateAllowance(ctx, envelope, livenessTokenCost)
 }
 
 // allowStateChannelMessage applies the ceilings for the State and VoteSetBits

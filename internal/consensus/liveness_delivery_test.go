@@ -2,6 +2,7 @@ package consensus
 
 import (
 	"context"
+	"math"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -110,14 +111,29 @@ type livenessReactorFixture struct {
 	// budget is empty: a signature check on the reactor's goroutine would be
 	// refused, and the message dropped instead of queued.
 	budget *tokenBudget
+	// clock is what the peers' state-channel allowances refill by, so they
+	// refill only as a test advances it.
+	clock *clockwork.FakeClock
 }
 
-const livenessTestPeer = types.NodeID("sender")
+const (
+	livenessTestPeer = types.NodeID("sender")
+	// livenessWitnessPeer sends what refused waits for. Its allowance is its
+	// own, so the wait does not depend on what the sender has left of its.
+	livenessWitnessPeer = types.NodeID("witness")
+)
 
 func newLivenessReactorFixture(ctx context.Context, t *testing.T) *livenessReactorFixture {
 	t.Helper()
+	return newLivenessReactorFixtureOf(ctx, t, 4)
+}
+
+// newLivenessReactorFixtureOf is newLivenessReactorFixture with validators
+// validators.
+func newLivenessReactorFixtureOf(ctx context.Context, t *testing.T, validators int) *livenessReactorFixture {
+	t.Helper()
 	cs, vss := makeState(ctx, t, makeStateArgs{
-		validators: 4,
+		validators: validators,
 		consensusParams: factory.ConsensusParams(func(c *types.ConsensusParams) {
 			c.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_2)
 		}),
@@ -145,9 +161,13 @@ func newLivenessReactorFixture(ctx context.Context, t *testing.T) *livenessReact
 	t.Cleanup(cs.liveness.stop)
 
 	logger := log.NewNopLogger()
-	f.r = newStateRateLimitedReactor(ctx, clockwork.NewRealClock())
+	f.clock = clockwork.NewFakeClock()
+	f.r = newStateRateLimitedReactor(ctx, f.clock)
 	f.r.state = cs
-	f.r.peers = map[types.NodeID]*PeerState{livenessTestPeer: NewPeerState(logger, livenessTestPeer)}
+	f.r.peers = map[types.NodeID]*PeerState{
+		livenessTestPeer:    NewPeerState(logger, livenessTestPeer),
+		livenessWitnessPeer: NewPeerState(logger, livenessWitnessPeer),
+	}
 	f.r.voteRateLimit = client.NewRateLimitWithBurst(ctx, 0, 1, true, logger)
 	f.r.dataRateLimit = client.NewRateLimitWithBurst(ctx, 0, 1, true, logger)
 	f.r.livenessOutbox = make(chan livenessSend, 8)
@@ -185,16 +205,21 @@ func (f *livenessReactorFixture) heartbeat(
 	return &tmcons.ProposerHeartbeat{Heartbeat: *pb}
 }
 
-// refused sends a heartbeat in the name of vss[2], which is not the proposer,
-// and waits until the reactor reports it. Envelopes are handled in
-// order, so the report proves everything sent before was handled.
+// refused has the witness send a heartbeat in the name of vss[2], which is not
+// the proposer, and waits until the reactor reports it. Envelopes are handled
+// in order, so the report proves everything sent before was handled.
 func (f *livenessReactorFixture) refused(ctx context.Context, t *testing.T) {
 	t.Helper()
 	proTxHash, err := f.vss[2].GetProTxHash(ctx)
 	require.NoError(t, err)
-	f.send(f.heartbeat(ctx, t, f.vss[2], proTxHash))
+	f.inCh <- p2p.Envelope{
+		From:      livenessWitnessPeer,
+		ChannelID: p2p.ConsensusStateChannel,
+		Message:   f.heartbeat(ctx, t, f.vss[2], proTxHash),
+	}
 	select {
 	case reported := <-f.errCh:
+		assert.Equal(t, livenessWitnessPeer, reported.NodeID)
 		assert.ErrorIs(t, reported.Err, errProposerHeartbeatWrongProposer)
 	case <-time.After(30 * time.Second):
 		t.Fatal("the heartbeat in another validator's name was not refused")
@@ -247,6 +272,49 @@ func TestReactorRelaysACountedSkipVoteAgain(t *testing.T) {
 	sent := <-f.r.livenessOutbox
 	assert.Equal(t, &tmcons.RoundSkipVote{Vote: *vote.ToProto()}, sent.msg)
 	assert.Zero(t, f.cs.msgInfoQueue.lanes.buffered(), "a vote already counted is not queued")
+}
+
+// A peer that is this node's only link to part of the validator set relays
+// that part's skip votes in bursts, the same votes in the same order each time
+// they come again. A burst of more new votes than the peer's allowance pays to
+// have verified drops the ones behind, and the bursts that follow must still
+// get those through: copies of the votes already counted cost next to nothing,
+// so they do not spend the refill the votes behind them need.
+func TestReactorTakesUnseenSkipVotesBehindRepeatedCopies(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	f := newLivenessReactorFixtureOf(ctx, t, 160)
+	f.cs.roundSkips.clock = clockwork.NewFakeClock()
+	ctx = dash.ContextWithProTxHash(ctx, f.cs.privValidator.ProTxHash)
+	height, round, vals := f.stateData.Height, f.stateData.Round, f.stateData.Validators
+
+	power := vals.Validators[0].VotingPower
+	needed := (types.RoundSkipThresholdPower(vals) + power - 1) / power
+	require.Greater(t, needed, int64(peerStateRateBurst/livenessTokenCost),
+		"a certificate must take more new votes than one allowance pays to have verified")
+
+	votes := make([]*tmcons.RoundSkipVote, 0, len(f.vss)-1)
+	for _, vs := range f.vss[1:] {
+		votes = append(votes, &tmcons.RoundSkipVote{Vote: *signRoundSkipVote(ctx, t, f.cs, vs, height, round).ToProto()})
+	}
+
+	f.budget.tokens = math.MaxInt
+	for burst := 1; f.stateData.RoundSkip == nil; burst++ {
+		require.LessOrEqual(t, burst, 3, "the votes behind the first burst's never got through")
+		for _, vote := range votes {
+			f.send(vote)
+		}
+		f.refused(ctx, t)
+		// Count what reached the sender's lane, as the consensus goroutine
+		// would.
+		for mi, ok := f.cs.msgInfoQueue.lanes.next(); ok; mi, ok = f.cs.msgInfoQueue.lanes.next() {
+			require.NoError(t, f.cs.handleLivenessMessage(ctx, &f.stateData, mi.Msg, mi.PeerID))
+		}
+		// The votes come again a silence timeout later, by when the sender's
+		// allowance has refilled.
+		f.clock.Advance(time.Duration(peerStateRateBurst/peerStateRateLimit) * time.Second)
+	}
+	assert.Equal(t, round, f.stateData.RoundSkip.Round)
 }
 
 // The liveness listeners run on the consensus goroutine and on the proposer's
