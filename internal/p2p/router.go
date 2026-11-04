@@ -549,7 +549,7 @@ LOOP:
 	for {
 		address, err := r.peerManager.DialNext(ctx)
 		switch {
-		case errors.Is(err, context.Canceled):
+		case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 			break LOOP
 		case address == NodeAddress{}:
 			continue LOOP
