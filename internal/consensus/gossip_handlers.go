@@ -23,15 +23,20 @@ func queryMaj23GossipHandler(ps *PeerState, gossiper Gossiper) gossipHandlerFunc
 	}
 }
 
-// roundSkipGossipHandler sends this node's round skip certificate to a peer
-// still in the round it skips, or an earlier one of the height.
+// roundSkipGossipHandler sends this node's round skip certificate to a peer at
+// its height that is not known to hold it.
 //
-// Certificates are broadcast once, when a node applies one, and nothing else
-// moves a node past a round whose proposer went silent while everyone waited:
-// there are no prevotes to follow into the next round, and the next proposal
-// is sent only to peers already in its round. A peer that missed the broadcast
-// would wait in the old round until the height ended. Once it applies the
-// certificate it announces its new round and stops being sent it.
+// Certificates are broadcast once, when a node first holds one, and nothing
+// else moves a node past a round whose proposer went silent while everyone
+// waited: there are no prevotes to follow into the next round, and the next
+// proposal is sent only to peers already in its round. A peer that missed the
+// broadcast would wait in the old round until the height ended.
+//
+// That goes for a peer in a later round too. It can have got there by
+// following +2/3 prevotes of that round, without the certificate, and be the
+// only link between this node and a peer still in the skipped round. So the
+// certificate goes to every peer until it sends one back, which it does when
+// it first holds it, or one for a later round.
 func roundSkipGossipHandler(
 	ps *PeerState,
 	logger log.Logger,
@@ -44,13 +49,13 @@ func roundSkipGossipHandler(
 		}
 		prs := ps.GetRoundState()
 		// A peer committing the height has no use for it.
-		if prs.Height != certificate.Height || prs.Round > certificate.Round ||
-			prs.Step >= cstypes.RoundStepApplyCommit {
+		if prs.Height != certificate.Height || prs.Step >= cstypes.RoundStepApplyCommit ||
+			ps.HasRoundSkip(certificate.Height, certificate.Round) {
 			return
 		}
 		err := send(ctx, &tmcons.RoundSkipCertificate{Certificate: *certificate.ToProto()})
 		if err != nil {
-			logger.Debug("cannot send round skip certificate to a peer behind",
+			logger.Debug("cannot send round skip certificate to a peer",
 				"height", certificate.Height, "round", certificate.Round, "peer_round", prs.Round, "err", err)
 		}
 	}

@@ -78,6 +78,11 @@ type PeerState struct {
 	// its session.
 	connID      uint64
 	laneSession uint64
+
+	// roundSkipHeight and roundSkipRound name the latest round skip
+	// certificate the peer is known to hold: the latest it sent this node.
+	roundSkipHeight int64
+	roundSkipRound  int32
 }
 
 // PeerStateOptionFunc overrides a default of a PeerState.
@@ -537,6 +542,27 @@ func (ps *PeerState) setHasVote(height int64, round int32, voteType tmproto.Sign
 		}
 	}
 	return nil
+}
+
+// SetHasRoundSkip records that the peer holds a round skip certificate for
+// round at height: it sent one.
+func (ps *PeerState) SetHasRoundSkip(height int64, round int32) {
+	ps.mtx.Lock()
+	defer ps.mtx.Unlock()
+
+	if height > ps.roundSkipHeight || (height == ps.roundSkipHeight && round > ps.roundSkipRound) {
+		ps.roundSkipHeight = height
+		ps.roundSkipRound = round
+	}
+}
+
+// HasRoundSkip reports whether the peer is known to hold a round skip
+// certificate for round at height, or for a later round.
+func (ps *PeerState) HasRoundSkip(height int64, round int32) bool {
+	ps.mtx.RLock()
+	defer ps.mtx.RUnlock()
+
+	return height == ps.roundSkipHeight && round <= ps.roundSkipRound
 }
 
 // SetHasCommit sets the given vote as known by the peer

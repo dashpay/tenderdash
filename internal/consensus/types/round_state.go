@@ -117,7 +117,8 @@ type RoundState struct {
 
 	// RoundSkip is the certificate for the highest round of this height that
 	// +2/3 of the validators voted to skip because its proposer went silent
-	// while they waited for transactions.
+	// while they waited for transactions. It is held for peers still in that
+	// round even when the node reached a later round by following its votes.
 	RoundSkip *types.RoundSkipCertificate `json:"round_skip"`
 
 	// TxsReported is set once the mempool reported transactions at this

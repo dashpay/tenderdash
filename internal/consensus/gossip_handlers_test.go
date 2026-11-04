@@ -503,33 +503,62 @@ func TestRoundSkipGossipHandler(t *testing.T) {
 		QuorumHash:         crypto.RandQuorumHash(),
 		ThresholdSignature: tmrand.Bytes(types.SignatureSize),
 	}
-	held := StateData{RoundState: cstypes.RoundState{Height: 5, Round: 3, RoundSkip: certificate}}
+	holding := StateData{RoundState: cstypes.RoundState{Height: 5, Round: 3, RoundSkip: certificate}}
 
+	type held struct {
+		height int64
+		round  int32
+	}
 	testCases := map[string]struct {
 		stateData StateData
 		peer      cstypes.PeerRoundState
+		// peerHolds is the certificate the peer sent this node, if any.
+		peerHolds *held
 		wantSent  bool
 	}{
 		"should send it to a peer still in the round it skips": {
-			stateData: held,
+			stateData: holding,
 			peer:      cstypes.PeerRoundState{Height: 5, Round: 2, Step: cstypes.RoundStepNewRound},
 			wantSent:  true,
 		},
 		"should send it to a peer in an earlier round": {
-			stateData: held,
+			stateData: holding,
 			peer:      cstypes.PeerRoundState{Height: 5, Round: 0, Step: cstypes.RoundStepPropose},
 			wantSent:  true,
 		},
-		"should not send it to a peer that moved on": {
-			stateData: held,
+		"should send it to a peer in a later round, which may have followed prevotes there": {
+			stateData: holding,
+			peer:      cstypes.PeerRoundState{Height: 5, Round: 3, Step: cstypes.RoundStepPrevote},
+			wantSent:  true,
+		},
+		"should not send it to a peer that sent it": {
+			stateData: holding,
 			peer:      cstypes.PeerRoundState{Height: 5, Round: 3, Step: cstypes.RoundStepNewRound},
+			peerHolds: &held{height: 5, round: 2},
+		},
+		"should not send it to a peer that sent one for a later round": {
+			stateData: holding,
+			peer:      cstypes.PeerRoundState{Height: 5, Round: 4, Step: cstypes.RoundStepNewRound},
+			peerHolds: &held{height: 5, round: 3},
+		},
+		"should send it to a peer that sent one for an earlier round": {
+			stateData: holding,
+			peer:      cstypes.PeerRoundState{Height: 5, Round: 2, Step: cstypes.RoundStepNewRound},
+			peerHolds: &held{height: 5, round: 1},
+			wantSent:  true,
+		},
+		"should send it to a peer that sent one at an earlier height": {
+			stateData: holding,
+			peer:      cstypes.PeerRoundState{Height: 5, Round: 2, Step: cstypes.RoundStepNewRound},
+			peerHolds: &held{height: 4, round: 6},
+			wantSent:  true,
 		},
 		"should not send it to a peer committing the height": {
-			stateData: held,
+			stateData: holding,
 			peer:      cstypes.PeerRoundState{Height: 5, Round: 2, Step: cstypes.RoundStepApplyCommit},
 		},
 		"should not send it to a peer at another height": {
-			stateData: held,
+			stateData: holding,
 			peer:      cstypes.PeerRoundState{Height: 4, Round: 2, Step: cstypes.RoundStepNewRound},
 		},
 		"should send nothing without a certificate": {
@@ -545,6 +574,9 @@ func TestRoundSkipGossipHandler(t *testing.T) {
 				return nil
 			}
 			ps := &PeerState{PRS: tc.peer}
+			if tc.peerHolds != nil {
+				ps.SetHasRoundSkip(tc.peerHolds.height, tc.peerHolds.round)
+			}
 			roundSkipGossipHandler(ps, log.NewNopLogger(), send)(ctx, tc.stateData)
 			if !tc.wantSent {
 				require.Empty(t, sent)

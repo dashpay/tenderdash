@@ -996,10 +996,13 @@ func (r *Reactor) handleStateMessage(ctx context.Context, envelope *p2p.Envelope
 
 	case *tmcons.RoundSkipCertificate:
 		certMsg := msgI.(*RoundSkipCertificateMessage)
+		// The peer holds it, or claims to, so it is not sent the certificate
+		// again (see roundSkipGossipHandler). Only what this node sends to the
+		// peer depends on the claim.
+		ps.SetHasRoundSkip(certMsg.Certificate.Height, certMsg.Certificate.Round)
 		stateData := r.state.GetStateData()
-		// The state machine verifies and applies it, and broadcasts it if it
-		// moved the node on. One it would not apply is dropped here, before it
-		// is written to the WAL on its way there.
+		// The state machine verifies, keeps and broadcasts it. One that is not
+		// news is dropped here, before it is written to the WAL on its way there.
 		if !roundSkipCertificateWanted(&stateData, certMsg.Certificate) {
 			return nil
 		}

@@ -25,6 +25,10 @@ func TestRoundSkipCertificateWanted(t *testing.T) {
 	certificate := func(height int64, round int32) *types.RoundSkipCertificate {
 		return &types.RoundSkipCertificate{Height: height, Round: round}
 	}
+	holding := func(stateData *StateData, held *types.RoundSkipCertificate) *StateData {
+		stateData.RoundSkip = held
+		return stateData
+	}
 	v2 := tmproto.VersionParams_CONSENSUS_VERSION_2
 
 	testCases := map[string]struct {
@@ -50,8 +54,22 @@ func TestRoundSkipCertificateWanted(t *testing.T) {
 			stateData:   stateDataAt(v2, 2, cstypes.RoundStepNewRound),
 			certificate: certificate(8, 2),
 		},
-		"should not want one for a round the node has left": {
-			stateData:   stateDataAt(v2, 2, cstypes.RoundStepNewRound),
+		"should want one for a round the node left by following prevotes, for peers still in it": {
+			stateData:   stateDataAt(v2, 2, cstypes.RoundStepPrevote),
+			certificate: certificate(7, 1),
+			want:        true,
+		},
+		"should want one for a later round than the one it holds": {
+			stateData:   holding(stateDataAt(v2, 4, cstypes.RoundStepPrevote), certificate(7, 1)),
+			certificate: certificate(7, 2),
+			want:        true,
+		},
+		"should not want another copy of the one it holds": {
+			stateData:   holding(stateDataAt(v2, 2, cstypes.RoundStepNewRound), certificate(7, 1)),
+			certificate: certificate(7, 1),
+		},
+		"should not want one for an earlier round than the one it holds": {
+			stateData:   holding(stateDataAt(v2, 4, cstypes.RoundStepPrevote), certificate(7, 2)),
 			certificate: certificate(7, 1),
 		},
 		"should not want one while committing the height": {

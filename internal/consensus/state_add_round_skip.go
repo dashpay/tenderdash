@@ -36,25 +36,30 @@ type AddRoundSkipCertificateAction struct {
 	metrics        *Metrics
 }
 
-// roundSkipCertificateWanted reports whether certificate would move the node on,
-// before anything is spent on it: the reactor drops one that would not before
-// it reaches the WAL, and the action checks again on the state it applies to.
+// roundSkipCertificateWanted reports whether certificate is news to the node,
+// before anything is spent on it: the reactor drops one that is not before it
+// reaches the WAL, and the action checks again on the state it applies to.
+//
+// News is a certificate for a later round than the one the node holds, not
+// only one that moves the node on. A node can reach a later round without a
+// certificate, by following +2/3 prevotes of that round, while peers it
+// connects to still wait in the skipped round. Nothing but the certificate
+// moves those peers on: the skipped round has no votes to send them, and the
+// later round's votes and proposal go only to peers in it.
 func roundSkipCertificateWanted(stateData *StateData, certificate *types.RoundSkipCertificate) bool {
 	// Before CONSENSUS_VERSION_2, or where a certificate cannot prove what
 	// the validator set needs, no round is skipped.
-	if !roundSkipping(stateData) {
+	if !roundSkipping(stateData) || certificate.Height != stateData.Height {
 		return false
 	}
-	// A certificate for a round this node has left changes nothing. That
-	// includes every round it holds a certificate for: applying one moves the
-	// node past its round.
-	if certificate.Height != stateData.Height || certificate.Round < stateData.Round {
+	// One for a round no later than the one it holds is not news.
+	if held := stateData.RoundSkip; held != nil && certificate.Round <= held.Round {
 		return false
 	}
-	// Nor does one for a node that is committing the height: skip votes lock
+	// Nor is one for a node that is committing the height: skip votes lock
 	// nothing, so +2/3 precommits for a late proposal can exist next to a
 	// certificate for its round, and moving rounds would drop the block being
-	// assembled for the commit.
+	// assembled for the commit. A peer behind catches up on the commit.
 	return stateData.Step < cstypes.RoundStepApplyCommit
 }
 
@@ -76,15 +81,23 @@ func (c *AddRoundSkipCertificateAction) Execute(ctx context.Context, stateEvent 
 		}
 	}
 
-	// Saved by entering the next round below.
+	// Kept, and broadcast, whether or not it moves the node on, for the peers
+	// still in the round it skips (see roundSkipGossipHandler).
 	stateData.RoundSkip = certificate
+	c.eventPublisher.emitter.Emit(roundSkipCertificateEventName, certificate)
+	if certificate.Round < stateData.Round {
+		c.logger.Debug("keeping round skip certificate for peers in the round it skips",
+			"height", certificate.Height,
+			"round", certificate.Round,
+			"node_round", stateData.Round)
+		return nil
+	}
+
 	c.metrics.RoundSkips.Add(1)
 	c.logger.Info("skipping round: +2/3 of the validators stopped hearing from its proposer",
 		"height", certificate.Height,
 		"round", certificate.Round,
 		"next_round", certificate.Round+1)
-	c.eventPublisher.emitter.Emit(roundSkipCertificateEventName, certificate)
-
 	return stateEvent.Ctrl.Dispatch(ctx, &EnterNewRoundEvent{
 		Height: certificate.Height,
 		Round:  certificate.Round + 1,
