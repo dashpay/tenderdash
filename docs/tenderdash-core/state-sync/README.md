@@ -5,6 +5,8 @@ parent:
   order: 4
 ---
 
+# State sync
+
 
 State sync allows new nodes to rapidly bootstrap and join the network by discovering, fetching,
 and restoring state machine snapshots. For more information, see the [state sync ABCI section](../../../spec/abci/abci.md#state-sync)).

@@ -1,105 +1,63 @@
-# Docs Build Workflow
+# Building the documentation
 
-The documentation for Tendermint Core is hosted at:
+Tenderdash uses [mdBook](https://rust-lang.github.io/mdBook/), like the Dash
+Platform book. The site includes the guides in `docs/`, all Markdown specifications
+in `spec/`, and the RPC reference from `rpc/openapi/`.
 
-- <https://docs.tendermint.com/>
+## Local build
 
-built from the files in this [`docs` directory for `master`](https://github.com/tendermint/tendermint/tree/master/docs)
-and other supported release branches.
+Install Python 3.10 or later and mdBook **0.4.40** (the version used by Platform):
 
-## How It Works
-
-There is a [GitHub Actions workflow](https://github.com/tendermint/docs/actions/workflows/deployment.yml)
-in the `tendermint/docs` repository that clones and builds the documentation
-site from the contents of this `docs` directory, for `master` and for the
-backport branch of each supported release. Under the hood, this workflow runs
-`make build-docs` from the [Makefile](../Makefile#L214).
-
-The list of supported versions are defined in [`config.js`](./.vuepress/config.js),
-which defines the UI menu on the documentation site, and also in
-[`docs/versions`](./versions), which determines which branches are built.
-
-The last entry in the `docs/versions` file determines which version is linked
-by default from the generated `index.html`. This should generally be the most
-recent release, rather than `master`, so that new users are not confused by
-documentation for unreleased features.
-
-## README
-
-The [README.md](./README.md) is also the landing page for the documentation
-on the website. During the Jenkins build, the current commit is added to the bottom
-of the README.
-
-## Config.js
-
-The [config.js](./.vuepress/config.js) generates the sidebar and Table of Contents
-on the website docs. Note the use of relative links and the omission of
-file extensions. Additional features are available to improve the look
-of the sidebar.
-
-## Links
-
-**NOTE:** Strongly consider the existing links - both within this directory
-and to the website docs - when moving or deleting files.
-
-Links to directories _MUST_ end in a `/`.
-
-Relative links should be used nearly everywhere, having discovered and weighed the following:
-
-### Relative
-
-Where is the other file, relative to the current one?
-
-- works both on GitHub and for the VuePress build
-- confusing / annoying to have things like: `../../../../myfile.md`
-- requires more updates when files are re-shuffled
-
-### Absolute
-
-Where is the other file, given the root of the repo?
-
-- works on GitHub, doesn't work for the VuePress build
-- this is much nicer: `/docs/hereitis/myfile.md`
-- if you move that file around, the links inside it are preserved (but not to it, of course)
-
-### Full
-
-The full GitHub URL to a file or directory. Used occasionally when it makes sense
-to send users to the GitHub.
-
-## Building Locally
-
-Make sure you are in the `docs` directory and run the following commands:
-
-```bash
-rm -rf node_modules
+```sh
+cargo install mdbook --version 0.4.40 --locked
+make build-docs
 ```
 
-This command will remove old version of the visual theme and required packages. This step is optional.
+Open `book/book/index.html`, or run `make serve-docs` to start the local server.
+`MDBOOK=/path/to/mdbook make build-docs` selects a particular binary.
+For guides and specifications, edit their canonical files in `docs/` or `spec/`,
+then run the build again. When using the server, rerun `make prepare-docs` after
+editing canonical files; mdBook watches the staged copies.
 
-```bash
-npm install
-```
+`book/SUMMARY.md` defines the navigation. Add every new Markdown page there;
+the build fails if a source page is missing from the summary or a summary entry
+has no source file. The HTML build also rejects missing local pages or assets.
+The consensus protocol and all its companion chapters are
+listed explicitly under Protocol specifications.
 
-Install the theme and all dependencies.
+The preparation script copies sources and assets into ignored `book/src/`, strips
+VuePress metadata, resolves directory links, and points links to repository source
+files at the build's Git revision. It also stages the RPC reference at `api/rpc/`.
+It does not switch branches or modify documentation sources. Both `book/src/` and
+`book/book/` are disposable build output. Set `DOCS_SOURCE_REF` to override the
+Git revision used for source links.
 
-```bash
-npm run serve
-```
+## Diagrams and search
 
-<!-- markdown-link-check-disable -->
+Use fenced `mermaid` blocks for diagrams. The book uses the same vendored
+Mermaid 11.6.0 distribution as Platform; its MIT license is in
+`book/mermaid-LICENSE`. Diagrams render locally without a CDN. mdBook provides
+local full-text search without an external search service.
 
-Run `pre` and `post` hooks and start a hot-reloading web-server. See output of this command for the URL (it is often <https://localhost:8080>).
+## Preview and publishing
 
-<!-- markdown-link-check-enable -->
+`.github/workflows/docs-deployment.yml` builds pull requests and uploads a
+`documentation-preview` artifact. Download it, extract it, and open `index.html`.
+Pull requests have read-only repository permissions and cannot deploy.
 
-To build documentation as a static website run `npm run build`. You will find the website in `.vuepress/dist` directory.
+Pushes to `v1.8-dev` and manual runs on that branch publish the same output using
+GitHub Pages artifacts and the `github-pages` environment, like Platform. In the
+repository's **Settings → Pages**, select **GitHub Actions** as the build source
+and allow `v1.8-dev` in the environment's deployment branch rules. The workflow
+reports the deployed URL. Builds of other branches remain previews.
 
-## Search
+## Naming and attribution
 
-We are using [Algolia](https://www.algolia.com) to power full-text search. This uses a public API search-only key in the `config.js` as well as a [tendermint.json](https://github.com/algolia/docsearch-configs/blob/master/configs/tendermint.json) configuration file that we can update with PRs.
+Use Tenderdash for this product, its CLI, and current source links. Preserve
+copyright notices, original research titles and citations, external project names,
+and identifiers required by the implementation, such as `tendermint.abci`, JSON
+public-key type names, metric names, and TLA+/Ivy module names. Do not rename wire
+types to change their display name.
 
-## Consistency
-
-Because the build processes are identical (as is the information contained herein), this file should be kept in sync as
-much as possible with its [counterpart in the Cosmos SDK repo](https://github.com/cosmos/cosmos-sdk/blob/master/docs/DOCS_README.md).
+Generate the ABCI API page from its protobuf source with `make proto-doc`;
+`spec/abci++/api.md` is generated and must not be edited by hand.

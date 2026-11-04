@@ -330,19 +330,21 @@ DESTINATION = ./index.html.md
 ###############################################################################
 ###                           Documentation                                 ###
 ###############################################################################
-# todo remove once tendermint.com DNS is solved
-build-docs:
-	@cd docs && \
-	while read -r branch path_prefix; do \
-		( git checkout $${branch} && npm ci --quiet && \
-			VUEPRESS_BASE="/$${path_prefix}/" npm run build --quiet ) ; \
-		mkdir -p ~/output/$${path_prefix} ; \
-		cp -r .vuepress/dist/* ~/output/$${path_prefix}/ ; \
-		cp ~/output/$${path_prefix}/index.html ~/output ; \
-	done < versions ; \
-	mkdir -p ~/output/master ; \
-	cp -r .vuepress/dist/* ~/output/master/
+MDBOOK ?= mdbook
+DOCS_SOURCE_REF ?= $(shell git rev-parse HEAD)
+
+prepare-docs:
+	python3 scripts/prepare-docs.py --source-ref "$(DOCS_SOURCE_REF)"
+.PHONY: prepare-docs
+
+build-docs: prepare-docs
+	$(MDBOOK) build book
+	python3 scripts/check-docs.py book/book
 .PHONY: build-docs
+
+serve-docs: prepare-docs
+	$(MDBOOK) serve book
+.PHONY: serve-docs
 
 ###############################################################################
 ###                            Docker image                                 ###

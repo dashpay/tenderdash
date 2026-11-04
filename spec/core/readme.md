@@ -5,6 +5,8 @@ parent:
   order: 3
 ---
 
+# Core protocol
+
 This section describes the core types and functionality of the Tenderdash protocol implementation.
 
 - [Core Data Structures](./data_structures.md)

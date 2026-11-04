@@ -5,6 +5,8 @@ parent:
   order: 2
 ---
 
+# Mempool
+
 The mempool is a in memory pool of potentially valid transactions,
 both to broadcast to other nodes, as well as to provide to the
 consensus reactor when it is selected as the block proposer.
