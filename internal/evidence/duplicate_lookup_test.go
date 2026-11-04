@@ -4,9 +4,10 @@ import (
 	"context"
 	"testing"
 
-	dbm "github.com/cometbft/cometbft-db"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	dbm "github.com/dashpay/tenderdash/libs/db"
 
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/libs/log"
@@ -36,6 +37,7 @@ func TestPendingAndCommittedAreOneHash(t *testing.T) {
 		evidenceStore: dbm.NewMemDB(),
 		logger:        log.NewNopLogger(),
 	}
+	pool.state.ConsensusParams = *types.DefaultConsensusParams()
 	proTxHash := crypto.ProTxHash(tmrand.Bytes(crypto.ProTxHashSize))
 	ev := &countingEvidence{Evidence: testEvidence(10, 2, proTxHash, 0x11, 0x22)}
 
@@ -52,6 +54,7 @@ func TestAddEvidenceAsksBothLookupsWithOneHash(t *testing.T) {
 		evidenceStore: dbm.NewMemDB(),
 		logger:        log.NewNopLogger(),
 	}
+	pool.state.ConsensusParams = *types.DefaultConsensusParams()
 	proTxHash := crypto.ProTxHash(tmrand.Bytes(crypto.ProTxHashSize))
 	ev := &countingEvidence{Evidence: testEvidence(10, 2, proTxHash, 0x11, 0x22)}
 	require.NoError(t, pool.evidenceStore.Set(keyCommittedFor(ev.Height(), ev.Evidence.Hash()), []byte{}))

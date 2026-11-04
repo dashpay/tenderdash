@@ -1,7 +1,5 @@
 # Tenderdash
 
-![banner](docs/tendermint-core-image.jpg)
-
 Tenderdash is the consensus component of [Dash Platform](https://github.com/dashpay/platform).
 It orders and finalizes Platform blocks using Dash masternode quorums, threshold
 signatures, and validator rotation. It is developed and supported as part of
@@ -33,7 +31,11 @@ and the [release process](RELEASES.md).
 
 Tenderdash originated as a fork of [Tendermint Core](https://github.com/tendermint/tendermint).
 Its Dash-specific consensus uses [long-living masternode quorums](https://github.com/dashpay/dips/blob/master/dip-0006.md).
-The inherited [specifications](spec/README.md) and [architecture documents](docs/architecture/)
+For Tenderdash protocol details, see the [protocol specifications](spec/README.md)
+and the [source-derived consensus protocol](spec/consensus/consensus.md).
+The [documentation guide](docs/DOCS_README.md) explains how to build and preview
+the complete mdBook site. [Architecture documents](docs/architecture/) and the
+original Tendermint paper, "[The latest gossip on BFT consensus](https://arxiv.org/abs/1807.04938)",
 provide background; Dash Platform integration and the current implementation
 remain the context for development and compatibility decisions.
 

@@ -3,11 +3,13 @@ package commands
 import (
 	"bytes"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -89,12 +91,18 @@ func addDBFlags(cmd *cobra.Command, conf *cfg.Config) {
 
 // NewRunNodeCmd returns the command that allows the CLI to start a node.
 // It can be used with a custom PrivValidator and in-process ABCI application.
+// A shutdown timeout leaves cleanup running; callers must terminate the process
+// on that error rather than release resources still owned by the node.
 func NewRunNodeCmd(nodeProvider cfg.ServiceProvider, conf *cfg.Config, logger log.Logger) *cobra.Command {
+	var shutdownTimeout time.Duration
 	cmd := &cobra.Command{
 		Use:     "start",
 		Aliases: []string{"node", "run"},
 		Short:   "Run the tendermint node",
 		RunE: func(cmd *cobra.Command, _args []string) error {
+			if shutdownTimeout <= 0 {
+				return errors.New("shutdown timeout must be positive")
+			}
 			if err := checkGenesisHash(conf); err != nil {
 				return err
 			}
@@ -114,10 +122,24 @@ func NewRunNodeCmd(nodeProvider cfg.ServiceProvider, conf *cfg.Config, logger lo
 			logger.Info("started node", "chain", conf.ChainID())
 
 			<-ctx.Done()
-			return nil
+			timer := time.NewTimer(shutdownTimeout)
+			defer timer.Stop()
+			done := make(chan struct{})
+			go func() {
+				n.Wait()
+				close(done)
+			}()
+			select {
+			case <-done:
+				return nil
+			case <-timer.C:
+				return fmt.Errorf("node shutdown timed out after %s; cleanup is incomplete", shutdownTimeout)
+			}
 		},
 	}
 
+	cmd.Flags().DurationVar(&shutdownTimeout, "shutdown-timeout", 30*time.Second,
+		"maximum wait for node shutdown before exiting with an error")
 	AddNodeFlags(cmd, conf)
 	return cmd
 }

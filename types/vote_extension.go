@@ -27,6 +27,10 @@ var (
 	// on the network paths.
 	ErrUnknownVoteExtensionType = errors.New("unknown vote extension type")
 
+	// ErrUnsupportedVoteExtensionType is returned for an application-supplied DEFAULT
+	// extension: no signing path supports it and peers reject it (VoteExtension.Validate).
+	ErrUnsupportedVoteExtensionType = errors.New("unsupported vote extension type")
+
 	// ErrNilVoteExtension is returned for a nil element of a vote-extension slice. A
 	// decoder can produce one for an empty repeated-field entry, so every site that
 	// dereferences such a slice must reject it rather than trust the slice is dense.
@@ -39,12 +43,15 @@ type VoteExtensions []VoteExtensionIf
 // NewVoteExtensionsFromABCIExtended returns vote-extensions container for given ExtendVoteExtension.
 //
 // The input is application-supplied. Returns an error if an extension type is not a
-// defined enum value.
+// defined enum value or is DEFAULT.
 func NewVoteExtensionsFromABCIExtended(exts []*abci.ExtendVoteExtension) (VoteExtensions, error) {
 	voteExtensions := make(VoteExtensions, 0, len(exts))
 
 	for _, ext := range exts {
 		ve := ext.ToVoteExtension()
+		if ve.Type == tmproto.VoteExtensionType_DEFAULT {
+			return nil, fmt.Errorf("%w: %s", ErrUnsupportedVoteExtensionType, ve.Type)
+		}
 		if err := voteExtensions.Add(ve); err != nil {
 			return nil, err
 		}

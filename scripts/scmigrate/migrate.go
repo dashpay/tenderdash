@@ -13,9 +13,10 @@ import (
 	"fmt"
 	"sort"
 
-	dbm "github.com/cometbft/cometbft-db"
 	"github.com/cosmos/gogoproto/proto"
 	"github.com/google/orderedcode"
+
+	dbm "github.com/dashpay/tenderdash/libs/db"
 
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"

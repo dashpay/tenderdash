@@ -630,7 +630,7 @@ peer-data-rate-limit = {{ .Consensus.PeerDataRateLimit }}
 [tx-index]
 
 # The backend database list to back the indexer.
-# If list contains "null" or "", meaning no indexer service will be used.
+# An empty list or a list containing "null" disables indexing.
 #
 # The application will set which txs to index. In some cases a node operator will be able
 # to decide which txs to index based on configuration set in the application.
@@ -638,13 +638,9 @@ peer-data-rate-limit = {{ .Consensus.PeerDataRateLimit }}
 # Options:
 #   1) "null" (default) - no indexer services.
 #   2) "kv" - a simple indexer backed by key-value storage (see DBBackend)
-#   3) "psql" - the indexer services backed by PostgreSQL.
-# When "kv" or "psql" is chosen "tx.height" and "tx.hash" will always be indexed.
+# When "kv" is chosen "tx.height" and "tx.hash" will always be indexed.
 indexer = [{{ range $i, $e := .TxIndex.Indexer }}{{if $i}}, {{end}}{{ printf "%q" $e}}{{end}}]
 
-# The PostgreSQL connection configuration, the connection format:
-#   postgresql://<user>:<password>@<host>:<port>/<db>?<opts>
-psql-conn = "{{ .TxIndex.PsqlConn }}"
 
 #######################################################
 ###       Instrumentation Configuration Options     ###

@@ -1,5 +1,9 @@
 # RFC 019: Configuration File Versioning
 
+> Historical upstream design record. Project and release names below identify
+> the original implementation; they do not describe Tenderdash releases.
+> See the [current protocol specification](../../spec/README.md) for Tenderdash.
+
 ## Changelog
 
 - 19-Apr-2022: Initial draft (@creachadair)

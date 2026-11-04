@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	dbm "github.com/cometbft/cometbft-db"
+	dbm "github.com/dashpay/tenderdash/libs/db"
 
 	mempoolmocks "github.com/dashpay/tenderdash/internal/mempool/mocks"
 	"github.com/dashpay/tenderdash/internal/state/indexer"

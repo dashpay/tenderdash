@@ -4,7 +4,7 @@ order: 6
 
 # Indexing Transactions
 
-Tendermint allows you to index transactions and blocks and later query or
+Tenderdash allows you to index transactions and blocks and later query or
 subscribe to their results. Transactions are indexed by `TxResult.Events` and
 blocks are indexed by `Response(Begin|End)Block.Events`. However, transactions
 are also indexed by a primary key which includes the transaction hash and maps
@@ -15,7 +15,7 @@ the block itself is never stored.
 Each event contains a type and a list of attributes, which are key-value pairs
 denoting something about what happened during the method's execution. For more
 details on `Events`, see the
-[ABCI](https://github.com/tendermint/tendermint/blob/master/spec/abci/abci.md#events)
+[ABCI](https://github.com/dashpay/tenderdash/blob/master/spec/abci/abci.md#events)
 documentation.
 
 An `Event` has a composite key associated with it. A `compositeKey` is
@@ -31,14 +31,14 @@ For example:
 
 would be equal to the composite key of `jack.account.number`.
 
-By default, Tendermint will index all transactions by their respective hashes
+By default, Tenderdash will index all transactions by their respective hashes
 and height and blocks by their height.
 
 ## Configuration
 
-Operators can configure indexing via the `[tx_index]` section. The `indexer`
+Operators can configure indexing via the `[tx-index]` section. The `indexer`
 field takes a series of supported indexers. If `null` is included, indexing will
-be turned off regardless of other values provided.
+be turned off. All configured indexer names must still be supported.
 
 ```toml
 [tx-index]
@@ -50,10 +50,9 @@ be turned off regardless of other values provided.
 # to decide which txs to index based on configuration set in the application.
 #
 # Options:
-#   1) "null"
-#   2) "kv" (default) - the simplest possible indexer, backed by key-value storage (defaults to levelDB; see DBBackend).
+#   1) "null" (default) - no indexer services.
+#   2) "kv" - an indexer backed by key-value storage (see DBBackend).
 #     - When "kv" is chosen "tx.height" and "tx.hash" will always be indexed.
-#   3) "psql" - the indexer services backed by PostgreSQL.
 # indexer = []
 ```
 
@@ -62,34 +61,26 @@ be turned off regardless of other values provided.
 #### KV
 
 The `kv` indexer type is an embedded key-value store supported by the main
-underlying Tendermint database. Using the `kv` indexer type allows you to query
-for block and transaction events directly against Tendermint's RPC. However, the
-query syntax is limited and so this indexer type might be deprecated or removed
-entirely in the future.
+underlying Tenderdash database. Using the `kv` indexer type allows you to query
+for block and transaction events directly against Tenderdash's RPC. However, the
+query syntax is limited to the supported event-query operators.
 
-#### PostgreSQL
+#### Removed PostgreSQL indexer
 
-The `psql` indexer type allows an operator to enable block and transaction event
-indexing by proxying it to an external PostgreSQL instance allowing for the events
-to be stored in relational models. Since the events are stored in a RDBMS, operators
-can leverage SQL to perform a series of rich and complex queries that are not
-supported by the `kv` indexer type. Since operators can leverage SQL directly,
-searching is not enabled for the `psql` indexer type via Tendermint's RPC -- any
-such query will fail.
+The `psql` event indexer is no longer supported. Selecting it, including alongside
+`kv` or `null`, returns a configuration error. Choose `indexer = ["kv"]` for local
+indexing and RPC searches, or `["null"]` to disable indexing. The obsolete
+`psql-conn` key is ignored, so existing Dashmate configurations with an empty
+value remain compatible.
 
-Note, the SQL schema is stored in `state/indexer/sink/psql/schema.sql` and operators
-must explicitly create the relations prior to starting Tendermint and enabling
-the `psql` indexer type.
-
-Example:
-
-```shell
-$ psql ... -f state/indexer/sink/psql/schema.sql
-```
+Existing PostgreSQL data is not deleted or migrated, and SQL consumers no longer
+receive new events. To populate KV indexes, explicitly run `tenderdash
+reindex-event` against the retained local blocks and results after selecting `kv`.
+Pruned history cannot be reconstructed by this command.
 
 ## Default Indexes
 
-The Tendermint tx and block event indexer indexes a few select reserved events
+The Tenderdash tx and block event indexer indexes a few select reserved events
 by default.
 
 ### Transactions
@@ -107,7 +98,7 @@ The following indexes are indexed by default:
 
 ## Adding Events
 
-Applications are free to define which events to index. Tendermint does not
+Applications are free to define which events to index. Tenderdash does not
 expose functionality to define which events to index and which to ignore. In
 your application's `DeliverTx` method, add the `Events` field with pairs of
 UTF-8 encoded strings (e.g. "transfer.sender": "Bob", "transfer.recipient":
@@ -146,7 +137,7 @@ You can query for a paginated set of transaction by their events by calling the
 curl "localhost:26657/tx_search?query=\"message.sender='cosmos1...'\"&prove=true"
 ```
 
-Check out [API docs](https://docs.tendermint.com/master/rpc/#/Info/tx_search)
+Check out [API docs](../tenderdash-core/rpc.md)
 for more information on query syntax and other options.
 
 ## Subscribing to Transactions
@@ -165,7 +156,7 @@ a query to `/subscribe` RPC endpoint.
 }
 ```
 
-Check out [API docs](https://docs.tendermint.com/master/rpc/#subscribe) for more information
+Check out [API docs](../tenderdash-core/rpc.md) for more information
 on query syntax and other options.
 
 ## Querying Blocks Events
@@ -177,5 +168,5 @@ You can query for a paginated set of blocks by their events by calling the
 curl "localhost:26657/block_search?query=\"block.height > 10 AND val_set.num_changed > 0\""
 ```
 
-Check out [API docs](https://docs.tendermint.com/master/rpc/#/Info/block_search)
+Check out [API docs](../tenderdash-core/rpc.md)
 for more information on query syntax and other options.

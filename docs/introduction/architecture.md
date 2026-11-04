@@ -1,16 +1,16 @@
 ---
 order: false
 ---
-# Tendermint Architectural Overview
+# Tenderdash Architectural Overview
 
 
 > **November 2019**
 
-Over the next few weeks, @brapse, @marbar3778 and I (@tessr) are having a series of meetings to go over the architecture of Tendermint Core. These are my notes from these meetings, which will either serve as an artifact for onboarding future engineers; or will provide the basis for such a document.
+Over the next few weeks, @brapse, @marbar3778 and I (@tessr) are having a series of meetings to go over the architecture of Tenderdash Core. These are my notes from these meetings, which will either serve as an artifact for onboarding future engineers; or will provide the basis for such a document.
 
 ## Communication
 
-There are three forms of communication (e.g., requests, responses, connections) that can happen in Tendermint Core: *internode communication*, *intranode communication*, and *client communication*.
+There are three forms of communication (e.g., requests, responses, connections) that can happen in Tenderdash Core: *internode communication*, *intranode communication*, and *client communication*.
 
 - Internode communication: Happens between a node and other peers. This kind of communication happens over TCP or HTTP. More on this below.
 - Intranode communication: Happens within the node itself (i.e., between reactors or other components). These are typically function or method calls, or occasionally happen through an event bus.
@@ -56,12 +56,12 @@ The second responsibility is handled by a combination of the PEX and the Address
 Here are some relevant facts about TCP:
 
 1. All TCP connections have a "frame window size" which represents the packet size to the "confidence;" i.e., if you are sending packets along a new connection, you must start out with small packets. As the packets are received successfully, you can start to send larger and larger packets. (This curve is illustrated below.) This means that TCP connections are slow to spin up.
-2. The syn/ack process also means that there's a high overhead for small, frequent messages 
+2. The syn/ack process also means that there's a high overhead for small, frequent messages
 3. Sockets are represented by file descriptors.
 
 ![tcp](../imgs/tcp-window.png)
 
-In order to have performant TCP connections under the conditions created in Tendermint, we've created the `mconnection`, or the multiplexing connection. It is our own protocol built on top of TCP. It lets us reuse TCP connections to minimize overhead, and it keeps the window size high by sending auxiliary messages when necessary.
+In order to have performant TCP connections under the conditions created in Tenderdash, we've created the `mconnection`, or the multiplexing connection. It is our own protocol built on top of TCP. It lets us reuse TCP connections to minimize overhead, and it keeps the window size high by sending auxiliary messages when necessary.
 
 The `mconnection` is represented by a struct, which contains a batch of messages, read and write buffers, and a map of channel IDs to reactors. It communicates with TCP via file descriptors, which it can write to. There is one `mconnection` per peer connection.
 

@@ -11,10 +11,11 @@ import (
 	"testing"
 	"time"
 
-	db "github.com/cometbft/cometbft-db"
 	sync "github.com/sasha-s/go-deadlock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	db "github.com/dashpay/tenderdash/libs/db"
 
 	"github.com/dashpay/tenderdash/abci/example/code"
 	"github.com/dashpay/tenderdash/abci/example/kvstore"

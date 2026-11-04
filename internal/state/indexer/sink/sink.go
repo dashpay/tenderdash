@@ -8,12 +8,14 @@ import (
 	"github.com/dashpay/tenderdash/internal/state/indexer"
 	"github.com/dashpay/tenderdash/internal/state/indexer/sink/kv"
 	"github.com/dashpay/tenderdash/internal/state/indexer/sink/null"
-	"github.com/dashpay/tenderdash/internal/state/indexer/sink/psql"
 )
 
 // EventSinksFromConfig constructs a slice of indexer.EventSink using the provided
 // configuration.
-func EventSinksFromConfig(cfg *config.Config, dbProvider config.DBProvider, chainID string) ([]indexer.EventSink, error) {
+func EventSinksFromConfig(cfg *config.Config, dbProvider config.DBProvider, _ string) ([]indexer.EventSink, error) {
+	if err := cfg.TxIndex.ValidateBasic(); err != nil {
+		return nil, err
+	}
 	if len(cfg.TxIndex.Indexer) == 0 {
 		return []indexer.EventSink{null.NewEventSink()}, nil
 	}
@@ -43,17 +45,6 @@ func EventSinksFromConfig(cfg *config.Config, dbProvider config.DBProvider, chai
 
 			eventSinks = append(eventSinks, kv.NewEventSink(store))
 
-		case indexer.PSQL:
-			conn := cfg.TxIndex.PsqlConn
-			if conn == "" {
-				return nil, errors.New("the psql connection settings cannot be empty")
-			}
-
-			es, err := psql.NewEventSink(conn, chainID)
-			if err != nil {
-				return nil, err
-			}
-			eventSinks = append(eventSinks, es)
 		default:
 			return nil, errors.New("unsupported event sink type")
 		}

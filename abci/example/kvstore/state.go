@@ -7,7 +7,7 @@ import (
 	"io"
 	"net/url"
 
-	dbm "github.com/cometbft/cometbft-db"
+	dbm "github.com/dashpay/tenderdash/libs/db"
 
 	"github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"

@@ -199,6 +199,13 @@ func NewMConnection(
 	return mconn
 }
 
+type errorContextKey struct{}
+
+// Start preserves the caller's context for error notification after I/O stops.
+func (c *MConnection) Start(ctx context.Context) error {
+	return c.BaseService.Start(context.WithValue(ctx, errorContextKey{}, ctx))
+}
+
 // OnStart implements BaseService
 func (c *MConnection) OnStart(ctx context.Context) error {
 	c.flushTimer = timer.NewThrottleTimer("flush", c.config.FlushThrottle)
@@ -293,6 +300,9 @@ func (c *MConnection) stopForError(ctx context.Context, r interface{}) {
 
 	if atomic.CompareAndSwapUint32(&c.errored, 0, 1) {
 		if c.onError != nil {
+			if parent, ok := ctx.Value(errorContextKey{}).(context.Context); ok {
+				ctx = parent
+			}
 			c.onError(ctx, r)
 		}
 	}

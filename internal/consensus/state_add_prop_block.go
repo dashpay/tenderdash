@@ -327,7 +327,7 @@ func (c *ProposalCompletedAction) Execute(ctx context.Context, stateEvent StateE
 	prevotes := stateData.Votes.Prevotes(stateData.Round)
 	blockID, hasTwoThirds := prevotes.TwoThirdsMajority()
 	if hasTwoThirds && !blockID.IsNil() && (stateData.ValidRound < stateData.Round) {
-		if stateData.ProposalBlock.HashesTo(blockID.Hash) {
+		if stateData.ProposalBlock.BlockID(stateData.ProposalBlockParts).Equals(blockID) {
 			c.logger.Debug("updating valid block to new proposal block",
 				"valid_round", stateData.Round,
 				"valid_block_hash", tmstrings.LazyBlockHash(stateData.ProposalBlock))

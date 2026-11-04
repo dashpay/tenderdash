@@ -1,5 +1,8 @@
 # RFC 007 : Deterministic Proto Byte Serialization
 
+> Inherited design record. This proposal provides design context, not a guarantee
+> of current behavior. See the [current protocol specification](../../spec/README.md).
+
 ## Changelog
 
 - 09-Dec-2021: Initial draft (@williambanfield).
@@ -7,27 +10,27 @@
 ## Abstract
 
 This document discusses the issue of stable byte-representation of serialized messages
-within Tendermint and describes a few possible routes that could be taken to address it.
+within Tenderdash and describes a few possible routes that could be taken to address it.
 
 ## Background
 
 We use the byte representations of wire-format proto messages to produce
-and verify hashes of data within the Tendermint codebase as well as for
+and verify hashes of data within the Tenderdash codebase as well as for
 producing and verifying cryptographic signatures over these signed bytes.
 
 The protocol buffer [encoding spec][proto-spec-encoding] does not guarantee that the byte representation
 of a protocol buffer message will be the same between two calls to an encoder.
 While there is a mode to force the encoder to produce the same byte representation
 of messages within a single binary, these guarantees are not good enough for our
-use case in Tendermint. We require multiple different versions of a binary running
-Tendermint to be able to inter-operate. Additionally, we require that multiple different
+use case in Tenderdash. We require multiple different versions of a binary running
+Tenderdash to be able to inter-operate. Additionally, we require that multiple different
 systems written in _different languages_ be able to participate in different aspects
-of the protocols of Tendermint and be able to verify the integrity of the messages
+of the protocols of Tenderdash and be able to verify the integrity of the messages
 they each produce.
 
 While this has not yet created a problem that we know of in a running network, we should
 make sure to provide stronger guarantees around the serialized representation of the messages
-used within the Tendermint consensus algorithm to prevent any issue from occurring.
+used within the Tenderdash consensus algorithm to prevent any issue from occurring.
 
 
 ## Discussion
@@ -64,14 +67,14 @@ According to [Cosmos-SDK ADR-27][cosmos-sdk-adr-27], when message types obey a s
 set of rules, gogoproto produces a consistent byte representation of serialized messages.
 This seems promising, although more research is needed to guarantee gogoproto always
 produces a consistent set of bytes on serialized messages. This would solve the problem 
-within Tendermint as written in Go, but would require ensuring that there are similar
+within Tenderdash as written in Go, but would require ensuring that there are similar
 serializers written in other languages that produce the same output as gogoproto.
 
 #### Reorder serialized bytes to ensure determinism.
 
 The serialized form of a proto message can be transformed into a canonical representation
 by applying simple rules to the serialized bytes. Re-ordering the serialized bytes
-would allow Tendermint to produce a canonical byte representation without having to
+would allow Tenderdash to produce a canonical byte representation without having to
 simultaneously maintain a custom proto marshaller.
 
 This could be implemented as a function in many languages that performed the following 
@@ -79,10 +82,10 @@ producing bytes to sign or hashing:
 
 1. Does not add any of the data from unknown fields into the type to hash.
 
-Tendermint should not run into a case where it needs to verify the integrity of 
+Tenderdash should not run into a case where it needs to verify the integrity of
 data with unknown fields for the following reasons:
 
-The purpose of checking hash equality within Tendermint is to ensure that
+The purpose of checking hash equality within Tenderdash is to ensure that
 its local copy of data matches the data that the network agreed on. There should
 therefore not be a case where a process is checking hash equality using data that it did not expect
 to receive. What the data represent may be opaque to the process, such as when checking the
@@ -90,7 +93,7 @@ transactions in a block, _but the process will still have expected to receive th
 despite not understanding what their internal structure is. It's not clear what it would
 mean to verify that a block contains data that a process does not know about.
 
-The same reasoning applies for signature verification within Tendermint. Processes
+The same reasoning applies for signature verification within Tenderdash. Processes
 verify that a digital signature signed over a set of bytes by locally reconstructing the 
 data structure that the digital signature signed using the process's local data.
 
@@ -125,7 +128,7 @@ canonical proto serializers that match in each language.
 
 ### Future work
 
-We should add clear documentation to the Tendermint codebase every time we
+We should add clear documentation to the Tenderdash codebase every time we
 compare hashes of proto messages or use proto serialized bytes to produces a
 digital signatures that we have been careful to ensure that the hashes are performed
 properly.

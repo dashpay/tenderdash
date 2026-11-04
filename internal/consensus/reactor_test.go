@@ -9,11 +9,12 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	dbm "github.com/cometbft/cometbft-db"
 	"github.com/fortytw2/leaktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
+	dbm "github.com/dashpay/tenderdash/libs/db"
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
 	"github.com/dashpay/tenderdash/abci/example/kvstore"
@@ -833,4 +834,18 @@ func TestReactorPeerDownDeletesPeerStateSynchronously(t *testing.T) {
 	require.False(t, ok,
 		"peerDown must delete the peer state before returning, so a fast reconnect cannot reuse it")
 	require.False(t, ps.IsRunning(), "peerDown must stop the peer state before returning")
+}
+
+func TestReactorRejectsConsensusHandoffAfterShutdown(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cs, _ := makeState(ctx, t, makeStateArgs{})
+	rts := setup(ctx, t, 1, []*State{cs}, 32)
+	for _, r := range rts.reactors {
+		r.Stop()
+		r.Wait()
+		r.SwitchToConsensus(ctx, cs.GetStateData().state, false, 0)
+		require.False(t, cs.IsRunning(), "handoff started consensus after reactor shutdown")
+		require.True(t, r.WaitSync(), "rejected handoff changed sync state")
+	}
 }

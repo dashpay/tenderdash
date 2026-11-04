@@ -17,9 +17,10 @@ import (
 	"strconv"
 	"sync"
 
-	dbm "github.com/cometbft/cometbft-db"
 	"github.com/google/orderedcode"
 	"golang.org/x/sync/errgroup"
+
+	dbm "github.com/dashpay/tenderdash/libs/db"
 )
 
 type (

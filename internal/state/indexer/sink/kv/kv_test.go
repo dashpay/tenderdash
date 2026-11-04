@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	dbm "github.com/cometbft/cometbft-db"
+	dbm "github.com/dashpay/tenderdash/libs/db"
 
 	"github.com/cosmos/gogoproto/proto"
 	"github.com/stretchr/testify/assert"

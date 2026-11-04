@@ -113,14 +113,17 @@ func (p *Proposaler) Set(
 	return nil
 }
 
-// Create creates, sings and sends a created proposal to the queue
+// Create creates, signs and sends a created proposal to the queue
 //
-// To create a proposal is used RoundState.ValidBlock if it isn't nil and valid, otherwise create a new one
+// RoundState.ValidBlock is re-proposed with ValidRound as its POL round if it
+// is set and still usable; otherwise a new block is created and proposed
+// without a POL round.
 func (p *Proposaler) Create(ctx context.Context, height int64, round int32, rs *cstypes.RoundState) error {
-	// Create a block.
-	// Note that we only create a block if we don't have a valid block already.
-	block, blockParts := rs.ValidBlock, rs.ValidBlockParts
+	block, blockParts, polRound := rs.ValidBlock, rs.ValidBlockParts, rs.ValidRound
 	if !p.checkValidBlock(rs) {
+		// Receivers check the polka at POLRound against the proposed block, and
+		// a new block has none: ValidRound here would make them prevote nil.
+		polRound = -1
 		var err error
 		start := time.Now()
 		block, blockParts, err = p.createProposalBlock(ctx, round, rs)
@@ -135,7 +138,7 @@ func (p *Proposaler) Create(ctx context.Context, height int64, round int32, rs *
 		"round", round)
 
 	// Make proposal
-	proposal := makeProposal(height, round, rs.ValidRound, block, blockParts)
+	proposal := makeProposal(height, round, polRound, block, blockParts)
 
 	// Sign proposal
 	err := p.signProposal(ctx, height, proposal)

@@ -1,3 +1,14 @@
+## [1.8.2] - 2026-10-30
+
+### Bug Fixes
+
+- Disable MPTCP listeners by default (#1573)
+- Update vulnerable Go dependencies (#1574)
+
+### Miscellaneous Tasks
+
+- Update Go to 1.27.3 (#1575)
+
 ## [1.8.1] - 2026-09-23
 
 ### Bug Fixes

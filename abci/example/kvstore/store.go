@@ -6,8 +6,9 @@ import (
 	"io"
 	"os"
 
-	dbm "github.com/cometbft/cometbft-db"
 	"github.com/creachadair/atomicfile"
+
+	dbm "github.com/dashpay/tenderdash/libs/db"
 )
 
 // StoreFactory reads state and replaces it after a successful write.

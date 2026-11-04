@@ -13,12 +13,13 @@ import (
 	"testing"
 	"time"
 
-	dbm "github.com/cometbft/cometbft-db"
 	"github.com/cosmos/gogoproto/proto"
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/fortytw2/leaktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	dbm "github.com/dashpay/tenderdash/libs/db"
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
 	"github.com/dashpay/tenderdash/abci/example/kvstore"
@@ -1521,10 +1522,6 @@ func testWALRoundsSkipper(t *testing.T, slowProposer bool) {
 		<-replayStopped
 		cs.Stop()
 		cs.Wait()
-		// The stop predicate bypasses receiveRoutine's WAL and queue shutdown.
-		cs.wal.Stop()
-		cs.wal.Wait()
-		cs.msgInfoQueue.stop()
 	}()
 
 	newBlockSub, err := cs.eventBus.SubscribeWithArgs(ctx, pubsub.SubscribeArgs{

@@ -116,3 +116,12 @@ func TestApplyVotingPowerThreshold(t *testing.T) {
 func ptr[T any](value T) *T {
 	return &value
 }
+
+func TestVerifyConsensusParamsEvidenceModes(t *testing.T) {
+	for _, maxBytes := range []int64{0, 1000, 0, 2000} {
+		params := *types.DefaultConsensusParams()
+		params.Evidence.MaxBytes = maxBytes
+		require.NoError(t, verifyConsensusParams(params, params.HashConsensusParams(), 10, nil))
+		require.Error(t, verifyConsensusParams(params, tmbytes.HexBytes("untrusted hash"), 10, nil))
+	}
+}

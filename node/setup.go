@@ -9,10 +9,11 @@ import (
 	"strings"
 	"time"
 
-	dbm "github.com/cometbft/cometbft-db"
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	dbm "github.com/dashpay/tenderdash/libs/db"
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
 	"github.com/dashpay/tenderdash/config"
@@ -206,7 +207,7 @@ func createEvidenceReactor(
 	evidencePool := evidence.NewPool(logger, evidenceDB, store, blockStore, metrics, eventBus)
 	evidenceReactor := evidence.NewReactor(logger, chCreator, peerEvents, evidencePool)
 
-	return evidenceReactor, evidencePool, evidenceDB.Close, nil
+	return evidenceReactor, evidencePool, evidencePool.Close, nil
 }
 
 func createPeerManager(
@@ -711,4 +712,46 @@ func startPProfServer(ctx context.Context, cfg config.RPCConfig) {
 			close(signal)
 		}
 	}()
+}
+
+// stateSyncMetricsSetter is the consensus-side surface of the state sync handoff.
+type stateSyncMetricsSetter interface {
+	SetStateSyncingMetrics(float64)
+	SetBlockSyncingMetrics(float64)
+}
+
+// blockSyncSwitcher is the block-sync-side surface of the state sync handoff.
+type blockSyncSwitcher interface {
+	SwitchToBlockSync(context.Context, sm.State) error
+}
+
+// newPostStateSyncHook returns the operation state sync runs to hand over to block sync.
+func newPostStateSyncHook(
+	logger log.Logger,
+	evPool *evidence.Pool,
+	csReactor stateSyncMetricsSetter,
+	bcReactor blockSyncSwitcher,
+) func(context.Context, sm.State) error {
+	return func(ctx context.Context, state sm.State) error {
+		// The no-snapshot fallback hands over the unchanged local state that
+		// OnStart already gave the pool; Update panics unless the height advances.
+		// Nothing else updates the pool before block sync starts, so this
+		// check-then-update cannot race.
+		if state.LastBlockHeight > evPool.State().LastBlockHeight {
+			evPool.Update(ctx, state, nil)
+		}
+		csReactor.SetStateSyncingMetrics(0)
+
+		// TODO: Some form of orchestrator is needed here between the state
+		// advancing reactors to be able to control which one of the three
+		// is running
+		// FIXME Very ugly to have these metrics bleed through here.
+		csReactor.SetBlockSyncingMetrics(1)
+		if err := bcReactor.SwitchToBlockSync(ctx, state); err != nil {
+			logger.Error("failed to switch to block sync", "err", err)
+			return err
+		}
+
+		return nil
+	}
 }

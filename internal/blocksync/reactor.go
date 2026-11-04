@@ -206,8 +206,12 @@ func (r *Reactor) OnStop() {
 	if r.messageHandler != nil {
 		r.messageHandler.stop()
 	}
-	if r.blockSyncFlag.Load() {
+	// Join regardless of blockSyncFlag: poolRoutine clears the flag after a Stop
+	// that returns early while the synchronizer is still draining (e.g. on parent
+	// cancellation). Stop and Wait are no-ops for a synchronizer never started.
+	if r.synchronizer != nil {
 		r.synchronizer.Stop()
+		r.synchronizer.Wait()
 	}
 }
 

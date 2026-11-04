@@ -206,7 +206,8 @@ func New(descriptors map[p2p.ChannelID]*p2p.ChannelDescriptor, creator p2p.Chann
 func (c *Client) GetBlock(ctx context.Context, height int64, peerID types.NodeID) (*promise.Promise[*bcproto.BlockResponse], error) {
 	reqID := uuid.NewString()
 	msg := &bcproto.BlockRequest{Height: height}
-	respCh, err := c.sendWithResponse(ctx, reqID, peerID, msg)
+	observer, _ := ctx.Value(blockObserverKey{}).(BlockRequestObserver)
+	respCh, err := c.sendWithResponse(ctx, reqID, peerID, msg, observer)
 	if err != nil {
 		return nil, err
 	}
@@ -452,23 +453,8 @@ func (c *Client) resolveMessage(_ctx context.Context, respID string, res result)
 		return fmt.Errorf("pending response %s not found", respID)
 	}
 	switch v := val.(type) {
-	case chan result:
-		// The send must never block. Once the buffer holds an answer to this request
-		// the promise takes that one, so anything further is a duplicate; and if the
-		// promise has already settled, nothing will ever drain the buffer at all.
-		// Waiting there would park the consumer goroutine - and with it every message
-		// it carries - for as long as the node runs. A receiver never waits on a
-		// channel whose buffer is non-empty, so a full buffer means nobody is owed
-		// this value and dropping it loses nothing.
-		//
-		// There is deliberately no context arm here. With a default the select cannot
-		// block, so there is nothing left to cancel, and an arm on an already-canceled
-		// context would instead win a coin flip against delivering the response.
-		select {
-		case v <- res:
-		default:
-			c.logger.Debug("discarding a duplicate response", "response_id", respID)
-		}
+	case *pendingResponse:
+		v.deliver(res)
 		return nil
 	case tombstone:
 		// Expiry is inclusive of the deadline, matching expireTombstones. If the two
@@ -486,7 +472,7 @@ func (c *Client) resolveMessage(_ctx context.Context, respID string, res result)
 		c.logger.Debug("discarding a response for a timed-out request", "response_id", respID)
 		return nil
 	default:
-		// Only a channel or a tombstone is ever stored, so reaching here means the
+		// Only a pending response or tombstone is stored, so reaching here means the
 		// map grew a third value type. That is our bug, not the peer's: log it rather
 		// than returning an error, which iter would turn into a PeerError against
 		// whoever happened to answer.
@@ -497,35 +483,35 @@ func (c *Client) resolveMessage(_ctx context.Context, respID string, res result)
 	return fmt.Errorf("pending response %s not found", respID)
 }
 
-func (c *Client) sendWithResponse(ctx context.Context, reqID string, peerID types.NodeID, msg proto.Message) (chan result, error) {
+func (c *Client) sendWithResponse(ctx context.Context, reqID string, peerID types.NodeID,
+	msg proto.Message, observers ...BlockRequestObserver,
+) (chan result, error) {
+	c.expireTombstones()
+	pending := &pendingResponse{ch: make(chan result, 1)}
+	if len(observers) > 0 {
+		pending.observer = observers[0]
+	}
+	// Register before publishing the request: a fast response can beat Send's return.
+	c.pending.Store(reqID, pending)
 	err := c.Send(ctx, p2p.Envelope{
 		Attributes: map[string]string{RequestIDAttribute: reqID},
 		To:         peerID,
 		Message:    msg,
 	})
 	if err != nil {
-		errSendError := c.Send(ctx, p2p.PeerError{
-			NodeID: peerID,
-			Err:    err,
-		})
-		if errSendError != nil {
-			return nil, multierror.Append(err, errSendError)
-		}
+		c.retirePending(reqID, false)
+		errSendError := c.Send(ctx, p2p.PeerError{NodeID: peerID, Err: err})
+		return nil, multierror.Append(err, errSendError).ErrorOrNil()
 	}
-	return c.addPending(reqID), nil
+	pending.admit()
+	return pending.ch, nil
 }
 
 func (c *Client) addPending(reqID string) chan result {
-	// Issuance and retirement are both opportunistic sweep points: they are the
-	// moments the map changes, and sweeping there keeps Client free of a background
-	// goroutine that shutdown would have to join. Neither is guaranteed to run - an
-	// idle client sweeps nothing - so the lifetime itself is enforced at lookup in
-	// resolveMessage, and sweeping only reclaims the memory. What we retain is tied
-	// to the requests we issue; a peer cannot inflate it.
 	c.expireTombstones()
-	respCh := make(chan result, 1)
-	c.pending.Store(reqID, respCh)
-	return respCh
+	pending := &pendingResponse{ch: make(chan result, 1)}
+	c.pending.Store(reqID, pending)
+	return pending.ch
 }
 
 // retirePending drops a settled request from the pending map.
@@ -544,14 +530,14 @@ func (c *Client) addPending(reqID string) chan result {
 // timeouts and cancellations are both capped by how many requests can be
 // outstanding at once, so retention follows concurrency instead.
 //
-// The response channel is deliberately not closed in either case. Its only reader
-// is the promise executor, which has already returned by the time this deferred
-// call runs, so a close would signal nobody - while a resolver that loaded the
-// channel a moment earlier would panic sending into it, on a path with no panic
-// recovery above it. Leaving it open costs nothing, because resolveMessage never
-// blocks on it: a late send either fills the one-slot buffer nobody reads or is
-// dropped, and the channel becomes garbage as soon as it leaves the map.
+// The channel stays open: a resolver may still hold the pending response when
+// retirement removes it from the map. Its settlement lock makes that reply inert.
 func (c *Client) retirePending(reqID string, answered bool) {
+	if value, ok := c.pending.Load(reqID); ok {
+		if pending, ok := value.(*pendingResponse); ok {
+			pending.retire()
+		}
+	}
 	// Reclaim on retirement as well as on issuance. A node that stops making
 	// requests would otherwise never run a sweep again and would hold its final
 	// window of tombstones for as long as it lives.

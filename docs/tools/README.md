@@ -7,7 +7,7 @@ parent:
 
 # Overview
 
-Tendermint has some tools that are associated with it for:
+Tenderdash has some tools that are associated with it for:
 
 - [Debugging](./debugging/pro.md)
 - [Benchmarking](#benchmarking)
@@ -17,20 +17,21 @@ Tendermint has some tools that are associated with it for:
 
 - <https://github.com/informalsystems/tm-load-test>
 
-`tm-load-test` is a distributed load testing tool (and framework) for load
-testing Tendermint networks.
+`tm-load-test` is an external load testing tool originally developed for upstream
+networks. Verify its transaction format and RPC compatibility before using it
+with Tenderdash.
 
 ## Testnets
 
 - <https://github.com/informalsystems/testnets>
 
-This repository contains various different configurations of test networks for,
-and relating to, Tendermint.
+This external repository contains upstream testnet configurations. They are
+not Tenderdash network configurations.
 
-Use [Docker Compose](./docker-compose.md) to spin up Tendermint testnets on your
+Use [Docker Compose](./docker-compose.md) to spin up Tenderdash testnets on your
 local machine.
 
-Use [Terraform and Ansible](./terraform-and-ansible.md) to deploy Tendermint
+Use [Terraform and Ansible](./terraform-and-ansible.md) to deploy Tenderdash
 testnets to the cloud.
 
-See the `tendermint testnet --help` command for more help initializing testnets.
+See the `tenderdash testnet --help` command for more help initializing testnets.
