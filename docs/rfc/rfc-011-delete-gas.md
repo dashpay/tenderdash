@@ -1,4 +1,7 @@
-# RFC 011: Remove Gas From Tendermint
+# RFC 011: Remove Gas From Tenderdash
+
+> Inherited design record. This proposal provides design context, not a guarantee
+> of current behavior. See the [current protocol specification](../../spec/README.md).
 
 ## Changelog
 
@@ -8,12 +11,12 @@
 
 ## Abstract
 
-In the v0.25.0 release, Tendermint added a mechanism for tracking 'Gas' in the mempool.
+In the v0.25.0 release, Tenderdash added a mechanism for tracking 'Gas' in the mempool.
 At a high level, Gas allows applications to specify how much it will cost the network,
 often in compute resources, to execute a given transaction. While such a mechanism is common
 in blockchain applications, it is not generalizable enough to be a maintained as a part
-of Tendermint. This RFC explores the possibility of removing the concept of Gas from
-Tendermint while still allowing applications the power to control the contents of
+of Tenderdash. This RFC explores the possibility of removing the concept of Gas from
+Tenderdash while still allowing applications the power to control the contents of
 blocks to achieve similar goals.
 
 ## Background
@@ -26,7 +29,7 @@ provides a Turing complete execution platform. Without any limitations, maliciou
 actors could waste computation resources by directing the EVM to perform large
 or even infinite computations. Gas serves as a metering mechanism to prevent this.
 
-Gas appears to have been added to Tendermint multiple times, initially as part of
+Gas appears to have been added to Tenderdash multiple times, initially as part of
 a now defunct `/vm` package, and in its most recent iteration [as part of v0.25.0][gas-add-pr]
 as a mechanism to limit the transactions that will be included in the block by an additional
 parameter.
@@ -38,17 +41,17 @@ and a mechanism for tracking how much gas a transaction has already taken.
 Non-SDK applications also make use of the concept of Gas. Anoma appears to implement
 [a gas system][anoma-gas] to meter the transactions it executes.
 
-While the notion of gas is present in projects that make use of Tendermint, it is
-not a concern of Tendermint's. Tendermint's value and goal is producing blocks
-via a distributed consensus algorithm. Tendermint relies on the application specific
-code to decide how to handle the transactions Tendermint has produced (or if the
+While the notion of gas is present in projects that make use of Tenderdash, it is
+not a concern of Tenderdash's. Tenderdash's value and goal is producing blocks
+via a distributed consensus algorithm. Tenderdash relies on the application specific
+code to decide how to handle the transactions Tenderdash has produced (or if the
 application wants to consider them at all). Gas is an application concern.
 
 Our implementation of Gas is not currently enforced by consensus. Our current validation check that
 occurs during block propagation does not verify that the block is under the configured `MaxGas`.
 Ensuring that the transactions in a proposed block do not exceed `MaxGas` would require
 input from the application during propagation. The `ProcessProposal` method introduced
-as part of ABCI++ would enable such input but would further entwine Tendermint and
+as part of ABCI++ would enable such input but would further entwine Tenderdash and
 the application. The issue of checking `MaxGas` during block propagation is important
 because it demonstrates that the feature as it currently exists is not implemented
 as fully as it perhaps should be.
@@ -65,7 +68,7 @@ While this should alleviate the pain for operators wishing to understand if thei
 transaction was included in the mempool, it highlights that the abstraction of
 what is included in the mempool is not currently well defined.
 
-Removing Gas from Tendermint and the mempool would allow for the mempool to be a better
+Removing Gas from Tenderdash and the mempool would allow for the mempool to be a better
 abstraction: any transaction that arrived at `CheckTx` and passed the check will either be
 a candidate for a later block or evicted after a TTL is reached or to make room for
 other, higher priority transactions. All other transactions are completely invalid and can be discarded forever.
@@ -75,7 +78,7 @@ equivalent functionality can be implemented outside of the mempool using the mem
 
 ## Discussion
 
-This section catalogs the functionality that will need to exist within the Tendermint
+This section catalogs the functionality that will need to exist within the Tenderdash
 mempool to allow Gas to be removed and replaced by application-side bookkeeping.
 
 ### Requirement: Provide Mempool Tx Sorting Mechanism
@@ -93,11 +96,11 @@ v0.35's `ResponseCheckTx` message.
 
 ### Requirement: Allow Application-Defined Block Resizing
 
-When creating a block proposal, Tendermint pulls a set of possible transactions out of
-the mempool to include in the next block. Tendermint uses MaxGas to limit the set of transactions
+When creating a block proposal, Tenderdash pulls a set of possible transactions out of
+the mempool to include in the next block. Tenderdash uses MaxGas to limit the set of transactions
 it pulls out of the mempool fetching a set of transactions whose sum is less than MaxGas.
 
-By removing gas tracking from Tendermint's mempool, Tendermint will need to provide a way for
+By removing gas tracking from Tenderdash's mempool, Tenderdash will need to provide a way for
 applications to determine an acceptable set of transactions to include in the block.
 
 This is what the new ABCI++ `PrepareProposal` method is useful for. Applications
@@ -118,7 +121,7 @@ to consume. The mempool currently handles this bookkeeping responsibility and us
 gas to determine the set of transactions to include in the block. In order to task
 the application with keeping track of this metadata, we should make it easier for the
 application to do so. In general, we'll want to keep only one copy of this type
-of metadata in the program at a time, either in the application or in Tendermint.
+of metadata in the program at a time, either in the application or in Tenderdash.
 
 The following sections are possible solutions to the problem of storing transaction
 metadata without duplication.
@@ -138,7 +141,7 @@ well-worn territory.
 
 An alternative approach to handling transaction metadata would be would be the
 addition of a new application-metadata field in the `ResponseCheckTx`. This field
-would be a protocol buffer message whose contents were entirely opaque to Tendermint.
+would be a protocol buffer message whose contents were entirely opaque to Tenderdash.
 The application would be responsible for marshalling and unmarshalling whatever data
 it stored in this field. During `PrepareProposal`, the application would be passed
 this metadata along with the transaction, allowing the application to use it to perform

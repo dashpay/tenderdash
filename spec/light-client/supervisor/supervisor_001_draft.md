@@ -11,15 +11,15 @@ the correct files eventually.
 # Light Client Sequential Supervisor
 
 The light client implements a read operation of a
-[header](TMBC-HEADER-link) from the [blockchain](TMBC-SEQ-link), by
+[header][TMBC-HEADER-link] from the [blockchain][TMBC-SEQ-link], by
 communicating with full nodes, a so-called primary and several
 so-called witnesses. As some full nodes may be faulty, this
 functionality must be implemented in a fault-tolerant way.
 
 In the Tendermint blockchain, the validator set may change with every
 new block.  The staking and unbonding mechanism induces a [security
-model](TMBC-FM-2THIRDS-link): starting at time *Time* of the
-[header](TMBC-HEADER-link),
+model][TMBC-FM-2THIRDS-link]: starting at time *Time* of the
+[header][TMBC-HEADER-link],
 more than two-thirds of the next validators of a new block are correct
 for the duration of *TrustedPeriod*.
 
@@ -28,7 +28,7 @@ operation designed for this security model. That is, it is safe if the
 model assumptions are satisfied and makes progress if it communicates
 to a correct primary.
 
-However, if the [security model](TMBC-FM-2THIRDS-link) is violated,
+However, if the [security model][TMBC-FM-2THIRDS-link] is violated,
 faulty peers (that have been validators at some point in the past) may
 launch attacks on the Tendermint network, and on the light
 client. These attacks as well as an axiomatization of blocks in
@@ -83,7 +83,7 @@ upcoming PRs.
 
 # Part I - Tendermint Blockchain
 
-See [verification spec](addLinksWhenDone)
+See [verification spec](../verification/verification_002_draft.md#part-i---tendermint-blockchain)
 
 # Part II - Sequential Problem Definition
 
@@ -108,7 +108,7 @@ The light client never stores a header which is not in the blockchain.
 ## Computational Model
 
 The light client communicates with remote processes only via the
-[verification](TODO) and the [detection](TODO) protocols. The
+[verification](../verification/verification_002_draft.md) and the [detection](../detection/detection_003_reviewed.md) protocols. The
 respective assumptions are given there.
 
 ## Distributed Problem Statement
@@ -135,10 +135,9 @@ The light client has a local data structure called LightStore
 that contains light blocks (that contain a header).
 
 > The light store exposes functions to query and update it. They are
-> specified [here](TODO:onceVerificationIsMerged).
+> specified [here](../verification/verification_002_draft.md#lcv-data-lightstore2).
 
-**TODO:** reference light store invariant [LCV-INV-LS-ROOT.2] once
-verification is merged
+See light store invariant [[LCV-INV-LS-ROOT.2]](../verification/verification_002_draft.md#lcv-inv-ls-root2).
 
 #### **[LC-DIST-SAFE.1]**
 
@@ -166,8 +165,8 @@ wait for another input.
 
 [LC-DIST-SAFE.1] is guaranteed by the detector; in particular it
 follows from
-[[LCD-DIST-INV-STORE.1]](TODO)
-[[LCD-DIST-LIVE.1]](TODO)
+[[LCD-DIST-INV-STORE.1]](../detection/detection_003_reviewed.md#lcd-dist-inv-store1)
+[[LCD-DIST-LIVE.1]](../detection/detection_003_reviewed.md#lcd-dist-live1)
 
 # Part IV - Light Client Supervisor Protocol
 
@@ -292,7 +291,7 @@ type LightStore struct {
 ```
 
 We use the functions that the LightStore exposes, which
-are defined in the [verification specification](TODO).
+are defined in the [verification specification](../verification/verification_002_draft.md#lcv-data-lightstore2).
 
 ### Inputs
 
@@ -308,8 +307,8 @@ type LCInitData struct {
 ```
 
 where only one of the components must be provided. `GenesisDoc` is
-defined in the [Tendermint
-Types](https://github.com/tendermint/tendermint/blob/master/types/genesis.go).
+defined in the [Tenderdash
+Types](https://github.com/dashpay/tenderdash/blob/v1.9-dev/types/genesis.go).
 
 #### **[LC-DATA-GENESIS.1]**
 
@@ -637,3 +636,7 @@ func VerifyAndDetect (lightStore LightStore, targetHeight Height)
     - [LC-DATA-PEERLIST-INV.1] is violated
 
 ----
+
+[TMBC-FM-2THIRDS-link]: ../verification/verification_002_draft.md#tmbc-fm-2thirds1
+[TMBC-HEADER-link]: ../verification/verification_002_draft.md#tmbc-header1
+[TMBC-SEQ-link]: ../verification/verification_002_draft.md#tmbc-seq1

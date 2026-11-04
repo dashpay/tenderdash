@@ -1,5 +1,8 @@
 # RFC 021: The Future of the Socket Protocol
 
+> Inherited design record. This proposal provides design context, not a guarantee
+> of current behavior. See the [current protocol specification](../../spec/README.md).
+
 ## Changelog
 
 - 19-May-2022: Initial draft (@creachadair)
@@ -17,7 +20,7 @@ should be viewed primarily as a record of the issue for future reference.
 ## Background
 
 The [Application Blockchain Interface (ABCI)][abci] is a client-server protocol
-used by the Tendermint consensus engine to communicate with the application on
+used by the Tenderdash consensus engine to communicate with the application on
 whose behalf it performs state replication. There are currently three transport
 options available for ABCI applications:
 
@@ -29,19 +32,19 @@ options available for ABCI applications:
 2. **Socket protocol**: Out-of-process applications may export the ABCI service
    via a custom socket protocol that sends requests and responses over a
    Unix-domain or TCP socket connection as length-prefixed protocol buffers.
-   In Tendermint, this is handled by the [socket client][socket-client].
+   In Tenderdash, this is handled by the [socket client][socket-client].
 
 3. **gRPC**: Out-of-process applications may export the ABCI service via gRPC.
-   In Tendermint, this is handled by the [gRPC client][grpc-client].
+   In Tenderdash, this is handled by the [gRPC client][grpc-client].
 
-Both the out-of-process options (2) and (3) have a long history in Tendermint.
+Both the out-of-process options (2) and (3) have a long history in Tenderdash.
 The beginnings of the gRPC client were added in [May 2016][abci-start] when
 ABCI was still hosted in a separate repository, and the socket client (formerly
 called the "remote client") was part of ABCI from its inception in November
 2015.
 
 At that time when ABCI was first being developed, the gRPC project was very new
-(it launched Q4 2015) and it was not an obvious choice for use in Tendermint.
+(it launched Q4 2015) and it was not an obvious choice for use in Tenderdash.
 It took a while before the language coverage and quality of gRPC reached a
 point where it could be a viable solution for out-of-process applications.  For
 that reason, it made sense for the initial design of ABCI to focus on a custom
@@ -73,7 +76,7 @@ applications using it. In particular:
   server to understand which operation is requested is to dispatch on the type
   of the request and response payloads. For responses, this means that [any
   error condition is terminal not only to the request, but to the entire ABCI
-  client](https://github.com/tendermint/tendermint/blob/master/abci/client/socket_client.go#L149).
+  client](https://github.com/dashpay/tenderdash/blob/master/abci/client/socket_client.go#L149).
 
   The historical intent of terminating for any error seems to have been that
   all ABCI errors are unrecoverable and hence protocol fatal <!-- markdown-link-check-disable-next-line -->
@@ -93,7 +96,7 @@ example, but doing so would be a breaking change to the protocol requiring
 every application using it to update.  If applications have to migrate anyway,
 the stability and language coverage of gRPC have improved a lot, and today it
 is probably simpler to set up and maintain an application using gRPC transport
-than to reimplement the Tendermint socket protocol.
+than to reimplement the Tenderdash socket protocol.
 
 Moreover, gRPC addresses all the above issues out-of-the-box, and requires
 (much) less custom code for both the server (i.e., the application) and the
@@ -109,7 +112,7 @@ There is a set of related alternatives to consider:
   Claim: We should converge on one (and only one) IPC option for out-of-process
   applications. We should choose an option that, after a suitable period of
   deprecation for alternatives, will address most or all the highest-impact
-  uses of Tendermint.  Maintaining multiple options increases the surface area
+  uses of Tenderdash.  Maintaining multiple options increases the surface area
   for bugs and vulnerabilities, and we should not have multiple options for
   basic interfaces without a clear and well-documented reason.
 
@@ -123,7 +126,7 @@ There is a set of related alternatives to consider:
 - Question 2b: Improve the socket protocol and deprecate/remove gRPC?
 
   Claim: If we find meaningful advantages to maintaining our own custom RPC
-  protocol in Tendermint, we should treat it as a first-class project within
+  protocol in Tenderdash, we should treat it as a first-class project within
   the core and invest in making it good enough that we do not require other
   options.
 
@@ -138,7 +141,7 @@ design.
 
 ## Detailed Design
 
-1. If we choose to standardize on gRPC, the main work in Tendermint core will
+1. If we choose to standardize on gRPC, the main work in Tenderdash core will
    be removing and cleaning up the code for the socket client and server.
 
    Besides the code cleanup, we will also need to clearly document a
@@ -217,14 +220,14 @@ design.
 ## References
 
 - [Application Blockchain Interface (ABCI)][abci]
-- [Tendermint ABCI socket client][socket-client]
-- [Tendermint ABCI gRPC client][grpc-client]
+- [Tenderdash ABCI socket client][socket-client]
+- [Tenderdash ABCI gRPC client][grpc-client]
 - [Initial commit of gRPC client][abci-start]
 
 [abci]: https://github.com/tendermint/spec/tree/master/spec/abci
-[socket-client]: https://github.com/tendermint/tendermint/blob/master/abci/client/socket_client.go
-[socket-server]: https://github.com/tendermint/tendermint/blob/master/abci/server/socket_server.go
-[grpc-client]: https://github.com/tendermint/tendermint/blob/master/abci/client/grpc_client.go
+[socket-client]: https://github.com/dashpay/tenderdash/blob/master/abci/client/socket_client.go
+[socket-server]: https://github.com/dashpay/tenderdash/blob/master/abci/server/socket_server.go
+[grpc-client]: https://github.com/dashpay/tenderdash/blob/master/abci/client/grpc_client.go
 [abci-start]: https://github.com/tendermint/abci/commit/1ab3c747182aaa38418258679c667090c2bb1e0d
 
 ## Notes
@@ -254,7 +257,7 @@ protocol. Note that in most cases I have not checked how complete or correct
 these implementations are; these are based on search results and a cursory
 visual inspection.
 
-- Tendermint Core (Go): [client][socket-client], [server][socket-server]
+- Tenderdash Core (Go): [client][socket-client], [server][socket-server]
 - Informal Systems [tendermint-rs](https://github.com/informalsystems/tendermint-rs) (Rust): [client](https://github.com/informalsystems/tendermint-rs/blob/master/abci/src/client.rs), [server](https://github.com/informalsystems/tendermint-rs/blob/master/abci/src/server.rs)
 - Tendermint [js-abci](https://github.com/tendermint/js-abci) (JS): [server](https://github.com/tendermint/js-abci/blob/master/src/server.js)
 - [Hotmoka](https://github.com/Hotmoka/hotmoka) ABCI (Java): [server](https://github.com/Hotmoka/hotmoka/blob/master/io-hotmoka-tendermint-abci/src/main/java/io/hotmoka/tendermint_abci/Server.java)

@@ -6,7 +6,7 @@ order: 2
 
 ## Overview
 
-This is a quick start guide. If you have a vague idea about how Tendermint
+This is a quick start guide. If you have a vague idea about how Tenderdash
 works and want to get started right away, continue. Make sure you've installed the binary.
 Check out [install](./install.md) if you haven't.
 
@@ -15,19 +15,19 @@ Check out [install](./install.md) if you haven't.
 Running:
 
 ```sh
-tendermint init validator
+tenderdash init validator
 ```
 
 will create the required files for a single, local node.
 
-These files are found in `$HOME/.tendermint`:
+These files are found in `$HOME/.tenderdash`:
 
 ```sh
-$ ls $HOME/.tendermint
+$ ls $HOME/.tenderdash
 
 config  data
 
-$ ls $HOME/.tendermint/config/
+$ ls $HOME/.tenderdash/config/
 
 config.toml  genesis.json  node_key.json  priv_validator.json
 ```
@@ -37,10 +37,10 @@ Configuring a cluster is covered further below.
 
 ## Local Node
 
-Start Tendermint with a simple in-process application:
+Start Tenderdash with a simple in-process application:
 
 ```sh
-tendermint start --proxy-app=kvstore
+tenderdash start --proxy-app=kvstore
 ```
 
 > Note: `kvstore` is a non persistent app, if you would like to run an application with persistence run `--proxy-app=persistent_kvstore`
@@ -99,30 +99,30 @@ curl -L https://git.io/fFfOR | bash
 source ~/.profile
 ```
 
-This will install `go` and other dependencies, get the Tendermint source code, then compile the `tendermint` binary.
+This will install `go` and other dependencies, get the Tenderdash source code, then compile the `tenderdash` binary.
 
-Next, use the `tendermint testnet` command to create four directories of config files (found in `./mytestnet`) and copy each directory to the relevant machine in the cloud, so that each machine has `$HOME/mytestnet/node[0-3]` directory.
+Next, use the `tenderdash testnet` command to create four directories of config files (found in `./mytestnet`) and copy each directory to the relevant machine in the cloud, so that each machine has `$HOME/mytestnet/node[0-3]` directory.
 
 Before you can start the network, you'll need peers identifiers (IPs are not enough and can change). We'll refer to them as ID1, ID2, ID3, ID4.
 
 ```sh
-tendermint show-node-id --home ./mytestnet/node0
-tendermint show-node-id --home ./mytestnet/node1
-tendermint show-node-id --home ./mytestnet/node2
-tendermint show-node-id --home ./mytestnet/node3
+tenderdash show-node-id --home ./mytestnet/node0
+tenderdash show-node-id --home ./mytestnet/node1
+tenderdash show-node-id --home ./mytestnet/node2
+tenderdash show-node-id --home ./mytestnet/node3
 ```
 
 Finally, from each machine, run:
 
 ```sh
-tendermint start --home ./mytestnet/node0 --proxy-app=kvstore --p2p.persistent-peers="ID1@IP1:26656,ID2@IP2:26656,ID3@IP3:26656,ID4@IP4:26656"
-tendermint start --home ./mytestnet/node1 --proxy-app=kvstore --p2p.persistent-peers="ID1@IP1:26656,ID2@IP2:26656,ID3@IP3:26656,ID4@IP4:26656"
-tendermint start --home ./mytestnet/node2 --proxy-app=kvstore --p2p.persistent-peers="ID1@IP1:26656,ID2@IP2:26656,ID3@IP3:26656,ID4@IP4:26656"
-tendermint start --home ./mytestnet/node3 --proxy-app=kvstore --p2p.persistent-peers="ID1@IP1:26656,ID2@IP2:26656,ID3@IP3:26656,ID4@IP4:26656"
+tenderdash start --home ./mytestnet/node0 --proxy-app=kvstore --p2p.persistent-peers="ID1@IP1:26656,ID2@IP2:26656,ID3@IP3:26656,ID4@IP4:26656"
+tenderdash start --home ./mytestnet/node1 --proxy-app=kvstore --p2p.persistent-peers="ID1@IP1:26656,ID2@IP2:26656,ID3@IP3:26656,ID4@IP4:26656"
+tenderdash start --home ./mytestnet/node2 --proxy-app=kvstore --p2p.persistent-peers="ID1@IP1:26656,ID2@IP2:26656,ID3@IP3:26656,ID4@IP4:26656"
+tenderdash start --home ./mytestnet/node3 --proxy-app=kvstore --p2p.persistent-peers="ID1@IP1:26656,ID2@IP2:26656,ID3@IP3:26656,ID4@IP4:26656"
 ```
 
 Note that after the third node is started, blocks will start to stream in
 because >2/3 of validators (defined in the `genesis.json`) have come online.
-Persistent peers can also be specified in the `config.toml`. See [here](../tendermint-core/configuration.md) for more information about configuration options.
+Persistent peers can also be specified in the `config.toml`. See [here](../tenderdash-core/configuration.md) for more information about configuration options.
 
 Transactions can then be sent as covered in the single, local node example above.
