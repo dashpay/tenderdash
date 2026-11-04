@@ -45,6 +45,13 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 	event := stateEvent.Data.(*TryAddCommitEvent)
 	stateData := stateEvent.StateData
 	commit := event.Commit
+	if stripped := commit.WithoutRandomBeacon(); stripped != commit {
+		// Before consensus version 2 a commit carries no beacon; see WithoutRandomBeacon.
+		commit = stripped
+		withoutBeacon := *event
+		withoutBeacon.Commit = commit
+		event = &withoutBeacon
+	}
 	peerID := event.PeerID
 	fromReplay := event.FromReplay
 	ctx = ctxWithPeerVerificationBudget(ctx, peerID, fromReplay, cs.verificationBudget)

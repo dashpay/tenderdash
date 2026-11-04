@@ -774,13 +774,16 @@ func (blockExec *BlockExecutor) flushMempool(
 	return err
 }
 
+// buildLastCommitInfo returns the CommitInfo of block.LastCommit for the application, without its
+// beacon and app hash: they are empty before consensus version 2, and neither the block hash nor the
+// commit's signature covers them, so the proposer could have set any.
 func buildLastCommitInfo(block *types.Block, initialHeight int64) abci.CommitInfo {
 	if block.Height == initialHeight {
 		// there is no last commit for the initial height.
 		// return an empty value.
 		return abci.CommitInfo{}
 	}
-	return block.LastCommit.ToCommitInfo()
+	return block.LastCommit.WithoutRandomBeacon().ToCommitInfo()
 }
 
 // Update returns a copy of state with the fields set using the arguments passed in.
