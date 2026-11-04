@@ -187,12 +187,16 @@ func proposalMessageHandler(propSetter cstypes.ProposalSetter, budget types.Veri
 // roundSkipCertificateMessageHandler hands a certificate to the state machine
 // with the permit its signature check is drawn against, which only a peer's
 // certificate carries. One without a peer is one this node recovered, and was
-// verified then.
+// verified then. The state machine writes the message to the WAL once it has
+// checked the certificate (see AddRoundSkipCertificateEvent.Record).
 func roundSkipCertificateMessageHandler(ctrl *Controller, budget types.VerificationBudget) msgHandlerFunc {
 	return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*RoundSkipCertificateMessage)
 		ctx = ctxWithPeerVerificationBudget(ctx, envelope.PeerID, envelope.fromReplay, budget)
 		event := &AddRoundSkipCertificateEvent{Certificate: msg.Certificate, Verified: envelope.PeerID == ""}
+		if !envelope.fromReplay {
+			event.Record = envelope.msgInfo
+		}
 		return ctrl.Dispatch(ctx, event, stateData)
 	}
 }
@@ -312,11 +316,11 @@ func walMiddleware(wal WALWriteFlusher, logger log.Logger) msgMiddlewareFunc {
 	return func(hd msgHandlerFunc) msgHandlerFunc {
 		return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
 			mi := envelope.msgInfo
-			// A certificate this node recovered carries no signature of its
-			// own, so it needs no fsync: one lost in a crash is resent by peers.
-			_, recovered := mi.Msg.(*RoundSkipCertificateMessage)
-			if !envelope.fromReplay && !livenessMessage(mi.Msg) {
-				if mi.PeerID != "" || recovered {
+			// A certificate is written by the state machine once it has been
+			// checked (see AddRoundSkipCertificateEvent.Record).
+			_, certificate := mi.Msg.(*RoundSkipCertificateMessage)
+			if !envelope.fromReplay && !livenessMessage(mi.Msg) && !certificate {
+				if mi.PeerID != "" {
 					err := wal.Write(mi)
 					if err != nil {
 						logger.Error("failed writing to WAL", "error", err)

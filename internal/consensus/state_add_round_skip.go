@@ -15,6 +15,10 @@ type AddRoundSkipCertificateEvent struct {
 	// Verified is set for a certificate this node recovered itself, whose
 	// signature was checked when it was recovered.
 	Verified bool
+	// Record is the message the certificate came in, written to the WAL once
+	// the certificate turns out news and valid, before it is applied. Nil for
+	// one replayed from the WAL.
+	Record WALMessage
 }
 
 // GetType returns AddRoundSkipCertificateType event-type
@@ -34,11 +38,12 @@ type AddRoundSkipCertificateAction struct {
 	logger         log.Logger
 	eventPublisher *EventPublisher
 	metrics        *Metrics
+	wal            WALWriter
 }
 
 // roundSkipCertificateWanted reports whether certificate is news to the node,
 // before anything is spent on it: the reactor drops one that is not before it
-// reaches the WAL, and the action checks again on the state it applies to.
+// is queued, and the action checks again on the state it applies to.
 //
 // News is a certificate for a later round than the one the node holds, not
 // only one that moves the node on. A node can reach a later round without a
@@ -78,6 +83,16 @@ func (c *AddRoundSkipCertificateAction) Execute(ctx context.Context, stateEvent 
 		}
 		if err := certificate.Verify(stateData.state.ChainID, stateData.Validators); err != nil {
 			return err
+		}
+	}
+	// Written only now, so replay checks no signature that did not verify:
+	// a peer could send any number of certificates that look like news and
+	// do not, and replay draws on no verification budget. A certificate
+	// carries no signature of this node's, so it needs no fsync; one lost in
+	// a crash is sent again by peers.
+	if event.Record != nil {
+		if err := c.wal.Write(event.Record); err != nil {
+			c.logger.Error("failed writing round skip certificate to WAL", "error", err)
 		}
 	}
 

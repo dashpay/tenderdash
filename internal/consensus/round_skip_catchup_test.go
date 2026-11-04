@@ -119,6 +119,49 @@ func TestStateKeepsTheCertificateOfARoundItLeftByPrevotes(t *testing.T) {
 	assert.Equal(t, *certificate.ToProto(), sent[0].(*tmcons.RoundSkipCertificate).Certificate)
 }
 
+// A peer's certificate reaches the WAL only once it has been verified, and
+// before applying it writes anything. Replay checks every certificate in the
+// WAL again, drawing on no verification budget, so the certificates a peer
+// can send that look like news and do not verify must not pile up there.
+func TestPeerCertificateIsWrittenToTheWALOnlyOnceVerified(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	ctx, cs, vss := newRoundSkipCatchupState(ctx, t)
+	wal := &recordingWAL{}
+	cs.wal = wal
+	stateData := cs.GetStateData()
+	height := stateData.Height
+
+	signedForRound3 := recoverRoundSkipCertificate(ctx, t, cs, vss, height, 3)
+	for round := int32(0); round < 3; round++ {
+		forged := *signedForRound3
+		forged.Round = round
+		require.True(t, roundSkipCertificateWanted(&stateData, &forged))
+		// The refusal is logged, not returned.
+		require.NoError(t, cs.msgDispatcher.dispatch(ctx, &stateData,
+			msgInfo{Msg: &RoundSkipCertificateMessage{Certificate: &forged}, PeerID: "peer"}))
+		require.Nil(t, stateData.RoundSkip, "a certificate signed for round 3 was taken for round %d", round)
+		require.Equal(t, int32(0), stateData.Round)
+	}
+	assert.Zero(t, wal.count(), "a certificate that did not verify was written")
+
+	mi := msgInfo{Msg: &RoundSkipCertificateMessage{Certificate: recoverRoundSkipCertificate(ctx, t, cs, vss, height, 0)},
+		PeerID: "peer"}
+	require.NoError(t, cs.msgDispatcher.dispatch(ctx, &stateData, mi))
+	require.Equal(t, int32(1), stateData.Round)
+	require.NotZero(t, wal.count())
+	assert.Equal(t, mi, wal.msgs[0], "the certificate is written before the round it starts")
+	certificates := 0
+	for _, record := range wal.msgs {
+		if record, ok := record.(msgInfo); ok {
+			if _, ok := record.Msg.(*RoundSkipCertificateMessage); ok {
+				certificates++
+			}
+		}
+	}
+	assert.Equal(t, 1, certificates)
+}
+
 // A certificate hands the round over on the consensus goroutine, which
 // announces the new round to peers. That must not wait for the router, where a
 // peer that stops reading can hold up every send on the state channel. Nor may
