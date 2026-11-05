@@ -107,6 +107,57 @@ func (suite *BlockFetchJobTestSuite) TestExecuteHeightMismatch() {
 	suite.requireError("peer sent block at height 6, requested height 5", res.Err)
 }
 
+// TestExecuteCarriesPeerConnection pins that a job's outcome stays attributed to the
+// connection generation the peer was reserved under, including a timeout, which has
+// no response envelope to take a generation from.
+func (suite *BlockFetchJobTestSuite) TestExecuteCarriesPeerConnection() {
+	ctx := context.Background()
+	const connID = uint64(7)
+	peer := suite.peer
+	peer.connID = connID
+
+	suite.client.
+		On("GetBlock", mock.Anything, int64(2), peer.peerID).
+		Once().
+		Return(suite.getBlockReturnFunc(suite.promiseResolve(2)), nil)
+	res := blockFetchJobHandler(suite.client, peer, 2)(ctx)
+	suite.Require().NoError(res.Err)
+	suite.Require().Equal(connID, res.Value.(*BlockResponse).ConnID)
+
+	suite.client.
+		On("GetBlock", mock.Anything, int64(3), peer.peerID).
+		Once().
+		Return(suite.getBlockReturnFunc(suite.promiseReject(client.ErrPeerNotResponded)), nil)
+	res = blockFetchJobHandler(suite.client, peer, 3)(ctx)
+	bfErr := &errBlockFetch{}
+	suite.Require().ErrorAs(res.Err, &bfErr)
+	suite.Require().Equal(connID, bfErr.connID)
+}
+
+// TestAttributedConn pins that a report's generation does not depend on how a timeout
+// raced a late delivery: the delivered generation counts only for an answer.
+func TestAttributedConn(t *testing.T) {
+	const reserved, delivered = uint64(3), uint64(9)
+	for _, tc := range []struct {
+		name      string
+		delivered uint64
+		awaitErr  error
+		want      uint64
+	}{
+		{"answered", delivered, nil, delivered},
+		{"answered that the block is missing", delivered, &client.ErrBlockNotFound{Height: 1}, delivered},
+		{"timed out while a delivery raced it", delivered, client.ErrPeerNotResponded, reserved},
+		{"timed out", 0, client.ErrPeerNotResponded, reserved},
+		{"answered through a client reporting no connection", 0, nil, reserved},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			request := newPeerData("peer", 1, 10).service.request()
+			request.Delivered(tc.delivered)
+			require.Equal(t, tc.want, attributedConn(reserved, request, tc.awaitErr))
+		})
+	}
+}
+
 func TestBlockResponseValidate(t *testing.T) {
 	block := func(h int64) *types.Block {
 		return &types.Block{Header: types.Header{Height: h}}

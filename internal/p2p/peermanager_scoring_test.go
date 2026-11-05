@@ -269,3 +269,70 @@ func TestLastDialed(t *testing.T) {
 	})
 
 }
+
+// TestPeerScoringUnknownPeer asserts a score change is recorded for a peer that
+// is not yet in the peer store.
+//
+// processPeerEvent starts from a zero peerInfo on a store miss, and peerStore.Set
+// rejects an entry with no ID, so without carrying the ID across the penalty is
+// discarded and the peer keeps a clean record.
+func TestPeerScoringUnknownPeer(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	selfKey := ed25519.GenPrivKeyFromSecret([]byte{0x2a, 0x3b, 0x4c, 0x5d})
+	pm, err := NewPeerManager(ctx, types.NodeIDFromPubKey(selfKey.PubKey()), dbm.NewMemDB(), PeerManagerOptions{})
+	require.NoError(t, err)
+
+	unknown := types.NodeID(strings.Repeat("b2", 20))
+	_, inStore := pm.store.Get(unknown)
+	require.False(t, inStore, "fixture requires a peer the store has never seen")
+
+	pm.processPeerEvent(ctx, PeerUpdate{NodeID: unknown, Status: PeerStatusBad})
+
+	require.EqualValues(t, -1, pm.Scores()[unknown], "penalty must be recorded for a peer not yet in the store")
+}
+
+// A peer first recorded by a score change has no addresses yet. PeerManager.Add
+// writes into peerInfo.AddressInfo directly, so an entry stored without that map
+// allocated panics on the first address later learned for that peer.
+//
+// The map is asserted before Add so the failure is a clean assertion rather than
+// a panic that takes the test binary with it.
+func TestPeerScoringUnknownPeer_LaterAddressDoesNotPanic(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	selfKey := ed25519.GenPrivKeyFromSecret([]byte{0x7e, 0x1f, 0x2a, 0x3b})
+	pm, err := NewPeerManager(ctx, types.NodeIDFromPubKey(selfKey.PubKey()), dbm.NewMemDB(), PeerManagerOptions{})
+	require.NoError(t, err)
+
+	unknown := types.NodeID(strings.Repeat("c3", 20))
+	_, inStore := pm.store.Get(unknown)
+	require.False(t, inStore, "fixture requires a peer the store has never seen")
+
+	pm.processPeerEvent(ctx, PeerUpdate{NodeID: unknown, Status: PeerStatusBad})
+
+	stored, ok := pm.store.Get(unknown)
+	require.True(t, ok, "the penalty must have stored an entry")
+	require.NotNil(t, stored.AddressInfo, "a stored peer must carry an initialized address map")
+
+	added, err := pm.Add(NodeAddress{NodeID: unknown, Protocol: "memory"})
+	require.NoError(t, err)
+	require.True(t, added, "the first address for a penalized peer must be stored")
+}
+
+// SetMutableScore skips persistence, so it must still invalidate the Ranked() cache.
+func TestPeerStoreSetMutableScoreReranks(t *testing.T) {
+	low := peerInfo{ID: types.NodeID(strings.Repeat("a1", 20)), MutableScore: -1}
+	high := peerInfo{ID: types.NodeID(strings.Repeat("b2", 20)), MutableScore: 1}
+	store := makeMockPeerStore(t, low, high)
+	require.Equal(t, high.ID, store.Ranked()[0].ID)
+
+	store.SetMutableScore(low.ID, 2)
+
+	require.Equal(t, low.ID, store.Ranked()[0].ID)
+	got, ok := store.Get(low.ID)
+	require.True(t, ok)
+	require.EqualValues(t, 2, got.MutableScore)
+}
