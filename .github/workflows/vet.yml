@@ -14,7 +14,10 @@ on:
   push:
     branches:
       - master
-      - v[0-9]+.[0-9]+-dev
+      - dev
+      # Keep both names until the integration-branch migration is complete.
+      - v1.8-dev
+      - v1.9-dev
 
 jobs:
   vet:
