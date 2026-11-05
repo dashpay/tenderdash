@@ -2,6 +2,7 @@ package blocksync
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"testing"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/cosmos/gogoproto/proto"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/dashpay/tenderdash/config"
@@ -16,6 +18,10 @@ import (
 	"github.com/dashpay/tenderdash/internal/p2p/client"
 	p2pmocks "github.com/dashpay/tenderdash/internal/p2p/mocks"
 	"github.com/dashpay/tenderdash/internal/state/mocks"
+	statefactory "github.com/dashpay/tenderdash/internal/state/test/factory"
+	"github.com/dashpay/tenderdash/internal/store"
+	"github.com/dashpay/tenderdash/internal/test/factory"
+	dbm "github.com/dashpay/tenderdash/libs/db"
 	"github.com/dashpay/tenderdash/libs/log"
 	bcproto "github.com/dashpay/tenderdash/proto/tendermint/blocksync"
 	"github.com/dashpay/tenderdash/types"
@@ -62,9 +68,6 @@ func (suite *BlockP2PMessageHandlerTestSuite) TestHandleBlockRequest() {
 	ctx := context.Background()
 	peerID := types.NodeID("peer")
 	const H1001 = int64(1001)
-	blockH1001 := types.Block{Header: types.Header{Height: 1001}}
-	protoBlockH1001, err := blockH1001.ToProto()
-	suite.Require().NoError(err)
 	commit1001 := types.Commit{Height: 1001}
 	protoCommit := commit1001.ToProto()
 	blockRequestH1001 := &bcproto.BlockRequest{Height: H1001}
@@ -75,7 +78,7 @@ func (suite *BlockP2PMessageHandlerTestSuite) TestHandleBlockRequest() {
 		{
 			mockFn: func() {
 				suite.fakeStore.
-					On("LoadBlock", H1001).
+					On("LoadBlockMeta", H1001).
 					Once().
 					Return(nil)
 			},
@@ -83,10 +86,7 @@ func (suite *BlockP2PMessageHandlerTestSuite) TestHandleBlockRequest() {
 		},
 		{
 			mockFn: func() {
-				suite.fakeStore.
-					On("LoadBlock", H1001).
-					Once().
-					Return(&blockH1001)
+				suite.expectStoredBlock(H1001, 1)
 				suite.fakeStore.
 					On("LoadSeenCommitAt", H1001).
 					Once().
@@ -95,17 +95,14 @@ func (suite *BlockP2PMessageHandlerTestSuite) TestHandleBlockRequest() {
 		},
 		{
 			mockFn: func() {
-				suite.fakeStore.
-					On("LoadBlock", H1001).
-					Once().
-					Return(&blockH1001)
+				suite.expectStoredBlock(H1001, 1)
 				suite.fakeStore.
 					On("LoadSeenCommitAt", H1001).
 					Once().
 					Return(&commit1001)
 			},
 			wantResp: &bcproto.BlockResponse{
-				Block:  protoBlockH1001,
+				Block:  suite.storedBlockBytes(H1001),
 				Commit: protoCommit,
 			},
 		},
@@ -128,10 +125,27 @@ func (suite *BlockP2PMessageHandlerTestSuite) TestHandleBlockRequest() {
 	}
 }
 
+// expectStoredBlock makes the store serve the block at height, in one part,
+// times times. It returns the call that loads the block's meta.
+func (suite *BlockP2PMessageHandlerTestSuite) expectStoredBlock(height int64, times int) *mock.Call {
+	blockBytes := suite.storedBlockBytes(height)
+	meta := &types.BlockMeta{
+		BlockID:   types.BlockID{PartSetHeader: types.PartSetHeader{Total: 1}},
+		BlockSize: len(blockBytes),
+	}
+	suite.fakeStore.On("LoadBlockPart", height, 0).Times(times).Return(&types.Part{Bytes: blockBytes})
+	return suite.fakeStore.On("LoadBlockMeta", height).Times(times).Return(meta)
+}
+
+// storedBlockBytes returns the bytes of the block expectStoredBlock stores at
+// height.
+func (suite *BlockP2PMessageHandlerTestSuite) storedBlockBytes(height int64) []byte {
+	return blockBytes(suite.T(), &types.Block{Header: types.Header{Height: height}})
+}
+
 func (suite *BlockP2PMessageHandlerTestSuite) TestServeBlockRequestReportsMissingCommit() {
 	suite.handler.handlePeerUpdate(p2p.PeerUpdate{NodeID: "peer", Status: p2p.PeerStatusUp, ConnID: 1})
-	block := &types.Block{Header: types.Header{Height: 1001}}
-	suite.fakeStore.On("LoadBlock", int64(1001)).Once().Return(block)
+	suite.expectStoredBlock(1001, 1)
 	suite.fakeStore.On("LoadSeenCommitAt", int64(1001)).Once().Return(nil)
 
 	_, _, err := suite.handler.prepareBlockResponse(blockResponseJob{
@@ -150,9 +164,8 @@ func (suite *BlockP2PMessageHandlerTestSuite) TestBlockResponseBackpressureAppli
 	defer cancel()
 
 	peerID := types.NodeID("slow-peer")
-	block := &types.Block{Header: types.Header{Height: 1001}}
 	commit := &types.Commit{Height: 1001}
-	suite.fakeStore.On("LoadBlock", int64(1001)).Times(3).Return(block)
+	suite.expectStoredBlock(1001, 3)
 	suite.fakeStore.On("LoadSeenCommitAt", int64(1001)).Times(3).Return(commit)
 
 	delivery := make(chan p2p.Envelope, 3)
@@ -183,10 +196,9 @@ func (suite *BlockP2PMessageHandlerTestSuite) TestStalledPeerDeliveryDoesNotBloc
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	block := &types.Block{Header: types.Header{Height: 1001}}
 	commit := &types.Commit{Height: 1001}
 	totalRequests := maxInFlightBlockResponses + 1
-	suite.fakeStore.On("LoadBlock", int64(1001)).Times(totalRequests).Return(block)
+	suite.expectStoredBlock(1001, totalRequests)
 	suite.fakeStore.On("LoadSeenCommitAt", int64(1001)).Times(totalRequests).Return(commit)
 
 	delivery := make(chan p2p.Envelope, totalRequests)
@@ -243,9 +255,8 @@ func (suite *BlockP2PMessageHandlerTestSuite) TestDisconnectedPeerQueueIsPurgedB
 
 	peerID := types.NodeID("disconnecting-peer")
 	const connID = uint64(7)
-	block := &types.Block{Header: types.Header{Height: 1001}}
 	commit := &types.Commit{Height: 1001}
-	suite.fakeStore.On("LoadBlock", int64(1001)).Once().Return(block)
+	suite.expectStoredBlock(1001, 1)
 	suite.fakeStore.On("LoadSeenCommitAt", int64(1001)).Once().Return(commit)
 
 	delivery := make(chan p2p.Envelope, 1)
@@ -291,14 +302,11 @@ func (suite *BlockP2PMessageHandlerTestSuite) TestDisconnectDuringLoadSkipsRespo
 	const connID = uint64(8)
 	started := make(chan struct{})
 	release := make(chan struct{})
-	suite.fakeStore.
-		On("LoadBlock", int64(1001)).
-		Once().
+	suite.expectStoredBlock(1001, 1).
 		Run(func(mock.Arguments) {
 			close(started)
 			<-release
-		}).
-		Return(&types.Block{Header: types.Header{Height: 1001}})
+		})
 
 	suite.handler.handlePeerUpdate(p2p.PeerUpdate{
 		NodeID: peerID,
@@ -466,7 +474,7 @@ func newMockPeerAdder(t *testing.T) *mockPeerAdder {
 
 func (suite *BlockP2PMessageHandlerTestSuite) TestRequestWaitsForConnectionUpdate() {
 	peerID := types.NodeID("early-peer")
-	suite.fakeStore.On("LoadBlock", int64(1001)).Once().Return(nil)
+	suite.fakeStore.On("LoadBlockMeta", int64(1001)).Once().Return(nil)
 	delivered := make(chan struct{}, 1)
 	suite.fakeP2PChannel.On("Send", mock.Anything, mock.Anything).Once().Run(func(mock.Arguments) { delivered <- struct{}{} }).Return(nil)
 	suite.Require().NoError(suite.handler.Handle(context.Background(), suite.fakeClient, &p2p.Envelope{
@@ -511,4 +519,121 @@ func (suite *BlockP2PMessageHandlerTestSuite) TestReconnectRequestSurvivesEarlie
 	suite.Equal(peer, gotPeer)
 	suite.Equal(uint64(11), job.envelope.ConnID)
 	suite.Zero(h.queuedResponses)
+}
+
+// TestServeBlockAsCommitted checks that a block is served as the parts it was
+// stored with, which are the parts it was committed with, and that the part set
+// rebuilt from the response is the stored one.
+func TestServeBlockAsCommitted(t *testing.T) {
+	ctx := context.Background()
+	valSet, privVals := factory.MockValidatorSet()
+	state := fakeInitialState(valSet)
+	blocks := statefactory.MakeBlocks(ctx, t, 5, &state, privVals, 1)
+	blockStore := store.NewBlockStore(dbm.NewMemDB())
+
+	const smallPartSize = 100
+	standard := blockBytes(t, blocks[0])
+	unknownField := withUnknownField(t, blocks[1])
+	smallParts := blockBytes(t, blocks[2])
+	testCases := []struct {
+		parts         *types.PartSet
+		wantBytes     []byte
+		wantPartSizes []uint32
+	}{
+		{types.NewPartSetFromData(standard, types.BlockPartSizeBytes), standard, nil},
+		{types.NewPartSetFromData(unknownField, types.BlockPartSizeBytes), unknownField, nil},
+		{
+			types.NewPartSetFromData(smallParts, smallPartSize),
+			smallParts,
+			smallPartSizes(len(smallParts), smallPartSize),
+		},
+	}
+	for i, tc := range testCases {
+		blockStore.SaveBlock(blocks[i], tc.parts, blocks[i+1].LastCommit)
+	}
+	// a header stored without its block, as state sync stores the one it
+	// restores the state at
+	header := blocks[3]
+	require.NoError(t, blockStore.SaveSignedHeader(
+		&types.SignedHeader{Header: &header.Header, Commit: blocks[4].LastCommit},
+		blocks[4].LastCommit.BlockID,
+	))
+
+	handler := newBlockP2PMessageHandler(ctx, log.NewNopLogger(), blockStore, newMockPeerAdder(t))
+	t.Cleanup(handler.stop)
+	handler.handlePeerUpdate(p2p.PeerUpdate{NodeID: "peer", Status: p2p.PeerStatusUp, ConnID: 1})
+	request := func(height int64) proto.Message {
+		msg, _, err := handler.prepareBlockResponse(blockResponseJob{
+			ctx:      ctx,
+			envelope: p2p.Envelope{From: "peer", ConnID: 1, Message: &bcproto.BlockRequest{Height: height}},
+		})
+		require.NoError(t, err)
+		return msg
+	}
+
+	for i, tc := range testCases {
+		height := blocks[i].Height
+		t.Run(fmt.Sprintf("height %d", height), func(t *testing.T) {
+			msg, ok := request(height).(*bcproto.BlockResponse)
+			require.True(t, ok)
+			require.Equal(t, tc.wantBytes, msg.Block)
+			require.Equal(t, tc.wantPartSizes, msg.PartSizes)
+
+			resp, err := BlockResponseFromProto(msg, "peer")
+			require.NoError(t, err)
+			require.Equal(t, blocks[i].Hash(), resp.Block.Hash())
+			require.Equal(t, blocks[i+1].LastCommit.BlockID, resp.Commit.BlockID)
+			parts, err := committedPartSet(resp.BlockBytes, resp.PartSizes)
+			require.NoError(t, err)
+			require.Equal(t, tc.parts.Header(), parts.Header())
+		})
+	}
+	require.Equal(t, &bcproto.NoBlockResponse{Height: header.Height}, request(header.Height))
+}
+
+// smallPartSizes returns the sizes of the parts types.NewPartSetFromData cuts
+// size bytes into with parts of partSize.
+func smallPartSizes(size, partSize int) []uint32 {
+	var sizes []uint32
+	for ; size > partSize; size -= partSize {
+		sizes = append(sizes, uint32(partSize))
+	}
+	return append(sizes, uint32(size))
+}
+
+// TestBlockResponseWireCompatible checks that a BlockResponse encodes as it did
+// when its block field was an embedded tendermint.types.Block, so peers on
+// either side of the change read what the other sends.
+func TestBlockResponseWireCompatible(t *testing.T) {
+	ctx := context.Background()
+	valSet, privVals := factory.MockValidatorSet()
+	state := fakeInitialState(valSet)
+	blocks := statefactory.MakeBlocks(ctx, t, 2, &state, privVals, 1)
+	block, commit := blocks[0], blocks[1].LastCommit.ToProto()
+	pbb, err := block.ToProto()
+	require.NoError(t, err)
+	commitBytes, err := proto.Marshal(commit)
+	require.NoError(t, err)
+
+	// an embedded message is its encoding, length-delimited
+	field := func(bz []byte, number byte, value []byte) []byte {
+		bz = append(bz, number<<3|2)
+		bz = binary.AppendUvarint(bz, uint64(len(value)))
+		return append(bz, value...)
+	}
+	embedded, err := proto.Marshal(pbb)
+	require.NoError(t, err)
+	older := field(field(nil, 1, embedded), 2, commitBytes)
+
+	newer, err := proto.Marshal(&bcproto.BlockResponse{Block: blockBytes(t, block), Commit: commit})
+	require.NoError(t, err)
+	require.Equal(t, older, newer)
+
+	var decoded bcproto.BlockResponse
+	require.NoError(t, proto.Unmarshal(older, &decoded))
+	resp, err := BlockResponseFromProto(&decoded, "peer")
+	require.NoError(t, err)
+	require.Equal(t, block.Hash(), resp.Block.Hash())
+	require.Equal(t, embedded, resp.BlockBytes)
+	require.Nil(t, resp.PartSizes)
 }

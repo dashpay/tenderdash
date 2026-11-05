@@ -69,8 +69,17 @@ func newBlockApplier(blockExec sm.Executor, store sm.BlockStore, opts ...applier
 	return applier
 }
 
-// Apply safely verifies, saves to the store and executes a block with commit
-func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *types.Commit) error {
+// Apply safely verifies, saves to the store and executes a block with commit.
+// blockBytes are the bytes block was decoded from, the parts it was committed
+// with in order, and partSizes the size of each part, or nil for parts of
+// types.BlockPartSizeBytes.
+func (e *blockApplier) Apply(
+	ctx context.Context,
+	block *types.Block,
+	blockBytes []byte,
+	partSizes []uint32,
+	commit *types.Commit,
+) error {
 	e.mtx.Lock()
 	defer e.mtx.Unlock()
 	defer func() { e.lastDone = time.Now() }()
@@ -83,10 +92,13 @@ func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *ty
 	}
 
 	// The part set is needed twice: to derive the block ID and to persist the
-	// block. Building it serializes the whole block and builds a Merkle tree over
-	// the parts, so build it once and pass it to both.
+	// block. Building it builds a Merkle tree over the parts, so build it once
+	// and pass it to both. It is rebuilt from the bytes the block was committed
+	// with, not from block: the commit's part set header is computed over
+	// those, and a re-encoding of block drops unknown fields and non-canonical
+	// encoding.
 	start := time.Now()
-	blockParts, err := block.MakePartSet(types.BlockPartSizeBytes)
+	blockParts, err := committedPartSet(blockBytes, partSizes)
 	if err != nil {
 		return err
 	}
@@ -208,6 +220,16 @@ func (e *blockApplier) verify(
 	return verified, nil
 }
 
+// committedPartSet returns the part set a block was committed with, from its
+// bytes and the size of each part, or nil sizes for parts of
+// types.BlockPartSizeBytes.
+func committedPartSet(blockBytes []byte, partSizes []uint32) (*types.PartSet, error) {
+	if len(partSizes) == 0 {
+		return types.NewPartSetFromData(blockBytes, types.BlockPartSizeBytes), nil
+	}
+	return types.NewPartSetFromPartSizes(blockBytes, partSizes)
+}
+
 // observeSince records the time since start under stage and returns it, so the
 // same measurement can also feed the per-block averages in applyStats.
 func (e *blockApplier) observeSince(stage string, start time.Time) time.Duration {
@@ -219,7 +241,7 @@ func (e *blockApplier) observeSince(stage string, start time.Time) time.Duration
 // applyTimings is the average time a single block spends in each stage of the
 // apply pipeline.
 type applyTimings struct {
-	// PartSet is block serialization plus the Merkle tree over its parts
+	// PartSet is the Merkle tree over the block's parts
 	PartSet time.Duration
 	// Verify is commit signature verification and block validation
 	Verify time.Duration

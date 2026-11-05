@@ -3,7 +3,6 @@ package tendermint.blocksync;
 
 option go_package = "github.com/dashpay/tenderdash/proto/tendermint/blocksync";
 
-import "tendermint/types/block.proto";
 import "tendermint/types/types.proto";
 
 // BlockRequest requests a block for a specific height
@@ -19,8 +18,18 @@ message NoBlockResponse {
 
 // BlockResponse returns block to the requested
 message BlockResponse {
-  tendermint.types.Block  block  = 1;
+  // block is a serialized tendermint.types.Block: the bytes of the parts it
+  // was committed with, in order. The commit's part set header is computed
+  // over those bytes, and decoding and re-encoding the block can change them
+  // (unknown fields, non-canonical encoding). On the wire this is the same as
+  // an embedded tendermint.types.Block, the type of this field in older
+  // releases.
+  bytes                   block  = 1;
   tendermint.types.Commit commit = 2;
+  // part_sizes is the size of each part the block was committed with, in
+  // order. It is empty when the block was cut into parts of 64kB, the last
+  // one shorter, the way honest proposers cut it.
+  repeated uint32 part_sizes = 3;
 }
 
 // StatusRequest requests the status of a peer.

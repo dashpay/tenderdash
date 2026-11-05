@@ -1361,10 +1361,8 @@ func (suite *SynchronizerTestSuite) TestStatusRefreshUpdatesAdvertisedRange() {
 func generateBlockResponses(t *testing.T, blocks []*types.Block) []*blocksync.BlockResponse {
 	responses := make([]*blocksync.BlockResponse, 0, len(blocks)-1)
 	for i := 0; i < len(blocks)-1; i++ {
-		protoBlock, err := blocks[i].ToProto()
-		require.NoError(t, err)
 		responses = append(responses, &blocksync.BlockResponse{
-			Block:  protoBlock,
+			Block:  blockBytes(t, blocks[i]),
 			Commit: blocks[i+1].LastCommit.ToProto(),
 		})
 	}
@@ -2214,7 +2212,7 @@ func (suite *SynchronizerTestSuite) TestClientTimeoutUnwedgesAFullWindow() {
 	// Everything above the dropped height fills the window and stops there.
 	wantBytes := 0
 	for height := blocking + 1; height < blocking+maxOutstandingHeights; height++ {
-		wantBytes += chain[height-1].Block.Size()
+		wantBytes += len(chain[height-1].Block)
 	}
 	suite.Require().Eventually(func() bool {
 		_, pendingBytes := pool.backlog()
