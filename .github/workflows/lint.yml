@@ -13,9 +13,10 @@ on:
     branches:
       - master
       - dev
-      # Keep both names until the integration-branch migration is complete.
-      - v1.8-dev
-      - v1.9-dev
+
+# Branch creation/rename events can refer to the deleted old branch.
+env:
+  GIT_DIFF: ${{ github.event_name == 'push' && github.event.created && 'all' || '' }}
 
 jobs:
   golangci:
@@ -36,6 +37,7 @@ jobs:
           fetch-depth: 0
 
       - uses: technote-space/get-diff-action@v6
+        if: github.event_name != 'push' || !github.event.created
         with:
           PATTERNS: |
             .github/workflows/lint.yml
@@ -75,9 +77,10 @@ jobs:
           # which the full-depth checkout above guarantees is present.
           args: >-
             --timeout 10m
-            ${{ github.event_name == 'pull_request' && format('--new-from-rev=origin/{0}', github.base_ref) || '' }}
+            ${{ github.event_name == 'pull_request' && format('--new-from-rev=origin/{0}', github.base_ref) || (github.event.created && '--new-from-rev=HEAD') || '' }}
           github-token: ${{ secrets.github_token }}
           # The action refuses --new-* args while only-new-issues is set, so the
           # two are mutually exclusive: pull requests filter via --new-from-rev
-          # above, and pushes keep the action's own filtering.
-          only-new-issues: ${{ github.event_name != 'pull_request' }}
+          # above. A new branch has no before commit, so its baseline is HEAD;
+          # ordinary pushes keep the action's own filtering.
+          only-new-issues: ${{ github.event_name != 'pull_request' && !github.event.created }}

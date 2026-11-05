@@ -62,10 +62,19 @@ and arm64 binaries with detached GPG signatures, tarballs, `SHA256SUMS`, and
 plus the local database license, provenance and NOTICE when present in that
 source revision. It does not upload, overwrite assets, or select a release.
 
-When preparing an older deployment-line fix, check Docker alias behavior before
-publishing: the current workflow promotes every non-dev release to `latest`
-and the major alias. An older-line release needs a separate approved publishing
-path that preserves newer aliases. Do not publish and repair the aliases later.
+Docker publication binds the release tag to its exact source SHA and passes the
+version explicitly to the build. Prereleases publish their complete version only.
+A separate serialized promotion step updates `latest`, major and minor aliases
+only for the current GitHub latest stable release, and never below a higher stable
+version already tagged. API failures stop promotion. An older-line release keeps
+its exact version image without replacing those aliases.
+
+Manual Docker runs do not promote stable aliases. Enter an existing release tag
+to build that exact source, or leave it empty to build the selected branch/tag.
+Branch builds carry an `unreleased-<branch>-<SHA>` binary version and a SHA image
+tag; integration also publishes the `dev` image tag. The workflow does not publish
+images automatically on dev pushes. Tagged source predating explicit Docker
+`VERSION` support requires a separately reviewed legacy publishing path.
 
 Local checks for this workflow:
 
