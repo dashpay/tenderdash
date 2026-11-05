@@ -31,20 +31,21 @@ type SignerClient struct {
 var _ types.PrivValidator = (*SignerClient)(nil)
 
 // NewSignerClient returns an instance of SignerClient.
-// it will start the endpoint (if not already started)
+// It takes ownership of conn, which Close closes.
 func NewSignerClient(conn *grpc.ClientConn,
 	chainID string, log log.Logger) (*SignerClient, error) {
 
 	sc := &SignerClient{
 		logger:  log,
 		chainID: chainID,
+		conn:    conn,
 		client:  privvalproto.NewPrivValidatorAPIClient(conn), // Create the Private Validator Client
 	}
 
 	return sc, nil
 }
 
-// Close closes the underlying connection
+// Close closes the connection the client was created with.
 func (sc *SignerClient) Close() error {
 	sc.logger.Info("Stopping service")
 	if sc.conn != nil {
