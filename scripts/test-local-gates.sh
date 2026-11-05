@@ -41,16 +41,18 @@ expect_lint_failure() {
 	test ! -s "$GATE_LOG"
 }
 
-git update-ref refs/remotes/origin/v1.9-dev HEAD
-git update-ref refs/remotes/origin/v1.10-dev HEAD
-expected_base=origin/v1.10-dev
+# During migration, the current PR base is the explicit fallback.
+git update-ref refs/remotes/origin/v1.8-dev HEAD
+git update-ref refs/remotes/origin/v9.0-dev HEAD
+expected_base=origin/v1.8-dev
 expect_lint_base
 
-git update-ref refs/remotes/origin/v2.0-dev HEAD
-expected_base=origin/v2.0-dev
+git update-ref refs/remotes/origin/dev HEAD
+expected_base=origin/dev
 expect_lint_base
 
-expected_base=origin/v1.9-dev
+expected_base=origin/master
+git update-ref refs/remotes/origin/master HEAD
 expect_lint_base LINT_BASE="$expected_base"
 LINT_BASE="$expected_base" expect_lint_base
 
@@ -63,9 +65,8 @@ git update-ref refs/remotes/origin/unrelated "$unrelated"
 expect_lint_failure LINT_BASE=origin/unrelated
 grep -F 'no common history' output.log
 
-git update-ref -d refs/remotes/origin/v1.9-dev
-git update-ref -d refs/remotes/origin/v1.10-dev
-git update-ref -d refs/remotes/origin/v2.0-dev
+git update-ref -d refs/remotes/origin/dev
+git update-ref -d refs/remotes/origin/v1.8-dev
 expect_lint_failure
 grep -F 'no development branch found' output.log
 expected_base=HEAD

@@ -140,8 +140,11 @@ func CheckValid(data []byte) error {
 		return fmt.Errorf("reading config: %w", err)
 	}
 
-	var cfg config.Config
-	if err := v.Unmarshal(&cfg); err != nil {
+	// Start from the defaults, as the node does: a config file legitimately omits
+	// keys it does not override, and validation rules that reject a zero value
+	// would otherwise fire on every absent key rather than on the file's content.
+	cfg := config.DefaultConfig()
+	if err := v.Unmarshal(cfg); err != nil {
 		return fmt.Errorf("decoding config: %w", err)
 	}
 

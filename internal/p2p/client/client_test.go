@@ -707,9 +707,22 @@ func (suite *ChannelTestSuite) TestResponseBeforeSendReturns() {
 }
 
 type countingBlockObserver struct {
-	mtx      sync.Mutex
-	starts   int
-	finishes int
+	mtx       sync.Mutex
+	starts    int
+	finishes  int
+	delivered []uint64
+}
+
+func (o *countingBlockObserver) Delivered(connID uint64) {
+	o.mtx.Lock()
+	defer o.mtx.Unlock()
+	o.delivered = append(o.delivered, connID)
+}
+
+func (o *countingBlockObserver) deliveries() []uint64 {
+	o.mtx.Lock()
+	defer o.mtx.Unlock()
+	return append([]uint64(nil), o.delivered...)
 }
 
 func (o *countingBlockObserver) Started()  { o.mtx.Lock(); defer o.mtx.Unlock(); o.starts++ }
@@ -772,6 +785,74 @@ func (suite *ChannelTestSuite) TestBlockObservationLifecycle() {
 	}
 }
 
+// TestBlockObserverLearnsDeliveringConnection pins that the generation which settles a
+// request reaches the observer before the promise does, and that a duplicate response
+// cannot replace it.
+func (suite *ChannelTestSuite) TestBlockObserverLearnsDeliveringConnection() {
+	ctx := context.Background()
+	observer := &countingBlockObserver{}
+	var request p2p.Envelope
+	suite.p2pChannel.On("Send", mock.Anything, mock.Anything).Once().Run(func(args mock.Arguments) {
+		request = args.Get(1).(p2p.Envelope)
+	}).Return(nil)
+	p, err := suite.client.GetBlock(WithBlockRequestObserver(ctx, observer), suite.height, suite.peerID)
+	suite.Require().NoError(err)
+
+	response := func(connID uint64) *p2p.Envelope {
+		return &p2p.Envelope{
+			Attributes: map[string]string{ResponseIDAttribute: request.Attributes[RequestIDAttribute]},
+			From:       suite.peerID,
+			ConnID:     connID,
+			Message:    suite.response,
+		}
+	}
+	suite.Require().NoError(suite.client.resolve(ctx, response(7)))
+	suite.Equal([]uint64{7}, observer.deliveries())
+
+	_, err = p.Await()
+	suite.Require().NoError(err)
+	_ = suite.client.resolve(ctx, response(8))
+	suite.Equal([]uint64{7}, observer.deliveries(), "a late response must not be recorded")
+
+	// A promise goroutine races the map above, so pin the guard on the entry itself.
+	observer = &countingBlockObserver{}
+	pending := &pendingResponse{ch: make(chan result, 1), observer: observer}
+	pending.deliver(result{ConnID: 7})
+	pending.deliver(result{ConnID: 8})
+	suite.Equal([]uint64{7}, observer.deliveries(), "only the settling response may be recorded")
+}
+
+// TestResponseFromAnotherPeerDoesNotResolve pins that a request ID is no credential: a
+// peer that learned one must neither settle the request nor label its generation.
+func (suite *ChannelTestSuite) TestResponseFromAnotherPeerDoesNotResolve() {
+	ctx := context.Background()
+	observer := &countingBlockObserver{}
+	var request p2p.Envelope
+	suite.p2pChannel.On("Send", mock.Anything, mock.Anything).Once().Run(func(args mock.Arguments) {
+		request = args.Get(1).(p2p.Envelope)
+	}).Return(nil)
+	p, err := suite.client.GetBlock(WithBlockRequestObserver(ctx, observer), suite.height, suite.peerID)
+	suite.Require().NoError(err)
+
+	response := func(from types.NodeID, connID uint64) *p2p.Envelope {
+		return &p2p.Envelope{
+			Attributes: map[string]string{ResponseIDAttribute: request.Attributes[RequestIDAttribute]},
+			From:       from,
+			ConnID:     connID,
+			Message:    suite.response,
+		}
+	}
+	suite.Require().ErrorIs(suite.client.resolve(ctx, response("colluding peer", 9)), ErrCannotResolveResponse,
+		"the sender must be reported, as for any other response it was not asked for")
+	suite.Empty(observer.deliveries(), "another peer must not label the request's generation")
+
+	suite.Require().NoError(suite.client.resolve(ctx, response(suite.peerID, 7)))
+	suite.Equal([]uint64{7}, observer.deliveries())
+	got, err := p.Await()
+	suite.Require().NoError(err)
+	suite.Equal(suite.response, got, "the peer asked must still be able to answer")
+}
+
 func (suite *ChannelTestSuite) TestBlockObserverResponseBeforeAdmission() {
 	observer := &countingBlockObserver{}
 	ctx := WithBlockRequestObserver(context.Background(), observer)
@@ -831,4 +912,36 @@ func (suite *ChannelTestSuite) TestBlockObserverConcurrentReplyAndCancellation()
 		suite.Equal(1, starts)
 		suite.Equal(1, finishes)
 	}
+}
+
+type rejectingHandler struct{}
+
+func (rejectingHandler) Handle(context.Context, *Client, *p2p.Envelope) error {
+	return errors.New("rejected")
+}
+
+// Envelope-derived peer errors must name the connection that delivered the
+// envelope, so a report drained after a reconnect cannot evict the replacement.
+func (suite *ChannelTestSuite) TestIterPeerErrorsCarryConnID() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var got []p2p.PeerError
+	suite.p2pChannel.
+		On("SendError", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) { got = append(got, args.Get(1).(p2p.PeerError)) }).
+		Return(nil)
+
+	unsolicited := newEnvelope(uuid.NewString(), suite.peerID, suite.response)
+	unsolicited.AddAttribute(ResponseIDAttribute, uuid.NewString())
+	unsolicited.ConnID = 7
+	pipe := make(chan p2p.Envelope, 2)
+	pipe <- *unsolicited
+	pipe <- p2p.Envelope{From: suite.peerID, ConnID: 8, Message: &bcproto.StatusRequest{}}
+	close(pipe)
+
+	suite.Require().NoError(suite.client.iter(ctx, p2p.NewChannelIterator(pipe), rejectingHandler{}))
+	suite.Require().Len(got, 2)
+	suite.Equal(uint64(7), got[0].ConnID, "resolve failure")
+	suite.Equal(uint64(8), got[1].ConnID, "handler failure")
 }

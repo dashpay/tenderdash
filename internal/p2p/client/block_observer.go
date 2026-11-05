@@ -3,15 +3,20 @@ package client
 import (
 	"context"
 	"sync"
+
+	"github.com/dashpay/tenderdash/types"
 )
 
 // BlockRequestObserver observes client admission and the end of waiting for a
 // correlated reply. Callbacks must be short, nonblocking bookkeeping operations.
 // Admission is not wire delivery; local transport/router queues remain included.
 // Finished runs once after Started, before promise delivery, even on cancellation.
+// Delivered runs at most once, for the response that settles the request and before
+// promise delivery, with the generation of the connection that delivered it.
 type BlockRequestObserver interface {
 	Started()
 	Finished()
+	Delivered(connID uint64)
 }
 
 type blockObserverKey struct{}
@@ -24,6 +29,8 @@ func WithBlockRequestObserver(ctx context.Context, observer BlockRequestObserver
 // pendingResponse serializes admission, the first response and retirement. A
 // reply can arrive while Send is returning; in that case its active time is zero.
 type pendingResponse struct {
+	// peerID is the only peer allowed to answer; set once, before the entry is shared.
+	peerID   types.NodeID
 	mtx      sync.Mutex
 	ch       chan result
 	observer BlockRequestObserver
@@ -59,6 +66,9 @@ func (p *pendingResponse) deliver(res result) {
 		return
 	}
 	p.finish()
+	if p.observer != nil {
+		p.observer.Delivered(res.ConnID)
+	}
 	select {
 	case p.ch <- res:
 	default:
