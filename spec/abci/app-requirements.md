@@ -180,7 +180,14 @@ round, Tenderdash calls `ExtendVote` on any node to learn that vector (see
 
 ## Connections
 
-Tenderdash maintains separate consensus, mempool, query and state-sync
-connections to an out-of-process application. Requests on one connection are
-ordered; calls across connections may overlap. Application state shared between
-connections must be synchronized, and queries must read committed state.
+Tenderdash uses one application client for consensus, mempool, query and
+state-sync calls. Its transport determines concurrency: the reference socket
+server processes one connection sequentially, while gRPC can execute calls
+concurrently over one connection. Explicitly configured routed clients may use
+multiple underlying connections. Local clients call the application directly.
+
+Applications MUST synchronize state shared by concurrent calls, including calls
+on different methods or connections. Waiting for one response does not block
+other callers. Queries must read committed state. See
+[Client and Server](client-server.md#message-protocol-and-synchrony) for transport
+ordering and gRPC concurrency settings.

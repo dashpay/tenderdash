@@ -24,10 +24,14 @@ or custom protobuf types.
 
 For more details on protobuf, see the [documentation](https://developers.google.com/protocol-buffers/docs/overview).
 
-For each of ABCI's four connections (see
-[Connections](app-requirements.md)), when Tenderdash issues a request to the
-Application, it will wait for the response before continuing execution. As a side effect,
-requests and responses are ordered for each connection, but not necessarily across connections.
+Tenderdash creates one application client and delegates the request classes to
+it. Ordinary socket and gRPC configurations do not create separate consensus,
+mempool, query and state-sync connections automatically. A `routed` client can
+use multiple underlying clients when explicitly configured.
+
+Each synchronous call waits for its own response. This does not serialize calls
+from independent callers. Execution order and concurrency depend on the
+transport and server implementation; see [Connections](app-requirements.md#connections).
 
 ## Server Implementations
 
@@ -46,6 +50,8 @@ implement Tenderdash's protobuf schema and application requirements.
 
 The simplest implementation uses function calls in Golang.
 This means ABCI applications written in Golang can be linked with Tenderdash and run as a single binary.
+The local client delegates directly to application methods without a shared
+execution lock, so the application must synchronize concurrent access to its state.
 
 ### GRPC
 
@@ -56,6 +62,12 @@ though it will have significant performance overhead.
 Please check GRPC's documentation to know to set up the Application as an
 ABCI GRPC server.
 
+The client multiplexes calls over one `grpc.ClientConn`; application methods can
+execute concurrently. The `abci.grpc-concurrency` configuration limits streams
+per method or through the default `*` rule. Its default is `{"*": 0}`, which
+imposes no limit. A limit for one method does not serialize it with methods
+using a different limit. Protect state shared by concurrent calls.
+
 ### Socket
 
 Tenderdash's socket-based ABCI interface is an asynchronous,
@@ -65,9 +77,11 @@ length encoded as an unsigned protobuf varint. For example, a four-byte message
 `DEADBEEF` is sent as `04DEADBEEF`. The receiver reads the varint length and then
 that many message bytes. See the [codec](../../abci/types/messages.go).
 
-This framing does not apply to gRPC. An ABCI socket server must support the
-separate consensus, mempool, query and state-sync connections described in the
-[application requirements](app-requirements.md).
+This framing does not apply to gRPC. The socket client sends requests and matches
+responses in order on its connection. Tenderdash's reference socket server
+executes requests sequentially per connection, while separate connections can
+execute concurrently. A compatible socket server must preserve response order;
+it must not assume a fixed number of role-specific connections.
 
 ## Client
 

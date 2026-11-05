@@ -13,12 +13,20 @@ gossip and Byzantine fault tolerant consensus.
 ## Consensus and validators
 
 Validators take turns proposing blocks at each height. They vote in two stages,
-**prevote** and **precommit**. A block requires precommits representing more than
-two-thirds of the validator set's voting power in the same round. If a round
-cannot commit a block, validators move to another round with a new proposer.
+**prevote** and **precommit**. To commit a block, precommits for it in the same
+round must reach the configured voting threshold, and quorum threshold-signature
+recovery and verification must succeed. The voting threshold can be an explicit
+override or the Dash quorum-type default; changing it does not lower the
+quorum's signature-recovery threshold. If a round cannot commit a block,
+validators move to another round with a new proposer.
 
-The protocol assumes less than one-third of voting power is Byzantine. Safety
-also depends on correct key management, validation and locking rules. Progress
+The usual BFT safety argument assumes less than one-third of voting power is
+Byzantine and a voting threshold strictly above two-thirds. Tenderdash accepts
+some lower thresholds, so that safety bound is not guaranteed by configuration.
+See the [threshold definitions](../../spec/consensus/consensus.md#terminology),
+[system-model assumptions](../../spec/consensus/consensus.md#system-model-as-enforced-by-the-code)
+and [threshold recovery](../../spec/consensus/consensus.md#threshold-recovery).
+Safety also depends on correct key management, validation and locking rules. Progress
 requires enough validators to communicate and sufficiently timely message
 delivery; a network partition can halt block production.
 

@@ -50,7 +50,14 @@ which returns when the Flush response comes back.
 * Return information about the application state.
 * Used to sync Tenderdash with the application during a handshake
 that happens on startup.
-* The returned `app_version` will be included in the Header of every block.
+* During the startup handshake, `app_version` initializes the local state's
+  application version only if no block has been committed yet. It also supplies
+  this node's advertised version, used as `Header.ProposedAppVersion` when the
+  node proposes a block. Another proposer may advertise a different version.
+* `Header.Version.App` is the version used for the proposed block's execution.
+  A nonzero `ResponsePrepareProposal.app_version` overrides its inherited value.
+  Changing `Info.app_version` on an existing chain does not by itself change
+  the committed execution version.
 * `last_block_app_hash` and `last_block_height` describe the state persisted by
   `FinalizeBlock`; there is no ABCI `Commit` method. See
   [ABCI handshake](../consensus/consensus-recovery.md#start-up-abci-handshake)
@@ -62,29 +69,34 @@ that happens on startup.
 
 * **Request**:
 
-    | Name                | Type                                                                                                                                   | Description                                                   | Field Number |
-    |------------------|--------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------|--------------|
-    | time                | [google.protobuf.Timestamp](https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#google.protobuf.Timestamp)   | Genesis time                                                  | 1            |
-    | chain_id            | string                                                                                                                                 | ID of the blockchain.                                         | 2            |
-    | consensus_params    | [ConsensusParams](#consensusparams)                                                                                                    | Initial consensus-critical parameters.                        | 3            |
-    | validator_set       | [ValidatorSetUpdate](#validatorsetupdate)                                                                                              | Initial genesis validator set, sorted by voting power. | 4            |
-    | app_state_bytes     | bytes                                                                                                                                  | Serialized initial application state. JSON bytes.             | 5            |
-    | initial_height      | int64                                                                                                                                  | Height of the initial block (typically `1`).                  | 6            |
-    | initial_core_height | int64                                                                                                                                  | Height of the initial core chainlock.                            | 7            |
+    | Name                | Type                                                                                                                                 | Description                                            | Field Number |
+    | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------ | ------------ |
+    | time                | [google.protobuf.Timestamp](https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#google.protobuf.Timestamp) | Genesis time                                           | 1            |
+    | chain_id            | string                                                                                                                               | ID of the blockchain.                                  | 2            |
+    | consensus_params    | [ConsensusParams](#consensusparams)                                                                                                  | Initial consensus-critical parameters.                 | 3            |
+    | validator_set       | [ValidatorSetUpdate](#validatorsetupdate)                                                                                            | Initial genesis validator set, sorted by voting power. | 4            |
+    | app_state_bytes     | bytes                                                                                                                                | Serialized initial application state. JSON bytes.      | 5            |
+    | initial_height      | int64                                                                                                                                | Height of the initial block (typically `1`).           | 6            |
+    | initial_core_height | uint32                                                                                                                               | Height of the initial core chainlock.                  | 7            |
 
 * **Response**:
 
-    | Name             | Type                                         | Description                                     | Field Number |
-    |------------------|----------------------------------------------|-------------------------------------------------|--------------|
-    | consensus_params | [ConsensusParams](#consensusparams)          | Initial consensus-critical parameters (optional) | 1            |
-    | validator_set    | [ValidatorSetUpdate](#validatorsetupdate) | Initial validator set (optional).                   | 2            |
-    | app_hash         | bytes                                        | Initial application hash.                        | 3            |
+    | Name                        | Type                                                                                                                                 | Description                                       | Field Number |
+    | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------- | ------------ |
+    | consensus_params            | [ConsensusParams](#consensusparams)                                                                                                  | Initial consensus-critical parameters (optional). | 1            |
+    | app_hash                    | bytes                                                                                                                                | Initial application hash, 32 bytes.               | 2            |
+    | validator_set_update        | [ValidatorSetUpdate](#validatorsetupdate)                                                                                            | Initial validator set update.                     | 3            |
+    | next_core_chain_lock_update | [CoreChainLock](../../proto/tendermint/types/dash.proto)                                                                             | Initial core chain lock update (optional).        | 4            |
+    | initial_core_height         | uint32                                                                                                                               | Initial core chain lock height.                   | 5            |
+    | genesis_time                | [google.protobuf.Timestamp](https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#google.protobuf.Timestamp) | Genesis time override (optional).                 | 6            |
 
 * **Usage**:
 * Called once upon genesis.
-* If ResponseInitChain.Validators is empty, the initial validator set will be the RequestInitChain.Validators
-* If ResponseInitChain.Validators is not empty, it will be the initial
-validator set (regardless of what is in RequestInitChain.Validators).
+* If `ResponseInitChain.validator_set_update.validator_updates` is empty,
+  genesis validator membership is retained; quorum-key and quorum-hash updates
+  can still be supplied in `validator_set_update`.
+* If it is not empty, those validators replace the initial membership supplied
+  through `RequestInitChain.validator_set`.
 * This allows the app to decide if it wants to accept the initial validator
 set proposed by Tenderdash (ie. in the genesis file), or if it wants to use
 a different one (perhaps computed based on some application specific
@@ -103,17 +115,17 @@ information in the genesis file).
 
 * **Response**:
 
-    | Name      | Type                  | Description                                                                                                                                                                                                        | Field Number |
-    |-----------|-----------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------|
-    | code      | uint32                | Response code.                                                                                                                                                                                                     | 1            |
-    | log       | string                | The output of the application's logger. **May be non-deterministic.**                                                                                                                                              | 3            |
-    | info      | string                | Additional information. **May be non-deterministic.**                                                                                                                                                              | 4            |
-    | index     | int64                 | The index of the key in the tree.                                                                                                                                                                                  | 5            |
-    | key       | bytes                 | The key of the matching data.                                                                                                                                                                                      | 6            |
-    | value     | bytes                 | The value of the matching data.                                                                                                                                                                                    | 7            |
-    | proof_ops | [ProofOps](#proofops) | Serialized proof for the value data, if requested, to be verified against the `app_hash` for the given Height.                                                                                                     | 8            |
-    | height    | int64                 | The block height from which data was derived. Note that this is the height of the block containing the application's Merkle root hash, which represents the state as it was after committing the block at Height | 9            |
-    | codespace | string                | Namespace for the `code`.                                                                                                                                                                                          | 10           |
+    | Name      | Type                  | Description                                                                                                                                                                                                      | Field Number |
+    | --------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+    | code      | uint32                | Response code.                                                                                                                                                                                                   | 1            |
+    | log       | string                | The output of the application's logger. **May be non-deterministic.**                                                                                                                                            | 2            |
+    | info      | string                | Additional information. **May be non-deterministic.**                                                                                                                                                            | 3            |
+    | index     | int64                 | The index of the key in the tree.                                                                                                                                                                                | 4            |
+    | key       | bytes                 | The key of the matching data.                                                                                                                                                                                    | 5            |
+    | value     | bytes                 | The value of the matching data.                                                                                                                                                                                  | 6            |
+    | proof_ops | [ProofOps](#proofops) | Serialized proof for the value data, if requested, to be verified against the `app_hash` for the given Height.                                                                                                   | 7            |
+    | height    | int64                 | The block height from which data was derived. Note that this is the height of the block containing the application's Merkle root hash, which represents the state as it was after committing the block at Height | 8            |
+    | codespace | string                | Namespace for the `code`.                                                                                                                                                                                        | 9            |
 
 * **Usage**:
 * Query for data from the application at current or past height.
@@ -151,7 +163,6 @@ transaction into its local mempool.
 * `CheckTx` validates the transaction against the current state of the application,
 for example, checking signatures and account balances, but does not apply any
 of the state changes described in the transaction.
-not running code in a virtual machine.
 * Transactions where `ResponseCheckTx.Code != 0` will be rejected - they will not be broadcast to
 other nodes or included in a proposal block.
 * Tenderdash attributes no other value to the response code
@@ -179,11 +190,11 @@ other nodes or included in a proposal block.
 
 * **Request**:
 
-    | Name   | Type   | Description                                                           | Field Number |
-    |--------|--------|-----------------------------------------------------------------------|--------------|
-    | height | uint64 | The height of the snapshot the chunk belongs to.                      | 1            |
-    | format | uint32 | The application-specific format of the snapshot the chunk belongs to. | 2            |
-    | chunk  | uint32 | The chunk index, starting from `0` for the initial chunk.             | 3            |
+    | Name     | Type   | Description                                            | Field Number |
+    | -------- | ------ | ------------------------------------------------------ | ------------ |
+    | height   | uint64 | The height of the snapshot the chunk belongs to.       | 1            |
+    | version  | uint32 | The application-specific snapshot version.             | 2            |
+    | chunk_id | bytes  | Application-defined identifier of the requested chunk. | 3            |
 
 * **Response**:
 
@@ -193,6 +204,9 @@ other nodes or included in a proposal block.
 
 * **Usage**:
 * Used during state sync to retrieve snapshot chunks from peers.
+* Chunk identifiers are bytes, not numeric indexes. The initial identifier is
+  `Snapshot.hash`; the application supplies further identifiers through
+  `ResponseApplySnapshotChunk.next_chunks`.
 
 ### OfferSnapshot
 
@@ -217,7 +231,7 @@ other nodes or included in a proposal block.
     ACCEPT        = 1;  // Snapshot is accepted, start applying chunks.
     ABORT         = 2;  // Abort snapshot restoration, and don't try any other snapshots.
     REJECT        = 3;  // Reject this specific snapshot, try others.
-    REJECT_FORMAT = 4;  // Reject all snapshots with this `format`, try others.
+    REJECT_FORMAT = 4;  // Reject all snapshots with this version, try others.
     REJECT_SENDER = 5;  // Reject all snapshots from all senders of this snapshot, try others.
   }
 ```
@@ -238,19 +252,20 @@ the restored application at the end of snapshot restoration.
 
 * **Request**:
 
-    | Name   | Type   | Description                                                                 | Field Number |
-    |--------|--------|-----------------------------------------------------------------------------|--------------|
-    | index  | uint32 | The chunk index, starting from `0`. Tenderdash applies chunks sequentially. | 1            |
-    | chunk  | bytes  | The binary chunk contents, as returned by `LoadSnapshotChunk`.              | 2            |
-    | sender | string | The P2P ID of the node who sent this chunk.                                 | 3            |
+    | Name     | Type   | Description                                                    | Field Number |
+    | -------- | ------ | -------------------------------------------------------------- | ------------ |
+    | chunk_id | bytes  | Application-defined identifier of this chunk.                  | 1            |
+    | chunk    | bytes  | The binary chunk contents, as returned by `LoadSnapshotChunk`. | 2            |
+    | sender   | string | The P2P ID of the node who sent this chunk.                    | 3            |
 
 * **Response**:
 
     | Name           | Type                | Description                                                                                                                                                                                                                             | Field Number |
-    |----------------|---------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------|
+    | -------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
     | result         | Result  (see below) | The result of applying this chunk.                                                                                                                                                                                                      | 1            |
-    | refetch_chunks | repeated uint32     | Refetch and reapply the given chunks, regardless of `result`. Only the listed chunks will be refetched, and reapplied in sequential order.                                                                                              | 2            |
+    | refetch_chunks | repeated bytes      | Identifiers of chunks to discard, refetch and reapply, regardless of `result`.                                                                                                                                                          | 2            |
     | reject_senders | repeated string     | Reject the given P2P senders, regardless of `Result`. Any chunks already applied will not be refetched unless explicitly requested, but queued chunks from these senders will be discarded, and new chunks or other snapshots rejected. | 3            |
+    | next_chunks    | repeated bytes      | Chunk identifiers to enqueue after `ACCEPT`; ignored for other results.                                                                                                                                                                 | 4            |
 
 ```proto
   enum Result {
@@ -260,6 +275,7 @@ the restored application at the end of snapshot restoration.
     RETRY           = 3;  // Reapply this chunk, combine with `RefetchChunks` and `RejectSenders` as appropriate.
     RETRY_SNAPSHOT  = 4;  // Restart this snapshot from `OfferSnapshot`, reusing chunks unless instructed otherwise.
     REJECT_SNAPSHOT = 5;  // Reject this snapshot, try a different one.
+    COMPLETE_SNAPSHOT = 6;  // Accept this chunk and finish restoring the snapshot.
   }
 ```
 
@@ -268,10 +284,17 @@ the restored application at the end of snapshot restoration.
 will not do this unless instructed by the application.
 * The application may want to verify each chunk, e.g. by attaching chunk hashes in
 `Snapshot.Metadata` and/or incrementally verifying contents against `AppHash`.
-* When all chunks have been accepted, Tenderdash will make an ABCI `Info` call to verify that
-`LastBlockAppHash` and `LastBlockHeight` matches the expected values, and record the
-`AppVersion` in the node state. It then switches to fast sync or consensus and joins the
-network.
+* On `ACCEPT`, Tenderdash enqueues `next_chunks` and continues applying chunks.
+  Fetching can run in parallel; identifiers do not impose a numeric application
+  order. The application must discover and validate the required chunks.
+* Return `COMPLETE_SNAPSHOT` only when restoration is complete. An `ACCEPT` with
+  no `next_chunks`, or an empty request queue, does not signal completion.
+* After `COMPLETE_SNAPSHOT`, Tenderdash calls `Info` and checks
+  `last_block_app_hash` against the light-client-verified hash,
+  `last_block_height` against the snapshot height, and `app_version` against the
+  version in the reconstructed consensus state. Failed verification prevents
+  successful state sync. The node can then catch up through block sync or enter
+  consensus.
 * If Tenderdash is unable to retrieve the next chunk after some time (e.g. because no suitable
 peers are available), it will reject the snapshot and try a different one via `OfferSnapshot`.
 The application should be prepared to reset and accept it or abort as appropriate.
@@ -745,8 +768,8 @@ enum VerifyStatus {
 
 ### CanonicalVoteExtension
 
->**TODO**: This protobuf message definition is not part of the ABCI interface, but rather belongs to the
-> Precommit message which is broadcast via P2P. So it is to be moved to the relevant section of the spec.
+> This signing structure belongs to the consensus vote-extension protocol,
+> rather than the ABCI application interface. See [vote-extension signing](../consensus/signing.md#block-signature-verification-on-light-client).
 
 * **Fields**:
 
