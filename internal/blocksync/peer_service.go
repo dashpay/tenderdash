@@ -93,6 +93,21 @@ type serviceRequest struct {
 	finished bool
 	start    time.Time
 	elapsed  time.Duration
+	// deliveredConn is the generation of the connection that answered; 0 if none did.
+	deliveredConn uint64
+}
+
+// Delivered records the connection that answered the request.
+func (r *serviceRequest) Delivered(connID uint64) {
+	r.service.mtx.Lock()
+	defer r.service.mtx.Unlock()
+	r.deliveredConn = connID
+}
+
+func (r *serviceRequest) deliveredConnID() uint64 {
+	r.service.mtx.Lock()
+	defer r.service.mtx.Unlock()
+	return r.deliveredConn
 }
 
 func (r *serviceRequest) Started() {

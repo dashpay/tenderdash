@@ -284,7 +284,7 @@ dial-timeout = "3s"
 # TODO: Remove once MConnConnection is removed.
 flush-throttle-timeout = "100ms"
 
-# Maximum size of a message packet payload, in bytes
+# Maximum size of a message packet payload, in bytes; must be greater than 0
 # TODO: Remove once MConnConnection is removed.
 max-packet-msg-payload-size = 1400
 

@@ -71,3 +71,24 @@ func TestMConnectionErrorCallbackRetainsParentContext(t *testing.T) {
 	case <-time.After(30 * time.Millisecond):
 	}
 }
+
+func TestMConnectionPeerInputErrorAfterCanceledStart(t *testing.T) {
+	local, remote := net.Pipe()
+	t.Cleanup(func() { _ = local.Close(); _ = remote.Close() })
+	connection := createTestMConnection(log.NewNopLogger(), local)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	require.NoError(t, connection.Start(ctx))
+	t.Cleanup(func() { connection.Stop(); connection.Wait() })
+
+	done := make(chan error, 1)
+	go func() { done <- connection.PeerInputError() }()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		close(connection.doneRecvRoutine)
+		require.NoError(t, <-done)
+		t.Fatal("PeerInputError did not return after startup canceled the receive worker")
+	}
+}

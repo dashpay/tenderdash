@@ -5,10 +5,13 @@ on:
   push:
     branches:
       - master
-      - v[0-9].[0-9]+-dev
+      - dev
+      # Keep both names until the integration-branch migration is complete.
+      - v1.8-dev
+      - v1.9-dev
 jobs:
   tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -19,6 +22,9 @@ jobs:
       - uses: technote-space/get-diff-action@v6
         with:
           PATTERNS: |
+            .github/workflows/tests.yml
+            .github/actions/bls/**
+            third_party/bls-signatures/**
             **/**.go
             "!test/"
           FILES: |

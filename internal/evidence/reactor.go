@@ -313,6 +313,7 @@ func (r *Reactor) processEvidenceCh(ctx context.Context) {
 			if serr := r.evidenceCh.SendError(ctx, p2p.PeerError{
 				NodeID: envelope.From,
 				Err:    err,
+				ConnID: envelope.ConnID,
 			}); serr != nil {
 				return
 			}
