@@ -132,18 +132,15 @@ of Merkle trees and encoding formats.
 
 * **Response**:
 
-    | Name       | Type                                                        | Description                                                           | Field Number |
-    |------------|-------------------------------------------------------------|-----------------------------------------------------------------------|--------------|
-    | code       | uint32                                                      | Response code.                                                        | 1            |
-    | data       | bytes                                                       | Result bytes, if any.                                                 | 2            |
-    | log        | string                                                      | The output of the application's logger. **May be non-deterministic.** | 3            |
-    | info       | string                                                      | Additional information. **May be non-deterministic.**                 | 4            |
-    | gas_wanted | int64                                                       | Amount of gas requested for transaction.                              | 5            |
-    | gas_used   | int64                                                       | Amount of gas consumed by transaction.                                | 6            |
-    | events     | repeated [Event](basic-concepts.md#events) | Type & Key-Value events for indexing transactions (eg. by account).   | 7            |
-    | codespace  | string                                                      | Namespace for the `code`.                                             | 8            |
-    | sender     | string                                                      | The transaction's sender (e.g. the signer)                            | 9            |
-    | priority   | int64                                                       | The transaction's priority (for mempool ordering)                     | 10           |
+    | Name       | Type   | Description                                           | Field Number |
+    |------------|--------|-------------------------------------------------------|--------------|
+    | code       | uint32 | Response code.                                        | 1            |
+    | data       | bytes  | Result bytes, if any.                                 | 2            |
+    | info       | string | Additional information. **May be non-deterministic.** | 3            |
+    | gas_wanted | int64  | Amount of gas requested for transaction.              | 4            |
+    | codespace  | string | Namespace for the `code`.                             | 5            |
+    | sender     | string | The transaction's sender (e.g. the signer)            | 6            |
+    | priority   | int64  | The transaction's priority (for mempool ordering)     | 7            |
 
 * **Usage**:
 

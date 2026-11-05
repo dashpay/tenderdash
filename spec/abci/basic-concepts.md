@@ -185,7 +185,7 @@ not part of that hash. See [Header](../core/data_structures.md#header) and
 
 [&uparrow; Back to Outline](#outline)
 
-`Query` and `CheckTx` responses and `ExecTxResult` entries carry application
+`ResponseQuery`, `ResponseCheckTx` and `ExecTxResult` entries carry application
 `Code`/`Codespace` values. Code zero means successful application processing;
 a nonzero transaction code is not the same as rejecting a whole proposal.
 
@@ -222,7 +222,7 @@ returned directly to the client that initiated the query.
 
 [&uparrow; Back to Outline](#outline)
 
-`ResponseCheckTx` can contain events. For block execution,
+`ResponseCheckTx` has no events field. For block execution,
 `ResponseProcessProposal.events` contains block events and each `ExecTxResult`
 can contain transaction events. These results are retained for publication when
 the block is finalized; `ResponseFinalizeBlock` has no events field.
@@ -265,7 +265,7 @@ message EventAttribute {
 Example:
 
 ```go
- abci.ResponseCheckTx{
+ abci.ExecTxResult{
   // ...
  Events: []abci.Event{
   {

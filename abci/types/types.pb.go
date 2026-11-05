@@ -3309,8 +3309,8 @@ func (m *CommitInfo) GetThresholdVoteExtensions() []*types1.VoteExtension {
 	return nil
 }
 
-// Event carries application attributes in ResponseCheckTx,
-// ResponseProcessProposal, and ExecTxResult.
+// Event carries application attributes in ResponseProcessProposal
+// and ExecTxResult.
 //
 // Later, transactions may be queried using these events.
 type Event struct {

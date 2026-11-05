@@ -611,8 +611,8 @@ message CommitInfo {
   repeated tendermint.types.VoteExtension threshold_vote_extensions = 4;
 }
 
-// Event carries application attributes in ResponseCheckTx,
-// ResponseProcessProposal, and ExecTxResult.
+// Event carries application attributes in ResponseProcessProposal
+// and ExecTxResult.
 //
 // Later, transactions may be queried using these events.
 message Event {

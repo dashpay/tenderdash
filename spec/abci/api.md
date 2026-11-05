@@ -96,8 +96,8 @@
 <a name="tendermint-abci-Event"></a>
 
 ### Event
-Event carries application attributes in ResponseCheckTx,
-ResponseProcessProposal, and ExecTxResult.
+Event carries application attributes in ResponseProcessProposal
+and ExecTxResult.
 
 Later, transactions may be queried using these events.
 
