@@ -935,3 +935,11 @@ func TestVerifyBlockAndExtensionSigns_MatchesFullVerifyAdmission(t *testing.T) {
 		})
 	}
 }
+
+func TestVoteFromProtoNil(t *testing.T) {
+	require.NotPanics(t, func() {
+		vote, err := VoteFromProto(nil)
+		require.ErrorIs(t, err, ErrVoteNil)
+		require.Nil(t, vote)
+	})
+}

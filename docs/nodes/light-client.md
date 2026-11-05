@@ -4,13 +4,13 @@ order: 6
 
 # Configure a Light Client
 
-Tendermint comes with a built-in `tendermint light` command, which can be used
-to run a light client proxy server, verifying Tendermint RPC. All calls that
+Tenderdash comes with a built-in `tenderdash light` command, which can be used
+to run a light client proxy server, verifying Tenderdash RPC. All calls that
 can be tracked back to a block header by a proof will be verified before
 passing them back to the caller. Other than that, it will present the same
-interface as a full Tendermint node.
+interface as a full Tenderdash node.
 
-You can start the light client proxy server by running `tendermint light <chainID>`,
+You can start the light client proxy server by running `tenderdash light <chainID>`,
 with a variety of flags to specify the primary node,  the witness nodes (which cross-check
 the information provided by the primary), the hash and height of the trusted header,
 and more.
@@ -18,12 +18,12 @@ and more.
 For example:
 
 ```bash
-$ tendermint light supernova -p tcp://233.123.0.140:26657 \
+$ tenderdash light supernova -p tcp://233.123.0.140:26657 \
   -w tcp://179.63.29.15:26657,tcp://144.165.223.135:26657 \
   --height=10 --hash=37E9A6DD3FA25E83B22C18835401E8E56088D0D7ABC6FD99FCDC920DD76C1C57
 ```
 
-For additional options, run `tendermint light --help`.
+For additional options, run `tenderdash light --help`.
 
 ## Where to obtain trusted height & hash
 

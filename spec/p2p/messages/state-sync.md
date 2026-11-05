@@ -124,7 +124,7 @@ unsolicited response messages are discarded.
 
 ### ParamsRequest
 
-In order to build tendermint state, the state provider will request the params
+In order to build Tenderdash state, the state provider will request the params
 at the height of the snapshot and use the header to verify it.
 
 | Name     | Type   | Description                     | Field Number |

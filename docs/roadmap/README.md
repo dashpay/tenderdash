@@ -1,6 +1,3 @@
----
-order: false
-parent:
-  title: Roadmap
-  order: 7
----
+# Roadmap
+
+See [Tenderdash development priorities](roadmap.md).

@@ -370,11 +370,12 @@ allowlist-only = {{ .P2P.AllowlistOnly }}
 # UPNP port forwarding
 upnp = {{ .P2P.UPNP }}
 
-# Maximum number of connections (inbound and outbound).
+# Maximum number of connections (inbound and outbound); 0 uses the default of 64.
 max-connections = {{ .P2P.MaxConnections }}
 
 # Maximum number of outgoing connections. Must not exceed max-connections;
-# 0 means all connections can be outgoing.
+# 0 uses half of max-connections, rounded down; at max-connections = 1 that is 0,
+# which leaves outgoing connections without a separate cap.
 max-outgoing-connections = {{ .P2P.MaxOutgoingConnections }}
 
 # Rate limits the number of incoming connection attempts per IP address.
@@ -402,7 +403,7 @@ dial-timeout = "{{ .P2P.DialTimeout }}"
 # TODO: Remove once MConnConnection is removed.
 flush-throttle-timeout = "{{ .P2P.FlushThrottleTimeout }}"
 
-# Maximum size of a message packet payload, in bytes
+# Maximum size of a message packet payload, in bytes; must be greater than 0
 # TODO: Remove once MConnConnection is removed.
 max-packet-msg-payload-size = {{ .P2P.MaxPacketMsgPayloadSize }}
 

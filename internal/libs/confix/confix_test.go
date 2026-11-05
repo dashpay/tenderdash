@@ -8,6 +8,7 @@ import (
 
 	"github.com/creachadair/tomledit"
 	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/internal/libs/confix"
 )
@@ -96,4 +97,28 @@ func TestApplyFixes(t *testing.T) {
 			}
 		})
 	})
+}
+
+func TestCheckValidP2PDefaultsAndExplicitZero(t *testing.T) {
+	for _, tc := range []struct {
+		name, config string
+		invalid      bool
+	}{
+		{name: "omitted section", config: `mode = "full"`},
+		{name: "omitted window", config: `mode = "full"
+[p2p]
+send-rate = 1`},
+		{name: "explicit zero", config: `mode = "full"
+[p2p]
+incoming-connection-window = "0s"`, invalid: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := confix.CheckValid([]byte(tc.config))
+			if tc.invalid {
+				require.ErrorContains(t, err, "incoming-connection-window")
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }

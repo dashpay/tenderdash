@@ -1,5 +1,8 @@
 # RFC 013: ABCI++
 
+> Inherited design record. This proposal provides design context, not a guarantee
+> of current behavior. See the [current protocol specification](../../spec/README.md).
+
 ## Changelog
 
 - 2020-01-11: initialized
@@ -60,7 +63,7 @@ On the top is the existing definition of ABCI, and on the bottom is the proposed
 ## Proposal
 
 Below we suggest an API to add these three new phases.
-In this document, sometimes the final round of voting is referred to as precommit for clarity in how it acts in the Tendermint case.
+In this document, sometimes the final round of voting is referred to as precommit for clarity in how it acts in the Tenderdash case.
 
 ### Prepare Proposal
 
@@ -72,7 +75,7 @@ The Prepare Proposal phase allows the block proposer to perform application-depe
 fn PrepareProposal(Block) -> BlockData
 ```
 
-where `BlockData` is a type alias for however data is internally stored within the consensus engine. In Tendermint Core today, this is `[]Tx`.
+where `BlockData` is a type alias for however data is internally stored within the consensus engine. In Tenderdash Core today, this is `[]Tx`.
 
 The application may read the entire block proposal, and mutate the block data fields. Mutated transactions will still get removed from the mempool later on, as the mempool rechecks all transactions after a block is executed.
 
@@ -108,7 +111,7 @@ If the returned `ResponseVerifyHeader.accept_header` is false, then the validato
 
 Upon receiving an entire block proposal (in the current implementation, all "block parts"), every validator runs `ProcessProposal(block)`. If the returned `ResponseProcessProposal.accept_block` is false, then the validator must precommit nil on this block, and reject all other precommits on this block. `ResponseProcessProposal.evidence` is appended to the validators local `EvidencePool`.
 
-Once a validator knows that consensus has failed to be achieved for a given block, it must run `RevertProposal(block.height, block.round)`, in order to signal to the application to revert any potentially mutative state changes it may have made. In Tendermint, this occurs when incrementing rounds.
+Once a validator knows that consensus has failed to be achieved for a given block, it must run `RevertProposal(block.height, block.round)`, in order to signal to the application to revert any potentially mutative state changes it may have made. In Tenderdash, this occurs when incrementing rounds.
 
 **RFC**: How do we handle the scenario where honest node A finalized on round x, and honest node B finalized on round x + 1? (e.g. when 2f precommits are publicly known, and a validator precommits themself but doesn't broadcast, but they increment rounds) Is this a real concern? The state root derived could change if everyone finalizes on round x+1, not round x, as the state machine can depend non-uniformly on timestamp.
 
@@ -159,7 +162,7 @@ The `CanonicalVote` struct will acommodate the `UnsignedAppVoteData` field by ad
 
 **RFC**: Please comment if you think it will be fine to have elongate the message the HSM signs, or if we need to explore pre-hashing the app vote data.
 
-The flow of these methods is that when a validator has to precommit, Tendermint will first produce a precommit canonical vote without the application vote data. It will then pass it to the application, which will return unsigned application vote data, and self authenticating application vote data. It will bundle the `unsigned_application_vote_data` into the canonical vote, and pass it to the HSM to sign. Finally it will package the self-authenticating app vote data, and the `signed_vote_data` together, into one final Vote struct to be passed around the network.
+The flow of these methods is that when a validator has to precommit, Tenderdash will first produce a precommit canonical vote without the application vote data. It will then pass it to the application, which will return unsigned application vote data, and self authenticating application vote data. It will bundle the `unsigned_application_vote_data` into the canonical vote, and pass it to the HSM to sign. Finally it will package the self-authenticating app vote data, and the `signed_vote_data` together, into one final Vote struct to be passed around the network.
 
 #### Changes to Prepare Proposal Phase
 
@@ -227,7 +230,7 @@ Proposed
     - Vote Extensions - can be a no-op
     - Finalize Block - Can black-box call BeginBlock, DeliverTx, EndBlock given the cached block data
 
-- Vote Extensions adds more complexity to core Tendermint Data Structures
+- Vote Extensions adds more complexity to core Tenderdash Data Structures
 - Allowing alternate alternate execution models will lead to a proliferation of new ways for applications to violate expected guarantees.
 
 ### Neutral

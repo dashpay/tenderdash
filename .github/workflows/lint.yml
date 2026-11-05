@@ -17,7 +17,7 @@ on:
 jobs:
   golangci:
     name: golangci-lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     env:
       CGO_LDFLAGS: "-L/usr/local/lib -ldashbls -lrelic_s -lmimalloc-secure -lgmp"
@@ -35,6 +35,9 @@ jobs:
       - uses: technote-space/get-diff-action@v6
         with:
           PATTERNS: |
+            .github/workflows/lint.yml
+            .github/actions/bls/**
+            third_party/bls-signatures/**
             **/**.go
             .github/linters/*
           FILES: |

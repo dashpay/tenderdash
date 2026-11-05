@@ -31,10 +31,10 @@ title: Methods
 
     | Name          | Type   | Description                              | Field Number |
     |---------------|--------|------------------------------------------|--------------|
-    | version       | string | The Tendermint software semantic version | 1            |
-    | block_version | uint64 | The Tendermint Block Protocol version    | 2            |
-    | p2p_version   | uint64 | The Tendermint P2P Protocol version      | 3            |
-    | abci_version  | string | The Tendermint ABCI semantic version     | 4            |
+    | version       | string | The Tenderdash software semantic version | 1            |
+    | block_version | uint64 | The Tenderdash Block Protocol version    | 2            |
+    | p2p_version   | uint64 | The Tenderdash P2P Protocol version      | 3            |
+    | abci_version  | string | The Tenderdash ABCI semantic version     | 4            |
 
 * **Response**:
 
@@ -48,10 +48,10 @@ title: Methods
 
 * **Usage**:
     * Return information about the application state.
-    * Used to sync Tendermint with the application during a handshake
+    * Used to sync Tenderdash with the application during a handshake
     that happens on startup.
     * The returned `app_version` will be included in the Header of every block.
-    * Tendermint expects `last_block_app_hash` and `last_block_height` to
+    * Tenderdash expects `last_block_app_hash` and `last_block_height` to
     be updated during `Commit`, ensuring that `Commit` is never
     called twice for the same block height.
 
@@ -85,7 +85,7 @@ title: Methods
     * If ResponseInitChain.Validators is not empty, it will be the initial
     validator set (regardless of what is in RequestInitChain.Validators).
     * This allows the app to decide if it wants to accept the initial validator
-    set proposed by tendermint (ie. in the genesis file), or if it wants to use
+    set proposed by Tenderdash (ie. in the genesis file), or if it wants to use
     a different one (perhaps computed based on some application specific
     information in the genesis file).
 
@@ -156,7 +156,7 @@ title: Methods
     not running code in a virtual machine.
     * Transactions where `ResponseCheckTx.Code != 0` will be rejected - they will not be broadcast to
     other nodes or included in a proposal block.
-    * Tendermint attributes no other value to the response code
+    * Tenderdash attributes no other value to the response code
 
 ### ListSnapshots
 
@@ -226,7 +226,7 @@ title: Methods
 
 * **Usage**:
     * `OfferSnapshot` is called when bootstrapping a node using state sync. The application may
-    accept or reject snapshots as appropriate. Upon accepting, Tendermint will retrieve and
+    accept or reject snapshots as appropriate. Upon accepting, Tenderdash will retrieve and
     apply snapshot chunks via `ApplySnapshotChunk`. The application may also choose to reject a
     snapshot in the chunk response, in which case it should be prepared to accept further
     `OfferSnapshot` calls.
@@ -242,7 +242,7 @@ title: Methods
 
     | Name   | Type   | Description                                                                 | Field Number |
     |--------|--------|-----------------------------------------------------------------------------|--------------|
-    | index  | uint32 | The chunk index, starting from `0`. Tendermint applies chunks sequentially. | 1            |
+    | index  | uint32 | The chunk index, starting from `0`. Tenderdash applies chunks sequentially. | 1            |
     | chunk  | bytes  | The binary chunk contents, as returned by `LoadSnapshotChunk`.              | 2            |
     | sender | string | The P2P ID of the node who sent this chunk.                                 | 3            |
 
@@ -266,15 +266,15 @@ title: Methods
 ```
 
 * **Usage**:
-    * The application can choose to refetch chunks and/or ban P2P peers as appropriate. Tendermint
+    * The application can choose to refetch chunks and/or ban P2P peers as appropriate. Tenderdash
     will not do this unless instructed by the application.
     * The application may want to verify each chunk, e.g. by attaching chunk hashes in
     `Snapshot.Metadata` and/or incrementally verifying contents against `AppHash`.
-    * When all chunks have been accepted, Tendermint will make an ABCI `Info` call to verify that
+    * When all chunks have been accepted, Tenderdash will make an ABCI `Info` call to verify that
     `LastBlockAppHash` and `LastBlockHeight` matches the expected values, and record the
     `AppVersion` in the node state. It then switches to fast sync or consensus and joins the
     network.
-    * If Tendermint is unable to retrieve the next chunk after some time (e.g. because no suitable
+    * If Tenderdash is unable to retrieve the next chunk after some time (e.g. because no suitable
     peers are available), it will reject the snapshot and try a different one via `OfferSnapshot`.
     The application should be prepared to reset and accept it or abort as appropriate.
 
@@ -293,21 +293,21 @@ title: Methods
     * The first six parameters of `RequestPrepareProposal` are the same as `RequestProcessProposal`
       and `RequestFinalizeBlock`.
     * The height and time values match the values from the header of the proposed block.
-    * `RequestPrepareProposal` contains a preliminary set of transactions `txs` that Tendermint considers to be a good block proposal, called _raw proposal_. The Application can modify this set via `ResponsePrepareProposal.tx_records` (see [TxRecord](#txrecord)).
+    * `RequestPrepareProposal` contains a preliminary set of transactions `txs` that Tenderdash considers to be a good block proposal, called _raw proposal_. The Application can modify this set via `ResponsePrepareProposal.tx_records` (see [TxRecord](#txrecord)).
         * The Application _can_ reorder, remove or add transactions to the raw proposal. Let `tx` be a transaction in `txs`:
-            * If the Application considers that `tx` should not be proposed in this block, e.g., there are other transactions with higher priority, then it should not include it in `tx_records`. In this case, Tendermint won't remove `tx` from the mempool. The Application should be extra-careful, as abusing this feature may cause transactions to stay forever in the mempool.
-            * If the Application considers that a `tx` should not be included in the proposal and removed from the mempool, then the Application should include it in `tx_records` and _mark_ it as `REMOVED`. In this case, Tendermint will remove `tx` from the mempool.
-            * If the Application wants to add a new transaction, then the Application should include it in `tx_records` and _mark_ it as `ADD`. In this case, Tendermint will add it to the mempool.
+            * If the Application considers that `tx` should not be proposed in this block, e.g., there are other transactions with higher priority, then it should not include it in `tx_records`. In this case, Tenderdash won't remove `tx` from the mempool. The Application should be extra-careful, as abusing this feature may cause transactions to stay forever in the mempool.
+            * If the Application considers that a `tx` should not be included in the proposal and removed from the mempool, then the Application should include it in `tx_records` and _mark_ it as `REMOVED`. In this case, Tenderdash will remove `tx` from the mempool.
+            * If the Application wants to add a new transaction, then the Application should include it in `tx_records` and _mark_ it as `ADD`. In this case, Tenderdash will add it to the mempool.
         * The Application should be aware that removing and adding transactions may compromise _traceability_.
-          > Consider the following example: the Application transforms a client-submitted transaction `t1` into a second transaction `t2`, i.e., the Application asks Tendermint to remove `t1` and add `t2` to the mempool. If a client wants to eventually check what happened to `t1`, it will discover that `t_1` is not in the mempool or in a committed block, getting the wrong idea that `t_1` did not make it into a block. Note that `t_2` _will be_ in a committed block, but unless the Application tracks this information, no component will be aware of it. Thus, if the Application wants traceability, it is its responsability to support it. For instance, the Application could attach to a transformed transaction a list with the hashes of the transactions it derives from.
-    * Tendermint MAY include a list of transactions in `RequestPrepareProposal.txs` whose total size in bytes exceeds `RequestPrepareProposal.max_tx_bytes`.
+          > Consider the following example: the Application transforms a client-submitted transaction `t1` into a second transaction `t2`, i.e., the Application asks Tenderdash to remove `t1` and add `t2` to the mempool. If a client wants to eventually check what happened to `t1`, it will discover that `t_1` is not in the mempool or in a committed block, getting the wrong idea that `t_1` did not make it into a block. Note that `t_2` _will be_ in a committed block, but unless the Application tracks this information, no component will be aware of it. Thus, if the Application wants traceability, it is its responsability to support it. For instance, the Application could attach to a transformed transaction a list with the hashes of the transactions it derives from.
+    * Tenderdash MAY include a list of transactions in `RequestPrepareProposal.txs` whose total size in bytes exceeds `RequestPrepareProposal.max_tx_bytes`.
       Therefore, if the size of `RequestPrepareProposal.txs` is greater than `RequestPrepareProposal.max_tx_bytes`, the Application MUST make sure that the
       `RequestPrepareProposal.max_tx_bytes` limit is respected by those transaction records returned in `ResponsePrepareProposal.tx_records` that are marked as `UNMODIFIED` or `ADDED`.
     * In same-block execution mode, the Application must provide values for `ResponsePrepareProposal.app_hash`,
       `ResponsePrepareProposal.tx_results`, `ResponsePrepareProposal.validator_updates`, `ResponsePrepareProposal.core_chain_lock_update` and
       `ResponsePrepareProposal.consensus_param_updates`, as a result of fully executing the block.
         * The values for `ResponsePrepareProposal.validator_updates`, `ResponsePrepareProposal.core_chain_lock_update` or
-          `ResponsePrepareProposal.consensus_param_updates` may be empty. In this case, Tendermint will keep
+          `ResponsePrepareProposal.consensus_param_updates` may be empty. In this case, Tenderdash will keep
           the current values.
         * `ResponsePrepareProposal.validator_updates`, triggered by block `H`, affect validation
           for blocks `H+1`, and `H+2`. Heights following a validator update are affected in the following way:
@@ -322,9 +322,9 @@ title: Methods
           the (synchronous) execution of the block does not cause other processes to prevote `nil` because
           their propose timeout goes off.
     * As a result of executing the prepared proposal, the Application may produce header events or transaction events.
-      The Application must keep those events until a block is decided and then pass them on to Tendermint via
+      The Application must keep those events until a block is decided and then pass them on to Tenderdash via
       `ResponseFinalizeBlock`.
-    * As a sanity check, Tendermint will check the returned parameters for validity if the Application modified them.
+    * As a sanity check, Tenderdash will check the returned parameters for validity if the Application modified them.
       In particular, `ResponsePrepareProposal.tx_records` will be deemed invalid if
         * There is a duplicate transaction in the list.
         * A new or modified transaction is marked as `UNMODIFIED` or `REMOVED`.
@@ -332,15 +332,15 @@ title: Methods
         * A transaction is marked as `UNKNOWN`.
     * `ResponsePrepareProposal.tx_results` contains only results of  `UNMODIFIED` and `ADDED` transactions.
     `REMOVED` transactions are omitted. The length of `tx_results` can be different than the length of `tx_records`.
-    * If Tendermint fails to validate the `ResponsePrepareProposal`, Tendermint will assume the application is faulty and crash.
+    * If Tenderdash fails to validate the `ResponsePrepareProposal`, Tenderdash will assume the application is faulty and crash.
     * The implementation of `PrepareProposal` can be non-deterministic.
 
-#### When does Tendermint call it?
+#### When does Tenderdash call it?
 
-When a validator _p_ enters Tendermint consensus round _r_, height _h_, in which _p_ is the proposer,
+When a validator _p_ enters Tenderdash consensus round _r_, height _h_, in which _p_ is the proposer,
 and _p_'s _validValue_ is `nil`:
 
-1. _p_'s Tendermint collects outstanding transactions from the mempool
+1. _p_'s Tenderdash collects outstanding transactions from the mempool
     * The transactions will be collected in order of priority
     * Let $C$ the list of currently collected transactions
     * The collection stops when any of the following conditions are met
@@ -348,9 +348,9 @@ and _p_'s _validValue_ is `nil`:
         * the total size of transactions $\in C$ is greater than or equal to `consensusParams.block.max_bytes`
         * the sum of `GasWanted` field of transactions $\in C$ is greater than or equal to
           `consensusParams.block.max_gas`
-    * _p_'s Tendermint creates a block header.
-2. _p_'s Tendermint calls `RequestPrepareProposal` with the newly generated block.
-   The call is synchronous: Tendermint's execution will block until the Application returns from the call.
+    * _p_'s Tenderdash creates a block header.
+2. _p_'s Tenderdash calls `RequestPrepareProposal` with the newly generated block.
+   The call is synchronous: Tenderdash's execution will block until the Application returns from the call.
 3. The Application checks the block (hashes, transactions, commit info, misbehavior). Besides,
     * in same-block execution mode, the Application can (and should) provide `ResponsePrepareProposal.app_hash`,
       `ResponsePrepareProposal.validator_updates`, or
@@ -365,9 +365,9 @@ and _p_'s _validValue_ is `nil`:
         * reorder transactions - the Application reorders transactions in the list
 4. If the block is modified, the Application includes the modified block in the return parameters (see the rules in section _Usage_).
    The Application returns from the call.
-5. _p_'s Tendermint uses the (possibly) modified block as _p_'s proposal in round _r_, height _h_.
+5. _p_'s Tenderdash uses the (possibly) modified block as _p_'s proposal in round _r_, height _h_.
 
-Note that, if _p_ has a non-`nil` _validValue_, Tendermint will use it as proposal and will not call `RequestPrepareProposal`.
+Note that, if _p_ has a non-`nil` _validValue_, Tenderdash will use it as proposal and will not call `RequestPrepareProposal`.
 
 ### ProcessProposal
 
@@ -384,13 +384,13 @@ Note that, if _p_ has a non-`nil` _validValue_, Tendermint will use it as propos
           However, any resulting state changes must be kept as _candidate state_,
           and the Application should be ready to backtrack/discard it in case the decided block is different.
     * The height and timestamp values match the values from the header of the proposed block.
-    * If `ResponseProcessProposal.status` is `REJECT`, Tendermint assumes the proposal received
+    * If `ResponseProcessProposal.status` is `REJECT`, Tenderdash assumes the proposal received
       is not valid.
     * In same-block execution mode, the Application is required to fully execute the block and provide values
       for parameters `ResponseProcessProposal.app_hash`, `ResponseProcessProposal.tx_results`,
       `ResponseProcessProposal.validator_updates`, and `ResponseProcessProposal.consensus_param_updates`,
-      so that Tendermint can then verify the hashes in the block's header are correct.
-      If the hashes mismatch, Tendermint will reject the block even if `ResponseProcessProposal.status`
+      so that Tenderdash can then verify the hashes in the block's header are correct.
+      If the hashes mismatch, Tenderdash will reject the block even if `ResponseProcessProposal.status`
       was set to `ACCEPT`.
     * The implementation of `ProcessProposal` MUST be deterministic. Moreover, the value of
       `ResponseProcessProposal.status` MUST **exclusively** depend on the parameters passed in
@@ -404,25 +404,25 @@ Note that, if _p_ has a non-`nil` _validValue_, Tendermint will use it as propos
     * Moreover, application implementors SHOULD always set `ResponseProcessProposal.status` to `ACCEPT`,
       unless they _really_ know what the potential liveness implications of returning `REJECT` are.
 
-#### When does Tendermint call it?
+#### When does Tenderdash call it?
 
-When a validator _p_ enters Tendermint consensus round _r_, height _h_, in which _q_ is the proposer (possibly _p_ = _q_):
+When a validator _p_ enters Tenderdash consensus round _r_, height _h_, in which _q_ is the proposer (possibly _p_ = _q_):
 
 1. _p_ sets up timer `ProposeTimeout`.
 2. If _p_ is the proposer, _p_ executes steps 1-6 in [PrepareProposal](#prepareproposal).
-3. Upon reception of Proposal message (which contains the header) for round _r_, height _h_ from _q_, _p_'s Tendermint verifies the block header.
-4. Upon reception of Proposal message, along with all the block parts, for round _r_, height _h_ from _q_, _p_'s Tendermint follows its algorithm
+3. Upon reception of Proposal message (which contains the header) for round _r_, height _h_ from _q_, _p_'s Tenderdash verifies the block header.
+4. Upon reception of Proposal message, along with all the block parts, for round _r_, height _h_ from _q_, _p_'s Tenderdash follows its algorithm
    to check whether it should prevote for the block just received, or `nil`
-5. If Tendermint should prevote for the block just received
-    1. Tendermint calls `RequestProcessProposal` with the block. The call is synchronous.
+5. If Tenderdash should prevote for the block just received
+    1. Tenderdash calls `RequestProcessProposal` with the block. The call is synchronous.
     2. The Application checks/processes the proposed block, which is read-only, and returns true (_accept_) or false (_reject_) in `ResponseProcessProposal.accept`.
        * The Application, depending on its needs, may call `ResponseProcessProposal`
          * either after it has completely processed the block (the simpler case),
          * or immediately (after doing some basic checks), and process the block asynchronously. In this case the Application will
            not be able to reject the block, or force prevote/precommit `nil` afterwards.
     3. If the returned value is
-         * _accept_, Tendermint prevotes on this proposal for round _r_, height _h_.
-         * _reject_, Tendermint prevotes `nil`.
+         * _accept_, Tenderdash prevotes on this proposal for round _r_, height _h_.
+         * _reject_, Tenderdash prevotes `nil`.
 
 ### ExtendVote
 
@@ -439,14 +439,14 @@ When a validator _p_ enters Tendermint consensus round _r_, height _h_, in which
 
     | Name            | Type  | Description                                   | Field Number |
     |-------------------|-------|-----------------------------------------------|--------------|
-    | vote_extensions | [ExtendVoteExtension](#extendvoteextension) | Optional information signed by Tendermint. | 1            |
+    | vote_extensions | [ExtendVoteExtension](#extendvoteextension) | Optional information signed by Tenderdash. | 1            |
 
 * **Usage**:
-    * `ResponseExtendVote.vote_extensions` is optional information that, if present, will be signed by Tendermint and
+    * `ResponseExtendVote.vote_extensions` is optional information that, if present, will be signed by Tenderdash and
       attached to the Precommit message.
     * `RequestExtendVote.hash` corresponds to the hash of a proposed block that was made available to the application
       in a previous call to `ProcessProposal` or `PrepareProposal` for the current height.
-    * `ResponseExtendVote.vote_extensions` will only be attached to a non-`nil` Precommit message. If Tendermint is to
+    * `ResponseExtendVote.vote_extensions` will only be attached to a non-`nil` Precommit message. If Tenderdash is to
       precommit `nil`, it will not call `RequestExtendVote`.
     * The Application logic that creates extensions that are not threshold-recoverable can be
       non-deterministic. Threshold-recoverable extensions (`THRESHOLD_RECOVER` and
@@ -460,29 +460,29 @@ When a validator _p_ enters Tendermint consensus round _r_, height _h_, in which
       [VerifyVoteExtension](#verifyvoteextension). An ABCI error or an invalid response from this
       call is fatal, as on the Precommit path.
 
-#### When does Tendermint call it?
+#### When does Tenderdash call it?
 
-When a validator _p_ is in Tendermint consensus state _prevote_ of round _r_, height _h_, in which _q_ is the proposer; and _p_ has received
+When a validator _p_ is in Tenderdash consensus state _prevote_ of round _r_, height _h_, in which _q_ is the proposer; and _p_ has received
 
 * the Proposal message _v_ for round _r_, height _h_, along with all the block parts, from _q_,
 * `Prevote` messages from _2f + 1_ validators' voting power for round _r_, height _h_, prevoting for the same block _id(v)_,
 
-then _p_'s Tendermint locks _v_  and sends a Precommit message in the following way
+then _p_'s Tenderdash locks _v_  and sends a Precommit message in the following way
 
-1. _p_'s Tendermint sets _lockedValue_ and _validValue_ to _v_, and sets _lockedRound_ and _validRound_ to _r_
-2. _p_'s Tendermint calls `RequestExtendVote` with _id(v)_ (`RequestExtendVote.hash`). The call is synchronous.
+1. _p_'s Tenderdash sets _lockedValue_ and _validValue_ to _v_, and sets _lockedRound_ and _validRound_ to _r_
+2. _p_'s Tenderdash calls `RequestExtendVote` with _id(v)_ (`RequestExtendVote.hash`). The call is synchronous.
 3. The Application optionally returns an array of bytes, `ResponseExtendVote.extension`. Tenderdash does not interpret
    it, except that it compares the threshold-recoverable subset with the extension vectors of commits (see below).
-4. _p_'s Tendermint includes `ResponseExtendVote.extension` in a field of type [CanonicalVoteExtension](#canonicalvoteextension),
+4. _p_'s Tenderdash includes `ResponseExtendVote.extension` in a field of type [CanonicalVoteExtension](#canonicalvoteextension),
    it then populates the other fields in [CanonicalVoteExtension](#canonicalvoteextension), and signs the populated
    data structure.
-5. _p_'s Tendermint constructs and signs the [CanonicalVote](../core/data_structures.md#canonicalvote) structure.
-6. _p_'s Tendermint constructs the Precommit message (i.e. [Vote](../core/data_structures.md#vote) structure)
+5. _p_'s Tenderdash constructs and signs the [CanonicalVote](../core/data_structures.md#canonicalvote) structure.
+6. _p_'s Tenderdash constructs the Precommit message (i.e. [Vote](../core/data_structures.md#vote) structure)
    using [CanonicalVoteExtension](#canonicalvoteextension) and [CanonicalVote](../core/data_structures.md#canonicalvote).
-7. _p_'s Tendermint broadcasts the Precommit message.
+7. _p_'s Tenderdash broadcasts the Precommit message.
 
-In the cases when _p_'s Tendermint is to broadcast `precommit nil` messages (either _2f+1_ `prevote nil` messages received,
-or _timeoutPrevote_ triggered), _p_'s Tendermint does **not** call `RequestExtendVote` and will not include
+In the cases when _p_'s Tenderdash is to broadcast `precommit nil` messages (either _2f+1_ `prevote nil` messages received,
+or _timeoutPrevote_ triggered), _p_'s Tenderdash does **not** call `RequestExtendVote` and will not include
 a [CanonicalVoteExtension](#canonicalvoteextension) field in the `precommit nil` message.
 
 Tenderdash also calls `RequestExtendVote` on any process, a non-validator included, when the
@@ -516,7 +516,7 @@ Tenderdash calls `VerifyVoteExtension` for two kinds of request, told apart by
     | validator_pro_tx_hash | bytes                                                | [ProTxHash](../core/data_structures.md#protxhash) of the validator that signed the extensions; empty for commit verification | 2            |
     | height                | int64                                                | Height of the block  (for sanity check).                                                                                     | 3            |
     | round                 | int32                                                | Round of the vote; for commit verification, the commit round.                                                                | 4            |
-    | vote_extensions       | repeated [ExtendVoteExtension](#extendvoteextension) | Application-specific information signed by Tendermint. Can have 0 length                                                     | 5            |
+    | vote_extensions       | repeated [ExtendVoteExtension](#extendvoteextension) | Application-specific information signed by Tenderdash. Can have 0 length                                                     | 5            |
 
 * **Response**:
 
@@ -598,7 +598,7 @@ block. This includes commits the process assembled from its own +2/3 precommits.
     * The Application can use `RequestFinalizeBlock.decided_last_commit` and `RequestFinalizeBlock.byzantine_validators`
       to determine rewards and punishments for the validators.
     * The application must execute the transactions in full, in the order they appear in `RequestFinalizeBlock.txs`,
-      before returning control to Tendermint. Alternatively, it can commit the candidate state corresponding to the same block
+      before returning control to Tenderdash. Alternatively, it can commit the candidate state corresponding to the same block
       previously executed via `PrepareProposal` or `ProcessProposal`.
     * `ResponseFinalizeBlock.tx_results[i].Code == 0` only if the _i_-th transaction is fully valid.
     * Application is expected to persist its state at the end of this call, before calling `ResponseFinalizeBlock`.
@@ -616,31 +616,31 @@ block. This includes commits the process assembled from its own +2/3 precommits.
       is consumed once; a node that restarts in between falls back to the configured wait.
     * Just as `ProcessProposal`, the implementation of `FinalizeBlock` MUST be deterministic, since it is
       making the Application's state evolve in the context of state machine replication.
-    * Currently, Tendermint will fill up all fields in `RequestFinalizeBlock`, even if they were
+    * Currently, Tenderdash will fill up all fields in `RequestFinalizeBlock`, even if they were
       already passed on to the Application via `RequestPrepareProposal` or `RequestProcessProposal`.
       If the Application is in same-block execution mode, it applies the right candidate state here
       (rather than executing the whole block). In this case the Application disregards all parameters in
       `RequestFinalizeBlock` except `RequestFinalizeBlock.hash`.
 
-#### When does Tendermint call it?
+#### When does Tenderdash call it?
 
-When a validator _p_ is in Tendermint consensus height _h_, and _p_ receives
+When a validator _p_ is in Tenderdash consensus height _h_, and _p_ receives
 
 * the Proposal message with block _v_ for a round _r_, along with all its block parts, from _q_,
   which is the proposer of round _r_, height _h_,
 * `Precommit` messages from _2f + 1_ validators' voting power for round _r_, height _h_,
   precommitting the same block _id(v)_,
 
-then _p_'s Tendermint decides block _v_ and finalizes consensus for height _h_ in the following way
+then _p_'s Tenderdash decides block _v_ and finalizes consensus for height _h_ in the following way
 
-1. _p_'s Tendermint calls `RequestVerifyVoteExtension` for the commit (empty `validator_pro_tx_hash`)
+1. _p_'s Tenderdash calls `RequestVerifyVoteExtension` for the commit (empty `validator_pro_tx_hash`)
    and requires _accept_; see [VerifyVoteExtension](#verifyvoteextension).
-2. _p_'s Tendermint persists _v_ as decision for height _h_.
-3. _p_'s Tendermint locks the mempool -- no calls to checkTx on new transactions.
-4. _p_'s Tendermint calls `RequestFinalizeBlock` with _id(v)_. The call is synchronous.
+2. _p_'s Tenderdash persists _v_ as decision for height _h_.
+3. _p_'s Tenderdash locks the mempool -- no calls to checkTx on new transactions.
+4. _p_'s Tenderdash calls `RequestFinalizeBlock` with _id(v)_. The call is synchronous.
 5. _p_'s Application processes block _v_, received in the latest call to `RequestProcessProposal`.
 6. _p_'s Application commits and persists the state resulting from processing the block.
-7. _p_'s Tendermint unlocks the mempool -- newly received transactions can now be checked.
+7. _p_'s Tenderdash unlocks the mempool -- newly received transactions can now be checked.
 8. _p_'s starts consensus for a new height _h+1_, round 0
 
 ## Data Types existing in ABCI
@@ -675,7 +675,7 @@ Most of the data structures used in ABCI are shared [common data structures](../
 
 * **Usage**:
     * Validator identified by ProTxHash
-    * Used to tell Tendermint to update the validator set
+    * Used to tell Tenderdash to update the validator set
 
 ### ValidatorSetUpdate
 
@@ -688,7 +688,7 @@ Most of the data structures used in ABCI are shared [common data structures](../
     | quorum_hash          | bytes                                                                      | Quorum hash                    | 3            |
 
 * **Usage**:
-    * Used to tell Tendermint to update the validator set update
+    * Used to tell Tenderdash to update the validator set update
 
 ### Misbehavior
 
@@ -750,9 +750,9 @@ Most of the data structures used in ABCI are shared [common data structures](../
     | Name     | Type   | Description                                                                                                                                                                       | Field Number |
     |----------|--------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------|
     | height   | uint64 | The height at which the snapshot was taken (after commit).                                                                                                                        | 1            |
-    | format   | uint32 | An application-specific snapshot format, allowing applications to version their snapshot data format and make backwards-incompatible changes. Tendermint does not interpret this. | 2            |
+    | format   | uint32 | An application-specific snapshot format, allowing applications to version their snapshot data format and make backwards-incompatible changes. Tenderdash does not interpret this. | 2            |
     | chunks   | uint32 | The number of chunks in the snapshot. Must be at least 1 (even if empty).                                                                                                         | 3            |
-    | hash     | bytes  | TAn arbitrary snapshot hash. Must be equal only for identical snapshots across nodes. Tendermint does not interpret the hash, it only compares them.                              | 3            |
+    | hash     | bytes  | TAn arbitrary snapshot hash. Must be equal only for identical snapshots across nodes. Tenderdash does not interpret the hash, it only compares them.                              | 3            |
     | metadata | bytes  | Arbitrary application metadata, for example chunk hashes or other verification data.                                                                                              | 3            |
 
 * **Usage**:
@@ -853,10 +853,10 @@ enum TxAction {
 ```
 
 * **Usage**:
-    * If `Action` is `UNKNOWN`, a problem happened in the Application. Tendermint will assume the application is faulty and crash.
-    * If `Action` is `UNMODIFIED`, Tendermint includes the transaction in the proposal. Nothing to do on the mempool.
-    * If `Action` is `ADDED`, Tendermint includes the transaction in the proposal. The transaction is _not_ added to the mempool.
-    * If `Action` is `REMOVED`, Tendermint excludes the transaction from the proposal. The transaction is also removed from the mempool if it exists,
+    * If `Action` is `UNKNOWN`, a problem happened in the Application. Tenderdash will assume the application is faulty and crash.
+    * If `Action` is `UNMODIFIED`, Tenderdash includes the transaction in the proposal. Nothing to do on the mempool.
+    * If `Action` is `ADDED`, Tenderdash includes the transaction in the proposal. The transaction is _not_ added to the mempool.
+    * If `Action` is `REMOVED`, Tenderdash excludes the transaction from the proposal. The transaction is also removed from the mempool if it exists,
       similar to `CheckTx` returning _false_.
 
 ### TxRecord
@@ -865,7 +865,7 @@ enum TxAction {
 
     | Name       | Type                  | Description                                                      | Field Number |
     |------------|-----------------------|------------------------------------------------------------------|--------------|
-    | action     | [TxAction](#txaction) | What should Tendermint do with this transaction?                 | 1            |
+    | action     | [TxAction](#txaction) | What should Tenderdash do with this transaction?                 | 1            |
     | tx         | bytes                 | Transaction contents                                             | 2            |
 
 ### ProposalStatus
@@ -880,9 +880,9 @@ enum ProposalStatus {
 
 * **Usage**:
     * Used within the [ProcessProposal](#processproposal) response.
-        * If `Status` is `UNKNOWN`, a problem happened in the Application. Tendermint will assume the application is faulty and crash.
-        * If `Status` is `ACCEPT`, Tendermint accepts the proposal and will issue a Prevote message for it.
-        * If `Status` is `REJECT`, Tendermint rejects the proposal and will issue a Prevote for `nil` instead.
+        * If `Status` is `UNKNOWN`, a problem happened in the Application. Tenderdash will assume the application is faulty and crash.
+        * If `Status` is `ACCEPT`, Tenderdash accepts the proposal and will issue a Prevote message for it.
+        * If `Status` is `REJECT`, Tenderdash rejects the proposal and will issue a Prevote for `nil` instead.
 
 ### VerifyStatus
 
@@ -896,8 +896,8 @@ enum VerifyStatus {
 
 * **Usage**:
     * Used within the [VerifyVoteExtension](#verifyvoteextension) response, for a Precommit or a commit.
-        * If `Status` is `ACCEPT`, Tendermint will accept the vote, or the commit, as valid.
-        * If `Status` is `REJECT` or `UNKNOWN`, Tendermint will reject the vote, or the commit, as invalid.
+        * If `Status` is `ACCEPT`, Tenderdash will accept the vote, or the commit, as valid.
+        * If `Status` is `REJECT` or `UNKNOWN`, Tenderdash will reject the vote, or the commit, as invalid.
           Only an error from the ABCI call itself is fatal.
 
 
@@ -917,6 +917,6 @@ enum VerifyStatus {
     | Type      | VoteExtensionType | [VoteExtensionType](../core/data_structures.md#voteExtensiontype)       | 100          |
 
 * **Usage**:
-    * Tendermint is to sign the whole data structure and attach it to a Precommit message
-    * Upon reception, Tendermint validates the sender's signature and sanity-checks the values of `height`, `round`, and `chain_id`.
+    * Tenderdash is to sign the whole data structure and attach it to a Precommit message
+    * Upon reception, Tenderdash validates the sender's signature and sanity-checks the values of `height`, `round`, and `chain_id`.
       Then it sends `extension` to the Application via `RequestVerifyVoteExtension` for verification.

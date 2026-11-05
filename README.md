@@ -1,7 +1,5 @@
 # Tenderdash
 
-![banner](docs/tendermint-core-image.jpg)
-
 [Byzantine-Fault Tolerant](https://en.wikipedia.org/wiki/Byzantine_fault_tolerance)
 [State Machine Replication](https://en.wikipedia.org/wiki/State_machine_replication).
 Or [Blockchain](<https://en.wikipedia.org/wiki/Blockchain_(database)>), for short.
@@ -20,17 +18,18 @@ written in any programming language - and securely replicates it on many machine
 ## Background
 
 Tenderdash started as a fork of the [Tendermint Core](https://www.github.com/tendermint/tendermint)
-project and has been used in public environments such as the Cosmos Network. Although based on
+project, which has been used in public environments such as the Cosmos Network. Although based on
 Tendermint, Tenderdash differs from Tendermint through its use of Dash's [long-living masternode
 quorums (LLMQs)](https://github.com/dashpay/dips/blob/master/dip-0006.md) to support threshold
 signatures, quorum-based voting, and dynamic validator set rotation. These enhancements to support
 rapid transaction finality and maintain strong security guarantees make Tenderdash ideal for Dash
 Platform’s needs.
 
-For Tendermint protocol details, refer to the [Tendermint Specification](./spec/README.md). For a
-detailed analysis of the consensus protocol, including safety and liveness proofs, read the
-Tendermint paper, "[The latest gossip on BFT consensus](https://arxiv.org/abs/1807.04938)".
-Tendermint documentation can be found on [docs.tendermint.com](https://docs.tendermint.com/).
+For Tenderdash protocol details, refer to the [protocol specifications](./spec/README.md)
+and the [source-derived consensus protocol](./spec/consensus/consensus.md).
+The [documentation guide](./docs/DOCS_README.md) explains how to build and preview
+the complete mdBook site. For the original consensus research, read
+"[The latest gossip on BFT consensus](https://arxiv.org/abs/1807.04938)".
 
 ## Releases
 
@@ -76,7 +75,7 @@ recommend keeping Tenderdash up-to-date.
 
 Before contributing to the project, please take a look at the [contributing
 guidelines](CONTRIBUTING.md) and the [style guide](STYLE_GUIDE.md). You may also find it helpful to
-read the [Tendermint specifications](./spec/README.md), and familiarize yourself with the
+read the [Tenderdash specifications](./spec/README.md), and familiarize yourself with the
 [Architectural Decision Records (ADRs)](./docs/architecture/) and [Request For Comments
 (RFCs)](./docs/rfc/).
 

@@ -1194,7 +1194,7 @@ func (r *Reactor) laneCtx(ctx context.Context, ps *PeerState, envelope *p2p.Enve
 	if !ok {
 		return nil, false
 	}
-	return ctxWithPeerLaneSession(ctx, session), true
+	return ctxWithPeerConnID(ctxWithPeerLaneSession(ctx, session), envelope.ConnID), true
 }
 
 // envelopeFromLiveConn reports whether the envelope was produced by the peer's
@@ -1416,7 +1416,12 @@ func (r *Reactor) handleMessage(ctx context.Context, envelope *p2p.Envelope, cha
 
 	msg, err := MsgFromProto(envelope.Message)
 	if err != nil {
-		return err
+		if errors.Is(err, ErrUnrecognizedMessage) {
+			// Unknown types may reflect version skew; retain ordinary error policy.
+			return fmt.Errorf("%w: %w", p2p.ErrUnrecognizedMessage, err)
+		}
+		// A recognized message failed structural validation.
+		return fmt.Errorf("%w: %w", p2p.ErrInvalidData, err)
 	}
 
 	switch envelope.ChannelID {
@@ -1696,8 +1701,8 @@ func (r *Reactor) processMsgCh(ctx context.Context, msgCh p2p.Channel, chBundle 
 			// bounded and self-inflicted: the reconnected connection is the same
 			// NodeID, so the only budget spent or state touched is its own, the
 			// amount is one envelope, and the peer-error path is separately guarded
-			// below by re-checking liveness before any error is raised — so the
-			// window can never report an honest peer. Holding a lock across the
+			// below, so the window can never report an honest peer for a rejection
+			// its live connection did not earn. Holding a lock across the
 			// limiter and handler to close it would couple this check to the
 			// scheduler's lock ordering for no attacker-reachable gain.
 			continue
@@ -1716,10 +1721,8 @@ func (r *Reactor) processMsgCh(ctx context.Context, msgCh p2p.Channel, chBundle 
 			// large, so echoing it turns a flood of unprocessable messages into a
 			// log-amplification vector. Log errors an unprivileged peer can trigger
 			// at will at debug; anything not positively matched stays at Error so a
-			// real fault is not hidden. The router logs the peer error raised
-			// below as well, and is told which kind it is.
-			floodable := isPeerFloodableError(err)
-			if floodable {
+			// real fault is not hidden.
+			if isPeerFloodableError(err) {
 				r.logger.Debug("rejected peer message", "ch_id", envelope.ChannelID, "peer", envelope.From, "err", err)
 			} else {
 				r.logger.Error("failed to process message", "ch_id", envelope.ChannelID, "peer", envelope.From, "err", err)
@@ -1727,17 +1730,22 @@ func (r *Reactor) processMsgCh(ctx context.Context, msgCh p2p.Channel, chBundle 
 			// Re-check liveness before raising the peer error. The top-of-loop check
 			// and the handler do not share a lock, so a reconnect could have swapped
 			// this NodeID's connection generation while the handler ran, leaving the
-			// error attributable to a connection that has already ended. Reporting it
-			// then would blame the peer standing here now for a message its live
-			// connection never sent — the one punitive step the bounded window above
-			// must not reach. A stale envelope's error is a silent local drop.
-			if !r.envelopeFromLiveConn(envelope) {
+			// error attributable to a connection that has already ended. A rejection
+			// from such a connection is a silent local drop, as it may only reflect
+			// state that has moved on. Invalid data is proof about the payload itself,
+			// so it is still reported: the identity owes the score penalty, and ConnID
+			// keeps eviction off any replacement connection.
+			if !errors.Is(err, p2p.ErrInvalidData) && !r.envelopeFromLiveConn(envelope) {
 				continue
 			}
+			if isPeerFloodableError(err) {
+				// Keep the Debug classification through the peer manager's eviction log.
+				err = fmt.Errorf("%w: %w", p2p.ErrRejectedPeerInput, err)
+			}
 			if serr := msgCh.SendError(ctx, p2p.PeerError{
-				NodeID:    envelope.From,
-				Err:       err,
-				Floodable: floodable,
+				NodeID: envelope.From,
+				Err:    err,
+				ConnID: envelope.ConnID,
 			}); serr != nil {
 				return
 			}
@@ -1813,18 +1821,14 @@ func (r *Reactor) peerErrorRoutine(ctx context.Context, msgCh p2p.Channel) {
 			r.logger.Trace("stopping peerErrorRoutine due to context cancellation")
 			return
 		case peerErr := <-r.state.peerErrorQueue.ch:
-			ps, ok := r.GetPeerState(peerErr.PeerID)
-			if !ok || ps == nil {
-				// peer may have been removed already
-				r.logger.Trace("attempt to report error for non-existent peer", "peer", peerErr.PeerID)
-				continue
-			}
-
-			// Send fatal peer error through the channel
+			// Send fatal peer error through the channel, even if the peer has since
+			// disconnected: the failure is verified, the identity still owes the
+			// score penalty, and ConnID keeps eviction off any replacement connection.
 			if err := msgCh.SendError(ctx, p2p.PeerError{
 				NodeID: peerErr.PeerID,
 				Err:    peerErr.Err,
 				Fatal:  peerErr.Fatal,
+				ConnID: peerErr.ConnID, // fences eviction to the sending connection
 			}); err != nil {
 				r.logger.Trace("failed to send peer error", "peer", peerErr.PeerID, "err", err)
 			}

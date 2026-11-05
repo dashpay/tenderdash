@@ -870,7 +870,7 @@ func (m *RequestQuery) GetProve() bool {
 //     signatures and account balances, but does not apply any of the state changes described in the transaction.
 //   - Transactions where ResponseCheckTx.Code != 0 will be rejected - they will not be broadcast to other nodes
 //     or included in a proposal block.
-//   - Tendermint attributes no other value to the response code
+//   - Tenderdash attributes no other value to the response code
 type RequestCheckTx struct {
 	// The request transaction bytes.
 	Tx []byte `protobuf:"bytes,1,opt,name=tx,proto3" json:"tx,omitempty"`
