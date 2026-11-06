@@ -17,7 +17,6 @@ import (
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/libs/eventemitter"
 	"github.com/dashpay/tenderdash/libs/log"
-	tmrand "github.com/dashpay/tenderdash/libs/rand"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
@@ -231,42 +230,86 @@ func TestStateRoundSkipAfterTxsReported(t *testing.T) {
 }
 
 // Skip votes do not stop validators from voting, so a late proposal can win a
-// polka in the round they skip. A node that has the polka but none of the
-// block's parts has no valid block, and the certificate that moves it on drops
-// the download, so the next round must not wait for transactions: they may
-// exist only in the proposed block, and a waiting proposer would keep
-// announcing itself with nothing to propose.
+// polka in the round they skip, before or after the certificate for that round
+// reaches a node. A node that has the polka but none of the block's parts has
+// no valid block, and the certificate drops the download. The next round must
+// not wait for transactions, whether the polka was recorded before it began or
+// while it waits: they may exist only in the proposed block, and a waiting
+// proposer would keep announcing itself with nothing to propose.
 func TestStateRoundSkipAfterAPolkaWithoutItsBlock(t *testing.T) {
+	for _, certificateFirst := range []bool{false, true} {
+		name := "polka first"
+		if certificateFirst {
+			name = "certificate first"
+		}
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			test := newRoundSkipTest(ctx, t, "consensus_round_skip_after_polka_test", nil)
+
+			// Round 0: its proposer is silent and this node votes to skip it.
+			test.ownSkipVote(t, 0)
+			if certificateFirst {
+				test.completeSkip(ctx, t, 0, 1)
+				require.Equal(t, cstypes.RoundStepNewRound, test.cs.GetStateData().Step, "round 1 waits")
+			}
+			// The proposal of round 0 comes late, and the other three validators
+			// prevote its block. This node hears their prevotes, but none of the
+			// block's parts, and no transaction reaches its mempool.
+			blockID := factory.MakeBlockID()
+			for _, vs := range test.vss[1:] {
+				vs.Height, vs.Round = 2, 0
+			}
+			signAddVotes(ctx, t, test.cs, tmproto.PrevoteType, test.chainID, blockID, test.vss[1:]...)
+			require.Eventually(t, func() bool {
+				polRound, polBlockID := test.cs.GetStateData().Votes.POLInfo()
+				return polRound == 0 && polBlockID.Equals(blockID)
+			}, 3*time.Second, 10*time.Millisecond, "the polka was not recorded")
+			require.Equal(t, int32(-1), test.cs.GetStateData().ValidRound,
+				"the block is not complete, so it is not valid yet")
+			if !certificateFirst {
+				test.completeSkip(ctx, t, 0, 1)
+			}
+
+			require.Eventually(t, func() bool {
+				stateData := test.cs.GetStateData()
+				return stateData.Round == 1 && stateData.Step >= cstypes.RoundStepPropose
+			}, 3*time.Second, 10*time.Millisecond, "round 1 waits for transactions though round 0 has a polka")
+		})
+	}
+}
+
+// A proposer can send its proposal and withhold the block's parts. The
+// proposal stops the silence watch, so a node waiting for transactions takes
+// it as the end of the wait and enters the propose step, whose timeout moves
+// the round on: with no transaction in its mempool, nothing else would.
+func TestStateWaitingRoundTakesAProposalWithoutItsBlock(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	test := newRoundSkipTest(ctx, t, "consensus_round_skip_after_polka_test", nil)
+	test := newRoundSkipTest(ctx, t, "consensus_round_skip_bare_proposal_test", nil)
 
-	// Round 0: its proposer is silent and this node votes to skip it.
+	// Round 0 is skipped, and round 1, whose proposer is stub 2, waits.
 	test.ownSkipVote(t, 0)
-	// The proposal comes late, and the other three validators prevote its
-	// block. This node hears their prevotes, but none of the block's parts.
-	blockID := types.BlockID{
-		Hash:          tmrand.Bytes(crypto.HashSize),
-		PartSetHeader: types.PartSetHeader{Total: 1, Hash: tmrand.Bytes(crypto.HashSize)},
-	}
-	for _, vs := range test.vss[1:] {
-		vs.Height, vs.Round = 2, 0
-	}
-	signAddVotes(ctx, t, test.cs, tmproto.PrevoteType, test.chainID, blockID, test.vss[1:]...)
-	require.Eventually(t, func() bool {
-		polRound, polBlockID := test.cs.GetStateData().Votes.POLInfo()
-		return polRound == 0 && polBlockID.Equals(blockID)
-	}, 3*time.Second, 10*time.Millisecond, "the polka was not recorded")
+	test.completeSkip(ctx, t, 0, 1)
 	stateData := test.cs.GetStateData()
-	require.Equal(t, int32(-1), stateData.ValidRound, "the block is not complete, so it is not valid yet")
 	require.Equal(t, cstypes.RoundStepNewRound, stateData.Step)
 
-	// The certificate moves the node to round 1, which must not wait.
-	test.completeSkip(ctx, t, 0, 1)
+	// Stub 2 sends a signed proposal for round 1, and none of its block's parts.
+	proposal := types.NewProposal(2, stateData.state.LastCoreChainLockedBlockHeight, 1, -1,
+		factory.MakeBlockID(), tmtime.Now())
+	pb := proposal.ToProto()
+	_, err := test.vss[2].SignProposal(ctx, test.chainID,
+		stateData.Validators.QuorumType, stateData.Validators.QuorumHash, pb)
+	require.NoError(t, err)
+	proposal.Signature = pb.Signature
+	require.NoError(t, test.cs.sendMessage(ctx, &ProposalMessage{Proposal: proposal}, "peer"))
+
+	// The propose timeout runs out with the block incomplete, and the node
+	// prevotes.
 	require.Eventually(t, func() bool {
 		stateData := test.cs.GetStateData()
-		return stateData.Round == 1 && stateData.Step >= cstypes.RoundStepPropose
-	}, 3*time.Second, 10*time.Millisecond, "round 1 waits for transactions though round 0 has a polka")
+		return stateData.Round == 1 && stateData.Proposal != nil && stateData.Step >= cstypes.RoundStepPrevote
+	}, 3*time.Second, 10*time.Millisecond, "the proposal ended the silence watch with no timeout running")
 }
 
 // A proposer that sends one more heartbeat after this validator voted to skip

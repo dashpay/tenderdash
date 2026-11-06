@@ -224,11 +224,25 @@ func roundSkipping(stateData *StateData) bool {
 }
 
 // waitingRound reports whether the node is waiting for transactions in a round
-// whose proposer's liveness it tracks.
+// whose proposer's liveness it tracks. A proposal for the round ends the wait
+// (see waitingForTxs), so the watch never stops with no timeout running.
 func waitingRound(stateData *StateData) bool {
+	return waitingForTxs(stateData) && stateData.Proposal == nil
+}
+
+// waitingForTxs reports whether the node waits for transactions in its round
+// on a chain that skips the rounds of silent proposers: it stays in the new
+// round step, where a round that does not wait goes on to propose at once.
+//
+// Only transactions end that wait on their own, and the silence watch the
+// proposer's heartbeats hold off. A proposal for the round, or a polka at the
+// height, shows a block is under way, and from then on neither can be relied
+// on: a proposer can send its proposal and withhold the block's parts, and a
+// polka's transactions may exist only in its block. So the node goes on to
+// the propose step, whose timeout moves the round on without them.
+func waitingForTxs(stateData *StateData) bool {
 	return roundSkipping(stateData) &&
 		stateData.Step == cstypes.RoundStepNewRound &&
-		stateData.Proposal == nil &&
 		stateData.Commit == nil
 }
 

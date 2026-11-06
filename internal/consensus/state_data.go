@@ -648,7 +648,8 @@ func (s *StateData) replaceProposalBlockOnLockedBlock(blockID types.BlockID) {
 // download, and a proposer that waited again could hold transactions that
 // exist only in the proposed block back for good.
 //
-// The node decides as it enters the round; see mayWaitAfterRoundSkip.
+// The node decides as it enters the round. A polka recorded once it waits
+// ends the wait then (see waitingForTxs).
 func (s *StateData) waitsAfterRoundSkip(round int32) bool {
 	polRound, _ := s.Votes.POLInfo()
 	return s.mayWaitAfterRoundSkip(round) && polRound == -1
@@ -656,8 +657,8 @@ func (s *StateData) waitsAfterRoundSkip(round int32) bool {
 
 // mayWaitAfterRoundSkip is waitsAfterRoundSkip without the polka: whether
 // round, entered on the certificate of the round before it, can be waiting for
-// transactions. A polka recorded after the node began waiting does not end the
-// wait, so the mempool's report must still end it.
+// transactions. The node decides whether to wait as it enters the round, so
+// the mempool's report ends any wait it began, whatever was recorded since.
 //
 // It does not once the mempool has reported transactions at this height. The
 // mempool reports them once per height, so a node that heard the report

@@ -210,6 +210,14 @@ func addVoteDispatchPrevoteMw(ctrl *Controller) AddVoteMiddlewareFunc {
 			case proposal != nil && 0 <= proposal.POLRound && proposal.POLRound == vote.Round && stateData.isProposalComplete():
 				// If the proposal is now complete, enter prevote of c.Round.
 				_ = ctrl.Dispatch(ctx, &EnterPrevoteEvent{Height: height, Round: stateData.Round}, stateData)
+
+			case waitingForTxs(stateData):
+				// A polka in this round or one before ends a wait for
+				// transactions (see waitingForTxs), including one completed
+				// after a round skip certificate began the wait.
+				if _, ok := prevotes.TwoThirdsMajority(); ok {
+					_ = ctrl.Dispatch(ctx, &EnterProposeEvent{Height: height, Round: stateData.Round}, stateData)
+				}
 			}
 			return added, err
 		}

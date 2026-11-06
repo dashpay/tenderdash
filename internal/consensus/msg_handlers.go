@@ -150,7 +150,7 @@ func newMsgInfoDispatcher(
 	}
 	mws = append(mws, middleware...)
 
-	proposalHandler := withMiddleware(proposalMessageHandler(proposaler, budget), mws...)
+	proposalHandler := withMiddleware(proposalMessageHandler(ctrl, proposaler, budget), mws...)
 	blockPartHandler := withMiddleware(blockPartMessageHandler(ctrl), mws...)
 	voteHandler := withMiddleware(voteMessageHandler(ctrl), mws...)
 	commitHandler := withMiddleware(commitMessageHandler(ctrl), mws...)
@@ -183,12 +183,23 @@ func livenessMessageHandler(liveness livenessMessageFunc) msgHandlerFunc {
 // proposalMessageHandler hands a proposal to the setter along with the permit
 // its signature check is drawn against. Only a peer's proposal carries one:
 // this node's own proposals and those replayed from the write-ahead log are not
-// what the budget bounds.
-func proposalMessageHandler(propSetter cstypes.ProposalSetter, budget types.VerificationBudget) msgHandlerFunc {
+// what the budget bounds. A proposal taken while the node waits for
+// transactions moves it to the propose step (see waitingForTxs).
+func proposalMessageHandler(
+	ctrl *Controller,
+	propSetter cstypes.ProposalSetter,
+	budget types.VerificationBudget,
+) msgHandlerFunc {
 	return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*ProposalMessage)
 		ctx = ctxWithPeerVerificationBudget(ctx, envelope.PeerID, envelope.fromReplay, budget)
-		return propSetter.Set(ctx, msg.Proposal, envelope.ReceiveTime, &stateData.RoundState)
+		if err := propSetter.Set(ctx, msg.Proposal, envelope.ReceiveTime, &stateData.RoundState); err != nil {
+			return err
+		}
+		if stateData.Proposal == nil || !waitingForTxs(stateData) {
+			return nil
+		}
+		return ctrl.Dispatch(ctx, &EnterProposeEvent{Height: stateData.Height, Round: stateData.Round}, stateData)
 	}
 }
 
