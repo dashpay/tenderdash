@@ -8,10 +8,13 @@ parent:
 
 # Light Client Specification
 
+> **Historical design material.** These Tendermint light-client designs and
+> formal models are retained as reference material.
+
 This directory contains work-in-progress English and TLA+ specifications for the Light Client
 protocol. Implementations of the light client can be found in
 [Rust](https://github.com/informalsystems/tendermint-rs/tree/master/light-client) and
-[Go](https://github.com/tendermint/tendermint/tree/master/light).
+[Go](https://github.com/dashpay/tenderdash/tree/v1.9-dev/light).
 
 Light clients are assumed to be initialized once from a trusted source
 with a trusted header and validator set. The light client
@@ -137,7 +140,7 @@ termination, which can be model checked with Apalache.
 The `LCD_MC*.tla` files contain concrete parameters for the
 [TLA+ specification](detection/LCDetector_003_draft.tla),
 in order to run the model checker.
-For instance, [LCD_MC4_4_faulty.tla](detection/MC4_4_faulty.tla)
+For instance, [LCD_MC4_4_faulty.tla](detection/LCD_MC4_4_faulty.tla)
 contains the following parameters
 for the nodes, heights, the trusting period, the clock drifts,
 correctness of the nodes, and the ratio of the faulty processes:

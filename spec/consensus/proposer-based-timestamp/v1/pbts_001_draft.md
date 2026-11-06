@@ -262,6 +262,6 @@ This specification describes the changes needed to be done to the Tendermint con
 [proposertla]: ../tla/TendermintPBT_001_draft.tla
 
 [bfttime]: ../../bft-time.md
-[tlatender]: https://github.com/tendermint/spec/blob/master/rust-spec/tendermint-accountability/README.md
+[tlatender]: ../../../light-client/accountability/README.md
 [lcspec]: ../../light-client/
 [arXiv]: https://arxiv.org/abs/1807.04938

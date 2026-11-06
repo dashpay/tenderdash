@@ -4,19 +4,19 @@ order: 1
 
 # Getting Started
 
-## First Tendermint App
+## First Tenderdash App
 
-As a general purpose blockchain engine, Tendermint is agnostic to the
+As a general purpose blockchain engine, Tenderdash is agnostic to the
 application you want to run. So, to run a complete blockchain that does
-something useful, you must start two programs: one is Tendermint Core,
+something useful, you must start two programs: one is Tenderdash Core,
 the other is your application, which can be written in any programming
 language. Recall from [the intro to
-ABCI](../introduction/what-is-tendermint.md#abci-overview) that Tendermint Core handles all the p2p and consensus stuff, and just forwards transactions to the
+ABCI](../introduction/what-is-tenderdash.md#abci-overview) that Tenderdash Core handles all the p2p and consensus stuff, and just forwards transactions to the
 application when they need to be validated, or when they're ready to be
 committed to a block.
 
 In this guide, we show you some examples of how to run an application
-using Tendermint.
+using Tenderdash.
 
 ### Install
 
@@ -32,8 +32,8 @@ echo export PATH=\"\$PATH:\$GOPATH/bin\" >> ~/.bash_profile
 Then run
 
 ```sh
-go get github.com/tendermint/tendermint
-cd $GOPATH/src/github.com/tendermint/tendermint
+go get github.com/dashpay/tenderdash
+cd $GOPATH/src/github.com/dashpay/tenderdash
 make install_abci
 ```
 
@@ -57,23 +57,23 @@ Let's start a kvstore application.
 abci-cli kvstore
 ```
 
-In another terminal, we can start Tendermint. You should already have the
-Tendermint binary installed. If not, follow the steps from
-[here](../introduction/install.md). If you have never run Tendermint
+In another terminal, we can start Tenderdash. You should already have the
+Tenderdash binary installed. If not, follow the steps from
+[here](../introduction/install.md). If you have never run Tenderdash
 before, use:
 
 ```sh
-tendermint init validator
-tendermint start
+tenderdash init validator
+tenderdash start
 ```
 
-If you have used Tendermint, you may want to reset the data for a new
-blockchain by running `tendermint unsafe-reset-all`. Then you can run
-`tendermint start` to start Tendermint, and connect to the app. For more
-details, see [the guide on using Tendermint](../tendermint-core/using-tendermint.md).
+If you have used Tenderdash, you may want to reset the data for a new
+blockchain by running `tenderdash unsafe-reset-all`. Then you can run
+`tenderdash start` to start Tenderdash, and connect to the app. For more
+details, see [the guide on using Tenderdash](../tenderdash-core/using-tenderdash.md).
 
-You should see Tendermint making blocks! We can get the status of our
-Tendermint node as follows:
+You should see Tenderdash making blocks! We can get the status of our
+Tenderdash node as follows:
 
 ```sh
 curl -s localhost:26657/status
@@ -173,17 +173,17 @@ cd js-abci
 npm install abci
 ```
 
-Kill the previous `counter` and `tendermint` processes. Now run the app:
+Kill the previous `counter` and `tenderdash` processes. Now run the app:
 
 ```sh
 node example/counter.js
 ```
 
-In another window, reset and start `tendermint`:
+In another window, reset and start `tenderdash`:
 
 ```sh
-tendermint reset unsafe-all
-tendermint start
+tenderdash reset unsafe-all
+tenderdash start
 ```
 
 Once again, you should see blocks streaming by - but now, our

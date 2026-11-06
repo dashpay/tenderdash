@@ -11,11 +11,19 @@ on:
   push:
     branches:
       - master
-      - v[0-9]+.[0-9]+-dev
+      - dev
+      # Keep both names until the integration-branch migration is complete.
+      - v1.8-dev
+      - v1.9-dev
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -29,6 +37,9 @@ jobs:
       - uses: technote-space/get-diff-action@v6
         with:
           PATTERNS: |
+            .github/workflows/build.yml
+            .github/actions/bls/**
+            third_party/bls-signatures/**
             **/**.go
             "!test/"
             go.mod
@@ -56,7 +67,7 @@ jobs:
         shell: bash
 
   test_abci_cli:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: build
     timeout-minutes: 5
     steps:
@@ -64,6 +75,9 @@ jobs:
       - uses: technote-space/get-diff-action@v6
         with:
           PATTERNS: |
+            .github/workflows/build.yml
+            .github/actions/bls/**
+            third_party/bls-signatures/**
             **/**.go
             go.mod
             go.sum
@@ -85,7 +99,7 @@ jobs:
         if: "env.GIT_DIFF != ''"
 
   test_apps:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: build
     timeout-minutes: 5
     steps:
@@ -93,6 +107,9 @@ jobs:
       - uses: technote-space/get-diff-action@v6
         with:
           PATTERNS: |
+            .github/workflows/build.yml
+            .github/actions/bls/**
+            third_party/bls-signatures/**
             **/**.go
             go.mod
             go.sum

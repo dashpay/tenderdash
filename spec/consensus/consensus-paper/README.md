@@ -1,6 +1,6 @@
-# Tendermint-spec
+# Consensus Paper
 
-The repository contains the specification (and the proofs) of the Tendermint
+This directory contains the original specification and proofs of the Tendermint
 consensus protocol.
 
 ## How to install Latex on Mac OS

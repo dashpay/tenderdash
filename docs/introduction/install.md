@@ -67,7 +67,7 @@ The latest Tenderdash is now installed. You can verify the installation by
 running:
 
 ```sh
-tendermint version
+tenderdash version
 ```
 
 
@@ -90,8 +90,8 @@ GOOS=linux GOARCH=arm  make
 To start a one-node blockchain with a simple in-process application:
 
 ```sh
-tendermint init validator
-tendermint start --proxy-app=kvstore
+tenderdash init validator
+tenderdash start --proxy-app=kvstore
 ```
 
 ## Reinstall
