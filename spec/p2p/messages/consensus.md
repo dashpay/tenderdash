@@ -68,13 +68,13 @@ height/round/step a process is in.
 
 ### NewValidBlock
 
-NewValidBlock is sent when a validator observes a valid block B in some round r,
-i.e., there is a Proposal for block B and 2/3+ prevotes for the block B in the round r.
-It contains height and round in which valid block is observed, block parts header that describes
-the valid block and is used to obtain all
-block parts, and a bit array of the block parts a process currently has, so its peers can know what
-parts it is missing so they can send them.
-In case the block is also committed, then IsCommit flag is set to true.
+NewValidBlock advertises a block-part download target: its height, round,
+part-set header, and the parts the node already holds. `is_commit` identifies a
+commit target. Consensus emits this event for a current-round polka or a verified
+commit even when the proposal or complete block is not held. It is a gossip
+announcement, not proof that the sender has processed a valid proposal.
+See [valid-block bookkeeping](../../consensus/consensus-alternative-flows.md#valid-block-bookkeeping)
+and [commit handling](../../consensus/consensus-commit.md).
 
 | Name                  | Type                                                         | Description                            | Field Number |
 |-----------------------|--------------------------------------------------------------|----------------------------------------|--------------|

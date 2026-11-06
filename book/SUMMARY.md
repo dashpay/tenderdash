@@ -82,15 +82,15 @@
     - [Known issues and discrepancies](spec/consensus/consensus-known-issues.md)
     - [Full consensus parameter commitment (draft)](spec/consensus/consensus-params-commitment.md)
 
-# ABCI++
+# ABCI
 
-- [ABCI++](spec/abci++/README.md)
-- [Application Requirements](spec/abci++/abci++_app_requirements.md)
-- [Overview and basic concepts](spec/abci++/abci++_basic_concepts.md)
-- [Client and Server](spec/abci++/abci++_client_server.md)
-- [Methods](spec/abci++/abci++_methods.md)
-- [Tenderdash's expected behavior](spec/abci++/abci++_tmint_expected_behavior.md)
-- [Protocol Documentation](spec/abci++/api.md)
+- [ABCI](spec/abci/README.md)
+- [Application Requirements](spec/abci/app-requirements.md)
+- [Overview and basic concepts](spec/abci/basic-concepts.md)
+- [Client and Server](spec/abci/client-server.md)
+- [Methods](spec/abci/methods.md)
+- [Tenderdash's expected behavior](spec/abci/expected-behavior.md)
+- [Protocol Documentation](spec/abci/api.md)
 
 # Core data structures and encoding
 
@@ -138,13 +138,6 @@
 # RPC protocol
 
 - [RPC spec](spec/rpc/README.md)
-
-# Historical ABCI reference
-
-- [ABCI](spec/abci/README.md)
-- [Methods and Types](spec/abci/abci.md)
-- [Applications](spec/abci/apps.md)
-- [Client and Server](spec/abci/client-server.md)
 
 # Light-client research
 
@@ -208,27 +201,10 @@
 - [RFC 019: Configuration File Versioning](docs/rfc/rfc-019-config-version.md)
 - [RFC 021: The Future of the Socket Protocol](docs/rfc/rfc-021-socket-protocol.md)
 
-# Roadmap
-
-- [Roadmap](docs/roadmap/README.md)
-- [Tenderdash Development](docs/roadmap/roadmap.md)
-
 # DoS observability
 
 - [Consensus DoS — observability](docs/dos-observability/README.md)
 
 # Engineering notes
 
-- [Consensus DoS Defense — Design Spec (v2)](docs/CONSENSUS_DOS_DEFENSE_SPEC.md)
-- [Consensus DoS — devnet test runbook](docs/CONSENSUS_DOS_DEVNET_RUNBOOK.md)
-- [Consensus DoS — Per-Message Matrix](docs/CONSENSUS_DOS_MESSAGE_MATRIX.md)
-- [Per-Message DoS Findings (research synthesis, for review)](docs/CONSENSUS_DOS_PER_MESSAGE_FINDINGS.md)
-- [Consensus DoS — Piece 10 spec: bound the evidence channel](docs/CONSENSUS_DOS_PIECE10_SPEC.md)
-- [Consensus DoS — Piece 2 spec: verification fairness](docs/CONSENSUS_DOS_PIECE2_SPEC.md)
-- [Consensus DoS — Piece 3b spec: honest connectivity](docs/CONSENSUS_DOS_PIECE3B_SPEC.md)
-- [Consensus DoS — Plan](docs/CONSENSUS_DOS_PLAN.md)
-- [Consensus DoS — rollout spec (devnet → testnet)](docs/CONSENSUS_DOS_ROLLOUT_SPEC.md)
-- [Consensus vote-flood DoS — hardening spec](docs/CONSENSUS_VOTE_FLOOD_SPEC.md)
-- [Devnet: custom Tenderdash DoS-hardened image + config-knob plumbing](docs/DEVNET_DOS_IMAGE_AND_TUNING.md)
 - [Building the documentation](docs/DOCS_README.md)
-- [Masternode vote gating — restrict consensus votes to evonodes](docs/MASTERNODE_VOTE_GATING_SPEC.md)

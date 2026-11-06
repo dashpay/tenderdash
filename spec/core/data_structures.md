@@ -53,69 +53,24 @@ and a list of evidence of malfeasance (ie. signing conflicting votes).
 | Name | Type | Description | Validation |
 | --- | --- | --- | --- |
 | Header | [Header](#header) | Header corresponding to the block. This field contains information used throughout consensus and other areas of the protocol. To find out what it contains, visit [header] (#header) | Must adhere to the validation rules of [header](#header) |
-| Data | [Data](#data) | Data contains a list of transactions. The contents of the transaction is unknown to Tenderdash. | This field can be empty or populated, but no validation is performed. Applications can perform validation on individual transactions prior to block creation using [checkTx](../abci/abci.md#checktx). |
+| Data | [Data](#data) | Data contains a list of transactions. The contents of the transaction is unknown to Tenderdash. | This field can be empty or populated, but no validation is performed. Applications can perform validation on individual transactions prior to block creation using [checkTx](../abci/methods.md#checktx). |
 | Evidence | [EvidenceList](#evidencelist) | Evidence contains a list of infractions committed by validators. | Can be empty, but when populated the validations rules from [evidenceList](#evidencelist) apply |
 | LastCommit | [Commit](#commit) | The threshold-signed commit of the previous block. | Must not be nil, must carry no threshold block signature at the initial height, and must adhere to the validation rules of [commit](#commit). |
 | CoreChainLock | `CoreChainLock` (optional) | Core chain lock carried by the block. | When present, must pass `CoreChainLock.ValidateBasic`. |
 
 ## Execution
 
-Once a block is validated, it can be executed against the state.
+Tenderdash uses same-block execution: `PrepareProposal` and `ProcessProposal`
+return this block's `AppHash`, transaction results, and pending validator/parameter
+changes. `FinalizeBlock` persists the accepted candidate; there is no ABCI
+`Commit` call. Changes from block `h` become active at `h + 1`.
 
-The state follows this recursive equation:
-
-```go
-state(initialHeight) = InitialState
-state(h+1) <- Execute(state(h), ABCIApp, block(h))
-```
-
-where `InitialState` includes the initial consensus parameters and validator set,
-and `ABCIApp` is an ABCI application that can return results and changes to the validator
-set (TODO). Execute is defined as:
-
-```go
-func Execute(s State, app ABCIApp, block Block) State {
- // Fuction ApplyBlock executes block of transactions against the app and returns the new root hash of the app state,
- // modifications to the validator set and the changes of the consensus parameters.
- AppHash, ValidatorChanges, ConsensusParamChanges := app.ApplyBlock(block)
-
- nextConsensusParams := UpdateConsensusParams(state.ConsensusParams, ConsensusParamChanges)
- return State{
-  ChainID:         state.ChainID,
-  InitialHeight:   state.InitialHeight,
-  LastResults:     abciResponses.DeliverTxResults,
-  AppHash:         AppHash,
-  InitialHeight:   state.InitialHeight,
-  LastValidators:  state.Validators,
-  Validators:      state.NextValidators,
-  NextValidators:  UpdateValidators(state.NextValidators, ValidatorChanges),
-  ConsensusParams: nextConsensusParams,
-  Version: {
-   Consensus: {
-    AppVersion: nextConsensusParams.Version.AppVersion,
-   },
-  },
- }
-}
-```
-
-Validating a new block is first done prior to the `prevote`, `precommit` & `finalizeCommit` stages.
-
-The steps to validate a new block are:
-
-- Check the validity rules of the block and its fields.
-- Check the versions (Block & App) are the same as in local state.
-- Check the chainID's match.
-- Check the height is correct.
-- Check the `LastBlockID` corresponds to BlockID currently in state.
-- Check the hashes in the header match those in state.
-- Verify the LastCommit against state, this step is skipped for the initial height.
-    - This is where checking the signatures correspond to the correct block will be made.
-- Make sure the proposer is part of the validator set.
-- Validate bock time.
-    - Above the initial height, make sure the block's time is after the previous block's time.
-    - At the initial height, make sure the block's time is not before the genesis time.
-- Validate the evidence in the block. Note: Evidence can be empty
+See the canonical [primary flow](../consensus/consensus-happy-path.md),
+[proposal-validity summary](../consensus/consensus-transitions.md#proposal-validity-summary),
+and [commit application](../consensus/consensus-happy-path.md#9-commit-and-apply)
+for execution, validation and persistence order. The local committed state is
+summarized in [State](./state.md); pending next-state values belong to
+`CurrentRoundState`.
 
 ## Header
 
@@ -148,10 +103,10 @@ NOTE: that this is more specifically the consensus version and doesn't include i
 P2P Version. (TODO: we should write a comprehensive document about
 versioning that this can refer to)
 
-| Name  | type   | Description                                                                                                     | Validation                                                                                                         |
-|-------|--------|-----------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------|
-| Block | uint64 | This number represents the version of the block protocol and must be the same throughout an operational network | Must be equal to protocol version being used in a network (`block.Version.Block == state.Version.Consensus.Block`) |
-| App   | uint64 | App version is decided on by the application. Read [here](../abci/abci.md#info)                                 | `block.Version.App == state.Version.Consensus.App`                                                                 |
+| Name  | type   | Description                                                                                                     | Validation                                                                                                                                        |
+| ----- | ------ | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Block | uint64 | This number represents the version of the block protocol and must be the same throughout an operational network | Must be equal to protocol version being used in a network (`block.Version.Block == state.Version.Consensus.Block`)                                |
+| App   | uint64 | Application version used for this block; `PrepareProposal` can override it.                                     | Basic block validation does not require equality with the last committed application version (`validateBlock` in `internal/state/validation.go`). |
 
 ## BlockID
 
@@ -414,33 +369,21 @@ Address is a type alias of a slice of bytes, calculated by hashing the public ke
 
 #### voting_power_threshold
 
-`voting_power_threshold` is the live commit gate: a block is finalized when accumulated precommit
-power crosses this value, recovering the BLS threshold signature. With `DefaultDashVotingPower = 100`
-per validator, a quorum of N members has total power `N * 100`.
+A positive `voting_power_threshold` sets the vote-counting threshold `T` returned
+by `ValidatorSet.QuorumVotingThresholdPower`; zero uses the quorum-type threshold.
+Every validator contributes power 100. An explicit value must not exceed total
+power, but a threshold below the strict BFT floor is only warned about.
 
-Validation is type-aware and operates as follows:
-
-1. **Recognized LLMQ type, threshold unset (0):** The threshold must equal the canonical value for
-   the quorum type as defined by Dash Core (e.g. 8 for `DEVNET_PLATFORM`, a 12-member quorum with
-   threshold 8). This is the normal production path and the fix for issue #1314, where the
-   canonical 8-of-12 threshold was previously rejected by an overly strict >2/3 check.
-
-2. **Unknown or custom quorum type, threshold unset (0):** The strict size-based floor applies —
-   threshold must equal `totalPower` for 1–2 validators, `>= 2/3 * totalPower` for 3 validators,
-   or `> 2/3 * totalPower` for 4+ validators.
-
-3. **Threshold explicitly set (> 0):** Accepted as-is, provided `0 < threshold <= totalPower`.
-   This is an operator override intended for single-node development or testing environments
-   (introduced in #1052). The value is recorded on-chain for accountability.
-
-**Operator footgun:** When the override is set, the only enforced bounds are `0 < threshold <=
-totalPower` — there is no mandatory 2/3 floor. Setting a value below 2/3 of total power is
-accepted but reduces Byzantine fault tolerance: for example, setting `voting_power_threshold = 1`
-on a 12-member quorum means a single node can commit a block alone, which is unsafe for
-production. Use this override only in controlled development or testing environments.
-
-This parameter validates locally (`ValidateBasic`) and is not hashed into the consensus state, so
-changes do not require an ABCI protocol bump and cannot fork a running chain.
+This override does not lower the separate BLS recovery threshold `R` returned by
+`QuorumTypeThresholdVotingPower`. Prevotes expose a majority at `T`; precommits
+also require successful recovery and verification of threshold signatures. A low
+vote-counting threshold alone does not let one signature share produce a commit.
+See [Threshold recovery](../consensus/consensus.md#threshold-recovery) for the
+canonical extension-group and recovery rules, and
+[Commit threshold is configurable below the BFT bound](../consensus/consensus-known-issues.md#commit-threshold-is-configurable-below-the-bft-bound)
+for the documented safety limitation. Changes to this live consensus parameter
+must not be assumed incapable of changing consensus behavior merely because a
+parameter is absent from a particular header-hash subset.
 
 ### VersionParams
 

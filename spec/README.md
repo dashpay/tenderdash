@@ -15,7 +15,7 @@ It shall be used to describe protocol semantics, namely the BFT consensus engine
 ## Table of Contents
 
 - [Overview](#overview)
-- [Application Blockchain Interface](./abci++/README.md)
+- [Application Blockchain Interface](abci/README.md)
 - [Encoding and Digests](./core/encoding.md)
 - [Core Data Structures](./core/data_structures.md)
 - [State](./core/state.md)
@@ -34,7 +34,7 @@ It shall be used to describe protocol semantics, namely the BFT consensus engine
 
 Contributions are welcome.
 
-Proposals at an early stage can first be drafted as Github issues. To progress, a proposal will often need to be written out and approved as a [Request For Comment (RFC)](https://github.com/dashpay/tenderdash/tree/v1.9-dev/docs/rfc).
+Proposals at an early stage can first be drafted as Github issues. To progress, a proposal will often need to be written out and approved as a [Request For Comment (RFC)](../CONTRIBUTING.md#development-procedure).
 
 The standard language for coding blocks is Golang.
 

@@ -1,5 +1,11 @@
 # PBTS: Protocol Specification
 
+> **Historical and outdated.** This Tendermint research draft is retained for
+> its algorithm derivation; it does not specify current Tenderdash behavior.
+> Use [Proposal timestamps and time rules](../consensus-alternative-flows.md#proposal-timestamps-and-time-rules)
+> and [proposal validity](../consensus-transitions.md#proposal-validity-summary) for the
+> implemented rules.
+
 ## Proposal Time
 
 PBTS computes for a proposed value `v` the proposal time `v.time`, with bounded difference to the actual real-time the proposed value was generated.
