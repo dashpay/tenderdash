@@ -9,9 +9,10 @@ on:
     branches:
       - master
       - dev
-      # Keep both names until the integration-branch migration is complete.
-      - v1.8-dev
-      - v1.9-dev
+
+# Branch creation/rename events can refer to the deleted old branch.
+env:
+  GIT_DIFF: ${{ github.event_name == 'push' && github.event.created && 'all' || '' }}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
@@ -37,6 +38,7 @@ jobs:
         with:
           submodules: true
       - uses: technote-space/get-diff-action@v6
+        if: github.event_name != 'push' || !github.event.created
         with:
           PATTERNS: |
             .github/workflows/e2e.yml
