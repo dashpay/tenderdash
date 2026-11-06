@@ -14,8 +14,7 @@ message ConsensusParams {
   BlockParams     block     = 1;
   EvidenceParams  evidence  = 2;
   ValidatorParams validator = 3;
-  // DEPRECATED. This will be removed in a future release.
-  // Replaced by ResponsePrepareProposal.app_version
+  // Consensus protocol version.
   VersionParams   version   = 4;
   SynchronyParams synchrony = 5;
   TimeoutParams   timeout   = 6;
@@ -81,9 +80,11 @@ message ValidatorParams {
   optional uint64 voting_power_threshold = 2;  //[(gogoproto.nullable) = true]
 }
 
-// VersionParams contains the ABCI application version.
+// VersionParams contains the consensus protocol version.
 message VersionParams {
-  uint64 app_version = 1;
+  // ResponsePrepareProposal.app_version sets Header.Version.App instead.
+  reserved 1;
+  reserved "app_version";
   // Version of consensus protocol, used to upgrade consensus without hard forks
   ConsensusVersion consensus_version = 2;
 
@@ -92,16 +93,41 @@ message VersionParams {
     CONSENSUS_VERSION_0 = 0;
     // CONSENSUS_VERSION_1 changes proposer selection algorithm to not double-propose when previous proposer is offline.
     CONSENSUS_VERSION_1 = 1;
+    // CONSENSUS_VERSION_2 keeps version 1 proposer selection and commits HashedParamsV2 (draft).
+    // See spec/consensus/consensus-params-commitment.md; runtime support is deferred.
+    CONSENSUS_VERSION_2 = 2;
   }
 }
 
-// HashedParams is a subset of ConsensusParams.
-//
-// It is hashed into the Header.ConsensusHash.
+// HashedParams is the legacy subset committed by Header.ConsensusHash.
+// Preserve its schema and encoding for historical block verification.
 message HashedParams {
   int64 block_max_bytes   = 1;
   int64 block_max_gas     = 2;
   int32 consensus_version = 3;
+}
+
+// HashedParamsV2 is the draft complete effective-parameter snapshot for consensus version >= 2.
+// Freeze this mapping and its encoding before activation; do not hash ABCI patches.
+// See spec/consensus/consensus-params-commitment.md for canonical bytes and domain separation.
+message HashedParamsV2 {
+  option (gogoproto.stable_marshaler) = true;
+
+  int32           consensus_version                = 1;  // Always >= CONSENSUS_VERSION_2.
+  int64           block_max_bytes                  = 2;
+  int64           block_max_gas                    = 3;
+  int64           evidence_max_age_num_blocks      = 4;
+  int64           evidence_max_age_duration_ns     = 5;
+  int64           evidence_max_bytes               = 6;
+  repeated string validator_pub_key_types          = 7;
+  optional uint64 validator_voting_power_threshold = 8;
+  int64           synchrony_message_delay_ns       = 9;
+  int64           synchrony_precision_ns           = 10;
+  int64           timeout_propose_ns               = 11;
+  int64           timeout_propose_delta_ns         = 12;
+  int64           timeout_vote_ns                  = 13;
+  int64           timeout_vote_delta_ns            = 14;
+  bool            abci_recheck_tx                  = 15;
 }
 
 // SynchronyParams configure the bounds under which a proposed block's timestamp is considered valid.

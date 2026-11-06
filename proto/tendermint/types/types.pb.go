@@ -366,10 +366,12 @@ type Header struct {
 	// hashes from the app output from the prev block
 	ValidatorsHash     []byte `protobuf:"bytes,8,opt,name=validators_hash,json=validatorsHash,proto3" json:"validators_hash,omitempty"`
 	NextValidatorsHash []byte `protobuf:"bytes,9,opt,name=next_validators_hash,json=nextValidatorsHash,proto3" json:"next_validators_hash,omitempty"`
-	ConsensusHash      []byte `protobuf:"bytes,10,opt,name=consensus_hash,json=consensusHash,proto3" json:"consensus_hash,omitempty"`
-	NextConsensusHash  []byte `protobuf:"bytes,11,opt,name=next_consensus_hash,json=nextConsensusHash,proto3" json:"next_consensus_hash,omitempty"`
-	AppHash            []byte `protobuf:"bytes,12,opt,name=app_hash,json=appHash,proto3" json:"app_hash,omitempty"`
-	ResultsHash        []byte `protobuf:"bytes,13,opt,name=results_hash,json=resultsHash,proto3" json:"results_hash,omitempty"`
+	// Current and next parameter commitments enter Header.Hash and the signed BlockID.
+	// Draft full-commitment rules: spec/consensus/consensus-params-commitment.md.
+	ConsensusHash     []byte `protobuf:"bytes,10,opt,name=consensus_hash,json=consensusHash,proto3" json:"consensus_hash,omitempty"`
+	NextConsensusHash []byte `protobuf:"bytes,11,opt,name=next_consensus_hash,json=nextConsensusHash,proto3" json:"next_consensus_hash,omitempty"`
+	AppHash           []byte `protobuf:"bytes,12,opt,name=app_hash,json=appHash,proto3" json:"app_hash,omitempty"`
+	ResultsHash       []byte `protobuf:"bytes,13,opt,name=results_hash,json=resultsHash,proto3" json:"results_hash,omitempty"`
 	// consensus info
 	EvidenceHash          []byte `protobuf:"bytes,14,opt,name=evidence_hash,json=evidenceHash,proto3" json:"evidence_hash,omitempty"`
 	ProposedAppVersion    uint64 `protobuf:"varint,15,opt,name=proposed_app_version,json=proposedAppVersion,proto3" json:"proposed_app_version,omitempty"`

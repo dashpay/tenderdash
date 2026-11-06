@@ -97,7 +97,6 @@ func (candidate *CurrentRoundState) UpdateState(target *State) error {
 	target.LastResultsHash = candidate.ResultsHash
 	target.ConsensusParams = candidate.NextConsensusParams
 	target.LastHeightConsensusParamsChanged = candidate.LastHeightConsensusParamsChanged
-	target.Version.Consensus.App = candidate.NextConsensusParams.Version.AppVersion
 	target.Validators = candidate.NextValidators
 	target.LastHeightValidatorsChanged = candidate.LastHeightValidatorsChanged
 	if candidate.CoreChainLock != nil {

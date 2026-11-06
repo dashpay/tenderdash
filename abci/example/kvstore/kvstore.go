@@ -302,11 +302,7 @@ func (app *Application) InitChain(_ context.Context, req *abci.RequestInitChain)
 	}
 	consensusParams, ok := app.consensusParamsUpdates[app.initialHeight]
 	if !ok {
-		consensusParams = types1.ConsensusParams{
-			Version: &types1.VersionParams{
-				AppVersion: uint64(app.LastCommittedState.GetHeight()) + 1,
-			},
-		}
+		consensusParams = types1.ConsensusParams{}
 	}
 	vsu := app.getValidatorSetUpdate(app.initialHeight, 0)
 	if vsu == nil {

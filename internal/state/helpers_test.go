@@ -273,9 +273,7 @@ func (app *testApp) PrepareProposal(_ context.Context, req *abci.RequestPrepareP
 		AppHash:            make([]byte, crypto.DefaultAppHashSize),
 		ValidatorSetUpdate: app.ValidatorSetUpdate,
 		ConsensusParamUpdates: &tmproto.ConsensusParams{
-			Version: &tmproto.VersionParams{
-				AppVersion: 1,
-			},
+			Version: &tmproto.VersionParams{},
 		},
 		AppVersion: 1,
 		TxResults:  resTxs,
@@ -291,9 +289,7 @@ func (app *testApp) ProcessProposal(_ context.Context, req *abci.RequestProcessP
 		AppHash:            make([]byte, crypto.DefaultAppHashSize),
 		ValidatorSetUpdate: app.ValidatorSetUpdate,
 		ConsensusParamUpdates: &tmproto.ConsensusParams{
-			Version: &tmproto.VersionParams{
-				AppVersion: 1,
-			},
+			Version: &tmproto.VersionParams{},
 		},
 		TxResults: resTxs,
 		Status:    abci.ResponseProcessProposal_ACCEPT,

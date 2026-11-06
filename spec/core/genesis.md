@@ -18,7 +18,7 @@ The genesis file is the starting point of a chain. An application will populate 
     - `validator`
         - `pub_key_types`: Lists the validator consensus key types allowed by the chain. Recognized values are `ed25519`, `secp256k1`, and `bls12381`; the default allows only `bls12381` (BLS12-381).
     - `version`
-        - `app_version`: The version of the application. This is set by the application and is used to identify which version of the app a user should be using in order to operate a node.
+        - `consensus`: The consensus protocol version (`VersionParams.consensus_version`). Consensus parameters carry no application version; a legacy `app_version` key still loads but is ignored.
     - `synchrony`
         - `message_delay`: A bound on how long a proposal message may take to reach all validators on a network and still be considered valid.
         - `precision`: A bound on how skewed the proposer's clock may be from any validator on the network while still producing valid proposals.

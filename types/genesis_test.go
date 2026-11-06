@@ -336,6 +336,30 @@ func TestGenesisDocFromJSON_OnlyRemovedTimeoutKeys(t *testing.T) {
 	assert.EqualValues(t, 100, genDoc.ConsensusParams.Block.MaxBytes)
 }
 
+// A genesis written while consensus parameters carried an application version
+// must still load. The key is ignored on decoding and not written back.
+func TestGenesisDocFromJSON_IgnoresRemovedAppVersion(t *testing.T) {
+	genDocBytes := []byte(`{
+		"chain_id": "test-chain-removed-app-version",
+		"validator_quorum_type": 100,
+		"consensus_params": {
+			"version": {"app_version": "5", "consensus": "1"},
+			"synchrony": {"precision": "1", "message_delay": "10"},
+			"validator": {"pub_key_types":["ed25519"]},
+			"block": {"max_bytes": "100"},
+			"evidence": {"max_age_num_blocks": "100", "max_age_duration": "10"}
+		}
+	}`)
+
+	genDoc, err := GenesisDocFromJSON(genDocBytes)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, genDoc.ConsensusParams.Version.ConsensusVersion)
+
+	encoded, err := json.Marshal(genDoc.ConsensusParams)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), "app_version")
+}
+
 func TestGenesisSaveAs(t *testing.T) {
 	tmpfile, err := os.CreateTemp(t.TempDir(), "genesis")
 	require.NoError(t, err)

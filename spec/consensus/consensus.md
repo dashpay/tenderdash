@@ -4,6 +4,10 @@ order: 2
 
 # Tenderdash Consensus Protocol
 
+For the proposed parameter authentication change, see the
+[Full Consensus Parameter Commitment draft](consensus-params-commitment.md).
+It defines a future schema and activation plan; current runtime behavior is unchanged.
+
 This document and its companions specify the Tenderdash consensus protocol
 **as implemented** in `internal/consensus` and the packages it depends on.
 Every non-trivial rule cites the function that implements it. Where the

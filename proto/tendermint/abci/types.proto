@@ -527,7 +527,8 @@ message ResponsePrepareProposal {
   tendermint.types.CoreChainLock core_chain_lock_update = 5;
   // Changes to validator set that will be applied at next height.
   ValidatorSetUpdate validator_set_update = 6 [(gogoproto.nullable) = true];
-  // Application version that was used to create the current proposal.
+  // Application protocol version used to create this proposal; MUST be non-zero.
+  // It becomes Header.Version.App. Validators' applications verify it in ProcessProposal.
   uint64 app_version = 7;
 }
 

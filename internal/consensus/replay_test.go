@@ -1398,6 +1398,52 @@ func TestHandshakeInitialCoreLockHeight(t *testing.T) {
 	assert.Equal(t, InitialCoreHeight, state.LastCoreChainLockedBlockHeight)
 }
 
+// The application version recorded at height 0 comes from ResponseInfo. InitChain
+// carries none, so processing its response must not reset it, even when the
+// application returns a version parameter group.
+func TestHandshakeInitChainKeepsInfoAppVersion(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const infoAppVersion uint64 = 7
+	logger := log.NewNopLogger()
+	conf, err := ResetConfig(t, "handshake_test_init_chain_app_version")
+	require.NoError(t, err)
+
+	privVal, err := privval.LoadFilePV(conf.PrivValidator.KeyFile(), conf.PrivValidator.StateFile())
+	require.NoError(t, err)
+
+	eventBus := eventbus.NewDefault(logger)
+	require.NoError(t, eventBus.Start(ctx))
+
+	app := &initChainApp{
+		infoAppVersion: infoAppVersion,
+		consensusParams: &tmproto.ConsensusParams{
+			Version: &tmproto.VersionParams{ConsensusVersion: tmproto.VersionParams_CONSENSUS_VERSION_1},
+		},
+	}
+	client := abciclient.NewLocalClient(logger, app)
+
+	proTxHash, err := privVal.GetProTxHash(ctx)
+	require.NoError(t, err)
+	stateDB, state, store := stateAndStore(t, conf, 0x0)
+	stateStore := sm.NewStore(stateDB)
+	proxyApp := proxy.New(client, logger, proxy.NopMetrics())
+	require.NoError(t, proxyApp.Start(ctx), "Error starting proxy app connections")
+
+	genDoc, _ := sm.MakeGenesisDocFromFile(conf.GenesisFile())
+	replayer := newBlockReplayer(stateStore, store, genDoc, eventBus, proxyApp, proTxHash)
+	handshaker := NewHandshaker(replayer, logger, state)
+
+	_, err = handshaker.Handshake(ctx, proxyApp)
+	require.NoError(t, err, "error on abci handshake")
+
+	state, err = stateStore.Load()
+	require.NoError(t, err)
+	assert.Equal(t, infoAppVersion, state.Version.Consensus.App)
+	assert.EqualValues(t, tmproto.VersionParams_CONSENSUS_VERSION_1, state.ConsensusParams.Version.ConsensusVersion)
+}
+
 // walRoundsSkipperProposeTimeout replaces the test genesis' 30ms propose
 // timeout on the node that generates the WAL for testWALRoundsSkipper. That
 // node is the only validator, so it proposes every round and its propose
@@ -1546,11 +1592,18 @@ type initChainApp struct {
 	abci.BaseApplication
 	vals              *abci.ValidatorSetUpdate
 	initialCoreHeight uint32
+	infoAppVersion    uint64
+	consensusParams   *tmproto.ConsensusParams
+}
+
+func (ica *initChainApp) Info(_ context.Context, _req *abci.RequestInfo) (*abci.ResponseInfo, error) {
+	return &abci.ResponseInfo{AppVersion: ica.infoAppVersion}, nil
 }
 
 func (ica *initChainApp) InitChain(_ context.Context, _req *abci.RequestInitChain) (*abci.ResponseInitChain, error) {
 	resp := abci.ResponseInitChain{
 		InitialCoreHeight: ica.initialCoreHeight,
+		ConsensusParams:   ica.consensusParams,
 	}
 	if ica.vals != nil {
 		resp.ValidatorSetUpdate = *ica.vals

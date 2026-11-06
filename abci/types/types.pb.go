@@ -2831,7 +2831,8 @@ type ResponsePrepareProposal struct {
 	CoreChainLockUpdate *types1.CoreChainLock `protobuf:"bytes,5,opt,name=core_chain_lock_update,json=coreChainLockUpdate,proto3" json:"core_chain_lock_update,omitempty"`
 	// Changes to validator set that will be applied at next height.
 	ValidatorSetUpdate *ValidatorSetUpdate `protobuf:"bytes,6,opt,name=validator_set_update,json=validatorSetUpdate,proto3" json:"validator_set_update,omitempty"`
-	// Application version that was used to create the current proposal.
+	// Application protocol version used to create this proposal; MUST be non-zero.
+	// It becomes Header.Version.App. Validators' applications verify it in ProcessProposal.
 	AppVersion uint64 `protobuf:"varint,7,opt,name=app_version,json=appVersion,proto3" json:"app_version,omitempty"`
 }
 

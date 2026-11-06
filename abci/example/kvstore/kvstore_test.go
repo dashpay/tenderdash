@@ -215,7 +215,7 @@ func TestConsensusParamsUpdate(t *testing.T) {
 		genesisHeight + 4: {
 			ConsParamUpdates: &tmproto.ConsensusParams{
 				Version: &tmproto.VersionParams{
-					AppVersion: 123,
+					ConsensusVersion: tmproto.VersionParams_CONSENSUS_VERSION_1,
 				},
 			},
 		},

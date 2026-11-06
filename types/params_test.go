@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
@@ -238,7 +239,6 @@ func makeParams(args makeParamsArgs) ConsensusParams {
 
 	if args.consensusVersion != 0 {
 		cp.Version = VersionParams{
-			AppVersion:       1,
 			ConsensusVersion: args.consensusVersion,
 		}
 	}
@@ -369,7 +369,6 @@ func TestConsensusParamsUpdate(t *testing.T) {
 			initialParams: makeParams(makeParamsArgs{blockBytes: 100, blockGas: 200, evidenceAge: 300}),
 			updates: &tmproto.ConsensusParams{
 				Version: &tmproto.VersionParams{
-					AppVersion:       1,
 					ConsensusVersion: 1,
 				},
 			},
@@ -387,15 +386,33 @@ func TestConsensusParamsUpdate(t *testing.T) {
 	}
 }
 
+// Consensus parameters encoded while VersionParams carried app_version (field 1),
+// in stored state or ABCI messages, must still decode; the field is dropped.
+func TestConsensusParamsDecodeIgnoresRemovedAppVersion(t *testing.T) {
+	// ConsensusParams{version (4): VersionParams{app_version (1): 5, consensus_version (2): 1}}
+	legacy := []byte{0x22, 0x04, 0x08, 0x05, 0x10, 0x01}
+
+	var pb tmproto.ConsensusParams
+	require.NoError(t, pb.Unmarshal(legacy))
+	require.NotNil(t, pb.Version)
+	assert.Equal(t, tmproto.VersionParams_CONSENSUS_VERSION_1, pb.Version.ConsensusVersion)
+
+	reencoded, err := pb.Marshal()
+	require.NoError(t, err)
+	assert.Equal(t, []byte{0x22, 0x02, 0x10, 0x01}, reencoded, "field 1 must not survive re-encoding")
+
+	params := ConsensusParamsFromProto(pb)
+	assert.EqualValues(t, 1, params.Version.ConsensusVersion)
+}
+
 func TestConsensusParamsUpdate_Version(t *testing.T) {
 	params := makeParams(makeParamsArgs{blockBytes: 1, blockGas: 2, evidenceAge: 3})
 
-	assert.EqualValues(t, 0, params.Version.AppVersion)
+	assert.EqualValues(t, 0, params.Version.ConsensusVersion)
 
 	updated := params.UpdateConsensusParams(
-		&tmproto.ConsensusParams{Version: &tmproto.VersionParams{AppVersion: 1, ConsensusVersion: 1}})
+		&tmproto.ConsensusParams{Version: &tmproto.VersionParams{ConsensusVersion: 1}})
 
-	assert.EqualValues(t, 1, updated.Version.AppVersion)
 	assert.EqualValues(t, 1, updated.Version.ConsensusVersion)
 }
 
