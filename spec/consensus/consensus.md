@@ -44,7 +44,8 @@ full node), the rules that decide what it signs, the interaction with the
 application over ABCI, and the parts of message exchange that change
 consensus state. Out of scope: the p2p transport, mempool internals, block
 sync and state sync (except their handover to consensus), light clients,
-and the DoS-defence design (see `docs/CONSENSUS_DOS_*.md`).
+and the complete DoS-defence design. For operational monitoring, see
+[DoS observability](../../docs/dos-observability/README.md).
 
 Source of truth: the code at the revision this document was written against
 (branch `v1.8-dev`). Citations use `path/file.go` and a function name; line
