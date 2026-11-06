@@ -96,6 +96,12 @@ class DockerMetadataTests(unittest.TestCase):
         self.git("tag", "v2.0.0")
         self.assertEqual(self.plan(latest="")["tags"], ["2.0.0"])
 
+    def test_build_job_pending_latest_never_promotes_aliases(self):
+        # docker.yml's build job passes LATEST_RELEASE_TAG=pending; only the
+        # promote-aliases job may resolve aliases.
+        self.git("tag", "v2.0.0")
+        self.assertEqual(self.plan(latest="pending")["tags"], ["2.0.0"])
+
     def test_manual_tag_resolves_tag_not_selected_workflow_branch(self):
         self.git("tag", "v2.0.0")
         self.git(
