@@ -52,14 +52,12 @@ func (cs *State) readReplayMessage(ctx context.Context, msg *TimedWALMessage, ne
 	case types.EventDataRoundState:
 		cs.logger.Trace("Replay: New Step", "height", m.Height, "round", m.Round, "step", m.Step)
 		// The propose step the node recorded is where replay must leave it. The
-		// iterator that skips rounds keeps only the certificates of the rounds
-		// it skips (see keepRoundSkipCertificates), so replay can rebuild the
-		// wait for transactions of the round a certificate leads to, which the
-		// node may have left for the propose step, or for a later round,
-		// through prevotes and timeouts that replay no longer has. On a chain
-		// that skips rounds, where such a wait has no timeout running, the
-		// recorded step settles it: a later round is entered as the node
-		// entered it, and a waiting round goes on to the propose step.
+		// WAL does not record the mempool's report of transactions, which ends
+		// a wait for them (see handleTxsAvailable), and the mempool starts
+		// empty after a restart, so replay can rebuild a wait the node had
+		// left. On a chain that skips rounds, where such a wait has no timeout
+		// running, the recorded step settles it: a later round is entered as
+		// the node entered it, and a waiting round goes on to the propose step.
 		if m.Step == cstypes.RoundStepPropose.String() && m.Height == stateData.Height && roundSkipping(&stateData) {
 			if m.Round > stateData.Round {
 				_ = cs.ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: m.Height, Round: m.Round}, &stateData)
@@ -95,7 +93,7 @@ func (cs *State) readReplayMessage(ctx context.Context, msg *TimedWALMessage, ne
 			// clears the proposal, its receive time, the block and the part set
 			// together. An earlier round's part set outlives the round it belonged
 			// to, and proposal admission judges the next proposal against it.
-			if cs.config.WalSkipRoundsToLast && p.Round > stateData.Round {
+			if cs.replaySkipsRounds(&stateData) && p.Round > stateData.Round {
 				stateData.Votes.SetRound(p.Round)
 				stateData.Round = p.Round
 			}
@@ -120,6 +118,19 @@ func (cs *State) readReplayMessage(ctx context.Context, msg *TimedWALMessage, ne
 		return fmt.Errorf("failed to update state-data: %w", err)
 	}
 	return nil
+}
+
+// replaySkipsRounds reports whether replay of the height of stateData skips to
+// its last round, as WalSkipRoundsToLast asks.
+//
+// A chain that skips the rounds of silent proposers replays every round. A
+// round a certificate leads to waits for transactions unless the node knew a
+// polka, or a prevote of that round, when it entered (see waitsAfterRoundSkip),
+// and the polka can be in any round before it. Replay that dropped those
+// rounds could leave the node waiting where it had gone on to propose, with no
+// timeout running and the round's proposer's heartbeats holding it there.
+func (cs *State) replaySkipsRounds(stateData *StateData) bool {
+	return cs.config.WalSkipRoundsToLast && !roundSkipping(stateData)
 }
 
 // Replay only those messages since the last block.  `timeoutRoutine` should
@@ -190,7 +201,7 @@ func (cs *State) catchupReplay(ctx context.Context, stateData StateData) error {
 
 	cs.logger.Info("Catchup by replaying consensus messages", "height", csHeight)
 
-	iter := newWalIter(&WALDecoder{gr}, cs.config.WalSkipRoundsToLast)
+	iter := newWalIter(&WALDecoder{gr}, cs.replaySkipsRounds(&stateData))
 	for iter.Next() {
 		// NOTE: since the priv key is set when the msgs are received
 		// it will attempt to eg double sign but we can just ignore it

@@ -188,13 +188,14 @@ func TestRefusedCertificatesThatAreNoPeerFault(t *testing.T) {
 	assert.Empty(t, cs.peerErrorQueue.ch)
 }
 
-// The iterator that skips rounds replays only the certificates of the rounds
-// it skips, not their prevotes, votes or timeouts. A node that a certificate
-// moved into the propose step of the next round, because the round before had
-// a polka, or that went on from there to a later round, must not then come
-// back from a crash waiting for transactions in the round the certificate
-// leads to: it would have no timeout running, and the round's proposer's
-// heartbeats would keep it there.
+// A node that a certificate moved into the propose step of the next round,
+// because it knew a polka, or that went on from there to a later round, must
+// not come back from a crash waiting for transactions: it would have no
+// timeout running, and the round's proposer's heartbeats would keep it there.
+// Replay reads every round of a chain that skips rounds, WalSkipRoundsToLast
+// or not, so a later certificate finds the polka of a round replay would
+// otherwise skip. And the propose step the node recorded ends a wait the WAL
+// has no reason for: it does not record the mempool's report of transactions.
 func TestReplayDoesNotWaitInARoundTheNodeLeftForPropose(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -241,6 +242,27 @@ func TestReplayDoesNotWaitInARoundTheNodeLeftForPropose(t *testing.T) {
 		newEventDataRoundState(height, 2, cstypes.RoundStepPropose),
 	)
 
+	// Or a certificate of round 1, recovered from skip votes signed before the
+	// polka, moves the node on to round 2, which it does not wait in, and the
+	// node stops before it records the propose step, as a proposer does while
+	// it creates its proposal.
+	secondCertificate := recoverRoundSkipCertificate(ctx, t, test.cs, test.vss, height, 1)
+	afterSecondCertificate := make([]any, 0, len(toRound1)+2)
+	afterSecondCertificate = append(afterSecondCertificate, toRound1...)
+	afterSecondCertificate = append(afterSecondCertificate,
+		msgInfo{Msg: &RoundSkipCertificateMessage{Certificate: secondCertificate}, PeerID: "peer"},
+		newEventDataRoundState(height, 2, cstypes.RoundStepNewRound),
+	)
+	// Or with no polka, the mempool's report of transactions ends the wait in
+	// round 1.
+	onMempoolReport := []any{
+		EndHeightMessage{Height: height - 1},
+		newEventDataRoundState(height, 0, cstypes.RoundStepNewHeight),
+		msgInfo{Msg: &RoundSkipCertificateMessage{Certificate: certificate}, PeerID: "peer"},
+		newEventDataRoundState(height, 1, cstypes.RoundStepNewRound),
+		newEventDataRoundState(height, 1, cstypes.RoundStepPropose),
+	}
+
 	for _, crash := range []struct {
 		name  string
 		wal   []any
@@ -248,6 +270,8 @@ func TestReplayDoesNotWaitInARoundTheNodeLeftForPropose(t *testing.T) {
 	}{
 		{"in round 1", toRound1, 1},
 		{"in round 2", toRound2, 2},
+		{"after a second certificate", afterSecondCertificate, 2},
+		{"on the mempool's report", onMempoolReport, 1},
 	} {
 		for _, skipRounds := range []bool{true, false} {
 			t.Run(fmt.Sprintf("%s, skip rounds %v", crash.name, skipRounds), func(t *testing.T) {
@@ -259,9 +283,10 @@ func TestReplayDoesNotWaitInARoundTheNodeLeftForPropose(t *testing.T) {
 					test.cs.privValidator.PrivValidator, NewCounterApplication(), test.cs.blockStore)
 				replay.emitter.Emit(setReplayModeEventName, true)
 				ctx := dash.ContextWithProTxHash(ctx, replay.privValidator.ProTxHash)
-				require.Equal(t, height, replay.GetStateData().Height)
+				start := replay.GetStateData()
+				require.Equal(t, height, start.Height)
 
-				iter := newWalIter(&mockWALReader{ret: crash.wal}, skipRounds)
+				iter := newWalIter(&mockWALReader{ret: crash.wal}, replay.replaySkipsRounds(&start))
 				for iter.Next() {
 					require.NoError(t, replay.readReplayMessage(ctx, iter.Value(), nil))
 				}
@@ -428,10 +453,11 @@ func TestReactorRecordsTheCertificateAPeerSent(t *testing.T) {
 	assert.Zero(t, sent)
 }
 
-// Replay that skips to the last round of a height keeps the certificates of
-// the rounds it skips. A node that held one for peers still behind holds it
-// again after a restart, though it reached the round it replays to by
-// following that round's prevotes.
+// Replay keeps the certificates of the rounds before the last, with
+// WalSkipRoundsToLast or not, since it reads every round of a chain that skips
+// rounds. A node that held one for peers still behind holds it again after a
+// restart, though it reached the round it replays to by following that
+// round's prevotes.
 func TestReplayKeepsTheCertificateOfASkippedRound(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
@@ -460,8 +486,9 @@ func TestReplayKeepsTheCertificateOfASkippedRound(t *testing.T) {
 			replay.config.DontAutoPropose = true
 			replay.config.WalSkipRoundsToLast = skipRounds
 			replay.emitter.Emit(setReplayModeEventName, true)
+			start := replay.GetStateData()
 
-			iter := newWalIter(&mockWALReader{ret: wal}, skipRounds)
+			iter := newWalIter(&mockWALReader{ret: wal}, replay.replaySkipsRounds(&start))
 			for iter.Next() {
 				require.NoError(t, replay.readReplayMessage(ctx, iter.Value(), nil))
 			}

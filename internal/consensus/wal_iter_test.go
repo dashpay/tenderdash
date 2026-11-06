@@ -126,8 +126,9 @@ func TestWalIter_Next(t *testing.T) {
 			},
 		},
 		{
-			// The certificates of the rounds skipped to the last are kept, in
-			// order, including one written after its round was left.
+			// A certificate is skipped with the rest of its round, including
+			// one written after its round was left. Replay of a chain that
+			// skips rounds reads every round instead (see replaySkipsRounds).
 			input: []any{
 				newEventDataRoundState(1001, 0, types.RoundStepNewHeight),
 				newRoundSkipCertificateMessage(1001, 0),
@@ -140,9 +141,7 @@ func TestWalIter_Next(t *testing.T) {
 				newEventDataRoundState(1002, 0, types.RoundStepNewHeight),
 			},
 			want: []any{
-				newRoundSkipCertificateMessage(1001, 0),
 				newEventDataRoundState(1001, 2, types.RoundStepPropose),
-				newRoundSkipCertificateMessage(1001, 1),
 				newVoteMessage(1001, 2),
 				EndHeightMessage{Height: 1001},
 				newEventDataRoundState(1002, 0, types.RoundStepNewHeight),

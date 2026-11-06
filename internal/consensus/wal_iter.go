@@ -123,7 +123,7 @@ func (i *skipperWalIter) processTimedWALMessage(msg *TimedWALMessage) error {
 		i.queue = append(i.queue, msg)
 		return nil
 	}
-	if height == i.curHeight && round < i.curRound && !isRoundSkipCertificate(msg) {
+	if height == i.curHeight && round < i.curRound {
 		return nil
 	}
 	switch m := msg.Msg.(type) {
@@ -137,39 +137,12 @@ func (i *skipperWalIter) processTimedWALMessage(msg *TimedWALMessage) error {
 		case cstypes.RoundStepPropose.String():
 			if m.Round == i.curRound+1 {
 				i.curRound = m.Round
-				i.hold = keepRoundSkipCertificates(i.hold)
+				i.hold = nil
 			}
 		}
 	}
 	i.hold = append(i.hold, i.msg)
 	return nil
-}
-
-// isRoundSkipCertificate reports whether msg is a round skip certificate.
-//
-// The skipping iterator keeps those of the rounds it skips. A node holds the
-// latest certificate of its height for peers still in the round it skips (see
-// roundSkipGossipHandler), and may have reached the round it replays to by
-// following its prevotes, not the certificate, which replay would then lose.
-func isRoundSkipCertificate(msg *TimedWALMessage) bool {
-	mi, ok := msg.Msg.(msgInfo)
-	if !ok {
-		return false
-	}
-	_, ok = mi.Msg.(*RoundSkipCertificateMessage)
-	return ok
-}
-
-// keepRoundSkipCertificates returns the round skip certificates among msgs, in
-// order.
-func keepRoundSkipCertificates(msgs []*TimedWALMessage) []*TimedWALMessage {
-	var kept []*TimedWALMessage
-	for _, msg := range msgs {
-		if isRoundSkipCertificate(msg) {
-			kept = append(kept, msg)
-		}
-	}
-	return kept
 }
 
 func walMsgHeight(msg WALMessage) (int64, int32, error) {
