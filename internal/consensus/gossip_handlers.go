@@ -8,6 +8,7 @@ import (
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmcons "github.com/dashpay/tenderdash/proto/tendermint/consensus"
 )
 
@@ -94,11 +95,15 @@ func waitingPeerPrevoteGossipHandler(
 		if !ok {
 			return
 		}
-		vote := prevotes.GetByIndex(int32(index))
+		valIndex, err := tmmath.SafeConvertInt32(index)
+		if err != nil {
+			return
+		}
+		vote := prevotes.GetByIndex(valIndex)
 		if vote == nil {
 			return
 		}
-		if err := send(ctx, vote.ToProto()); err != nil {
+		if err = send(ctx, vote.ToProto()); err != nil {
 			logger.Debug("cannot send a prevote to a peer waiting in its round",
 				"height", rs.Height, "round", rs.Round, "err", err)
 		}
