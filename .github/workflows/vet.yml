@@ -19,6 +19,10 @@ on:
       - v1.8-dev
       - v1.9-dev
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   vet:
     name: go vet
