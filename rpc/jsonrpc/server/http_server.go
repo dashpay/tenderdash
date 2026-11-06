@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"runtime/debug"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/net/netutil"
@@ -59,65 +60,65 @@ func DefaultConfig() *Config {
 // Serve creates a http.Server and calls Serve with the given listener. It
 // wraps handler to recover panics and limit the request body size.
 func Serve(ctx context.Context, listener net.Listener, handler http.Handler, logger log.Logger, config *Config) error {
-	logger.Info("Starting RPC HTTP server on", "addr", listener.Addr())
-	h := recoverAndLogHandler(MaxBytesHandler(handler, config.MaxBodyBytes), logger)
-	s := &http.Server{
-		Handler:        h,
-		ReadTimeout:    config.ReadTimeout,
-		WriteTimeout:   config.WriteTimeout,
-		MaxHeaderBytes: config.MaxHeaderBytes,
-	}
-	sig := make(chan struct{})
-	go func() {
-		select {
-		case <-ctx.Done():
-			sctx, cancel := context.WithTimeout(context.Background(), time.Second)
-			defer cancel()
-			_ = s.Shutdown(sctx)
-		case <-sig:
-		}
-	}()
-
-	if err := s.Serve(listener); err != nil {
-		logger.Info("RPC HTTP server stopped", "err", err)
-		close(sig)
-		return err
-	}
-	return nil
+	return serve(ctx, listener, handler, logger, config, func(s *http.Server) error {
+		return s.Serve(listener)
+	})
 }
 
-// Serve creates a http.Server and calls ServeTLS with the given listener,
-// certFile and keyFile. It wraps handler to recover panics and limit the
-// request body size.
+// ServeTLS serves HTTPS and joins all requests, including websocket sessions,
+// before returning. Cancellation is propagated to request contexts.
 func ServeTLS(ctx context.Context, listener net.Listener, handler http.Handler, certFile, keyFile string, logger log.Logger, config *Config) error {
-	logger.Info("Starting RPC HTTPS server",
-		"listenterAddr", listener.Addr(),
-		"certFile", certFile,
-		"keyFile", keyFile)
+	return serve(ctx, listener, handler, logger, config, func(s *http.Server) error {
+		return s.ServeTLS(listener, certFile, keyFile)
+	})
+}
 
+func serve(ctx context.Context, listener net.Listener, handler http.Handler, logger log.Logger, config *Config, run func(*http.Server) error) error {
+	// TLS setup can fail before http.Server takes ownership of the listener.
+	defer func() { _ = listener.Close() }()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var mu sync.Mutex
+	var requests sync.WaitGroup
+	stopping := false
+	h := recoverAndLogHandler(MaxBytesHandler(handler, config.MaxBodyBytes), logger)
 	s := &http.Server{
-		Handler:        recoverAndLogHandler(MaxBytesHandler(handler, config.MaxBodyBytes), logger),
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Shutdown does not join hijacked connections. Keep their handlers in
+			// this group, and serialize admission with shutdown's call to Wait.
+			mu.Lock()
+			if stopping {
+				mu.Unlock()
+				http.Error(w, "RPC server is stopping", http.StatusServiceUnavailable)
+				return
+			}
+			requests.Add(1)
+			mu.Unlock()
+			defer requests.Done()
+			h.ServeHTTP(w, r)
+		}),
+		BaseContext:    func(net.Listener) context.Context { return ctx },
 		ReadTimeout:    config.ReadTimeout,
 		WriteTimeout:   config.WriteTimeout,
 		MaxHeaderBytes: config.MaxHeaderBytes,
 	}
-	sig := make(chan struct{})
+	drained := make(chan struct{})
 	go func() {
-		select {
-		case <-ctx.Done():
-			sctx, cancel := context.WithTimeout(context.Background(), time.Second)
-			defer cancel()
-			_ = s.Shutdown(sctx)
-		case <-sig:
-		}
+		defer close(drained)
+		<-ctx.Done()
+		mu.Lock()
+		stopping = true
+		mu.Unlock()
+		// Cancellation alone cannot unblock a handler writing to a stalled
+		// client. Close its transport before joining the handler itself.
+		_ = s.Close()
+		requests.Wait()
 	}()
-
-	if err := s.ServeTLS(listener, certFile, keyFile); err != nil {
-		logger.Error("RPC HTTPS server stopped", "err", err)
-		close(sig)
-		return err
-	}
-	return nil
+	err := run(s)
+	cancel()
+	<-drained
+	logger.Info("RPC server stopped", "err", err)
+	return err
 }
 
 // writeInternalError writes an internal server error (500) to w with the text

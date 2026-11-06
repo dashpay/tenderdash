@@ -49,17 +49,51 @@ Register owned workers with `BaseService.Go`. `OnStop` must unblock them, not
 wait for them; move shared-resource cleanup to optional `OnDrain`, which runs
 after those workers exit. Call `Stop` then `Wait` before releasing resources.
 Plain goroutines and their existing joins remain the implementation's responsibility.
-`TimeoutTicker` implementations must now provide `Wait`.
+`TimeoutTicker` implementations must now provide `Wait`. `WSRPCConnection`
+implementations must provide `Go(func(context.Context)) bool` so the server owns
+subscription workers.
+
+`WSClient.Stop` is safe to call repeatedly and concurrently, including after
+reconnect attempts run out. During a reconnect it now blocks until the context
+ends or the attempts run out, instead of returning while a reconnect could still
+start workers. Dials now observe that context and fail after ten seconds, including
+the one in `Start`, so a peer that never answers the handshake cannot block either
+call. Once the context ends, `Stop` waits at most for a write in progress to hit
+its ten-second deadline. It also joins `OnReconnect` callbacks, which must return
+once the context ends, and `Send` fails once the client has shut down. Stopping the
+HTTP RPC client also joins its event listener and resubscriptions.
+
+`rpc/jsonrpc/server.Serve` and `ServeTLS` always close the listener before
+returning, including when TLS setup fails. Cancellation now reaches request
+contexts, rejects new requests with 503, closes active connections instead of a
+one-second graceful shutdown, and returns only after every handler, including
+hijacked WebSocket sessions, has finished. They no longer log a startup line;
+one "RPC server stopped" line is logged on return.
 
 A stop requested during startup cancels work immediately but defers `OnStop`
 until successful startup returns. Failed startup must roll back its resources;
 BaseService joins registered work without calling shutdown hooks. Retry requires
 recreating any child that already started successfully and then stopped.
+A node that fails after reserving its RPC listeners, or a seed node that fails
+startup, closes its databases and rejects another `Start`; construct a new node.
+In the same process that panics with `duplicate metrics collector registration
+attempted` for a seed, or for a node with Prometheus enabled, unless
+`Instrumentation.Namespace` differs. An RPC listener bind failure stays retryable
+and keeps the stores open, with no `service.Service` call to release them if you
+give up. Do not call a Dash Core `RPCClient` after `Close`: requests can block
+forever. Its `Close` waits at most five seconds for an in-flight request, but that
+does not bound node shutdown: a reactor stuck in a Dash Core call still blocks
+`Wait`, because the client has no HTTP timeout. `--shutdown-timeout` limits the
+node command's wait, not `Start` or embedders.
 
 Direct consensus `State.Stop` drains a commit already in progress using the
 context originally passed to `State.Start`. Cancel that parent to abort it;
 reactor/node shutdown still cancels that parent and can require WAL recovery.
 This is not an unconditional durable-finalization guarantee for node shutdown.
+Node shutdown keeps application connections, the event bus and the indexer on a
+dependency context until reactors have been joined, then releases them and the
+stores. After a node startup failure past RPC listener reservation, construct a
+fresh node graph.
 Once admitted, a consensus handoff belongs to its reactor. Canceling the caller
 releases its wait; reactor shutdown cancels and joins the admitted handoff.
 Router disconnect notifications during shutdown are best effort; subscribers

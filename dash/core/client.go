@@ -62,11 +62,16 @@ type Client interface {
 	Ping() error
 }
 
+// defaultCloseTimeout bounds Close: the endpoint has no HTTP timeout or
+// cancellation, so a stuck request would otherwise block it indefinitely.
+const defaultCloseTimeout = 5 * time.Second
+
 // RPCClient implements Client
 // Handles connection to the underlying dashd instance
 type RPCClient struct {
-	endpoint *rpc.Client
-	logger   log.Logger
+	endpoint     *rpc.Client
+	logger       log.Logger
+	closeTimeout time.Duration
 }
 
 // NewRPCClient returns an instance of Client.
@@ -96,17 +101,33 @@ func NewRPCClient(host string, username string, password string, logger log.Logg
 	}
 
 	dashCoreClient := RPCClient{
-		endpoint: client,
-		logger:   logger,
+		endpoint:     client,
+		logger:       logger,
+		closeTimeout: defaultCloseTimeout,
 	}
 
 	return &dashCoreClient, nil
 }
 
-// Close closes the underlying connection
+// Close closes the underlying connection and joins its dispatcher, up to
+// closeTimeout. It is safe to call repeatedly. Do not send requests after Close:
+// they can return an error, but they block forever once the endpoint's send
+// buffer fills, because nothing drains it any more.
 func (rpcClient *RPCClient) Close() error {
 	rpcClient.endpoint.Shutdown()
-	return nil
+	joined := make(chan struct{})
+	go func() {
+		defer close(joined)
+		rpcClient.endpoint.WaitForShutdown()
+	}()
+	timer := time.NewTimer(rpcClient.closeTimeout)
+	defer timer.Stop()
+	select {
+	case <-joined:
+		return nil
+	case <-timer.C:
+		return fmt.Errorf("dash core request still in flight %s after closing the client", rpcClient.closeTimeout)
+	}
 }
 
 // Ping sends a ping request to the remote signer

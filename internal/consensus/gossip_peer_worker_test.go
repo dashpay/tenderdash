@@ -2,7 +2,6 @@ package consensus
 
 import (
 	"context"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -11,6 +10,7 @@ import (
 
 	"github.com/dashpay/tenderdash/libs/eventemitter"
 	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/libs/service"
 )
 
 func TestPeerGossipWorker(t *testing.T) {
@@ -33,10 +33,9 @@ func TestPeerGossipWorker(t *testing.T) {
 				handlerCalledCh <- struct{}{}
 			}, 1*time.Second),
 		},
-		running:        atomic.Bool{},
 		stateDataStore: NewStateDataStore(NopMetrics(), logger, cfg.Consensus, emitter),
-		stopCh:         make(chan struct{}),
 	}
+	pg.BaseService = *service.NewBaseService(logger, "PeerGossipWorker", &pg)
 	require.False(t, pg.IsRunning())
 	err := pg.Start(ctx)
 	require.NoError(t, err)
@@ -46,6 +45,35 @@ func TestPeerGossipWorker(t *testing.T) {
 	}
 	defer cancel()
 	pg.Stop()
+	pg.Wait()
 	require.False(t, pg.IsRunning())
 	close(handlerCalledCh)
+}
+
+func TestPeerGossipWorkerWaitDrainsHandler(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	entered, release := make(chan struct{}), make(chan struct{})
+	cs, _ := makeState(ctx, t, makeStateArgs{})
+	pg := &peerGossipWorker{
+		clock: clockwork.NewRealClock(), logger: log.NewNopLogger(), stateDataStore: cs.stateDataStore,
+		handlers: []gossipHandler{newGossipHandler(func(context.Context, StateData) { close(entered); <-release }, time.Hour)},
+	}
+	pg.BaseService = *service.NewBaseService(pg.logger, t.Name(), pg)
+	require.NoError(t, pg.Start(ctx))
+	<-entered
+	pg.Stop()
+	done := make(chan struct{})
+	go func() { pg.Wait(); close(done) }()
+	select {
+	case <-done:
+		t.Error("Wait returned before gossip handler finished")
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("gossip handler did not drain")
+	}
 }

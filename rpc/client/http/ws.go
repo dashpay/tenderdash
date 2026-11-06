@@ -23,6 +23,17 @@ type wsEvents struct {
 
 	mtx           sync.RWMutex
 	subscriptions map[string]*wsSubscription
+	// cleared closes when UnsubscribeAll forgets the subscriptions read with it,
+	// and is then replaced. Both fields are guarded by mtx.
+	cleared chan struct{}
+
+	// lifetime bounds resubscribing and event delivery. It ends with the context
+	// passed to Start, or in Stop if the client shut down by itself first.
+	lifetime     context.Context
+	endLifetime  context.CancelFunc
+	listenerDone chan struct{}
+	// resubscribeDelay gives Tendermint time to restart after an RPC error.
+	resubscribeDelay time.Duration
 }
 
 type wsSubscription struct {
@@ -37,6 +48,9 @@ func newWsEvents(remote string) (*wsEvents, error) {
 	w := &wsEvents{
 		Logger:        log.NewNopLogger(),
 		subscriptions: make(map[string]*wsSubscription),
+		cleared:       make(chan struct{}),
+
+		resubscribeDelay: time.Second,
 	}
 
 	var err error
@@ -46,7 +60,7 @@ func newWsEvents(remote string) (*wsEvents, error) {
 	}
 	w.ws.OnReconnect(func() {
 		// resubscribe immediately
-		w.redoSubscriptionsAfter(0 * time.Second)
+		w.redoSubscriptionsAfter(w.lifetime, 0)
 	})
 	w.ws.Logger = w.Logger
 
@@ -55,15 +69,31 @@ func newWsEvents(remote string) (*wsEvents, error) {
 
 // Start starts the websocket client and the event loop.
 func (w *wsEvents) Start(ctx context.Context) error {
+	w.lifetime, w.endLifetime = context.WithCancel(ctx)
 	if err := w.ws.Start(ctx); err != nil {
+		w.endLifetime()
 		return err
 	}
-	go w.eventListener(ctx)
+	w.listenerDone = make(chan struct{})
+	go w.eventListener(w.lifetime, w.listenerDone)
 	return nil
 }
 
-// Stop shuts down the websocket client.
-func (w *wsEvents) Stop() error { return w.ws.Stop() }
+// Stop waits for the websocket client, which joins reconnect callbacks, to shut
+// down with the context passed to Start, then joins the event loop.
+func (w *wsEvents) Stop() error {
+	err := w.ws.Stop()
+	w.stopListener()
+	return err
+}
+
+// stopListener ends the event loop, even if blocked on a subscriber not reading.
+func (w *wsEvents) stopListener() {
+	if w.listenerDone != nil {
+		w.endLifetime()
+		<-w.listenerDone
+	}
+}
 
 // Subscribe implements SubscriptionClient by using WSClient to subscribe given
 // subscriber to query. By default, it returns a channel with cap=1. Error is
@@ -123,37 +153,58 @@ func (w *wsEvents) Unsubscribe(ctx context.Context, _subscriber, query string) e
 // UnsubscribeAll implements SubscriptionClient by using WSClient to
 // unsubscribe given subscriber from all the queries.
 //
-// It returns an error if wsEvents is not running.
+// It returns an error if wsEvents is not running. Subscriptions are forgotten
+// even then: a reconnect must not restore one whose channel nobody reads, which
+// would stall every other subscription on the single events loop.
 func (w *wsEvents) UnsubscribeAll(ctx context.Context, _subscriber string) error {
-	if err := w.ws.UnsubscribeAll(ctx); err != nil {
-		return err
-	}
-
 	w.mtx.Lock()
-	defer w.mtx.Unlock()
 	w.subscriptions = make(map[string]*wsSubscription)
+	close(w.cleared)
+	w.cleared = make(chan struct{})
+	w.mtx.Unlock()
 
-	return nil
+	return w.ws.UnsubscribeAll(ctx)
 }
 
 // After being reconnected, it is necessary to redo subscription to server
 // otherwise no data will be automatically received.
-func (w *wsEvents) redoSubscriptionsAfter(d time.Duration) {
-	time.Sleep(d)
+func (w *wsEvents) redoSubscriptionsAfter(ctx context.Context, d time.Duration) {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-ctx.Done():
+		return
+	}
 
-	ctx := context.TODO()
-
+	// Sending can block until the writer restarts, so no lock is held across it.
+	// eventListener writes to the map under RLock, so reading it here needs Lock.
 	w.mtx.Lock()
-	defer w.mtx.Unlock()
-
+	queries := make([]string, 0, len(w.subscriptions))
 	for q, info := range w.subscriptions {
 		if q != "" && q == info.id {
 			continue
 		}
-		err := w.ws.Subscribe(ctx, q)
-		if err != nil {
+		queries = append(queries, q)
+	}
+	w.mtx.Unlock()
+
+	for _, q := range queries {
+		w.mtx.Lock()
+		_, ok := w.subscriptions[q]
+		w.mtx.Unlock()
+		if !ok {
+			continue
+		}
+		// If q is forgotten during this send, it stays subscribed upstream until
+		// the next reconnect. That is harmless: eventListener drops events for
+		// unknown queries, and subscribing to q again gets ErrAlreadySubscribed,
+		// which it ignores.
+		if err := w.ws.Subscribe(ctx, q); err != nil {
 			w.Logger.Error("failed to resubscribe", "query", q, "err", err)
+			w.mtx.Lock()
 			delete(w.subscriptions, q)
+			w.mtx.Unlock()
 		}
 	}
 }
@@ -162,7 +213,8 @@ func isErrAlreadySubscribed(err error) bool {
 	return strings.Contains(err.Error(), pubsub.ErrAlreadySubscribed.Error())
 }
 
-func (w *wsEvents) eventListener(ctx context.Context) {
+func (w *wsEvents) eventListener(ctx context.Context, done chan<- struct{}) {
+	defer close(done)
 	for {
 		select {
 		case resp, ok := <-w.ws.ResponsesCh:
@@ -177,9 +229,9 @@ func (w *wsEvents) eventListener(ctx context.Context) {
 				// We can ignore ErrAlreadySubscribed, but need to retry in other
 				// cases.
 				if !isErrAlreadySubscribed(resp.Error) {
-					// Resubscribe after 1 second to give Tendermint time to restart (if
+					// Resubscribe after a delay to give Tendermint time to restart (if
 					// crashed).
-					w.redoSubscriptionsAfter(1 * time.Second)
+					w.redoSubscriptionsAfter(ctx, w.resubscribeDelay)
 				}
 				continue
 			}
@@ -199,11 +251,12 @@ func (w *wsEvents) eventListener(ctx context.Context) {
 					w.subscriptions[result.SubscriptionID] = out
 				}
 			}
-
+			cleared := w.cleared
 			w.mtx.RUnlock()
 			if ok {
 				select {
 				case out.res <- *result:
+				case <-cleared:
 				case <-ctx.Done():
 					return
 				}

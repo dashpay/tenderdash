@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"runtime"
+	stdsync "sync"
 
 	sync "github.com/sasha-s/go-deadlock"
 
@@ -55,7 +56,7 @@ func (s *SocketServer) OnStart(ctx context.Context) error {
 	}
 
 	s.listener = ln
-	go s.acceptConnectionsRoutine(ctx)
+	s.Go(ctx, s.acceptConnectionsRoutine)
 
 	return nil
 }
@@ -103,7 +104,7 @@ func (s *SocketServer) acceptConnectionsRoutine(ctx context.Context) {
 		s.logger.Info("Waiting for new connection...")
 		conn, err := s.listener.Accept()
 		if err != nil {
-			if !s.IsRunning() {
+			if ctx.Err() != nil {
 				return // Ignore error from listener closing.
 			}
 			s.logger.Warn("Failed to accept connection", "err", err)
@@ -111,7 +112,11 @@ func (s *SocketServer) acceptConnectionsRoutine(ctx context.Context) {
 		}
 
 		cctx, ccancel := context.WithCancel(ctx)
-		connID := s.addConn(ccancel)
+		closeConn := stdsync.OnceValue(conn.Close)
+		// Cancellation cannot interrupt socket I/O, so shutdown also closes the
+		// transport. This closer never touches connsMtx: OnStop and rmConn call
+		// it while holding that lock.
+		connID := s.addConn(func() { ccancel(); _ = closeConn() })
 
 		s.logger.Info("Accepted a new connection", "id", connID)
 
@@ -121,7 +126,7 @@ func (s *SocketServer) acceptConnectionsRoutine(ctx context.Context) {
 		closer := func(err error) {
 			ccancel()
 			once.Do(func() {
-				if cerr := conn.Close(); err != nil {
+				if cerr := closeConn(); cerr != nil {
 					s.logger.Error("error closing connection",
 						"id", connID,
 						"close_err", cerr,
@@ -153,9 +158,15 @@ func (s *SocketServer) acceptConnectionsRoutine(ctx context.Context) {
 		}
 
 		// Read requests from conn and deal with them
-		go s.handleRequests(cctx, closer, conn, responses)
+		if !s.Go(cctx, func(ctx context.Context) { s.handleRequests(ctx, closer, conn, responses) }) {
+			closer(context.Canceled)
+			return
+		}
 		// Pull responses from 'responses' and write them to conn.
-		go s.handleResponses(cctx, closer, conn, responses)
+		if !s.Go(cctx, func(ctx context.Context) { s.handleResponses(ctx, closer, conn, responses) }) {
+			closer(context.Canceled)
+			return
+		}
 	}
 }
 

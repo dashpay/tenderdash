@@ -17,10 +17,13 @@ import (
 )
 
 type routedClient struct {
-	service.Service
+	*service.BaseService
 	logger        log.Logger
 	routing       Routing
 	defaultClient ClientInfo
+	// owned lists the clients started by the current attempt. Lifecycle hooks
+	// never overlap, and the drain worker starts after OnStart sets it.
+	owned []Client
 }
 
 var _ Client = (*routedClient)(nil)
@@ -125,46 +128,71 @@ func NewRoutedClient(logger log.Logger, defaultClient Client, routing Routing) (
 		defaultClient: ClientInfo{defaultClient, defaultClientID},
 	}
 
-	cli.Service = service.NewBaseService(logger, "RoutedClient", cli)
+	cli.BaseService = service.NewBaseService(logger, "RoutedClient", cli)
 	return cli, nil
 }
 
+// OnStart starts the clients that are not running yet and owns only those:
+// clients the caller already started keep their own lifetime.
 func (cli *routedClient) OnStart(ctx context.Context) error {
+	cli.owned = nil
+	// Client does not require Stop, and BaseService cancels ctx only after OnStart
+	// returns, so this context is what ends a child before a rollback joins it.
+	childCtx, cancelChildren := context.WithCancel(ctx)
 	var errs error
-	for _, clients := range cli.routing {
-		for _, client := range clients {
-			if !client.IsRunning() {
-				if err := client.Start(ctx); err != nil {
-					errs = multierror.Append(errs, err)
-				}
-			}
+	for _, client := range cli.clients() {
+		if client.IsRunning() {
+			continue
 		}
-	}
-
-	if !cli.defaultClient.IsRunning() {
-		if err := cli.defaultClient.Start(ctx); err != nil {
+		if err := client.Start(childCtx); err != nil {
 			errs = multierror.Append(errs, err)
+			continue
 		}
+		cli.owned = append(cli.owned, client)
+	}
+	// A failed attempt gets no OnStop; release what it started before returning.
+	if errs != nil {
+		cancelChildren()
+		cli.stopOwned()
+		return errs
 	}
 
-	return errs
+	if !cli.Go(ctx, func(ctx context.Context) {
+		defer cancelChildren()
+		<-ctx.Done()
+		for _, client := range cli.owned {
+			client.Wait()
+		}
+	}) {
+		cancelChildren()
+		cli.stopOwned()
+	}
+	return nil
 }
 
 func (cli *routedClient) OnStop() {
-	for _, clients := range cli.routing {
-		for _, client := range clients {
-			if client.IsRunning() {
-				switch c := client.Client.(type) {
-				case *socketClient:
-					c.Stop()
-				case *localClient:
-					c.Stop()
-				case *grpcClient:
-					c.Stop()
-				}
-			}
+	for _, client := range cli.owned {
+		if stopper, ok := client.(interface{ Stop() }); ok {
+			stopper.Stop()
 		}
 	}
+}
+
+func (cli *routedClient) stopOwned() {
+	cli.OnStop()
+	for _, client := range cli.owned {
+		client.Wait()
+	}
+}
+
+func (cli *routedClient) clients() []Client {
+	clients := []Client{cli.defaultClient.Client}
+	for _, routes := range cli.routing {
+		for _, route := range routes {
+			clients = append(clients, route.Client)
+		}
+	}
+	return clients
 }
 
 // delegate calls the given function on the appropriate client with the given

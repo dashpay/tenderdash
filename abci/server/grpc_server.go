@@ -47,21 +47,21 @@ func (s *GRPCServer) OnStart(ctx context.Context) error {
 	types.RegisterABCIApplicationServer(s.server, &gRPCApplication{Application: s.app})
 
 	s.logger.Info("Listening", "proto", s.proto, "addr", s.addr)
-	go func() {
-		go func() {
-			<-ctx.Done()
-			s.server.GracefulStop()
-		}()
-
+	if !s.Go(ctx, func(context.Context) {
 		if err := s.server.Serve(ln); err != nil {
 			s.logger.Error("error serving gRPC server", "err", err)
 		}
-	}()
+	}) {
+		return ln.Close()
+	}
 	return nil
 }
 
 // OnStop stops the gRPC server.
 func (s *GRPCServer) OnStop() { s.server.Stop() }
+
+// OnDrain joins handlers that were already running when the transport closed.
+func (s *GRPCServer) OnDrain() { s.server.GracefulStop() }
 
 //-------------------------------------------------------
 

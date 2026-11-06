@@ -53,7 +53,10 @@ type Client struct {
 	prt       *merkle.ProofRuntime
 	keyPathFn KeyPathFunc
 
-	closers []func()
+	serviceCtx context.Context
+	// callerOwnsNext records that next was already running when this client
+	// started. Lifecycle hooks never overlap, so OnStart's write precedes OnDrain.
+	callerOwnsNext bool
 }
 
 var _ rpcclient.Client = (*Client)(nil)
@@ -106,19 +109,30 @@ func NewClient(logger log.Logger, next rpcclient.Client, lc LightClient, opts ..
 }
 
 func (c *Client) OnStart(ctx context.Context) error {
-	nctx, ncancel := context.WithCancel(ctx)
-	if err := c.next.Start(nctx); err != nil {
-		ncancel()
+	c.serviceCtx = ctx
+	// A local client shares its node's event bus, whose Start ignores ctx if it is
+	// already running. Clients not reporting their state are started here.
+	running, ok := c.next.(interface{ IsRunning() bool })
+	c.callerOwnsNext = ok && running.IsRunning()
+	if err := c.next.Start(ctx); err != nil {
 		return err
 	}
-	c.closers = append(c.closers, ncancel)
 
 	return nil
 }
 
-func (c *Client) OnStop() {
-	for _, closer := range c.closers {
-		closer()
+func (c *Client) OnStop() {}
+
+// OnDrain joins clients exposing transport shutdown in addition to the RPC API,
+// unless the caller had already started them and so controls their lifetime.
+func (c *Client) OnDrain() {
+	if c.callerOwnsNext {
+		return
+	}
+	if waiter, ok := c.next.(interface{ Wait() }); ok {
+		waiter.Wait()
+	} else if stopper, ok := c.next.(interface{ Stop() error }); ok {
+		_ = stopper.Stop()
 	}
 }
 
@@ -648,19 +662,31 @@ func (c *Client) RegisterOpDecoder(typ string, dec merkle.OpDecoder) {
 // a subscriber, but does not verify responses (UNSAFE)!
 // TODO: verify data
 func (c *Client) SubscribeWS(ctx context.Context, query string) (*coretypes.ResultSubscribe, error) {
-	bctx, bcancel := context.WithCancel(context.Background())
-	c.closers = append(c.closers, bcancel)
+	if !c.IsRunning() {
+		return nil, fmt.Errorf("light RPC client is not running")
+	}
+	bctx, cancel := context.WithCancel(c.serviceCtx)
 
 	callInfo := rpctypes.GetCallInfo(ctx)
+	stopCancel := context.AfterFunc(callInfo.WSConn.Context(), cancel)
 	out, err := c.next.Subscribe(bctx, callInfo.RemoteAddr(), query) //nolint:staticcheck
 	if err != nil {
+		stopCancel()
+		cancel()
 		return nil, err
 	}
 
-	go func() {
+	done := make(chan struct{})
+	if !c.Go(bctx, func(bctx context.Context) {
+		defer close(done)
+		defer cancel()
+		defer stopCancel()
 		for {
 			select {
-			case resultEvent := <-out:
+			case resultEvent, ok := <-out:
+				if !ok {
+					return
+				}
 				// We should have a switch here that performs a validation
 				// depending on the event's type.
 				callInfo.WSConn.TryWriteRPCResponse(bctx, callInfo.RPCRequest.MakeResponse(resultEvent))
@@ -668,7 +694,17 @@ func (c *Client) SubscribeWS(ctx context.Context, query string) (*coretypes.Resu
 				return
 			}
 		}
-	}()
+	}) {
+		stopCancel()
+		cancel()
+		return nil, fmt.Errorf("light RPC client is stopping")
+	}
+
+	if !callInfo.WSConn.Go(func(context.Context) { <-done }) {
+		cancel()
+		<-done
+		return nil, fmt.Errorf("websocket session is stopping")
+	}
 
 	return &coretypes.ResultSubscribe{}, nil
 }
@@ -676,7 +712,8 @@ func (c *Client) SubscribeWS(ctx context.Context, query string) (*coretypes.Resu
 // UnsubscribeWS calls original client's Unsubscribe using remote address as a
 // subscriber.
 func (c *Client) UnsubscribeWS(ctx context.Context, query string) (*coretypes.ResultUnsubscribe, error) {
-	err := c.next.Unsubscribe(context.Background(), rpctypes.GetCallInfo(ctx).RemoteAddr(), query) //nolint:staticcheck
+	// ctx ends with the WebSocket session, which joins this call on shutdown.
+	err := c.next.Unsubscribe(ctx, rpctypes.GetCallInfo(ctx).RemoteAddr(), query) //nolint:staticcheck
 	if err != nil {
 		return nil, err
 	}
@@ -686,7 +723,8 @@ func (c *Client) UnsubscribeWS(ctx context.Context, query string) (*coretypes.Re
 // UnsubscribeAllWS calls original client's UnsubscribeAll using remote address
 // as a subscriber.
 func (c *Client) UnsubscribeAllWS(ctx context.Context) (*coretypes.ResultUnsubscribe, error) {
-	err := c.next.UnsubscribeAll(context.Background(), rpctypes.GetCallInfo(ctx).RemoteAddr()) //nolint:staticcheck
+	// ctx ends with the WebSocket session, which joins this call on shutdown.
+	err := c.next.UnsubscribeAll(ctx, rpctypes.GetCallInfo(ctx).RemoteAddr()) //nolint:staticcheck
 	if err != nil {
 		return nil, err
 	}

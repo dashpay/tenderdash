@@ -61,9 +61,7 @@ func (env *Environment) Subscribe(ctx context.Context, req *coretypes.RequestSub
 
 	// Capture the current ID, since it can change in the future.
 	subscriptionID := callInfo.RPCRequest.ID
-	go func() {
-		opctx, opcancel := context.WithCancel(context.TODO())
-		defer opcancel()
+	if !callInfo.WSConn.Go(func(opctx context.Context) {
 
 		for {
 			msg, err := sub.Next(opctx)
@@ -81,6 +79,10 @@ func (env *Environment) Subscribe(ctx context.Context, req *coretypes.RequestSub
 				return
 			}
 
+			if err != nil {
+				return
+			}
+
 			// We have a message to deliver to the client.
 			resp := callInfo.RPCRequest.MakeResponse(&coretypes.ResultEvent{
 				Query:  req.Query,
@@ -95,7 +97,10 @@ func (env *Environment) Subscribe(ctx context.Context, req *coretypes.RequestSub
 					"to", addr, "subscriptionID", subscriptionID, "err", err)
 			}
 		}
-	}()
+	}) {
+		_ = env.EventBus.UnsubscribeAll(context.Background(), addr)
+		return nil, errors.New("websocket session is stopping")
+	}
 
 	return &coretypes.ResultSubscribe{}, nil
 }

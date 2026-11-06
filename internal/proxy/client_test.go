@@ -198,7 +198,6 @@ func TestAppConns_Start_Stop(t *testing.T) {
 	clientMock := &abcimocks.Client{}
 	clientMock.On("Start", mock.Anything).Return(nil)
 	clientMock.On("Error").Return(nil)
-	clientMock.On("IsRunning").Return(true)
 	clientMock.On("Wait").Return(nil).Times(1)
 	cl := &noopStoppableClientImpl{Client: clientMock}
 
@@ -227,7 +226,6 @@ func TestAppConns_Failure(t *testing.T) {
 	clientMock := &abcimocks.Client{}
 	clientMock.On("SetLogger", mock.Anything).Return()
 	clientMock.On("Start", mock.Anything).Return(nil)
-	clientMock.On("IsRunning").Return(true)
 	clientMock.On("Wait").Return(nil)
 	clientMock.On("Error").Return(errors.New("EOF"))
 	cl := &noopStoppableClientImpl{Client: clientMock}

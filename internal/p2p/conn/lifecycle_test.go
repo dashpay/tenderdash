@@ -11,6 +11,32 @@ import (
 	"github.com/dashpay/tenderdash/libs/log"
 )
 
+func TestMConnectionWaitDrainsCallback(t *testing.T) {
+	local, remote := net.Pipe()
+	entered, release := make(chan struct{}), make(chan struct{})
+	receiver := createMConnectionWithCallbacks(log.NewNopLogger(), local,
+		func(context.Context, ChannelID, []byte) { close(entered); <-release }, nil)
+	sender := createTestMConnection(log.NewNopLogger(), remote)
+	require.NoError(t, receiver.Start(context.Background()))
+	require.NoError(t, sender.Start(context.Background()))
+	t.Cleanup(func() { sender.Stop(); sender.Wait(); receiver.Stop(); receiver.Wait() })
+	defer close(release)
+	require.True(t, sender.Send(1, []byte("drain")))
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("receive callback did not start")
+	}
+	receiver.Stop()
+	done := make(chan struct{})
+	go func() { receiver.Wait(); close(done) }()
+	select {
+	case <-done:
+		t.Fatal("Wait returned while the receive callback was still running")
+	case <-time.After(30 * time.Millisecond):
+	}
+}
+
 func TestMConnectionErrorCallbackRetainsParentContext(t *testing.T) {
 	local, remote := net.Pipe()
 	t.Cleanup(func() { _ = local.Close(); _ = remote.Close() })
@@ -36,5 +62,33 @@ func TestMConnectionErrorCallbackRetainsParentContext(t *testing.T) {
 		require.False(t, result.running)
 	case <-time.After(time.Second):
 		t.Fatal("error callback did not run")
+	}
+	done := make(chan struct{})
+	go func() { connection.Wait(); close(done) }()
+	select {
+	case <-done:
+		t.Fatal("Wait returned before the error callback finished")
+	case <-time.After(30 * time.Millisecond):
+	}
+}
+
+func TestMConnectionPeerInputErrorAfterCanceledStart(t *testing.T) {
+	local, remote := net.Pipe()
+	t.Cleanup(func() { _ = local.Close(); _ = remote.Close() })
+	connection := createTestMConnection(log.NewNopLogger(), local)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	require.NoError(t, connection.Start(ctx))
+	t.Cleanup(func() { connection.Stop(); connection.Wait() })
+
+	done := make(chan error, 1)
+	go func() { done <- connection.PeerInputError() }()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		close(connection.doneRecvRoutine)
+		require.NoError(t, <-done)
+		t.Fatal("PeerInputError did not return after startup canceled the receive worker")
 	}
 }

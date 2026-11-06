@@ -153,13 +153,7 @@ type (
 		jobGen         *jobGenerator
 		pendingToApply map[int64]BlockResponse
 
-		// ctx/cancel scope the handler goroutines' lifetime. Created in OnStart
-		// (live before the goroutines spawn, so it never observes a start-race)
-		// and canceled in OnStop so Stop releases the handlers even when the
-		// caller's context is still live.
-		ctx          context.Context
-		cancel       context.CancelFunc
-		consumerDone chan struct{}
+		ctx context.Context
 	}
 	OptionFunc func(v *Synchronizer)
 )
@@ -244,29 +238,24 @@ func (s *Synchronizer) OnStart(ctx context.Context) error {
 	}
 	s.lastAdvance = s.clock.Now()
 	s.lastMonitorUpdate = s.lastAdvance
-	s.ctx, s.cancel = context.WithCancel(ctx)
+	s.ctx = ctx
 	applicationCtx, ok := ctx.Value(applicationContextKey{}).(context.Context)
 	if !ok {
 		applicationCtx = ctx
 	}
-	s.consumerDone = make(chan struct{})
 	s.workerPool.Run(s.ctx)
-	go s.runHandler(s.ctx, s.produceJob)
-	go func() {
-		defer close(s.consumerDone)
-		s.runHandler(s.ctx, func(handlerCtx context.Context) error {
+	s.Go(ctx, func(ctx context.Context) { s.runHandler(ctx, s.produceJob) })
+	s.Go(ctx, func(ctx context.Context) {
+		s.runHandler(ctx, func(handlerCtx context.Context) error {
 			// Handover cancels consumer I/O; parent cancellation also stops application.
 			return s.consumeJobResult(handlerCtx, applicationCtx)
 		})
-	}()
+	})
 	return nil
 }
 
 func (s *Synchronizer) OnStop() {
-	s.cancel()
 	s.workerPool.Stop(context.Background())
-	// Finish all application work before consensus reads the final state.
-	<-s.consumerDone
 }
 
 func (s *Synchronizer) produceJob(ctx context.Context) error {

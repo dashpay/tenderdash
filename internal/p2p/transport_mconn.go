@@ -138,7 +138,10 @@ func (m *MConnTransport) Accept(ctx context.Context) (Connection, error) {
 
 	conCh := make(chan net.Conn)
 	errCh := make(chan error)
+	done := make(chan struct{})
+	defer func() { <-done }()
 	go func() {
+		defer close(done)
 		tcpConn, err := m.listener.Accept()
 		if err != nil {
 			select {
@@ -147,12 +150,15 @@ func (m *MConnTransport) Accept(ctx context.Context) (Connection, error) {
 				m.logger.Trace("MConnTransport Accept: connection closed - doneCh")
 			case <-ctx.Done():
 			}
+			return
 		}
 		select {
 		case conCh <- tcpConn:
 		case <-m.doneCh:
+			_ = tcpConn.Close()
 			m.logger.Trace("MConnTransport Accept: connection closed - doneCh")
 		case <-ctx.Done():
+			_ = tcpConn.Close()
 		}
 	}()
 
@@ -273,7 +279,8 @@ type mConnConnection struct {
 	doneCh       chan struct{}
 	closeOnce    sync.Once
 
-	mconn *conn.MConnection // set during Handshake()
+	mconnMtx sync.Mutex
+	mconn    *conn.MConnection // set during Handshake()
 
 	// invalidData is the peer-attributable failure that tore the connection
 	// down, kept so ReceiveMessage reports it even after doneCh closes.
@@ -326,7 +333,10 @@ func (c *mConnConnection) Handshake(
 	// To handle context cancellation, we need to do the handshake in a
 	// goroutine and abort the blocking network calls by closing the connection
 	// when the context is canceled.
+	done := make(chan struct{})
+	defer func() { <-done }()
 	go func() {
+		defer close(done)
 		// FIXME: Since the MConnection code panics, we need to recover it and turn it
 		// into an error. We should remove panics instead.
 		defer func() {
@@ -337,11 +347,7 @@ func (c *mConnConnection) Handshake(
 		var err error
 		mconn, peerInfo, peerKey, err = c.handshake(handshakeCtx, nodeInfo, privKey)
 
-		select {
-		case errCh <- err:
-		case <-c.doneCh:
-		case <-handshakeCtx.Done():
-		}
+		errCh <- err
 
 	}()
 
@@ -354,6 +360,13 @@ func (c *mConnConnection) Handshake(
 	case err := <-errCh:
 		if err != nil {
 			return types.NodeInfo{}, nil, err
+		}
+		c.mconnMtx.Lock()
+		defer c.mconnMtx.Unlock()
+		select {
+		case <-c.doneCh:
+			return types.NodeInfo{}, nil, io.EOF
+		default:
 		}
 		c.mconn = mconn
 		// Start must not use the handshakeCtx. The handshakeCtx may have a
@@ -391,28 +404,22 @@ func (c *mConnConnection) handshake(
 	go func() {
 		defer wg.Done()
 		_, err := protoio.NewDelimitedWriter(secretConn).WriteMsg(nodeInfo.ToProto())
-		select {
-		case errCh <- err:
-		case <-c.doneCh:
-		case <-ctx.Done():
-		}
+		errCh <- err
 
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		_, err := protoio.NewDelimitedReader(secretConn, types.MaxNodeInfoSize()).ReadMsg(&pbPeerInfo)
-		select {
-		case errCh <- err:
-		case <-c.doneCh:
-		case <-ctx.Done():
-		}
+		errCh <- err
 	}()
 
 	wg.Wait()
-
-	if err, ok := <-errCh; ok && err != nil {
-		return nil, types.NodeInfo{}, nil, err
+	close(errCh)
+	for err := range errCh {
+		if err != nil {
+			return nil, types.NodeInfo{}, nil, err
+		}
 	}
 
 	if err := ctx.Err(); err != nil {
@@ -576,14 +583,28 @@ func (c *mConnConnection) RemoteEndpoint() Endpoint {
 func (c *mConnConnection) Close() error {
 	var err error
 	c.closeOnce.Do(func() {
+		c.mconnMtx.Lock()
+		defer c.mconnMtx.Unlock()
 		c.logger.Trace("mConnConnection.Close(): closing doneCh")
 		defer close(c.doneCh)
 
-		if c.mconn != nil && c.mconn.IsRunning() {
+		if c.mconn != nil {
 			c.mconn.Stop()
-		} else {
-			err = c.conn.Close()
+		}
+		err = c.conn.Close()
+		if errors.Is(err, net.ErrClosed) {
+			err = nil
 		}
 	})
 	return err
+}
+
+// Wait joins the protocol workers after Close. Call it from the connection owner.
+func (c *mConnConnection) Wait() {
+	c.mconnMtx.Lock()
+	mconn := c.mconn
+	c.mconnMtx.Unlock()
+	if mconn != nil {
+		mconn.Wait()
+	}
 }
