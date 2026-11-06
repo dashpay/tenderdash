@@ -389,8 +389,11 @@ parameter is absent from a particular header-hash subset.
 
 | Name        | Type   | Description                   | Field Number |
 |-------------|--------|-------------------------------|--------------|
-| app_version | uint64 | The ABCI application version. | 1            |
 | consensus_version | `ConsensusVersion` | Version of the consensus protocol, selecting the [proposer strategy](../consensus/proposer-selection.md). | 2 |
+
+Field 1 (`app_version`) is reserved. The application version is not a consensus
+parameter; see
+[application version](../consensus/consensus-params-commitment.md#application-version-is-not-a-consensus-parameter).
 
 ### SynchronyParams
 

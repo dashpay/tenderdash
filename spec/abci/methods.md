@@ -92,6 +92,9 @@ that happens on startup.
 
 * **Usage**:
 * Called once upon genesis.
+* `consensus_params` carries no application version. The application determines
+  its initial protocol version itself, for example per network or from its own
+  configuration.
 * If `ResponseInitChain.validator_set_update.validator_updates` is empty,
   genesis validator membership is retained; quorum-key and quorum-hash updates
   can still be supplied in `validator_set_update`.

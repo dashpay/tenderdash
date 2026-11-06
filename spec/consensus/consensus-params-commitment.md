@@ -348,12 +348,27 @@ This change implements the following:
    ([`internal/state/rollback.go:78`](../../internal/state/rollback.go)).
 4. **Example applications.** The kvstore example and the e2e application do not
    send the field in parameter updates.
-5. **Compatibility.** Protobuf decoding ignores field 1 sent by older applications
-   in `InitChain`, `PrepareProposal` or `FinalizeBlock` parameter updates. Genesis
-   JSON containing `consensus_params.version.app_version` still loads, because
+5. **InitChain.** `RequestInitChain.consensus_params` carries no application
+   version, and Tenderdash provides no replacement channel. The application MUST
+   determine its initial protocol version itself, for example per network or from
+   its own configuration.
+6. **Compatibility.** Protobuf decoding ignores field 1 sent by older applications
+   in `InitChain`, `PrepareProposal` or `FinalizeBlock` parameter updates, and in
+   stored parameters. Genesis JSON containing
+   `consensus_params.version.app_version` still loads, because
    [`types/genesis.go`](../../types/genesis.go) decodes with lenient
-   `json.Unmarshal`; the key is not written back. Generated ABCI clients drop the
-   field, which requires a coordinated application release.
+   `json.Unmarshal`, but the value is ignored and not passed to InitChain or
+   written back. Generated ABCI clients drop the field, which requires a
+   coordinated application release.
+
+**Breaking for Dash Platform.** Platform selects its starting `PlatformVersion`
+from `RequestInitChain.consensus_params.version.app_version`, the genesis value
+`1` on mainnet and testnet, and falls back to its desired version when the value
+is 0
+([`rs-drive-abci` `init_chain`](https://github.com/dashpay/platform/blob/de80f86d80ffcfa0a91ae59ce43cfeb161e27bc5/packages/rs-drive-abci/src/execution/engine/initialization/init_chain/mod.rs#L27-L52)).
+Platform MUST determine its initial protocol version itself before it upgrades to
+a Tenderdash without this field. Otherwise a node syncing from genesis starts at
+the wrong protocol version and halts on an app-hash mismatch.
 
 The following remain for the implementation:
 
