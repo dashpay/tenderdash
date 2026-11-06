@@ -776,10 +776,10 @@ enum VerifyStatus {
     | Name      | Type              | Description                                                             | Field Number |
     |-----------|-------------------|-------------------------------------------------------------------------|--------------|
     | extension | bytes             | Vote extension provided by the Application.                             | 1            |
-    | height    | int64             | Height in which the extension was provided.                             | 2            |
-    | round     | int32             | Round in which the extension was provided.                              | 3            |
+    | height    | sfixed64          | Height in which the extension was provided.                             | 2            |
+    | round     | sfixed64          | Round in which the extension was provided.                              | 3            |
     | chain_id  | string            | ID of the blockchain running consensus.                                 | 4            |
-    | Type      | VoteExtensionType | [VoteExtensionType](../core/data_structures.md#voteExtensiontype)       | 100          |
+    | type      | VoteExtensionType | [VoteExtensionType](../core/data_structures.md#voteExtensiontype)       | 5            |
 
 * **Usage**:
 * Tenderdash is to sign the whole data structure and attach it to a Precommit message
