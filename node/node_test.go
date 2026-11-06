@@ -853,6 +853,8 @@ func TestMaxProposalBlockSize(t *testing.T) {
 		BlockID:                 blockID,
 		QuorumHash:              crypto.RandQuorumHash(),
 		ThresholdBlockSignature: crypto.CRandBytes(bls12381.SignatureSize),
+		Beacon:                  crypto.CRandBytes(bls12381.SignatureSize),
+		AppHash:                 crypto.Checksum([]byte("final_app_hash")),
 	}
 
 	block, _, err := blockExec.CreateProposalBlock(
@@ -874,7 +876,8 @@ func TestMaxProposalBlockSize(t *testing.T) {
 	pb, err := block.ToProto()
 	require.NoError(t, err)
 
-	// require that the header and commit be the max possible size
+	// require that the header and commit be the max possible size; the proposal drops the beacon and
+	// app hash of the commit before consensus version 2
 	require.Equal(t, types.MaxHeaderBytes, int64(pb.Header.Size()))
 	require.Equal(t, types.MaxCommitOverheadBytes, int64(pb.LastCommit.Size()))
 	// make sure that the block is less than the max possible size

@@ -183,7 +183,6 @@ func (bs *BlockStore) LoadBlock(height int64) *types.Block {
 		return nil
 	}
 
-	pbb := new(tmproto.Block)
 	buf := []byte{}
 	for i := 0; i < int(blockMeta.BlockID.PartSetHeader.Total); i++ {
 		part := bs.LoadBlockPart(height, i)
@@ -194,7 +193,7 @@ func (bs *BlockStore) LoadBlock(height int64) *types.Block {
 		}
 		buf = append(buf, part.Bytes...)
 	}
-	err := proto.Unmarshal(buf, pbb)
+	pbb, err := types.UnmarshalBlockProto(buf)
 	if err != nil {
 		// NOTE: The existence of meta should imply the existence of the
 		// block. So, make sure meta is only saved after blocks are saved.
@@ -603,7 +602,9 @@ func (bs *BlockStore) saveBlockToBatch(batch dbm.Batch, block *types.Block, bloc
 		return err
 	}
 
-	pbc := block.LastCommit.ToProto()
+	// Nothing signs the beacon and app hash of block.LastCommit, so a proposer can fill them. The block's
+	// parts keep them, as the encoding the next commit signs, but they are not the previous height's commit.
+	pbc := block.LastCommit.WithoutRandomBeacon().ToProto()
 	blockCommitBytes := mustEncode(pbc)
 	if err := batch.Set(blockCommitKey(height-1), blockCommitBytes); err != nil {
 		return err

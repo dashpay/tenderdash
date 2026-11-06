@@ -47,6 +47,74 @@ func (_m *Application) EXPECT() *Application_Expecter {
 	return &Application_Expecter{mock: &_m.Mock}
 }
 
+// ApplyBlockRandomness provides a mock function for the type Application
+func (_mock *Application) ApplyBlockRandomness(context1 context.Context, requestApplyBlockRandomness *types.RequestApplyBlockRandomness) (*types.ResponseApplyBlockRandomness, error) {
+	ret := _mock.Called(context1, requestApplyBlockRandomness)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ApplyBlockRandomness")
+	}
+
+	var r0 *types.ResponseApplyBlockRandomness
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *types.RequestApplyBlockRandomness) (*types.ResponseApplyBlockRandomness, error)); ok {
+		return returnFunc(context1, requestApplyBlockRandomness)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *types.RequestApplyBlockRandomness) *types.ResponseApplyBlockRandomness); ok {
+		r0 = returnFunc(context1, requestApplyBlockRandomness)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*types.ResponseApplyBlockRandomness)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *types.RequestApplyBlockRandomness) error); ok {
+		r1 = returnFunc(context1, requestApplyBlockRandomness)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// Application_ApplyBlockRandomness_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ApplyBlockRandomness'
+type Application_ApplyBlockRandomness_Call struct {
+	*mock.Call
+}
+
+// ApplyBlockRandomness is a helper method to define mock.On call
+//   - context1 context.Context
+//   - requestApplyBlockRandomness *types.RequestApplyBlockRandomness
+func (_e *Application_Expecter) ApplyBlockRandomness(context1 any, requestApplyBlockRandomness any) *Application_ApplyBlockRandomness_Call {
+	return &Application_ApplyBlockRandomness_Call{Call: _e.mock.On("ApplyBlockRandomness", context1, requestApplyBlockRandomness)}
+}
+
+func (_c *Application_ApplyBlockRandomness_Call) Run(run func(context1 context.Context, requestApplyBlockRandomness *types.RequestApplyBlockRandomness)) *Application_ApplyBlockRandomness_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *types.RequestApplyBlockRandomness
+		if args[1] != nil {
+			arg1 = args[1].(*types.RequestApplyBlockRandomness)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *Application_ApplyBlockRandomness_Call) Return(responseApplyBlockRandomness *types.ResponseApplyBlockRandomness, err error) *Application_ApplyBlockRandomness_Call {
+	_c.Call.Return(responseApplyBlockRandomness, err)
+	return _c
+}
+
+func (_c *Application_ApplyBlockRandomness_Call) RunAndReturn(run func(context1 context.Context, requestApplyBlockRandomness *types.RequestApplyBlockRandomness) (*types.ResponseApplyBlockRandomness, error)) *Application_ApplyBlockRandomness_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ApplySnapshotChunk provides a mock function for the type Application
 func (_mock *Application) ApplySnapshotChunk(context1 context.Context, requestApplySnapshotChunk *types.RequestApplySnapshotChunk) (*types.ResponseApplySnapshotChunk, error) {
 	ret := _mock.Called(context1, requestApplySnapshotChunk)

@@ -117,6 +117,12 @@ func ToRequestFinalizeBlock(req *RequestFinalizeBlock) *Request {
 	}
 }
 
+func ToRequestApplyBlockRandomness(req *RequestApplyBlockRandomness) *Request {
+	return &Request{
+		Value: &Request_ApplyBlockRandomness{req},
+	}
+}
+
 //----------------------------------------
 
 func ToResponseException(errStr string) *Response {
@@ -212,5 +218,11 @@ func ToResponseProcessProposal(res *ResponseProcessProposal) *Response {
 func ToResponseFinalizeBlock(res *ResponseFinalizeBlock) *Response {
 	return &Response{
 		Value: &Response_FinalizeBlock{res},
+	}
+}
+
+func ToResponseApplyBlockRandomness(res *ResponseApplyBlockRandomness) *Response {
+	return &Response{
+		Value: &Response_ApplyBlockRandomness{res},
 	}
 }

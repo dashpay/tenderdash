@@ -13,6 +13,7 @@
     - [Misbehavior](#tendermint-abci-Misbehavior)
     - [QuorumHashUpdate](#tendermint-abci-QuorumHashUpdate)
     - [Request](#tendermint-abci-Request)
+    - [RequestApplyBlockRandomness](#tendermint-abci-RequestApplyBlockRandomness)
     - [RequestApplySnapshotChunk](#tendermint-abci-RequestApplySnapshotChunk)
     - [RequestCheckTx](#tendermint-abci-RequestCheckTx)
     - [RequestEcho](#tendermint-abci-RequestEcho)
@@ -29,6 +30,7 @@
     - [RequestQuery](#tendermint-abci-RequestQuery)
     - [RequestVerifyVoteExtension](#tendermint-abci-RequestVerifyVoteExtension)
     - [Response](#tendermint-abci-Response)
+    - [ResponseApplyBlockRandomness](#tendermint-abci-ResponseApplyBlockRandomness)
     - [ResponseApplySnapshotChunk](#tendermint-abci-ResponseApplySnapshotChunk)
     - [ResponseCheckTx](#tendermint-abci-ResponseCheckTx)
     - [ResponseEcho](#tendermint-abci-ResponseEcho)
@@ -87,6 +89,8 @@
 | quorum_hash | [bytes](#bytes) |  |  |
 | block_signature | [bytes](#bytes) |  |  |
 | threshold_vote_extensions | [tendermint.types.VoteExtension](#tendermint-types-VoteExtension) | repeated |  |
+| beacon | [bytes](#bytes) |  | Random beacon of the committed block: the threshold signature recovered from the prevotes of the commit round. Set from consensus version 2; empty before. |
+| app_hash | [bytes](#bytes) |  | App hash after `ApplyBlockRandomness` for the committed block and round. The commit signs it through the state ID of its block ID, which Tenderdash checks before passing it on. Set from consensus version 2; empty before. |
 
 
 
@@ -251,6 +255,60 @@ Request types
 | extend_vote | [RequestExtendVote](#tendermint-abci-RequestExtendVote) |  |  |
 | verify_vote_extension | [RequestVerifyVoteExtension](#tendermint-abci-RequestVerifyVoteExtension) |  |  |
 | finalize_block | [RequestFinalizeBlock](#tendermint-abci-RequestFinalizeBlock) |  |  |
+| apply_block_randomness | [RequestApplyBlockRandomness](#tendermint-abci-RequestApplyBlockRandomness) |  |  |
+
+
+
+
+
+
+<a name="tendermint-abci-RequestApplyBlockRandomness"></a>
+
+### RequestApplyBlockRandomness
+Applies the block&#39;s randomness and returns the app hash the Precommit signs.
+
+#### Usage
+
+- Used from consensus version 2 (`VersionParams.consensus_version`). Before that, Tenderdash never calls it.
+  This release defines consensus versions 0 and 1 only, so it never calls it.
+- `RequestApplyBlockRandomness.beacon` is the random beacon of the block and round: the 96-byte BLS threshold
+  signature recovered from the Prevotes of round `round` for the block `hash`. Tenderdash has verified it against
+  the quorum&#39;s threshold public key before the call.
+- The Application applies the randomness to the state that `ProcessProposal` (or `PrepareProposal`) left for
+  that block and round, and returns the resulting Merkle root hash in `ResponseApplyBlockRandomness.app_hash`.
+  When nothing in the block uses randomness, `app_hash` equals the app hash of the block header.
+- The header keeps the app hash from `ProcessProposal`, which Prevotes sign. Precommits and the commit sign
+  `ResponseApplyBlockRandomness.app_hash`, and the commit carries it in `Commit.app_hash`.
+- The randomness may change only the application state behind `app_hash`. Transaction results, events,
+  validator set updates, consensus parameter updates and the other outputs of `ProcessProposal` are fixed
+  by the header the Prevotes signed: they MUST NOT depend on the beacon, and Tenderdash keeps the ones
+  `ProcessProposal` returned.
+- Vote extensions and their verification MUST NOT depend on the beacon or on the state this call produces;
+  see `ExtendVote`.
+- The implementation MUST be deterministic: every process that applies the same beacon to the same block
+  and round MUST return the same `app_hash`.
+- Tenderdash may call it more than once for the same block, round and beacon; the Application MUST return
+  the same `app_hash` each time.
+- It MUST NOT modify the committed state: Tenderdash may call it for a round that never commits, and
+  `FinalizeBlock` commits the state for the commit round.
+- An ABCI error is fatal, as for `ExtendVote`.
+
+#### When does Tenderdash call it?
+
+- On a validator, once the Prevotes of round _r_ for block _v_ reach the threshold and their signature is
+  recovered, before `ExtendVote` and before signing its Precommit for _v_.
+- On every path that finalizes a block from a commit (consensus, block sync, replay, a node that did not
+  vote): after `ProcessProposal` of the committed block for the commit round, with the commit&#39;s beacon, and
+  before `FinalizeBlock`. Tenderdash compares the returned `app_hash` with `Commit.app_hash` and stops on a
+  mismatch.
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| hash | [bytes](#bytes) |  | The header hash of the block the Prevotes are for. |
+| height | [int64](#int64) |  | Height of the block. |
+| round | [int32](#int32) |  | Round whose Prevotes produced the beacon. |
+| beacon | [bytes](#bytes) |  | 96-byte BLS threshold signature recovered from those Prevotes. |
 
 
 
@@ -337,6 +395,8 @@ to attach to that vote. It may also call ExtendVote on any node after rejecting
 a commit vector, to learn the expected vector without signing or broadcasting.
 The call must be free of side effects. Threshold-recoverable extensions must be
 deterministic and match the vector accepted at commit-level VerifyVoteExtension.
+From consensus version 2, ApplyBlockRandomness runs first, but the extensions
+must not depend on the beacon or on the state it produced.
 See the [ExtendVote contract](methods.md#extendvote).
 
 
@@ -360,6 +420,8 @@ The application must persist the candidate before returning; execution results
 and events are provided through proposal processing, not ResponseFinalizeBlock.
 The response contains retention and next-block scheduling hints only.
 Use retain_height with care: pruning blocks can prevent replay and bootstrapping.
+From consensus version 2, the state to persist is that candidate with commit.beacon
+applied, as ApplyBlockRandomness applies it, and its root must equal commit.app_hash.
 See the [FinalizeBlock contract](methods.md#finalizeblock) and
 [commit and apply](../consensus/consensus-happy-path.md#9-commit-and-apply).
 
@@ -694,6 +756,22 @@ block. This includes commits the process assembled from its own &#43;2/3 precomm
 | extend_vote | [ResponseExtendVote](#tendermint-abci-ResponseExtendVote) |  |  |
 | verify_vote_extension | [ResponseVerifyVoteExtension](#tendermint-abci-ResponseVerifyVoteExtension) |  |  |
 | finalize_block | [ResponseFinalizeBlock](#tendermint-abci-ResponseFinalizeBlock) |  |  |
+| apply_block_randomness | [ResponseApplyBlockRandomness](#tendermint-abci-ResponseApplyBlockRandomness) |  |  |
+
+
+
+
+
+
+<a name="tendermint-abci-ResponseApplyBlockRandomness"></a>
+
+### ResponseApplyBlockRandomness
+
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| app_hash | [bytes](#bytes) |  | The Merkle root hash of the application state after the randomness is applied. 32 bytes. Equals the header app hash when nothing in the block uses randomness. The randomness changes nothing but this state: the other results of the block are the ones ProcessProposal returned. |
 
 
 
@@ -1250,6 +1328,7 @@ TxAction contains App-provided information on what to do with a transaction that
 | ExtendVote | [RequestExtendVote](#tendermint-abci-RequestExtendVote) | [ResponseExtendVote](#tendermint-abci-ResponseExtendVote) |  |
 | VerifyVoteExtension | [RequestVerifyVoteExtension](#tendermint-abci-RequestVerifyVoteExtension) | [ResponseVerifyVoteExtension](#tendermint-abci-ResponseVerifyVoteExtension) |  |
 | FinalizeBlock | [RequestFinalizeBlock](#tendermint-abci-RequestFinalizeBlock) | [ResponseFinalizeBlock](#tendermint-abci-ResponseFinalizeBlock) |  |
+| ApplyBlockRandomness | [RequestApplyBlockRandomness](#tendermint-abci-RequestApplyBlockRandomness) | [ResponseApplyBlockRandomness](#tendermint-abci-ResponseApplyBlockRandomness) |  |
 
  
 

@@ -337,7 +337,7 @@ func BlockFromProto(bp *tmproto.Block) (*Block, error) {
 	b.CoreChainLock = coreChainLock
 
 	if bp.LastCommit != nil {
-		lc, err := CommitFromProto(bp.LastCommit)
+		lc, err := CommitFromProto(lastCommitWithoutMalformedRandomness(bp.LastCommit))
 		if err != nil {
 			return nil, err
 		}
@@ -345,6 +345,23 @@ func BlockFromProto(bp *tmproto.Block) (*Block, error) {
 	}
 
 	return b, b.ValidateBasic()
+}
+
+// lastCommitWithoutMalformedRandomness returns the block's LastCommit without its beacon and app hash
+// when they do not have the sizes ValidateBasic requires, and cp itself otherwise.
+//
+// A block's LastCommit is not refused for them, unlike a commit received on its own: releases before
+// these fields skip them as unknown, so they accept such a block, and an upgraded node refusing it
+// would split from them. Neither field is covered by the block hash, and dropping them here keeps
+// them from being read, stored in the decoded block, or passed on.
+func lastCommitWithoutMalformedRandomness(cp *tmproto.Commit) *tmproto.Commit {
+	if validRandomBeaconSizes(cp.Beacon, cp.AppHash) {
+		return cp
+	}
+	stripped := *cp
+	stripped.Beacon = nil
+	stripped.AppHash = nil
+	return &stripped
 }
 
 //-----------------------------------------------------------------------------
@@ -747,9 +764,23 @@ const (
 	// (110+2) for BlockID,  (8+2) for Height, (4+2) for Round,
 	// (32+2) for QuorumHash, (96+2) for Block signature.
 	MaxCommitOverheadBytes int64 = (110 + 2) + (8 + 2) + (4 + 2) + (32 + 2) + (96 + 2) + 0
+	// MaxCommitRandomnessBytes is what a commit grows by when it carries a random beacon (consensus
+	// version 2): (96+2) for Beacon, (32+2) for AppHash.
+	MaxCommitRandomnessBytes int64 = (96 + 2) + (32 + 2)
 )
 
 //-------------------------------------
+
+// ErrInvalidCommitRandomness is returned for a commit whose beacon and app hash are neither both empty
+// nor exactly a threshold signature and an app hash.
+var ErrInvalidCommitRandomness = errors.New("invalid commit beacon or app hash size")
+
+// validRandomBeaconSizes reports whether a commit's beacon and app hash are both empty, or a threshold
+// signature and an app hash: the only forms a commit can carry them in.
+func validRandomBeaconSizes(beacon, appHash []byte) bool {
+	return (len(beacon) == 0 && len(appHash) == 0) ||
+		(len(beacon) == SignatureSize && len(appHash) == crypto.DefaultAppHashSize)
+}
 
 // Commit contains the evidence that a block was committed by a set of validators.
 // NOTE: Commit is empty for height 1, but never nil.
@@ -765,6 +796,13 @@ type Commit struct {
 	ThresholdBlockSignature []byte            `json:"threshold_block_signature"`
 	// ThresholdVoteExtensions keeps the list of recovered threshold signatures for vote-extensions
 	ThresholdVoteExtensions tmproto.VoteExtensions `json:"threshold_vote_extensions"`
+	// Beacon is the threshold signature recovered from the prevotes of the commit round.
+	// Set from consensus version 2; empty before.
+	Beacon []byte `json:"beacon,omitempty"`
+	// AppHash is the result of ApplyBlockRandomness for this block and round. The precommits sign it
+	// only through BlockID.StateID, the hash of the header's state ID with this app hash: the field
+	// itself is not signed. Set from consensus version 2; empty before.
+	AppHash tmbytes.HexBytes `json:"app_hash,omitempty"`
 
 	// Memoized in first call to corresponding method.
 	// NOTE: can't memoize in constructor because constructor isn't used for
@@ -797,7 +835,23 @@ func (commit *Commit) ToCommitInfo() types.CommitInfo {
 		QuorumHash:              commit.QuorumHash,
 		BlockSignature:          commit.ThresholdBlockSignature,
 		ThresholdVoteExtensions: commit.ThresholdVoteExtensions,
+		Beacon:                  commit.Beacon,
+		AppHash:                 commit.AppHash,
 	}
+}
+
+// WithoutRandomBeacon returns commit without its random beacon and app hash. Before consensus version 2
+// both fields must be empty, but neither is covered by the commit's threshold signature, so a peer could
+// fill them; nodes drop them from commits of such heights instead of storing or passing them on. It
+// returns commit itself when both are already empty.
+func (commit *Commit) WithoutRandomBeacon() *Commit {
+	if commit == nil || (len(commit.Beacon) == 0 && len(commit.AppHash) == 0) {
+		return commit
+	}
+	stripped := *commit
+	stripped.Beacon = nil
+	stripped.AppHash = nil
+	return &stripped
 }
 
 // GetCanonicalVote returns the message that is being voted on in the form of a vote without signatures.
@@ -893,6 +947,15 @@ func (commit *Commit) ValidateBasic() error {
 		}
 	}
 
+	// Neither field is covered by the commit hash or its threshold signature, so a peer can fill them
+	// in a commit it relays. Bounding them here refuses a commit with wrongly sized ones before it is
+	// stored or passed to the application, whatever the consensus version; before consensus version 2,
+	// nodes also drop well-sized ones where they adopt a commit (see WithoutRandomBeacon).
+	if !validRandomBeaconSizes(commit.Beacon, commit.AppHash) {
+		return fmt.Errorf("%w: beacon of %d bytes and app hash of %d bytes, expected both empty or %d and %d bytes",
+			ErrInvalidCommitRandomness, len(commit.Beacon), len(commit.AppHash), SignatureSize, crypto.DefaultAppHashSize)
+	}
+
 	// Reject extension types nothing can dispatch on: proto3's open enums let an
 	// undefined varint decode untouched, and no other check rejects it. Type only —
 	// each extension's contents are covered by its own threshold signature.
@@ -953,12 +1016,14 @@ func (commit *Commit) String() string {
 		return "nil-Commit"
 	}
 	return fmt.Sprintf(
-		`Commit{H: %d, R: %d, BlockID: %v, QuorumHash %v, BlockSignature: %v}#%v`,
+		`Commit{H: %d, R: %d, BlockID: %v, QuorumHash %v, BlockSignature: %v, Beacon: %v, AppHash: %v}#%v`,
 		commit.Height,
 		commit.Round,
 		commit.BlockID,
 		commit.QuorumHash,
 		base64.StdEncoding.EncodeToString(commit.ThresholdBlockSignature),
+		base64.StdEncoding.EncodeToString(commit.Beacon),
+		commit.AppHash,
 		commit.hash)
 }
 
@@ -972,11 +1037,15 @@ func (commit *Commit) StringIndented(indent string) string {
 %s  Round:      %d
 %s  BlockID:    %v
 %s  BlockSignature: %v
+%s  Beacon:     %v
+%s  AppHash:    %v
 %s}#%v`,
 		indent, commit.Height,
 		indent, commit.Round,
 		indent, commit.BlockID,
 		indent, base64.StdEncoding.EncodeToString(commit.ThresholdBlockSignature),
+		indent, base64.StdEncoding.EncodeToString(commit.Beacon),
+		indent, commit.AppHash,
 		indent, commit.hash)
 }
 
@@ -987,6 +1056,8 @@ func (commit *Commit) MarshalZerologObject(e *zerolog.Event) {
 		e.Int32("round", commit.Round)
 		e.Str("BlockID.Hash", commit.BlockID.Hash.String())
 		e.Str("BlockSignature", hex.EncodeToString(commit.ThresholdBlockSignature))
+		e.Str("Beacon", hex.EncodeToString(commit.Beacon))
+		e.Str("AppHash", commit.AppHash.String())
 	}
 }
 
@@ -1005,6 +1076,8 @@ func (commit *Commit) ToProto() *tmproto.Commit {
 	c.ThresholdBlockSignature = commit.ThresholdBlockSignature
 	c.ThresholdVoteExtensions = commit.ThresholdVoteExtensions
 	c.QuorumHash = commit.QuorumHash
+	c.Beacon = commit.Beacon
+	c.AppHash = commit.AppHash
 
 	return c
 }
@@ -1031,6 +1104,8 @@ func CommitFromProto(cp *tmproto.Commit) (*Commit, error) {
 	commit.QuorumHash = cp.QuorumHash
 	commit.ThresholdBlockSignature = cp.ThresholdBlockSignature
 	commit.ThresholdVoteExtensions = cp.ThresholdVoteExtensions
+	commit.Beacon = cp.Beacon
+	commit.AppHash = cp.AppHash
 
 	commit.Height = cp.Height
 	commit.Round = cp.Round

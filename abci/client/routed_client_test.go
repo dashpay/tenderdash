@@ -25,6 +25,7 @@ import (
 // * when a request of type FinalizeBlock is made, it should be first routed to queryApp, then to consensusApp
 // * when a request of type CheckTx is made, it should be routed to queryApp
 // * when a request of type PrepareProposal is made, it should be routed to to consensusApp
+// * when a request of type ApplyBlockRandomness is made, it should be routed to consensusApp
 func TestRouting(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -64,10 +65,14 @@ func TestRouting(t *testing.T) {
 	consensusApp.On("FinalizeBlock", mock.Anything, mock.Anything).Return(&types.ResponseFinalizeBlock{
 		RetainHeight: 1,
 	}, nil).Once()
+	consensusApp.On("ApplyBlockRandomness", mock.Anything, mock.Anything).Return(&types.ResponseApplyBlockRandomness{
+		AppHash: []byte("final apphash"),
+	}, nil).Once()
 
 	addr := fmt.Sprintf("CheckTx:socket:%s", querySocket) +
 		fmt.Sprintf(",FinalizeBlock:socket:%s,FinalizeBlock:socket:%s", querySocket, consensusSocket) +
 		fmt.Sprintf(",PrepareProposal:socket:%s", consensusSocket) +
+		fmt.Sprintf(",ApplyBlockRandomness:socket:%s", consensusSocket) +
 		fmt.Sprintf(",*:socket:%s", defaultSocket)
 
 	logger.Info("configuring routed abci client with address", "addr", addr)
@@ -100,6 +105,11 @@ func TestRouting(t *testing.T) {
 	// PrepareProposal
 	_, err = routedClient.PrepareProposal(ctx, &types.RequestPrepareProposal{})
 	assert.NoError(t, err)
+
+	// ApplyBlockRandomness
+	randomness, err := routedClient.ApplyBlockRandomness(ctx, &types.RequestApplyBlockRandomness{})
+	assert.NoError(t, err)
+	assert.EqualValues(t, "final apphash", randomness.AppHash)
 
 	// unlock info
 	assert.False(t, infoExecuted)
