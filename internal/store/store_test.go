@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -619,4 +620,39 @@ func TestLoadBlockMistypedLastCommitRandomness(t *testing.T) {
 	require.NotPanics(t, func() { loaded = bs.LoadBlock(1) })
 	require.NotNil(t, loaded)
 	require.Equal(t, block.Hash(), loaded.Hash())
+}
+
+// TestSaveBlockDropsLastCommitRandomness is the regression test for a proposer that fills the beacon
+// and app hash of its block's LastCommit, which nothing signs: they were stored as the canonical
+// commit of the previous height, and served from there. The block's parts keep them, as the encoding
+// the next commit signs.
+func TestSaveBlockDropsLastCommitRandomness(t *testing.T) {
+	state, bs := makeStateAndBlockStore(t, t.TempDir())
+	const height = int64(2)
+	state.LastBlockHeight = height - 1
+
+	lastCommit := makeTestCommit(t, state, height-1)
+	lastCommit.Beacon = bytes.Repeat([]byte{0x01}, types.SignatureSize)
+	lastCommit.AppHash = bytes.Repeat([]byte{0x02}, crypto.DefaultAppHashSize)
+	block, err := factory.MakeBlock(state, height, lastCommit, 0)
+	require.NoError(t, err)
+	parts, err := block.MakePartSet(types.BlockPartSizeBytes)
+	require.NoError(t, err)
+
+	bs.SaveBlock(block, parts, makeTestCommit(t, state, height))
+
+	canonical := bs.LoadBlockCommit(height - 1)
+	require.NotNil(t, canonical)
+	require.Empty(t, canonical.Beacon)
+	require.Empty(t, canonical.AppHash)
+	require.Equal(t, lastCommit.Hash(), canonical.Hash())
+
+	for i := 0; i < int(parts.Total()); i++ {
+		require.Equal(t, parts.GetPart(i).Bytes, bs.LoadBlockPart(height, i).Bytes)
+	}
+	loaded := bs.LoadBlock(height)
+	require.NotNil(t, loaded)
+	require.Equal(t, lastCommit.Beacon, loaded.LastCommit.Beacon)
+	require.Equal(t, lastCommit.AppHash, loaded.LastCommit.AppHash)
+	require.NotEmpty(t, block.LastCommit.Beacon, "saving must not change the block")
 }
