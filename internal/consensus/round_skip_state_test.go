@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/dash"
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	tmpubsub "github.com/dashpay/tenderdash/internal/pubsub"
 	"github.com/dashpay/tenderdash/internal/test/factory"
@@ -310,6 +311,52 @@ func TestStateWaitingRoundTakesAProposalWithoutItsBlock(t *testing.T) {
 		stateData := test.cs.GetStateData()
 		return stateData.Round == 1 && stateData.Proposal != nil && stateData.Step >= cstypes.RoundStepPrevote
 	}, 3*time.Second, 10*time.Millisecond, "the proposal ended the silence watch with no timeout running")
+}
+
+// A node takes a proposal for round 0 while it waits out the start of a
+// height, as it does once it has started, or switched to consensus from block
+// sync. Round 0 must not then wait for transactions: the proposal keeps the
+// silence watch off, so a proposer that withheld the block's parts would hold
+// the round with no timeout running.
+func TestStateRoundZeroTakesAProposalFromBeforeItBegan(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	test := newRoundSkipTest(ctx, t, "consensus_round_zero_early_proposal_test", nil)
+
+	// The node starts again with height 1 committed, and finds height 2
+	// waiting to begin round 0. It is not run: the test drives it.
+	config, err := ResetConfig(t, "consensus_round_zero_early_proposal_restart_test")
+	require.NoError(t, err)
+	config.Consensus.CreateEmptyBlocks = false
+	node := newStateWithConfigAndBlockStore(ctx, t, log.NewNopLogger(), config, test.cs.GetStateData().state,
+		test.cs.privValidator.PrivValidator, NewCounterApplication(), test.cs.blockStore)
+	ctx = dash.ContextWithProTxHash(ctx, node.privValidator.ProTxHash)
+	stateData := node.GetStateData()
+	require.Equal(t, int64(2), stateData.Height)
+	require.Equal(t, cstypes.RoundStepNewHeight, stateData.Step)
+
+	// Stub 1, the proposer of round 0, sends its signed proposal, and none of
+	// the block's parts. No transaction reaches the node's mempool.
+	proposal := types.NewProposal(2, stateData.state.LastCoreChainLockedBlockHeight, 0, -1,
+		factory.MakeBlockID(), tmtime.Now())
+	pb := proposal.ToProto()
+	_, err = test.vss[1].SignProposal(ctx, test.chainID,
+		stateData.Validators.QuorumType, stateData.Validators.QuorumHash, pb)
+	require.NoError(t, err)
+	proposal.Signature = pb.Signature
+	require.NoError(t, node.msgDispatcher.dispatch(ctx, &stateData,
+		msgInfo{Msg: &ProposalMessage{Proposal: proposal}, PeerID: "peer"}))
+	require.NotNil(t, stateData.Proposal, "the proposal was not taken")
+	require.Equal(t, cstypes.RoundStepNewHeight, stateData.Step)
+
+	require.NoError(t, node.ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: 2}, &stateData))
+	require.Equal(t, cstypes.RoundStepPropose, stateData.Step,
+		"round 0 waits for transactions with its proposal in hand")
+
+	// The propose timeout runs out with the block incomplete, and the node
+	// prevotes.
+	node.handleTimeout(ctx, timeoutInfo{Height: 2, Round: 0, Step: cstypes.RoundStepPropose}, &stateData)
+	assert.Equal(t, cstypes.RoundStepPrevote, stateData.Step)
 }
 
 // A proposer that sends one more heartbeat after this validator voted to skip

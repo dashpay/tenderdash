@@ -110,6 +110,14 @@ func (c *EnterNewRoundAction) Execute(ctx context.Context, stateEvent StateEvent
 		logger.Debug("not waiting for transactions: the application requested this block immediately")
 		waitForTxs = false
 	}
+	// A proposal for round 0 can be taken while the node still waits out the
+	// start of the height, and is kept above. It ends the wait as one taken
+	// in the round does (see waitingForTxs): with it in hand the silence watch
+	// stays off, so waiting would leave the round with no timeout running.
+	if waitForTxs && stateData.Proposal != nil && roundSkipping(stateData) {
+		logger.Debug("not waiting for transactions: the round's proposal is already here")
+		waitForTxs = false
+	}
 	if waitForTxs {
 		// Only a round entered through a skip certificate waits after round 0.
 		// It announces itself, as entering the propose step would: peers send
