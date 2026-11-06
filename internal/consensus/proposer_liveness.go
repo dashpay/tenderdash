@@ -105,8 +105,10 @@ type proposerLiveness struct {
 	emitter *eventemitter.EventEmitter
 	// ready reports whether this node could propose at a height right now. A
 	// proposer that could not sends no heartbeat, so a node whose application
-	// is down, or that is still catching up, is not waited on.
-	ready func(ctx context.Context, height int64) error
+	// is down, or that is still catching up, is not waited on. It answers by
+	// the time ctx ends; work it leaves running after that is bound to life,
+	// the consensus routine's context (see appReadiness).
+	ready func(life, ctx context.Context, height int64) error
 	// signerUnsupported is set once this node's signer refused a heartbeat as
 	// a request it cannot sign at all. No heartbeat is attempted after that.
 	signerUnsupported atomic.Bool
@@ -172,7 +174,7 @@ func newProposerLiveness(
 	logger log.Logger,
 	metrics *Metrics,
 	emitter *eventemitter.EventEmitter,
-	ready func(ctx context.Context, height int64) error,
+	ready func(life, ctx context.Context, height int64) error,
 	budget types.VerificationBudget,
 ) *proposerLiveness {
 	return &proposerLiveness{
@@ -239,7 +241,10 @@ func waitingRound(stateData *StateData) bool {
 // height, shows a block is under way, and from then on neither can be relied
 // on: a proposer can send its proposal and withhold the block's parts, and a
 // polka's transactions may exist only in its block. So the node goes on to
-// the propose step, whose timeout moves the round on without them.
+// the propose step, whose timeout moves the round on without them. A prevote
+// in a round a certificate began does the same: another validator could not
+// wait there (see StateData.waitsAfterRoundSkip), and alone it cannot end the
+// round.
 func waitingForTxs(stateData *StateData) bool {
 	return roundSkipping(stateData) &&
 		stateData.Step == cstypes.RoundStepNewRound &&
@@ -371,7 +376,7 @@ func (l *proposerLiveness) announce(ctx context.Context, target livenessTarget, 
 	}
 	sendCtx, cancel := context.WithCancel(ctx)
 	l.cancel = cancel
-	go l.sendHeartbeats(sendCtx, l.generation, target, pv)
+	go l.sendHeartbeats(ctx, sendCtx, l.generation, target, pv)
 }
 
 // stop ends any watch or heartbeat sender.
@@ -630,12 +635,19 @@ func heartbeatSequence(last uint64, now time.Time) uint64 {
 	return max(last+1, uint64(ms))
 }
 
-func (l *proposerLiveness) sendHeartbeats(ctx context.Context, generation uint64, target livenessTarget, pv privValidator) {
+// sendHeartbeats sends heartbeats for target until ctx ends. life is the
+// consensus routine's context, which ctx derives from.
+func (l *proposerLiveness) sendHeartbeats(
+	life, ctx context.Context,
+	generation uint64,
+	target livenessTarget,
+	pv privValidator,
+) {
 	ticker := time.NewTicker(target.interval)
 	defer ticker.Stop()
 
 	for {
-		if !l.sendHeartbeat(ctx, generation, target, pv) {
+		if !l.sendHeartbeat(life, ctx, generation, target, pv) {
 			return
 		}
 		select {
@@ -650,7 +662,7 @@ func (l *proposerLiveness) sendHeartbeats(ctx context.Context, generation uint64
 // propose now. It reports whether more should follow: not once the signer
 // turns out unable to sign heartbeats at all, nor once the round has ended.
 func (l *proposerLiveness) sendHeartbeat(
-	ctx context.Context,
+	life, ctx context.Context,
 	generation uint64,
 	target livenessTarget,
 	pv privValidator,
@@ -668,7 +680,7 @@ func (l *proposerLiveness) sendHeartbeat(
 	defer cancel()
 
 	if l.ready != nil {
-		if err := l.ready(ctx, target.height); err != nil {
+		if err := l.ready(life, ctx, target.height); err != nil {
 			l.logger.Debug("not sending a proposer heartbeat: this node cannot propose right now",
 				"height", target.height, "round", target.round, "err", err)
 			return true

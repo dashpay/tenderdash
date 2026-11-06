@@ -12,6 +12,7 @@ import (
 
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/crypto"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	"github.com/dashpay/tenderdash/internal/eventbus"
 	"github.com/dashpay/tenderdash/internal/mempool"
 	"github.com/dashpay/tenderdash/internal/test/factory"
@@ -79,6 +80,84 @@ func TestReactorHandsASilentProposersRoundOn(t *testing.T) {
 			continue
 		}
 		assert.Equal(t, hash, []byte(block.Hash()), "the nodes committed different blocks")
+	}
+}
+
+// Validators decide whether to wait after a round skip from what they have
+// seen, and a node does not pass on the votes of a round to peers that have
+// moved past it. Here a polka from the skipped round reaches one validator
+// only, after every node entered the next round on the certificate. That
+// validator cannot wait, and the rest wait under a proposer whose heartbeats
+// arrive. Its prevote in the round brings them along, and the height commits
+// with no transaction anywhere.
+func TestReactorRoundAfterASkipFollowsTheValidatorThatSawAPolka(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	const nodes = 4
+	params := factory.ConsensusParams(func(c *types.ConsensusParams) {
+		c.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_2)
+		c.Timeout.Propose = 500 * time.Millisecond
+		c.Timeout.Vote = 50 * time.Millisecond
+		c.Timeout.VoteDelta = 5 * time.Millisecond
+		c.Timeout.ProposerHeartbeat = 50 * time.Millisecond
+		c.Timeout.ProposerSilence = 300 * time.Millisecond
+	})
+	states := makeConsensusStateWithParams(ctx, t, nodes, "consensus_round_skip_split_polka_test", newTickerFunc(), params,
+		func(c *config.Config) { c.Consensus.CreateEmptyBlocks = false })
+	for _, state := range states {
+		state.SetPrivValidator(ctx, &roundSilentSigner{PrivValidator: state.privValidator.PrivValidator, height: 2, round: 0})
+	}
+	rts := setup(ctx, t, nodes, states, 100)
+	rts.switchToConsensus(ctx)
+	for _, sub := range rts.subs {
+		require.Equal(t, int64(1), nextBlock(ctx, t, sub).Height)
+	}
+
+	// Round 0 of height 2 is handed on, and every node waits in round 1.
+	require.Eventually(t, func() bool {
+		for _, state := range states {
+			stateData := state.GetStateData()
+			if stateData.Height != 2 || stateData.Round != 1 || stateData.Step != cstypes.RoundStepNewRound {
+				return false
+			}
+		}
+		return true
+	}, 30*time.Second, 20*time.Millisecond, "the silent proposer's round was not handed on")
+
+	// The node that hears the polka is not the proposer of round 1.
+	stateData := states[0].GetStateData()
+	proposer, err := stateData.ProposerSelector.GetProposer(2, 1)
+	require.NoError(t, err)
+	witness := -1
+	for i, state := range states {
+		if !state.privValidator.IsProTxHashEqual(proposer.ProTxHash) {
+			witness = i
+			break
+		}
+	}
+	require.NotEqual(t, -1, witness)
+
+	// The other three validators' prevotes for a block in round 0 reach it
+	// alone.
+	blockID := factory.MakeBlockID()
+	valSet := stateData.Validators
+	for i, state := range states {
+		if i == witness {
+			continue
+		}
+		index, _ := valSet.GetByProTxHash(state.privValidator.ProTxHash)
+		require.GreaterOrEqual(t, index, int32(0))
+		vs := newValidatorStub(state.privValidator.PrivValidator, index, 2)
+		vote := signVote(ctx, t, vs, tmproto.PrevoteType, stateData.state.ChainID, blockID,
+			valSet.QuorumType, valSet.QuorumHash)
+		addVotes(states[witness], vote)
+	}
+
+	commitCtx, cancelCommit := context.WithTimeout(ctx, 30*time.Second)
+	defer cancelCommit()
+	for _, sub := range rts.subs {
+		require.Equal(t, int64(2), nextBlock(commitCtx, t, sub).Height, "the waiting nodes did not follow")
 	}
 }
 

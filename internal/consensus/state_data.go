@@ -648,11 +648,21 @@ func (s *StateData) replaceProposalBlockOnLockedBlock(blockID types.BlockID) {
 // download, and a proposer that waited again could hold transactions that
 // exist only in the proposed block back for good.
 //
-// The node decides as it enters the round. A polka recorded once it waits
-// ends the wait then (see waitingForTxs).
+// It does not wait either once another validator has prevoted in round.
+// Whether a node waits depends on what it has seen, and validators can see
+// different things: a polka's last prevote can reach one validator alone, and
+// a node does not pass on the votes of a round to a peer that has moved past
+// it. A validator that cannot wait goes on to propose and prevote by itself,
+// while the rest wait under a proposer whose heartbeats arrive. Its prevote
+// reaches them as the votes of their own round do, and brings them along.
+//
+// The node decides as it enters the round. A polka or a prevote recorded once
+// it waits ends the wait then (see waitingForTxs).
 func (s *StateData) waitsAfterRoundSkip(round int32) bool {
 	polRound, _ := s.Votes.POLInfo()
-	return s.mayWaitAfterRoundSkip(round) && polRound == -1
+	return s.mayWaitAfterRoundSkip(round) &&
+		polRound == -1 &&
+		s.Votes.Prevotes(round).BitArray().IsEmpty()
 }
 
 // mayWaitAfterRoundSkip is waitsAfterRoundSkip without the polka: whether

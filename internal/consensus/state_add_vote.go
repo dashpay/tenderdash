@@ -214,8 +214,12 @@ func addVoteDispatchPrevoteMw(ctrl *Controller) AddVoteMiddlewareFunc {
 			case waitingForTxs(stateData):
 				// A polka in this round or one before ends a wait for
 				// transactions (see waitingForTxs), including one completed
-				// after a round skip certificate began the wait.
-				if _, ok := prevotes.TwoThirdsMajority(); ok {
+				// after a round skip certificate began the wait. So does a
+				// prevote in a round after round 0, which waits only once a
+				// certificate began it: another validator could not wait
+				// there and went on to vote.
+				_, polka := prevotes.TwoThirdsMajority()
+				if polka || (vote.Round == stateData.Round && stateData.Round > 0) {
 					_ = ctrl.Dispatch(ctx, &EnterProposeEvent{Height: height, Round: stateData.Round}, stateData)
 				}
 			}

@@ -152,6 +152,8 @@ type State struct {
 
 	// create and execute blocks
 	blockExec *sm.BlockExecutor
+	// appReadiness probes blockExec's application for the proposer heartbeat.
+	appReadiness *appReadiness
 
 	// notify us if txs are available
 	txNotifier txNotifier
@@ -322,6 +324,9 @@ func NewState(
 		withLaneMetrics(cs.metrics),
 	)
 
+	if cs.blockExec != nil {
+		cs.appReadiness = newAppReadiness(cs.blockExec.AppReady)
+	}
 	cs.liveness = newProposerLiveness(cs.logger, cs.metrics, cs.emitter, cs.proposerReady, cs.verificationBudget)
 	cs.roundSkips = newRoundSkipCollector(cs.logger, cs.verificationBudget)
 	cs.roundSkipSigner = newRoundSkipSigner()
@@ -938,15 +943,16 @@ var errProposerCatchingUp = errors.New("catching up after block sync, not propos
 // proposerReady reports whether this node could propose at height right now,
 // which is what its proposer heartbeat tells the validators: the propose step
 // would not hold it back after a block-sync handover, and the application
-// answers.
-func (cs *State) proposerReady(ctx context.Context, height int64) error {
+// answers before ctx ends. A probe of the application still unanswered then
+// stays in flight under life (see appReadiness).
+func (cs *State) proposerReady(life, ctx context.Context, height int64) error {
 	if !cs.catchup.mayPropose(height) {
 		return errProposerCatchingUp
 	}
-	if cs.blockExec == nil {
+	if cs.appReadiness == nil {
 		return nil
 	}
-	return cs.blockExec.AppReady(ctx)
+	return cs.appReadiness.check(life, ctx)
 }
 
 // handleProposerSilence acts on a report that the proposer of the round this

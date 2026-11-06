@@ -313,6 +313,74 @@ func TestStateWaitingRoundTakesAProposalWithoutItsBlock(t *testing.T) {
 	}, 3*time.Second, 10*time.Millisecond, "the proposal ended the silence watch with no timeout running")
 }
 
+// Whether a node waits after a round skip depends on what it has seen, and a
+// validator that saw a lock, a polka or a transaction report goes on to vote
+// in the round by itself. Its prevote ends the wait of the others, whether it
+// reaches them while they wait or before the certificate moves them into the
+// round. Round 0 keeps waiting: a validator with transactions prevotes there
+// too, and the mempool hands the transactions on.
+func TestStateRoundAfterASkipFollowsAValidatorThatPrevotes(t *testing.T) {
+	inRound := func(t *testing.T, test *roundSkipTest, round int32) {
+		t.Helper()
+		require.Eventually(t, func() bool {
+			stateData := test.cs.GetStateData()
+			return stateData.Round == round && stateData.Step >= cstypes.RoundStepPropose
+		}, 3*time.Second, 10*time.Millisecond, "round %d waits for transactions after a validator prevoted in it", round)
+	}
+
+	t.Run("prevote while the round waits", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		test := newRoundSkipTest(ctx, t, "consensus_round_skip_prevote_wakes_test", nil)
+
+		// Round 0 is skipped, and round 1, whose proposer is stub 2, waits.
+		test.ownSkipVote(t, 0)
+		test.completeSkip(ctx, t, 0, 1)
+		require.Equal(t, cstypes.RoundStepNewRound, test.cs.GetStateData().Step, "round 1 waits")
+
+		// Stub 3 could not wait in round 1, and prevotes nil there.
+		test.vss[3].Height, test.vss[3].Round = 2, 1
+		signAddVotes(ctx, t, test.cs, tmproto.PrevoteType, test.chainID, types.BlockID{}, test.vss[3])
+		inRound(t, test, 1)
+	})
+
+	t.Run("prevote before the round began", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		test := newRoundSkipTest(ctx, t, "consensus_round_skip_early_prevote_test", nil)
+
+		// Stub 3 enters round 1 first, and its prevote there arrives while
+		// this node still waits in round 0.
+		test.ownSkipVote(t, 0)
+		test.vss[3].Height, test.vss[3].Round = 2, 1
+		signAddVotes(ctx, t, test.cs, tmproto.PrevoteType, test.chainID, types.BlockID{}, test.vss[3])
+		require.Eventually(t, func() bool {
+			return !test.cs.GetStateData().Votes.Prevotes(1).BitArray().IsEmpty()
+		}, 3*time.Second, 10*time.Millisecond, "the prevote was not recorded")
+		require.Equal(t, cstypes.RoundStepNewRound, test.cs.GetStateData().Step, "round 0 still waits")
+
+		test.completeSkip(ctx, t, 0, 1)
+		inRound(t, test, 1)
+	})
+
+	t.Run("round 0 waits on", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		test := newRoundSkipTest(ctx, t, "consensus_round_zero_prevote_test", nil)
+
+		test.vss[3].Height, test.vss[3].Round = 2, 0
+		signAddVotes(ctx, t, test.cs, tmproto.PrevoteType, test.chainID, types.BlockID{}, test.vss[3])
+		require.Eventually(t, func() bool {
+			return !test.cs.GetStateData().Votes.Prevotes(0).BitArray().IsEmpty()
+		}, 3*time.Second, 10*time.Millisecond, "the prevote was not recorded")
+		// The node goes on watching the proposer, and votes to skip it.
+		test.ownSkipVote(t, 0)
+		stateData := test.cs.GetStateData()
+		assert.Equal(t, int32(0), stateData.Round)
+		assert.Equal(t, cstypes.RoundStepNewRound, stateData.Step, "round 0 waits for transactions")
+	})
+}
+
 // A node takes a proposal for round 0 while it waits out the start of a
 // height, as it does once it has started, or switched to consensus from block
 // sync. Round 0 must not then wait for transactions: the proposal keeps the

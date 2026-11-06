@@ -36,7 +36,7 @@ type livenessFixture struct {
 	liveness *proposerLiveness
 }
 
-func newLivenessFixture(t *testing.T, ready func(context.Context, int64) error) *livenessFixture {
+func newLivenessFixture(t *testing.T, ready func(context.Context, context.Context, int64) error) *livenessFixture {
 	t.Helper()
 	valSet, privVals := types.RandValidatorSet(4)
 	emitter := eventemitter.New()
@@ -514,7 +514,9 @@ func TestProposerLivenessAnnounce(t *testing.T) {
 	})
 
 	t.Run("should send nothing while the application cannot propose", func(t *testing.T) {
-		f := newLivenessFixture(t, func(context.Context, int64) error { return errors.New("application down") })
+		f := newLivenessFixture(t, func(context.Context, context.Context, int64) error {
+			return errors.New("application down")
+		})
 		sent := collect(f)
 		proposer := f.valSet.Validators[0]
 		f.liveness.announce(context.Background(), f.target(proposer, 100*time.Millisecond), f.privValidator(t, proposer))
@@ -692,13 +694,13 @@ func TestProposerLivenessStaleTimerKeepsTheCurrentReport(t *testing.T) {
 func TestProposerReady(t *testing.T) {
 	clock := clockwork.NewFakeClock()
 	cs := &State{catchup: &catchupTracker{}}
-	require.NoError(t, cs.proposerReady(context.Background(), 5))
+	require.NoError(t, cs.proposerReady(context.Background(), context.Background(), 5))
 
 	// After a block-sync handover to height 9, the propose step holds back
 	// until the node is past it, and the heartbeat must not claim otherwise.
 	cs.catchup.arm(9, clock)
-	assert.ErrorIs(t, cs.proposerReady(context.Background(), 5), errProposerCatchingUp)
-	assert.NoError(t, cs.proposerReady(context.Background(), 10))
+	assert.ErrorIs(t, cs.proposerReady(context.Background(), context.Background(), 5), errProposerCatchingUp)
+	assert.NoError(t, cs.proposerReady(context.Background(), context.Background(), 10))
 }
 
 func TestProposerLivenessRelaysNearbyRounds(t *testing.T) {
@@ -840,7 +842,7 @@ func TestProposerLivenessDropsHeartbeatForARoundLeftWhileSigning(t *testing.T) {
 
 	pv := f.privValidator(t, proposer)
 	pv.PrivValidator = &hookedHeartbeatSigner{PrivValidator: pv.PrivValidator, signing: f.liveness.stop}
-	more := f.liveness.sendHeartbeat(context.Background(), generation, target, pv)
+	more := f.liveness.sendHeartbeat(context.Background(), context.Background(), generation, target, pv)
 	assert.False(t, more, "the sender for the round left stops")
 	assert.Zero(t, emitted.Load(), "no heartbeat goes out for the round left")
 }
