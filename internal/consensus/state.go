@@ -909,7 +909,7 @@ func (cs *State) handleTxsAvailable(ctx context.Context, stateData *StateData) {
 	// skipped the one before it while waiting. Whichever round hears it, the
 	// report is the only one this height gets, so it is recorded: a round
 	// entered later must not wait for another.
-	waiting := stateData.Round == 0 || stateData.waitsAfterRoundSkip(stateData.Round)
+	waiting := stateData.Round == 0 || stateData.mayWaitAfterRoundSkip(stateData.Round)
 	stateData.TxsReported = true
 	if !waiting {
 		return

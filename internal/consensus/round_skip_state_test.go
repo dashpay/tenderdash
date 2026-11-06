@@ -17,6 +17,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/libs/eventemitter"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmrand "github.com/dashpay/tenderdash/libs/rand"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
@@ -227,6 +228,45 @@ func TestStateRoundSkipAfterTxsReported(t *testing.T) {
 		stateData := test.cs.GetStateData()
 		return stateData.Round == 1 && stateData.Step >= cstypes.RoundStepPropose
 	}, 3*time.Second, 10*time.Millisecond, "round 1 waits for transactions the mempool already reported")
+}
+
+// Skip votes do not stop validators from voting, so a late proposal can win a
+// polka in the round they skip. A node that has the polka but none of the
+// block's parts has no valid block, and the certificate that moves it on drops
+// the download, so the next round must not wait for transactions: they may
+// exist only in the proposed block, and a waiting proposer would keep
+// announcing itself with nothing to propose.
+func TestStateRoundSkipAfterAPolkaWithoutItsBlock(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	test := newRoundSkipTest(ctx, t, "consensus_round_skip_after_polka_test", nil)
+
+	// Round 0: its proposer is silent and this node votes to skip it.
+	test.ownSkipVote(t, 0)
+	// The proposal comes late, and the other three validators prevote its
+	// block. This node hears their prevotes, but none of the block's parts.
+	blockID := types.BlockID{
+		Hash:          tmrand.Bytes(crypto.HashSize),
+		PartSetHeader: types.PartSetHeader{Total: 1, Hash: tmrand.Bytes(crypto.HashSize)},
+	}
+	for _, vs := range test.vss[1:] {
+		vs.Height, vs.Round = 2, 0
+	}
+	signAddVotes(ctx, t, test.cs, tmproto.PrevoteType, test.chainID, blockID, test.vss[1:]...)
+	require.Eventually(t, func() bool {
+		polRound, polBlockID := test.cs.GetStateData().Votes.POLInfo()
+		return polRound == 0 && polBlockID.Equals(blockID)
+	}, 3*time.Second, 10*time.Millisecond, "the polka was not recorded")
+	stateData := test.cs.GetStateData()
+	require.Equal(t, int32(-1), stateData.ValidRound, "the block is not complete, so it is not valid yet")
+	require.Equal(t, cstypes.RoundStepNewRound, stateData.Step)
+
+	// The certificate moves the node to round 1, which must not wait.
+	test.completeSkip(ctx, t, 0, 1)
+	require.Eventually(t, func() bool {
+		stateData := test.cs.GetStateData()
+		return stateData.Round == 1 && stateData.Step >= cstypes.RoundStepPropose
+	}, 3*time.Second, 10*time.Millisecond, "round 1 waits for transactions though round 0 has a polka")
 }
 
 // A proposer that sends one more heartbeat after this validator voted to skip

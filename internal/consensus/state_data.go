@@ -641,11 +641,29 @@ func (s *StateData) replaceProposalBlockOnLockedBlock(blockID types.BlockID) {
 // or has a polka: the skipped rounds produced no proposal, and the next
 // proposer waits for something to propose like the silent one did.
 //
+// A polka is read from the prevotes, not from ValidRound, which is set only
+// once the polka's block is complete. Skip votes do not stop validators from
+// voting, so a late proposal can win a polka in a round that is then skipped
+// before this node has its parts. Entering the next round drops that
+// download, and a proposer that waited again could hold transactions that
+// exist only in the proposed block back for good.
+//
+// The node decides as it enters the round; see mayWaitAfterRoundSkip.
+func (s *StateData) waitsAfterRoundSkip(round int32) bool {
+	polRound, _ := s.Votes.POLInfo()
+	return s.mayWaitAfterRoundSkip(round) && polRound == -1
+}
+
+// mayWaitAfterRoundSkip is waitsAfterRoundSkip without the polka: whether
+// round, entered on the certificate of the round before it, can be waiting for
+// transactions. A polka recorded after the node began waiting does not end the
+// wait, so the mempool's report must still end it.
+//
 // It does not once the mempool has reported transactions at this height. The
 // mempool reports them once per height, so a node that heard the report
 // before the certificate arrived would wait for one that never comes, with
 // the transactions already in its mempool.
-func (s *StateData) waitsAfterRoundSkip(round int32) bool {
+func (s *StateData) mayWaitAfterRoundSkip(round int32) bool {
 	return round > 0 &&
 		s.RoundSkip != nil &&
 		s.RoundSkip.Round == round-1 &&
