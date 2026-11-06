@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cosmos/gogoproto/proto"
 	"github.com/jonboulle/clockwork"
 	sync "github.com/sasha-s/go-deadlock"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/dashpay/tenderdash/libs/service"
 	"github.com/dashpay/tenderdash/libs/workerpool"
 	bcproto "github.com/dashpay/tenderdash/proto/tendermint/blocksync"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -44,10 +46,11 @@ const (
 	// that when one block may be tens of megabytes.
 	//
 	// Serialized bytes understate the heap actually retained. The size covers the
-	// block alone, not the commit held alongside it, and a decoded block costs
-	// more than its wire form - several times more for blocks small enough that
-	// fixed per-response overhead dominates. Read this as a budget for block
-	// data, not as the memory the backlog occupies.
+	// block alone, not the commit held alongside it, and a response holds the
+	// decoded block next to its wire form, the bytes it is applied from. A
+	// decoded block costs more than its wire form - several times more for
+	// blocks small enough that fixed per-response overhead dominates. Read this
+	// as a budget for block data, not as the memory the backlog occupies.
 	maxPendingApplyBytes = 256 << 20
 
 	// maxOutstandingHeights is how many heights may be requested and not yet
@@ -637,7 +640,7 @@ func (s *Synchronizer) applyBlock(ctx context.Context) (BlockResponse, error) {
 		if !ok {
 			return BlockResponse{}, nil
 		}
-		err := s.applier.Apply(ctx, resp.Block, resp.Commit)
+		err := s.applier.Apply(ctx, resp.Block, resp.BlockBytes, resp.PartSizes, resp.Commit)
 		if err != nil {
 			return resp, fmt.Errorf("cannot apply block: %w", err)
 		}
@@ -776,10 +779,15 @@ type BlockResponse struct {
 	// its failures are fenced to.
 	ConnID uint64
 	Block  *types.Block
-	Commit *types.Commit
-	// Size is the serialized size of Block in bytes, measured while decoding the
-	// response. Deriving it from Block again means re-serializing the whole
-	// block, which is too expensive to do on the block apply path.
+	// BlockBytes is Block as it was committed, the bytes of its parts in order,
+	// and PartSizes the size of each part, or nil for parts of
+	// types.BlockPartSizeBytes. Block is decoded from BlockBytes, and applied
+	// with the part set rebuilt from them: that is what the commit's block ID
+	// describes, and re-encoding Block need not give the same bytes.
+	BlockBytes []byte
+	PartSizes  []uint32
+	Commit     *types.Commit
+	// Size is the serialized size of Block in bytes, the length of BlockBytes.
 	Size int
 }
 
@@ -803,7 +811,14 @@ func BlockResponseFromProto(resp *bcproto.BlockResponse, peerID types.NodeID) (*
 	if resp == nil {
 		return nil, errors.New("invalid")
 	}
-	block, err := types.BlockFromProto(resp.Block)
+	if len(resp.Block) == 0 {
+		return nil, errors.New("block response without a block")
+	}
+	pbb := new(tmproto.Block)
+	if err := proto.Unmarshal(resp.Block, pbb); err != nil {
+		return nil, fmt.Errorf("cannot decode block: %w", err)
+	}
+	block, err := types.BlockFromProto(pbb)
 	if err != nil {
 		return nil, err
 	}
@@ -815,11 +830,11 @@ func BlockResponseFromProto(resp *bcproto.BlockResponse, peerID types.NodeID) (*
 		}
 	}
 	return &BlockResponse{
-		PeerID: peerID,
-		Block:  block,
-		Commit: commit,
-		// measured here, on a worker goroutine, rather than on the single
-		// goroutine that applies blocks
-		Size: resp.Block.Size(),
+		PeerID:     peerID,
+		Block:      block,
+		BlockBytes: resp.Block,
+		PartSizes:  resp.PartSizes,
+		Commit:     commit,
+		Size:       len(resp.Block),
 	}, nil
 }

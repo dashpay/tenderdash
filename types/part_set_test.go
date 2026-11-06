@@ -301,3 +301,54 @@ func TestPartIndexProofBinding(t *testing.T) {
 	require.False(t, added)
 	require.ErrorIs(t, err, ErrPartSetUnexpectedIndex)
 }
+
+func TestNewPartSetFromPartSizes(t *testing.T) {
+	data := tmrand.Bytes(2*int(BlockPartSizeBytes) + 100)
+
+	t.Run("the standard cut", func(t *testing.T) {
+		partSet, err := NewPartSetFromPartSizes(data, []uint32{BlockPartSizeBytes, BlockPartSizeBytes, 100})
+		require.NoError(t, err)
+		assert.Equal(t, NewPartSetFromData(data, BlockPartSizeBytes).Header(), partSet.Header())
+	})
+
+	t.Run("another cut", func(t *testing.T) {
+		sizes := []uint32{100, BlockPartSizeBytes, 0, BlockPartSizeBytes}
+		partSet, err := NewPartSetFromPartSizes(data, sizes)
+		require.NoError(t, err)
+		assert.True(t, partSet.IsComplete())
+		assert.EqualValues(t, len(sizes), partSet.Total())
+		assert.EqualValues(t, len(data), partSet.ByteSize())
+		assert.NotEqual(t, NewPartSetFromData(data, BlockPartSizeBytes).Header(), partSet.Header())
+
+		// the parts verify against the header, as a part set gossiped by a
+		// proposer that cut the data this way would
+		received := NewPartSetFromHeader(partSet.Header())
+		for i, size := range sizes {
+			part := partSet.GetPart(i)
+			assert.Len(t, part.Bytes, int(size))
+			added, err := received.AddPart(part)
+			require.NoError(t, err)
+			require.True(t, added)
+		}
+		got, err := io.ReadAll(received.GetReader())
+		require.NoError(t, err)
+		assert.Equal(t, data, got)
+	})
+
+	testCases := map[string]struct {
+		sizes   []uint32
+		wantErr string
+	}{
+		"no sizes":         {nil, "no part sizes"},
+		"too many parts":   {make([]uint32, MaxBlockPartsCount+1), "too many parts"},
+		"part too big":     {[]uint32{BlockPartSizeBytes + 1, BlockPartSizeBytes - 1, 100}, "too big"},
+		"sizes beyond end": {[]uint32{BlockPartSizeBytes, BlockPartSizeBytes, 101}, "exceed"},
+		"sizes short":      {[]uint32{BlockPartSizeBytes, BlockPartSizeBytes, 99}, "cover"},
+	}
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			_, err := NewPartSetFromPartSizes(data, tc.sizes)
+			assert.ErrorContains(t, err, tc.wantErr)
+		})
+	}
+}
