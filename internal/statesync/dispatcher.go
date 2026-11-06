@@ -29,9 +29,13 @@ var (
 // lightBlockResult is what one dispatched call resolves to. A nil block with a nil
 // error is the peer answering that it does not have the height; a non-nil error is
 // a response that arrived and could not be used, carrying the reason it was refused.
+//
+// connID is the generation of the connection that delivered the response. Calls are
+// tracked per peer, so it can be older than the connection the request went out on.
 type lightBlockResult struct {
-	block *types.LightBlock
-	err   error
+	block  *types.LightBlock
+	err    error
+	connID uint64
 }
 
 // A Dispatcher multiplexes concurrent requests by multiple peers for light blocks.
@@ -59,10 +63,17 @@ func NewDispatcher(requestChannel p2p.Channel, logger log.Logger) *Dispatcher {
 // tracking, the call and waiting for the reactor to pass back the response. A nil
 // LightBlock response is used to signal that the peer doesn't have the requested LightBlock.
 func (d *Dispatcher) LightBlock(ctx context.Context, height int64, peer types.NodeID) (*types.LightBlock, error) {
+	lb, _, err := d.lightBlockWithConn(ctx, height, peer)
+	return lb, err
+}
+
+// lightBlockWithConn is LightBlock that also returns the generation of the connection
+// that delivered the response, for attributing a refusal of it to that connection.
+func (d *Dispatcher) lightBlockWithConn(ctx context.Context, height int64, peer types.NodeID) (*types.LightBlock, uint64, error) {
 	// dispatch the request to the peer
 	callCh, err := d.dispatch(ctx, peer, height)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	// clean up the call after a response is returned
@@ -85,20 +96,20 @@ func (d *Dispatcher) LightBlock(ctx context.Context, height int64, peer types.No
 				"took", time.Since(start).String(),
 				"error", resp.err,
 			)
-			return nil, resp.err
+			return nil, resp.connID, resp.err
 		}
 		d.logger.Debug("received light-block",
 			"height", height,
 			"took", time.Since(start).String(),
 		)
-		return resp.block, nil
+		return resp.block, resp.connID, nil
 
 	case <-ctx.Done():
 		d.logger.Debug("failed to get a light-block",
 			"height", height,
 			"took", time.Since(start).String(),
 		)
-		return nil, ctx.Err()
+		return nil, 0, ctx.Err()
 	}
 }
 
@@ -144,7 +155,7 @@ func (d *Dispatcher) dispatch(ctx context.Context, peer types.NodeID, height int
 // than dropped. Dropping it leaves the caller waiting out its own deadline and
 // reading the sender as slow, which charges a shared retry budget for one peer's
 // choice and hides the reason the response was unusable.
-func (d *Dispatcher) Respond(ctx context.Context, lb *tmproto.LightBlock, peer types.NodeID) error {
+func (d *Dispatcher) Respond(ctx context.Context, lb *tmproto.LightBlock, peer types.NodeID, connID uint64) error {
 	d.mtx.Lock()
 	defer d.mtx.Unlock()
 
@@ -159,7 +170,7 @@ func (d *Dispatcher) Respond(ctx context.Context, lb *tmproto.LightBlock, peer t
 	// block and thus pass on the nil to the caller.
 	if lb == nil {
 		select {
-		case answerCh <- lightBlockResult{}:
+		case answerCh <- lightBlockResult{connID: connID}:
 			return nil
 		case <-ctx.Done():
 			return ctx.Err()
@@ -173,7 +184,7 @@ func (d *Dispatcher) Respond(ctx context.Context, lb *tmproto.LightBlock, peer t
 	if err != nil {
 		err = fmt.Errorf("%w: %w", errMalformedLightBlock, err)
 		select {
-		case answerCh <- lightBlockResult{err: err}:
+		case answerCh <- lightBlockResult{err: err, connID: connID}:
 			return err
 		case <-ctx.Done():
 			return ctx.Err()
@@ -183,7 +194,7 @@ func (d *Dispatcher) Respond(ctx context.Context, lb *tmproto.LightBlock, peer t
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case answerCh <- lightBlockResult{block: block}:
+	case answerCh <- lightBlockResult{block: block, connID: connID}:
 		return nil
 	}
 }

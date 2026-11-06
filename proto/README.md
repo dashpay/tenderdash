@@ -17,6 +17,6 @@ The `.proto` files within this section are core to the protocol and updates must
    - Within the issue members, from the Tendermint team will leave comments. If there is not consensus on the change an [RFC](../docs/rfc/README.md) may be requested.
   1a. Submission of an RFC as a pull request should be made to facilitate further discussion.
   1b. Merge the RFC.
-2. Make the necessary changes to the `.proto` file(s), [core data structures](../spec/core/data_structures.md) and/or [ABCI protocol](../spec/abci/apps.md).
+2. Make the necessary changes to the `.proto` file(s), [core data structures](../spec/core/data_structures.md) and/or [ABCI protocol](../spec/abci/app-requirements.md).
 3. Rebuild the Go protocol buffers by running `make proto-gen`. Ensure that the project builds correctly by running `make build`.
 

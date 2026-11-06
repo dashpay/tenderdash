@@ -1,121 +1,67 @@
 # State
 
-The state contains information whose cryptographic digest is included in block headers, and thus is
-necessary for validating new blocks. For instance, the validators set and the results of
-transactions are never included in blocks, but their Merkle roots are:
-the state keeps track of them.
+The committed `State` in [`internal/state/state.go`](../../internal/state/state.go)
+contains the information needed to validate the next block. It is local state,
+not a network message or a hash of the whole consensus state. Header commitments
+and the signed `StateID` have their own definitions in
+[Data Structures](./data_structures.md).
 
-The `State` object itself is an implementation detail, since it is never
-included in a block or gossiped over the network, and we never compute
-its hash. The persistence or query interface of the `State` object
-is an implementation detail and not included in the specification.
-However, the types in the `State` object are part of the specification, since
-the Merkle roots of the `State` objects are included in blocks and values are used during
-validation.
+| Fields | Meaning |
+| --- | --- |
+| `ChainID`, `InitialHeight` | Chain identity and first block height; the initial height is normally 1 and must be positive. |
+| `LastBlockHeight`, `LastBlockRound`, `LastBlockID`, `LastBlockTime` | Last committed block and its commit round. |
+| `LastCoreChainLockedBlockHeight` | Last committed core chain lock height; unchanged when a block carries no new lock. |
+| `Validators`, `LastValidators` | Active validators for the next block, and the previous set used to verify its `LastCommit`. |
+| `ConsensusParams` | Parameters used to validate the next block. |
+| `LastAppHash`, `LastResultsHash` | Application state and transaction-result commitments of the last committed block. |
+| `LastHeightValidatorsChanged`, `LastHeightConsensusParamsChanged` | Heights at which changes become active. |
+| `Version` | Consensus block/application versions and software version. |
 
-```go
-type State struct {
-    ChainID        string
-    InitialHeight  int64
-
-    LastBlockHeight int64
-    LastBlockID     types.BlockID
-    LastBlockTime   time.Time
-
-    Version     Version
-    LastResults []Result
-    AppHash     []byte
-
-    LastValidators ValidatorSet
-    Validators     ValidatorSet
-    NextValidators ValidatorSet
-
-    ConsensusParams ConsensusParams
-}
-```
-
-The chain ID and initial height are taken from the genesis file, and not changed again. The
-initial height will be `1` in the typical case, `0` is an invalid value.
-
-Note there is a hard-coded limit of 10000 validators. This is inherited from the
-limit on the number of votes in a commit.
-
-Further information on [`Validator`'s](./data_structures.md#validator),
-[`ValidatorSet`'s](./data_structures.md#validatorset) and
-[`ConsensusParams`'s](./data_structures.md#consensusparams) can
-be found in [data structures](./data_structures.md)
+The ephemeral [round state](../consensus/consensus.md#round-state) is separate
+from this committed state. Pending next validators and parameters are held in
+`CurrentRoundState`, not a committed `State.NextValidators` field.
 
 ## Execution
 
-State gets updated at the end of executing a block. Of specific interest is `ResponseEndBlock` and
-`ResponseCommit`
+Tenderdash uses same-block execution: `PrepareProposal` and `ProcessProposal`
+return the application hash and transaction results for the block being proposed.
+`FinalizeBlock` persists the accepted candidate state. There is no ABCI `Commit`
+call, and `ResponseFinalizeBlock` does not return an application hash.
 
-```go
-type ResponseEndBlock struct {
-	ValidatorUpdates      []ValidatorUpdate       `protobuf:"bytes,1,rep,name=validator_updates,json=validatorUpdates,proto3" json:"validator_updates"`
-	ConsensusParamUpdates *types1.ConsensusParams `protobuf:"bytes,2,opt,name=consensus_param_updates,json=consensusParamUpdates,proto3" json:"consensus_param_updates,omitempty"`
-	Events                []Event                 `protobuf:"bytes,3,rep,name=events,proto3" json:"events,omitempty"`
-}
-```
-
-where
-
-```go
-type ValidatorUpdate struct {
-	PubKey crypto.PublicKey `protobuf:"bytes,1,opt,name=pub_key,json=pubKey,proto3" json:"pub_key"`
-	Power  int64            `protobuf:"varint,2,opt,name=power,proto3" json:"power,omitempty"`
-}
-```
-
-and
-
-```go
-type ResponseCommit struct {
-	// reserve 1
-	Data         []byte `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
-	RetainHeight int64  `protobuf:"varint,3,opt,name=retain_height,json=retainHeight,proto3" json:"retain_height,omitempty"`
-}
-```
-
-`ValidatorUpdates` are used to add and remove validators to the current set as well as update
-validator power. Setting validator power to 0 in `ValidatorUpdate` will cause the validator to be
-removed. `ConsensusParams` are safely copied across (i.e. if a field is nil it gets ignored) and the
-`Data` from the `ResponseCommit` is used as the `AppHash`
+The authoritative ordering of validation, block/WAL writes, `FinalizeBlock`,
+mempool/evidence updates and state persistence is
+[Commit and apply](../consensus/consensus-happy-path.md#9-commit-and-apply).
+Validator-set and parameter changes from block `h` take effect at `h + 1`; see
+[Validator-set and parameter changes](../consensus/consensus-alternative-flows.md#validator-set-and-parameter-changes).
+For startup reconciliation of application, block-store and state-store heights,
+see [Recovery and synchronisation](../consensus/consensus-recovery.md).
 
 ## Version
 
-```go
-type Version struct {
-  consensus Consensus
-  software string
-}
-```
-
-[`Consensus`](./data_structures.md#version) contains the protocol version for the blockchain and the
-application.
+[Version](./data_structures.md#version) distinguishes block protocol version from
+application version. `ConsensusParams.Version.ConsensusVersion` additionally
+selects the [proposer-selection strategy](../consensus/proposer-selection.md).
 
 ## Block
 
-The total size of a block is limited in bytes by the `ConsensusParams.Block.MaxBytes`.
-Proposed blocks must be less than this size, and will be considered invalid
-otherwise.
-
-Blocks should additionally be limited by the amount of "gas" consumed by the
-transactions in the block, though this is not yet implemented.
+`ConsensusParams.Block.MaxBytes` limits block size. Transaction selection uses
+`Block.MaxGas`, but applications must validate gas requirements when processing
+blocks; see [BlockParams](./data_structures.md#blockparams).
+The complete block/header/application checks are in the
+[proposal-validity summary](../consensus/consensus-transitions.md#proposal-validity-summary).
 
 ## Evidence
 
-For evidence in a block to be valid, it must satisfy:
-
-```go
-block.Header.Time-evidence.Time < ConsensusParams.Evidence.MaxAgeDuration &&
- block.Header.Height-evidence.Height < ConsensusParams.Evidence.MaxAgeNumBlocks
-```
-
-A block must not contain more than `ConsensusParams.Evidence.MaxBytes` of evidence. This is
-implemented to mitigate spam attacks.
+`ConsensusParams.Evidence` bounds evidence age and bytes. Pending evidence is
+included during [proposal creation](../consensus/consensus-happy-path.md#3a-creating-the-proposal-proposer-only).
+[Conflicting-vote handling](../consensus/consensus-alternative-flows.md#equivocation-duplicates-and-conflicting-votes)
+reports evidence to the pool; reporting is distinct from its inclusion in a block
+and application-level punishment.
 
 ## Validator
 
-Validators from genesis file and `ResponseEndBlock` must have pubkeys of type ∈
-`ConsensusParams.Validator.PubKeyTypes`.
+Validators are identified by `ProTxHash`, ordered by ascending `ProTxHash`, and
+have equal `DefaultDashVotingPower = 100`. The active quorum includes its type,
+hash, threshold public key and voting-power threshold; see
+[Terminology](../consensus/consensus.md#terminology) and
+[ValidatorSet](./data_structures.md#validatorset).

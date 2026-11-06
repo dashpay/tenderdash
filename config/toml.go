@@ -370,11 +370,12 @@ allowlist-only = {{ .P2P.AllowlistOnly }}
 # UPNP port forwarding
 upnp = {{ .P2P.UPNP }}
 
-# Maximum number of connections (inbound and outbound).
+# Maximum number of connections (inbound and outbound); 0 uses the default of 64.
 max-connections = {{ .P2P.MaxConnections }}
 
 # Maximum number of outgoing connections. Must not exceed max-connections;
-# 0 means all connections can be outgoing.
+# 0 uses half of max-connections, rounded down; at max-connections = 1 that is 0,
+# which leaves outgoing connections without a separate cap.
 max-outgoing-connections = {{ .P2P.MaxOutgoingConnections }}
 
 # Rate limits the number of incoming connection attempts per IP address.
@@ -402,7 +403,7 @@ dial-timeout = "{{ .P2P.DialTimeout }}"
 # TODO: Remove once MConnConnection is removed.
 flush-throttle-timeout = "{{ .P2P.FlushThrottleTimeout }}"
 
-# Maximum size of a message packet payload, in bytes
+# Maximum size of a message packet payload, in bytes; must be greater than 0
 # TODO: Remove once MConnConnection is removed.
 max-packet-msg-payload-size = {{ .P2P.MaxPacketMsgPayloadSize }}
 
@@ -552,10 +553,9 @@ wal-file = "{{ js .Consensus.WalPath }}"
 # can have security side-effects.
 wal-skip-rounds-to-last = "{{ .Consensus.WalSkipRoundsToLast }}"
 
-# How many blocks to look back to check existence of the node's consensus votes before joining consensus
-# When non-zero, the node will panic upon restart
-# if the same consensus key was used to sign {double-sign-check-height} last blocks.
-# So, validators should stop the state machine, wait for some blocks, and then restart the state machine to avoid panic.
+# Legacy compatibility setting; currently unused by consensus.
+# This does not provide double-sign protection. Preserve the signer's state
+# and never run two active signers with the same consensus identity.
 double-sign-check-height = {{ .Consensus.DoubleSignCheckHeight }}
 
 # EmptyBlocks mode and possible interval between empty blocks
@@ -615,7 +615,7 @@ peer-data-rate-limit = {{ .Consensus.PeerDataRateLimit }}
 
 # This field provides an unsafe override of the Vote timeout consensus parameter.
 # This field configures how long the consensus engine will wait after
-# receiving +2/3 votes in a round.
+# receiving the configured voting threshold in a round.
 # If this field is set to a value greater than 0, it will take effect.
 # unsafe-vote-timeout-override = {{ .Consensus.UnsafeVoteTimeoutOverride }}
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	"github.com/dashpay/tenderdash/internal/p2p"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
@@ -23,7 +24,10 @@ import (
 // apart here. What they have in common is that producing one is free, so a log
 // line per rejection is an amplification vector.
 func isPeerFloodableError(err error) bool {
-	return errors.Is(err, types.ErrVoteInvalidBlockSignature) ||
+	return errors.Is(err, p2p.ErrInvalidData) ||
+		errors.Is(err, p2p.ErrUnrecognizedMessage) ||
+		errors.Is(err, ErrUnrecognizedMessage) ||
+		errors.Is(err, types.ErrVoteInvalidBlockSignature) ||
 		errors.Is(err, types.ErrVoteInvalidSignature) ||
 		errors.Is(err, types.ErrVoteUnexpectedStep) ||
 		// A vote names its validator twice, by index and by pro-tx hash, and a
@@ -193,6 +197,7 @@ func commitMessageHandler(ctrl *Controller) msgHandlerFunc {
 		return ctrl.Dispatch(ctx, &TryAddCommitEvent{
 			Commit:     msg.Commit,
 			PeerID:     envelope.PeerID,
+			ConnID:     envelope.ConnID,
 			FromReplay: envelope.fromReplay,
 		}, stateData)
 	}

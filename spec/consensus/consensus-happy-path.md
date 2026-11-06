@@ -18,7 +18,7 @@ sequenceDiagram
     participant T as timeoutTicker
     participant P as Proposer (validator)
     participant V as Validator (non-proposer)
-    participant A as Application (ABCI++)
+    participant A as Application (ABCI)
     participant S as Block/State store
 
     Note over P,V: updateToState: Height=h, Round=0, Step=NewHeight, StartTime=CommitTime

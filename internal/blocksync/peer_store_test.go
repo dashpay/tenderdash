@@ -45,6 +45,30 @@ func TestInMemPeerStoreBasicOperations(t *testing.T) {
 	require.True(t, inmem.IsZero())
 }
 
+// TestUpsertKeepsNewestConnection pins that a status re-advertised on a newer
+// connection moves the peer's generation, and that a stale one still queued from the
+// connection it replaced cannot move it back.
+func TestUpsertKeepsNewestConnection(t *testing.T) {
+	peerID := types.NodeID("peer")
+	onConn := func(connID uint64) PeerData {
+		peer := newPeerData(peerID, 1, 100)
+		peer.connID = connID
+		return peer
+	}
+
+	peers := NewInMemPeerStore()
+	peers.Upsert(onConn(3))
+	peers.Upsert(onConn(5))
+	peer, found := peers.Get(peerID)
+	require.True(t, found)
+	require.Equal(t, uint64(5), peer.connID, "a newer connection must replace the generation")
+
+	peers.Upsert(onConn(4))
+	peer, found = peers.Get(peerID)
+	require.True(t, found)
+	require.Equal(t, uint64(5), peer.connID, "a stale status must not restore an old generation")
+}
+
 func TestMissingBlockRangeSurvivesReorderedReplies(t *testing.T) {
 	peerID := types.NodeID("snapshot peer")
 	peers := NewInMemPeerStore(newPeerData(peerID, 1000, 1030))

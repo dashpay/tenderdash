@@ -96,6 +96,9 @@ type Testnet struct {
 	MaxEvidenceSize        int64
 	// CreateEmptyBlocks is the consensus create-empty-blocks option of every node.
 	CreateEmptyBlocks bool
+	// CreateEmptyBlocksInterval is the consensus create-empty-blocks-interval
+	// option of every node.
+	CreateEmptyBlocksInterval time.Duration
 	// ProposeNextBlockImmediately makes the application ask for the next height in
 	// every FinalizeBlock response.
 	ProposeNextBlockImmediately bool
@@ -142,6 +145,7 @@ type Node struct {
 	Perturbations                []Perturbation
 	LogLevel                     string
 	QueueType                    string
+	FinalizeHold                 time.Duration
 	HasStarted                   bool
 }
 
@@ -239,6 +243,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 	if manifest.CreateEmptyBlocks != nil {
 		testnet.CreateEmptyBlocks = *manifest.CreateEmptyBlocks
 	}
+	testnet.CreateEmptyBlocksInterval = manifest.CreateEmptyBlocksInterval
 	if testnet.TxSize <= 0 {
 		testnet.TxSize = 1024
 	}
@@ -290,6 +295,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 			Perturbations:    []Perturbation{},
 			LogLevel:         manifest.LogLevel,
 			QueueType:        manifest.QueueType,
+			FinalizeHold:     nodeManifest.FinalizeHold,
 		}
 		if node.StartAt == testnet.InitialHeight {
 			node.StartAt = 0 // normalize to 0 for initial nodes, since code expects this
@@ -504,6 +510,9 @@ func (t Testnet) Validate() error {
 	default:
 		return fmt.Errorf("invalid ABCI protocol setting %q", t.ABCIProtocol)
 	}
+	if t.CreateEmptyBlocksInterval < 0 {
+		return fmt.Errorf("create_empty_blocks_interval must not be negative, got %v", t.CreateEmptyBlocksInterval)
+	}
 
 	for _, node := range t.Nodes {
 		if err := node.Validate(t); err != nil {
@@ -593,6 +602,10 @@ func (n Node) Validate(testnet Testnet) error {
 		return errors.New("snapshot_interval must be less than er equal to retain_blocks")
 	}
 
+	if err := n.validateFinalizeHold(testnet); err != nil {
+		return err
+	}
+
 	for _, perturbation := range n.Perturbations {
 		switch perturbation {
 		case PerturbationDisconnect, PerturbationKill, PerturbationPause, PerturbationRestart:
@@ -601,6 +614,32 @@ func (n Node) Validate(testnet Testnet) error {
 		}
 	}
 
+	return nil
+}
+
+// validateFinalizeHold checks that a held node exercises block sync from the
+// start and that the evidence TestBlockSync_FinalizeHold relies on survives.
+func (n Node) validateFinalizeHold(testnet Testnet) error {
+	switch {
+	case n.FinalizeHold == 0:
+		return nil
+	case n.FinalizeHold < 0:
+		return fmt.Errorf("finalize_hold must not be negative, got %v", n.FinalizeHold)
+	case testnet.ABCIProtocol != ProtocolBuiltin:
+		// The application samples node metrics in-process.
+		return errors.New("finalize_hold requires the builtin ABCI protocol")
+	case n.Mode != ModeFull:
+		return errors.New("finalize_hold requires mode \"full\"")
+	case n.StartAt == 0 || n.StateSync != StateSyncDisabled:
+		// Only a late node without state sync block-syncs from the initial height.
+		return errors.New("finalize_hold requires start_at and no state sync")
+	case n.QueueType != "priority":
+		// Only the priority queue exports sent block-request bytes.
+		return errors.New("finalize_hold requires queue_type \"priority\"")
+	case len(n.Perturbations) > 0:
+		// A restart would reset the counters the hold record is compared with.
+		return errors.New("finalize_hold cannot be combined with perturbations")
+	}
 	return nil
 }
 

@@ -16,6 +16,7 @@ import (
 type TryAddCommitEvent struct {
 	Commit     *types.Commit
 	PeerID     types.NodeID
+	ConnID     uint64 // sender's connection generation, see msgInfo.ConnID
 	FromReplay bool
 }
 
@@ -62,7 +63,7 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 	if stateData.Commit != nil {
 		if commit.Height == stateData.Height {
 			if err := cs.queueCandidate(ctx, stateData, event); err != nil {
-				cs.handleCommitVerifyError(err, peerID, fromReplay)
+				cs.handleCommitVerifyError(err, peerID, event.ConnID, fromReplay)
 				return err
 			}
 		}
@@ -78,7 +79,7 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 			"our_round", rs.Round, "commit_round", commit.Round)
 		verified, err := cs.prepareCommitForApply(ctx, stateData, commit, peerID, true)
 		if err != nil {
-			cs.handleCommitVerifyError(err, peerID, fromReplay)
+			cs.handleCommitVerifyError(err, peerID, event.ConnID, fromReplay)
 			return err
 		}
 		if verified {
@@ -95,7 +96,7 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 			if held {
 				if err := verifyHeldCommit(ctx, cs.logger, cs.blockExec, stateData, commit); err != nil {
 					stateData.Commit = nil
-					cs.handleCommitVerifyError(err, peerID, fromReplay)
+					cs.handleCommitVerifyError(err, peerID, event.ConnID, fromReplay)
 					return err
 				}
 			}
@@ -113,7 +114,7 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 	// First lets verify that the commit is what we are expecting
 	verified, err := cs.prepareCommitForApply(ctx, stateData, commit, peerID, false)
 	if err != nil {
-		cs.handleCommitVerifyError(err, peerID, fromReplay)
+		cs.handleCommitVerifyError(err, peerID, event.ConnID, fromReplay)
 		return err
 	}
 	if !verified {
@@ -179,7 +180,7 @@ func (cs *TryAddCommitAction) queueCandidate(ctx context.Context, stateData *Sta
 // network. Replayed messages are exempt entirely: the WAL re-dispatches them
 // under the original PeerID, so a peer would otherwise be evicted at restart for
 // a message it sent long ago.
-func (cs *TryAddCommitAction) handleCommitVerifyError(err error, peerID types.NodeID, fromReplay bool) {
+func (cs *TryAddCommitAction) handleCommitVerifyError(err error, peerID types.NodeID, connID uint64, fromReplay bool) {
 	if peerID != "" && !fromReplay {
 		cs.metrics.CommitVerifyFailures.With("reason", CommitVerifyFailureReason(err)).Add(1)
 		if errors.Is(err, types.ErrVerificationBudgetExhausted) {
@@ -198,7 +199,7 @@ func (cs *TryAddCommitAction) handleCommitVerifyError(err error, peerID types.No
 	// drains the queue. Dropping a report under saturation costs one missed
 	// eviction, whereas blocking would stall consensus.
 	select {
-	case cs.peerErrorQueue.ch <- peerErrorMsg{PeerID: peerID, Err: err, Fatal: true}:
+	case cs.peerErrorQueue.ch <- peerErrorMsg{PeerID: peerID, ConnID: connID, Err: err, Fatal: true}:
 	default:
 	}
 }
