@@ -602,9 +602,7 @@ func (bs *BlockStore) saveBlockToBatch(batch dbm.Batch, block *types.Block, bloc
 		return err
 	}
 
-	// Nothing signs the beacon and app hash of block.LastCommit, so a proposer can fill them. The block's
-	// parts keep them, as the encoding the next commit signs, but they are not the previous height's commit.
-	pbc := block.LastCommit.WithoutRandomBeacon().ToProto()
+	pbc := bs.canonicalLastCommit(block).ToProto()
 	blockCommitBytes := mustEncode(pbc)
 	if err := batch.Set(blockCommitKey(height-1), blockCommitBytes); err != nil {
 		return err
@@ -623,6 +621,24 @@ func (bs *BlockStore) saveBlockToBatch(batch dbm.Batch, block *types.Block, bloc
 	}
 
 	return nil
+}
+
+// canonicalLastCommit returns the commit SaveBlock stores for the previous height. Nothing signs the
+// beacon and app hash of block.LastCommit, so a proposer can fill them, and validateBlock checks them
+// only when the last block was committed with a beacon. So they are kept only when they are the ones in
+// the commit this node saved for that height; before consensus version 2 that commit has neither. The
+// block's parts keep them either way, as the encoding the next commit signs.
+func (bs *BlockStore) canonicalLastCommit(block *types.Block) *types.Commit {
+	commit := block.LastCommit
+	if commit == nil || (len(commit.Beacon) == 0 && len(commit.AppHash) == 0) {
+		return commit
+	}
+	seen := bs.LoadSeenCommit()
+	if seen != nil && seen.Height == commit.Height &&
+		bytes.Equal(seen.Beacon, commit.Beacon) && bytes.Equal(seen.AppHash, commit.AppHash) {
+		return commit
+	}
+	return commit.WithoutRandomBeacon()
 }
 
 func (bs *BlockStore) saveBlockPart(height int64, index int, part *types.Part, batch dbm.Batch) {

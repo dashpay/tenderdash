@@ -656,3 +656,48 @@ func TestSaveBlockDropsLastCommitRandomness(t *testing.T) {
 	require.Equal(t, lastCommit.AppHash, loaded.LastCommit.AppHash)
 	require.NotEmpty(t, block.LastCommit.Beacon, "saving must not change the block")
 }
+
+// TestSaveBlockKeepsSeenLastCommitRandomness checks the canonical commit from consensus version 2: it
+// keeps a beacon and app hash that match the commit this node saved for that height, and drops others.
+func TestSaveBlockKeepsSeenLastCommitRandomness(t *testing.T) {
+	beacon := bytes.Repeat([]byte{0x01}, types.SignatureSize)
+	appHash := bytes.Repeat([]byte{0x02}, crypto.DefaultAppHashSize)
+	forged := bytes.Repeat([]byte{0x03}, types.SignatureSize)
+
+	testCases := []struct {
+		name           string
+		lastBeacon     []byte
+		expectedBeacon []byte
+		expectedApp    []byte
+	}{
+		{name: "matches the seen commit", lastBeacon: beacon, expectedBeacon: beacon, expectedApp: appHash},
+		{name: "differs from the seen commit", lastBeacon: forged},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			state, bs := makeStateAndBlockStore(t, t.TempDir())
+
+			first, err := factory.MakeBlock(state, 1, new(types.Commit), 0)
+			require.NoError(t, err)
+			firstParts, err := first.MakePartSet(types.BlockPartSizeBytes)
+			require.NoError(t, err)
+			seen := makeTestCommit(t, state, 1)
+			seen.Beacon, seen.AppHash = beacon, appHash
+			bs.SaveBlock(first, firstParts, seen)
+
+			state.LastBlockHeight = 1
+			lastCommit := makeTestCommit(t, state, 1)
+			lastCommit.Beacon, lastCommit.AppHash = tc.lastBeacon, appHash
+			second, err := factory.MakeBlock(state, 2, lastCommit, 0)
+			require.NoError(t, err)
+			secondParts, err := second.MakePartSet(types.BlockPartSizeBytes)
+			require.NoError(t, err)
+			bs.SaveBlock(second, secondParts, makeTestCommit(t, state, 2))
+
+			canonical := bs.LoadBlockCommit(1)
+			require.NotNil(t, canonical)
+			require.EqualValues(t, tc.expectedBeacon, canonical.Beacon)
+			require.EqualValues(t, tc.expectedApp, canonical.AppHash)
+		})
+	}
+}
