@@ -307,7 +307,7 @@ The application should be prepared to reset and accept it or abort as appropriat
 
 | Method Name | Request Type | Response Type | Description |
 | ----------- | ------------ | ------------- | ------------|
-| PrepareProposal | [RequestPrepareProposal](api.md#tendermint-abci-RequestPrepareProposal) | [ResponsePrepareProposal](api.md#tendermint-abci-ResponsePrepareProposal) |
+| PrepareProposal | [RequestPrepareProposal](api.md#tendermint-abci-RequestPrepareProposal) | [ResponsePrepareProposal](api.md#tendermint-abci-ResponsePrepareProposal) |  |
 
 #### Usage
 

@@ -264,7 +264,7 @@ Applies a snapshot chunk.
 
 - The application can choose to refetch chunks and/or ban P2P peers as appropriate.
   Tenderdash will not do this unless instructed by the application.
-- The application may want to verify each chunk, e.g. by attaching chunk hashes in `Snapshot.Metadata`` and/or
+- The application may want to verify each chunk, e.g. by attaching chunk hashes in `Snapshot.Metadata` and/or
   incrementally verifying contents against AppHash.
 - On ACCEPT, Tenderdash enqueues `ResponseApplySnapshotChunk.next_chunks` and continues applying chunks.
   Restoration finishes only when the application returns COMPLETE_SNAPSHOT; an ACCEPT without
@@ -464,7 +464,7 @@ Used during state sync to retrieve snapshot chunks from peers.
 | ----- | ---- | ----- | ----------- |
 | height | [uint64](#uint64) |  | The height of the snapshot the chunks belongs to. |
 | version | [uint32](#uint32) |  | The application-specific format of the snapshot the chunk belongs to. |
-| chunk_id | [bytes](#bytes) |  | The chunk id is a hash of the node of subtree of the snapshot. |
+| chunk_id | [bytes](#bytes) |  | Application-defined chunk identifier: `Snapshot.hash` for the first chunk, then identifiers returned in `ResponseApplySnapshotChunk.next_chunks`. |
 
 
 

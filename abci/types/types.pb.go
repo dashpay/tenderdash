@@ -1031,6 +1031,8 @@ func (m *RequestOfferSnapshot) GetAppHash() []byte {
 type RequestLoadSnapshotChunk struct {
 	Height  uint64 `protobuf:"varint,1,opt,name=height,proto3" json:"height,omitempty"`
 	Version uint32 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	// Application-defined chunk identifier: `Snapshot.hash` for the first chunk, then identifiers
+	// returned in `ResponseApplySnapshotChunk.next_chunks`.
 	ChunkId []byte `protobuf:"bytes,3,opt,name=chunk_id,json=chunkId,proto3" json:"chunk_id,omitempty"`
 }
 
@@ -1092,7 +1094,7 @@ func (m *RequestLoadSnapshotChunk) GetChunkId() []byte {
 //
 //   - The application can choose to refetch chunks and/or ban P2P peers as appropriate.
 //     Tenderdash will not do this unless instructed by the application.
-//   - The application may want to verify each chunk, e.g. by attaching chunk hashes in `Snapshot.Metadata“ and/or
+//   - The application may want to verify each chunk, e.g. by attaching chunk hashes in `Snapshot.Metadata` and/or
 //     incrementally verifying contents against AppHash.
 //   - On ACCEPT, Tenderdash enqueues `ResponseApplySnapshotChunk.next_chunks` and continues applying chunks.
 //     Restoration finishes only when the application returns COMPLETE_SNAPSHOT; an ACCEPT without

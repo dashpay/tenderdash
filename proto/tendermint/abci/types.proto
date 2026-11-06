@@ -160,14 +160,16 @@ message RequestOfferSnapshot {
 message RequestLoadSnapshotChunk {
   uint64 height   = 1;  // The height of the snapshot the chunks belongs to.
   uint32 version  = 2;  // The application-specific format of the snapshot the chunk belongs to.
-  bytes  chunk_id = 3;  // The chunk id is a hash of the node of subtree of the snapshot.
+  // Application-defined chunk identifier: `Snapshot.hash` for the first chunk, then identifiers
+  // returned in `ResponseApplySnapshotChunk.next_chunks`.
+  bytes  chunk_id = 3;
 }
 
 // Applies a snapshot chunk.
 //
 // - The application can choose to refetch chunks and/or ban P2P peers as appropriate.
 //   Tenderdash will not do this unless instructed by the application.
-// - The application may want to verify each chunk, e.g. by attaching chunk hashes in `Snapshot.Metadata`` and/or
+// - The application may want to verify each chunk, e.g. by attaching chunk hashes in `Snapshot.Metadata` and/or
 //   incrementally verifying contents against AppHash.
 // - On ACCEPT, Tenderdash enqueues `ResponseApplySnapshotChunk.next_chunks` and continues applying chunks.
 //   Restoration finishes only when the application returns COMPLETE_SNAPSHOT; an ACCEPT without
