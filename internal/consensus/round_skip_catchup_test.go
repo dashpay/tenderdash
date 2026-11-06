@@ -211,10 +211,11 @@ func TestReplayDoesNotWaitInARoundTheNodeLeftForPropose(t *testing.T) {
 	prevotes := signVotes(ctx, t, tmproto.PrevoteType, test.chainID, blockID, nil,
 		committed.Validators.QuorumType, committed.Validators.QuorumHash, test.vss[1:]...)
 	certificate := recoverRoundSkipCertificate(ctx, t, test.cs, test.vss, height, 0)
-	wal := []any{
+	wal := make([]any, 0, 5+len(prevotes))
+	wal = append(wal,
 		EndHeightMessage{Height: height - 1},
 		newEventDataRoundState(height, 0, cstypes.RoundStepNewHeight),
-	}
+	)
 	for _, vote := range prevotes {
 		wal = append(wal, msgInfo{Msg: &VoteMessage{Vote: vote}, PeerID: "peer"})
 	}
