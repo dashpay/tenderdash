@@ -211,7 +211,10 @@ type State struct {
 	roundSkips *roundSkipCollector
 	// signs this validator's votes to skip a round, off the consensus goroutine
 	roundSkipSigner *roundSkipSigner
-	msgMiddlewares  []msgMiddlewareFunc
+	// the round whose silence ProposerSilences last counted; only the
+	// consensus goroutine uses it
+	silenceCounted silentRound
+	msgMiddlewares []msgMiddlewareFunc
 
 	stopFn func(cs *State) bool
 }
@@ -958,9 +961,12 @@ func (cs *State) handleProposerSilence(ctx context.Context, stateData *StateData
 	if !stateData.isValidator(cs.privValidator.ProTxHash) {
 		return
 	}
-	// A silence reported after this validator voted is the vote's resend timer
-	// (see voteToSkipRound), not another silent round.
-	if cs.roundSkips.voteOf(silence.Height, silence.Round, cs.privValidator.ProTxHash) == nil {
+	// A silence reported again for the same round is not another silent round:
+	// it is the resend timer of this validator's vote (see voteToSkipRound), or
+	// the retry of a vote that could not be signed, or had to wait for the
+	// signing of an earlier round's vote.
+	if round := (silentRound{height: silence.Height, round: silence.Round}); cs.silenceCounted != round {
+		cs.silenceCounted = round
 		cs.metrics.ProposerSilences.Add(1)
 		cs.logger.Info("proposer of the round is silent, voting to skip the round",
 			"height", silence.Height,
@@ -968,6 +974,12 @@ func (cs *State) handleProposerSilence(ctx context.Context, stateData *StateData
 			"proposer", silence.Proposer.ShortString())
 	}
 	cs.voteToSkipRound(ctx, stateData, silence)
+}
+
+// silentRound is a height and round in which the proposer went silent.
+type silentRound struct {
+	height int64
+	round  int32
 }
 
 // voteToSkipRound has this validator's vote to skip the round it waits in

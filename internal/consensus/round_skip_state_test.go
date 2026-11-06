@@ -71,6 +71,7 @@ type roundSkipTest struct {
 	proposalCh   <-chan tmpubsub.Message
 	ownSkipVotes chan *types.RoundSkipVote
 	heartbeats   chan *types.ProposerHeartbeat
+	silences     *syncCounter
 }
 
 // newRoundSkipTest builds the state and commits height 1, which this node
@@ -113,7 +114,9 @@ func newRoundSkipTest(
 		proposalCh:   subscribe(ctx, t, cs.eventBus, types.EventQueryCompleteProposal),
 		ownSkipVotes: make(chan *types.RoundSkipVote, 10),
 		heartbeats:   make(chan *types.ProposerHeartbeat, 1000),
+		silences:     &syncCounter{},
 	}
+	cs.metrics.ProposerSilences = test.silences
 	for i, privVal := range privVals {
 		test.vss[i] = newValidatorStub(privVal, int32(i), state.InitialHeight)
 	}
@@ -361,6 +364,7 @@ func TestStateRoundSkipVoteRetriedAfterSigningFails(t *testing.T) {
 
 	test.ownSkipVote(t, 0)
 	assert.Equal(t, int32(2), signer.skipVotes.Load(), "one failed attempt, then the vote")
+	assert.Equal(t, float64(1), test.silences.count(), "the retry is not another silent round")
 }
 
 // A signer that does not answer holds up this validator's skip vote, not the
