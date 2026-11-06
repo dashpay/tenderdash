@@ -9,8 +9,8 @@ application queries and events. With RPC enabled, opening the configured RPC
 listen address in a browser lists the endpoints available on that node.
 
 See the [RPC API reference](../../api/rpc/index.html) for method parameters
-and responses. The [RPC routes](https://github.com/dashpay/tenderdash/blob/master/internal/rpc/core/routes.go)
-and [implementation](https://github.com/dashpay/tenderdash/tree/master/internal/rpc/core)
+and responses. The [RPC routes](../../internal/rpc/core/routes.go)
+and [implementation](../../internal/rpc/core)
 define the methods supported by this source version.
 
 For clients written in Go, use the

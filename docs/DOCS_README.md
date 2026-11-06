@@ -70,4 +70,4 @@ public-key type names, metric names, and TLA+/Ivy module names. Do not rename wi
 types to change their display name.
 
 Generate the ABCI API page from its protobuf source with `make proto-doc`;
-`spec/abci++/api.md` is generated and must not be edited by hand.
+`spec/abci/api.md` is generated and must not be edited by hand.

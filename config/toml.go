@@ -553,10 +553,9 @@ wal-file = "{{ js .Consensus.WalPath }}"
 # can have security side-effects.
 wal-skip-rounds-to-last = "{{ .Consensus.WalSkipRoundsToLast }}"
 
-# How many blocks to look back to check existence of the node's consensus votes before joining consensus
-# When non-zero, the node will panic upon restart
-# if the same consensus key was used to sign {double-sign-check-height} last blocks.
-# So, validators should stop the state machine, wait for some blocks, and then restart the state machine to avoid panic.
+# Legacy compatibility setting; currently unused by consensus.
+# This does not provide double-sign protection. Preserve the signer's state
+# and never run two active signers with the same consensus identity.
 double-sign-check-height = {{ .Consensus.DoubleSignCheckHeight }}
 
 # EmptyBlocks mode and possible interval between empty blocks
@@ -616,7 +615,7 @@ peer-data-rate-limit = {{ .Consensus.PeerDataRateLimit }}
 
 # This field provides an unsafe override of the Vote timeout consensus parameter.
 # This field configures how long the consensus engine will wait after
-# receiving +2/3 votes in a round.
+# receiving the configured voting threshold in a round.
 # If this field is set to a value greater than 0, it will take effect.
 # unsafe-vote-timeout-override = {{ .Consensus.UnsafeVoteTimeoutOverride }}
 

@@ -2,7 +2,7 @@
 
 Tenderdash is the Byzantine Fault Tolerant consensus engine used by Dash Platform.
 It replicates application state across validators and connects to the application
-through the Application Blockchain Interface (ABCI++).
+through the Application Blockchain Interface (ABCI).
 
 - [Introduction](introduction/README.md) and [installation](introduction/install.md)
 - [Operating a node](nodes/README.md)
