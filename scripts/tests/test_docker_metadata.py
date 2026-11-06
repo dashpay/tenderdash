@@ -90,7 +90,11 @@ class DockerMetadataTests(unittest.TestCase):
 
     def test_first_stable_release_can_promote_aliases(self):
         self.git("tag", "v2.0.0")
-        self.assertIn("latest", self.plan(latest="")["tags"])
+        self.assertIn("latest", self.plan(latest="v2.0.0")["tags"])
+
+    def test_missing_latest_release_never_promotes_aliases(self):
+        self.git("tag", "v2.0.0")
+        self.assertEqual(self.plan(latest="")["tags"], ["2.0.0"])
 
     def test_manual_tag_resolves_tag_not_selected_workflow_branch(self):
         self.git("tag", "v2.0.0")

@@ -59,12 +59,13 @@ def plan(event_name, event, ref, latest_release, repo=Path(".")):
                 continue
             if not candidate_suffix:
                 stable_versions.append(candidate_version)
-        # The API must identify this release as latest; an older line must also
-        # never overwrite aliases for a higher version already tagged locally.
+        # The API must affirmatively identify this release as latest (an empty
+        # result fails closed); an older line must also never overwrite aliases
+        # for a higher version already tagged locally.
         if (
             event_name == "release"
             and not prerelease
-            and latest_release in ("", tag)
+            and latest_release == tag
             and numbers >= max(stable_versions, default=numbers)
         ):
             tags += [f"{numbers[0]}.{numbers[1]}", str(numbers[0]), "latest"]
