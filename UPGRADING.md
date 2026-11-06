@@ -86,7 +86,8 @@ This release defines consensus versions 0 and 1 only and never calls it.
 - `Commit` and `CommitInfo` gain `beacon` and `app_hash`. At every consensus version, a commit whose
   beacon and app hash are not both empty, or exactly 96 and 32 bytes, is refused, and a block's
   last commit is read without malformed ones. Before consensus version 2, nodes drop well-sized ones
-  from the commits they adopt and from the last commit they pass to the application.
+  from the commits they adopt, from the previous height's commit they store from a block, and from the
+  last commit they pass to the application.
 
 ### ABCI: commit vote-extension verification
 

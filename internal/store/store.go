@@ -602,7 +602,9 @@ func (bs *BlockStore) saveBlockToBatch(batch dbm.Batch, block *types.Block, bloc
 		return err
 	}
 
-	pbc := block.LastCommit.ToProto()
+	// Nothing signs the beacon and app hash of block.LastCommit, so a proposer can fill them. The block's
+	// parts keep them, as the encoding the next commit signs, but they are not the previous height's commit.
+	pbc := block.LastCommit.WithoutRandomBeacon().ToProto()
 	blockCommitBytes := mustEncode(pbc)
 	if err := batch.Set(blockCommitKey(height-1), blockCommitBytes); err != nil {
 		return err
