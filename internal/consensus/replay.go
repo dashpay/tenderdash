@@ -51,15 +51,22 @@ func (cs *State) readReplayMessage(ctx context.Context, msg *TimedWALMessage, ne
 	switch m := msg.Msg.(type) {
 	case types.EventDataRoundState:
 		cs.logger.Trace("Replay: New Step", "height", m.Height, "round", m.Round, "step", m.Step)
-		// A round the node left for the propose step must not be left waiting
-		// for transactions by replay. Whether a round entered on a round skip
-		// certificate waits depends on the prevotes the node had (see
-		// waitsAfterRoundSkip), and the iterator that skips rounds keeps only
-		// their certificates (see keepRoundSkipCertificates), so replay can
-		// rebuild a wait the node never had. The step it recorded settles it.
-		if m.Step == cstypes.RoundStepPropose.String() && m.Height == stateData.Height &&
-			m.Round == stateData.Round && waitingForTxs(&stateData) {
-			_ = cs.ctrl.Dispatch(ctx, &EnterProposeEvent{Height: m.Height, Round: m.Round}, &stateData)
+		// The propose step the node recorded is where replay must leave it. The
+		// iterator that skips rounds keeps only the certificates of the rounds
+		// it skips (see keepRoundSkipCertificates), so replay can rebuild the
+		// wait for transactions of the round a certificate leads to, which the
+		// node may have left for the propose step, or for a later round,
+		// through prevotes and timeouts that replay no longer has. On a chain
+		// that skips rounds, where such a wait has no timeout running, the
+		// recorded step settles it: a later round is entered as the node
+		// entered it, and a waiting round goes on to the propose step.
+		if m.Step == cstypes.RoundStepPropose.String() && m.Height == stateData.Height && roundSkipping(&stateData) {
+			if m.Round > stateData.Round {
+				_ = cs.ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: m.Height, Round: m.Round}, &stateData)
+			}
+			if m.Round == stateData.Round && waitingForTxs(&stateData) {
+				_ = cs.ctrl.Dispatch(ctx, &EnterProposeEvent{Height: m.Height, Round: m.Round}, &stateData)
+			}
 		}
 		// these are playback checks
 		if newStepSub != nil {

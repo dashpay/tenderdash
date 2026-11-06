@@ -189,66 +189,91 @@ func TestRefusedCertificatesThatAreNoPeerFault(t *testing.T) {
 }
 
 // The iterator that skips rounds replays only the certificates of the rounds
-// it skips, not their prevotes. A node that crashed just after a certificate
-// moved it into the propose step of the next round, because the round before
-// had a polka, must not then come back waiting in that round for transactions:
-// it would have no timeout running, and the round's proposer's heartbeats
-// would keep it there.
+// it skips, not their prevotes, votes or timeouts. A node that a certificate
+// moved into the propose step of the next round, because the round before had
+// a polka, or that went on from there to a later round, must not then come
+// back from a crash waiting for transactions in the round the certificate
+// leads to: it would have no timeout running, and the round's proposer's
+// heartbeats would keep it there.
 func TestReplayDoesNotWaitInARoundTheNodeLeftForPropose(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	test := newRoundSkipTest(ctx, t, "consensus_replay_round_skip_polka_test", nil)
 	committed := test.cs.GetStateData().state
+	quorumType, quorumHash := committed.Validators.QuorumType, committed.Validators.QuorumHash
 	const height = int64(2)
+	votesOf := func(voteType tmproto.SignedMsgType, round int32, blockID types.BlockID) []any {
+		for _, vs := range test.vss[1:] {
+			vs.Height, vs.Round = height, round
+		}
+		votes := signVotes(ctx, t, voteType, test.chainID, blockID, nil, quorumType, quorumHash, test.vss[1:]...)
+		msgs := make([]any, 0, len(votes))
+		for _, vote := range votes {
+			msgs = append(msgs, msgInfo{Msg: &VoteMessage{Vote: vote}, PeerID: "peer"})
+		}
+		return msgs
+	}
 
 	// Round 0 of height 2: the three other validators prevote a block whose
 	// parts never reach the node, and a certificate skips the round. The node
-	// enters the propose step of round 1, and crashes.
-	blockID := factory.MakeBlockID()
-	for _, vs := range test.vss[1:] {
-		vs.Height, vs.Round = height, 0
-	}
-	prevotes := signVotes(ctx, t, tmproto.PrevoteType, test.chainID, blockID, nil,
-		committed.Validators.QuorumType, committed.Validators.QuorumHash, test.vss[1:]...)
+	// enters the propose step of round 1.
 	certificate := recoverRoundSkipCertificate(ctx, t, test.cs, test.vss, height, 0)
-	wal := make([]any, 0, 5+len(prevotes))
-	wal = append(wal,
+	toRound1 := make([]any, 0, 8+len(test.vss))
+	toRound1 = append(toRound1,
 		EndHeightMessage{Height: height - 1},
 		newEventDataRoundState(height, 0, cstypes.RoundStepNewHeight),
 	)
-	for _, vote := range prevotes {
-		wal = append(wal, msgInfo{Msg: &VoteMessage{Vote: vote}, PeerID: "peer"})
-	}
-	wal = append(wal,
+	toRound1 = append(toRound1, votesOf(tmproto.PrevoteType, 0, factory.MakeBlockID())...)
+	toRound1 = append(toRound1,
 		msgInfo{Msg: &RoundSkipCertificateMessage{Certificate: certificate}, PeerID: "peer"},
 		newEventDataRoundState(height, 1, cstypes.RoundStepNewRound),
 		newEventDataRoundState(height, 1, cstypes.RoundStepPropose),
 	)
+	// Round 1 then ends in nil votes, and the node enters the propose step of
+	// round 2.
+	toRound2 := make([]any, 0, len(toRound1)+9)
+	toRound2 = append(toRound2, toRound1...)
+	toRound2 = append(toRound2, votesOf(tmproto.PrevoteType, 1, types.BlockID{})...)
+	toRound2 = append(toRound2, votesOf(tmproto.PrecommitType, 1, types.BlockID{})...)
+	toRound2 = append(toRound2,
+		timeoutInfo{Height: height, Round: 1, Step: cstypes.RoundStepPrecommitWait},
+		newEventDataRoundState(height, 2, cstypes.RoundStepNewRound),
+		newEventDataRoundState(height, 2, cstypes.RoundStepPropose),
+	)
 
-	for _, skipRounds := range []bool{true, false} {
-		t.Run(fmt.Sprintf("skip rounds %v", skipRounds), func(t *testing.T) {
-			config, err := ResetConfig(t, "consensus_replay_round_skip_polka_restart_test")
-			require.NoError(t, err)
-			config.Consensus.CreateEmptyBlocks = false
-			config.Consensus.WalSkipRoundsToLast = skipRounds
-			replay := newStateWithConfigAndBlockStore(ctx, t, log.NewNopLogger(), config, committed,
-				test.cs.privValidator.PrivValidator, NewCounterApplication(), test.cs.blockStore)
-			replay.emitter.Emit(setReplayModeEventName, true)
-			ctx := dash.ContextWithProTxHash(ctx, replay.privValidator.ProTxHash)
-			require.Equal(t, height, replay.GetStateData().Height)
+	for _, crash := range []struct {
+		name  string
+		wal   []any
+		round int32
+	}{
+		{"in round 1", toRound1, 1},
+		{"in round 2", toRound2, 2},
+	} {
+		for _, skipRounds := range []bool{true, false} {
+			t.Run(fmt.Sprintf("%s, skip rounds %v", crash.name, skipRounds), func(t *testing.T) {
+				config, err := ResetConfig(t, "consensus_replay_round_skip_polka_restart_test")
+				require.NoError(t, err)
+				config.Consensus.CreateEmptyBlocks = false
+				config.Consensus.WalSkipRoundsToLast = skipRounds
+				replay := newStateWithConfigAndBlockStore(ctx, t, log.NewNopLogger(), config, committed,
+					test.cs.privValidator.PrivValidator, NewCounterApplication(), test.cs.blockStore)
+				replay.emitter.Emit(setReplayModeEventName, true)
+				ctx := dash.ContextWithProTxHash(ctx, replay.privValidator.ProTxHash)
+				require.Equal(t, height, replay.GetStateData().Height)
 
-			iter := newWalIter(&mockWALReader{ret: wal}, skipRounds)
-			for iter.Next() {
-				require.NoError(t, replay.readReplayMessage(ctx, iter.Value(), nil))
-			}
-			require.NoError(t, iter.Err())
+				iter := newWalIter(&mockWALReader{ret: crash.wal}, skipRounds)
+				for iter.Next() {
+					require.NoError(t, replay.readReplayMessage(ctx, iter.Value(), nil))
+				}
+				require.NoError(t, iter.Err())
 
-			stateData := replay.GetStateData()
-			require.NotNil(t, stateData.RoundSkip)
-			assert.Equal(t, int32(1), stateData.Round)
-			assert.Equal(t, cstypes.RoundStepPropose, stateData.Step,
-				"replay left the node waiting in a round it had left for the propose step")
-		})
+				stateData := replay.GetStateData()
+				require.NotNil(t, stateData.RoundSkip)
+				assert.Equal(t, crash.round, stateData.Round)
+				assert.Equal(t, cstypes.RoundStepPropose, stateData.Step,
+					"replay left the node waiting in a round it had left for the propose step")
+			})
+		}
 	}
 }
 
