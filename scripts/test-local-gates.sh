@@ -41,16 +41,17 @@ expect_lint_failure() {
 	test ! -s "$GATE_LOG"
 }
 
-git update-ref refs/remotes/origin/v1.9-dev HEAD
-git update-ref refs/remotes/origin/v1.10-dev HEAD
-expected_base=origin/v1.10-dev
+# Historical versioned refs must not substitute for the integration branch.
+git update-ref refs/remotes/origin/v1.8-dev HEAD
+git update-ref refs/remotes/origin/v9.0-dev HEAD
+expect_lint_failure
+
+git update-ref refs/remotes/origin/dev HEAD
+expected_base=origin/dev
 expect_lint_base
 
-git update-ref refs/remotes/origin/v2.0-dev HEAD
-expected_base=origin/v2.0-dev
-expect_lint_base
-
-expected_base=origin/v1.9-dev
+expected_base=origin/master
+git update-ref refs/remotes/origin/master HEAD
 expect_lint_base LINT_BASE="$expected_base"
 LINT_BASE="$expected_base" expect_lint_base
 
@@ -63,9 +64,8 @@ git update-ref refs/remotes/origin/unrelated "$unrelated"
 expect_lint_failure LINT_BASE=origin/unrelated
 grep -F 'no common history' output.log
 
-git update-ref -d refs/remotes/origin/v1.9-dev
-git update-ref -d refs/remotes/origin/v1.10-dev
-git update-ref -d refs/remotes/origin/v2.0-dev
+git update-ref -d refs/remotes/origin/dev
+git update-ref -d refs/remotes/origin/v1.8-dev
 expect_lint_failure
 grep -F 'no development branch found' output.log
 expected_base=HEAD
@@ -74,4 +74,9 @@ expect_lint_base LINT_BASE=HEAD
 make --no-print-directory vet lint-all > output.log 2>&1
 grep -Fx 'vet ./...' "$GATE_LOG"
 grep -E 'golangci-lint@[^ ]+ run --timeout 10m$' "$GATE_LOG"
+for version in 2.0.0 2.0.0-rc.1 unreleased-dev-0123456789abcdef; do
+	: > "$GATE_LOG"
+	make --no-print-directory build-binary VERSION="$version" > output.log 2>&1
+	grep -F -- "-X github.com/dashpay/tenderdash/version.TMCoreSemVer=$version" "$GATE_LOG"
+done
 echo 'Local quality gate tests passed'

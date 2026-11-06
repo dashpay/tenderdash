@@ -91,6 +91,7 @@ func TestReactorSendsRequestsTooOften(t *testing.T) {
 
 	r.pexInCh <- p2p.Envelope{
 		From:    badNode,
+		ConnID:  7,
 		Message: &p2pproto.PexRequest{},
 	}
 
@@ -98,6 +99,7 @@ func TestReactorSendsRequestsTooOften(t *testing.T) {
 	require.Error(t, peerErr.Err)
 	require.Empty(t, r.pexOutCh)
 	require.Contains(t, peerErr.Err.Error(), "sent PEX request too soon")
+	require.Equal(t, uint64(7), peerErr.ConnID, "the report must name the sending connection")
 	require.Equal(t, badNode, peerErr.NodeID)
 }
 

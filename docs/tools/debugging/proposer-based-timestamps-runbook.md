@@ -13,7 +13,7 @@ depending on the configuration of the validator's local clock.
 
 This document provides a set of actionable steps for application developers and
 node operators to diagnose and fix issues related to clock synchronization and
-configuration of the Proposer-Based Timestamps [SynchronyParams](https://github.com/dashpay/tenderdash/blob/master/spec/core/data_structures.md#synchronyparams).
+configuration of the Proposer-Based Timestamps [SynchronyParams](../../../spec/core/data_structures.md#synchronyparams).
 
 Use this runbook if you observe that validators are frequently voting `nil` for a block that the rest
 of the network votes for or if validators are frequently producing block proposals
@@ -21,7 +21,7 @@ that are not voted for by the rest of the network.
 
 ## Requirements
 
-To use this runbook, you must be running a node that has the [Prometheus metrics endpoint enabled](https://github.com/dashpay/tenderdash/blob/master/docs/nodes/metrics.md)
+To use this runbook, you must be running a node that has the [Prometheus metrics endpoint enabled](../../nodes/metrics.md)
 and the Tenderdash RPC endpoint enabled and accessible.
 
 It is strongly recommended to also run a Prometheus metrics collector to gather and
@@ -209,4 +209,4 @@ upgrade process. Check the application's supported parameter update mechanism.
 
 If the application does not implement a way to update the consensus parameters
 programatically, then the application itself must be updated to do so. More information on updating
-the consensus parameters via ABCI can be found in the [FinalizeBlock documentation](../../../spec/abci++/abci%2B%2B_methods.md#finalizeblock).
+the consensus parameters via ABCI can be found in the [FinalizeBlock documentation](../../../spec/abci/methods.md#finalizeblock).

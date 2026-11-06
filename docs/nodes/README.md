@@ -14,7 +14,7 @@ This section will focus on how to operate full nodes, validators and light clien
   - [Configure State sync](./state-sync.md)
 - [Validator Guides](./validators.md)
   - [Running in Production](./running-in-production.md)
-  - [How to secure your keys](./validators.md#validator_keys)
+  - [How to secure your keys](./validators.md#validator-keys)
   - [Remote Signer](./remote-signer.md)
 - [Light Client guides](./light-client.md)
   - [How to sync a light client](./light-client.md#)
@@ -43,6 +43,7 @@ We will cover the various types of node types within Tenderdash.
 
 ### Validators
 
-Validators are nodes that participate in the security of a network. Validators have an associated power in Tenderdash, this power can represent stake in a [proof of stake](https://en.wikipedia.org/wiki/Proof_of_stake) system, reputation in [proof of authority](https://en.wikipedia.org/wiki/Proof_of_authority) or any sort of measurable unit. Running a secure and consistently online validator is crucial to a networks health. A validator must be secure and fault tolerant, it is recommended to run your validator with 2 or more sentry nodes.
-
-As a validator there is the potential to have your weight reduced, this is defined by the application. Tenderdash is notified by the application if a validator should have their weight increased or reduced. Application have different types of malicious behavior which lead to slashing of the validators power. Please check the documentation of the application you will be running in order to find more information.
+Validators sign consensus votes when their pro-tx-hash belongs to the active
+Dash quorum. All validators have voting power `100`; application-provided
+validator-set updates determine membership. See the [validator guide](./validators.md)
+and the canonical [validator-set rules](../../spec/consensus/consensus-alternative-flows.md#validator-set-and-parameter-changes).

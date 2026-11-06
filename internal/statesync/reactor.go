@@ -671,7 +671,7 @@ func (r *Reactor) backfill(
 	//
 	// It returns the error from reporting the peer; each caller resolves that in its
 	// own control flow.
-	withdrawPeer := func(peer types.NodeID, height int64, reason error, severity peerSeverity) error {
+	withdrawPeer := func(peer types.NodeID, connID uint64, height int64, reason error, severity peerSeverity) error {
 		dispatch.quarantine(peer, reason)
 		queue.discardPeer(peer)
 		queue.requeue(height)
@@ -679,6 +679,7 @@ func (r *Reactor) backfill(
 			NodeID: peer,
 			Err:    reason,
 			Fatal:  bool(severity),
+			ConnID: connID,
 		})
 		failIfStalled()
 		return err
@@ -724,7 +725,7 @@ func (r *Reactor) backfill(
 						r.logger.Debug("fetching next block", "height", height, "peer", peer)
 						// request the light block with a timeout
 						subCtx, subCtxCancel := context.WithTimeout(ctxWithCancel, lightBlockResponseTimeout)
-						lb, err := r.dispatcher.LightBlock(subCtx, height, peer)
+						lb, connID, err := r.dispatcher.lightBlockWithConn(subCtx, height, peer)
 						subCtxCancel()
 
 						if errors.Is(err, errMalformedLightBlock) {
@@ -740,7 +741,7 @@ func (r *Reactor) backfill(
 							// peer failing here has not been shown to be faulty.
 							r.logger.Info("backfill: received a light block that could not be decoded",
 								"height", height, "peer", peer, "error", err)
-							if serr := withdrawPeer(peer, height, err, penalizePeer); serr != nil {
+							if serr := withdrawPeer(peer, connID, height, err, penalizePeer); serr != nil {
 								r.logger.Error("backfill: failed to report peer supplying a malformed light block",
 									"height", height, "error", serr)
 								return true
@@ -788,6 +789,7 @@ func (r *Reactor) backfill(
 							if serr := r.sendBlockError(ctx, p2p.PeerError{
 								NodeID: peer,
 								Err:    fmt.Errorf("received invalid light block: %w", err),
+								ConnID: connID,
 							}); serr != nil {
 								r.logger.Error("backfill: failed to send block error", "error", serr)
 								return true
@@ -797,8 +799,9 @@ func (r *Reactor) backfill(
 
 						// add block to queue to be verified
 						queue.add(lightBlockResponse{
-							block: lb,
-							peer:  peer,
+							block:  lb,
+							peer:   peer,
+							connID: connID,
 						})
 						r.logger.Debug("backfill: added light block to processing queue", "height", height)
 						return false
@@ -834,6 +837,7 @@ func (r *Reactor) backfill(
 				if err := r.sendBlockError(ctx, p2p.PeerError{
 					NodeID: resp.peer,
 					Err:    fmt.Errorf("received invalid light block. Expected hash %v, got: %v", w, g),
+					ConnID: resp.connID,
 				}); err != nil {
 					r.logger.Error("backfill: failed to report peer supplying a mismatched header",
 						"height", resp.block.Height, "error", err)
@@ -903,7 +907,7 @@ func (r *Reactor) backfill(
 				// also loses the connection follows the cause. Evicting it locally
 				// matters either way, because the router's own eviction is asynchronous
 				// and lags behind the fetch loop.
-				if serr := withdrawPeer(resp.peer, resp.block.Height, rejectErr, rejectSeverity); serr != nil {
+				if serr := withdrawPeer(resp.peer, resp.connID, resp.block.Height, rejectErr, rejectSeverity); serr != nil {
 					r.logger.Error("backfill: failed to report peer supplying a refused commit",
 						"height", resp.block.Height, "error", serr)
 					return fmt.Errorf("backfill aborted: failed to report peer supplying a refused commit: %w", serr)
@@ -1175,7 +1179,7 @@ func (r *Reactor) handleLightBlockMessage(ctx context.Context, envelope *p2p.Env
 			height = msg.LightBlock.SignedHeader.Header.Height
 		}
 		r.logger.Info("received light block response", "peer", envelope.From, "height", height)
-		if err := r.dispatcher.Respond(ctx, msg.LightBlock, envelope.From); err != nil {
+		if err := r.dispatcher.Respond(ctx, msg.LightBlock, envelope.From, envelope.ConnID); err != nil {
 			if errors.Is(err, context.Canceled) {
 				return err
 			}
@@ -1295,6 +1299,7 @@ func (r *Reactor) processChannels(ctx context.Context, chanTable map[p2p.Channel
 			if serr := ch.SendError(ctx, p2p.PeerError{
 				NodeID: envelope.From,
 				Err:    err,
+				ConnID: envelope.ConnID,
 			}); serr != nil {
 				return
 			}

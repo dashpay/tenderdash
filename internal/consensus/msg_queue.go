@@ -99,7 +99,7 @@ type chanMsgSender struct {
 }
 
 func (s *chanMsgSender) send(ctx context.Context, msg Message, peerID types.NodeID) error {
-	mi := msgInfo{msg, peerID, tmtime.Now()}
+	mi := msgInfo{Msg: msg, PeerID: peerID, ReceiveTime: tmtime.Now(), ConnID: peerConnIDFromCtx(ctx)}
 	usePeerQueue := peerQueueFromCtx(ctx)
 	ch := s.peerQueue
 	if peerID == "" && !usePeerQueue {

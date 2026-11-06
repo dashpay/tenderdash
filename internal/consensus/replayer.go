@@ -1,6 +1,7 @@
 package consensus
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -277,6 +278,14 @@ func (r *BlockReplayer) replayBlock(
 	height int64,
 ) (sm.CurrentRoundState, []byte, error) {
 	r.logger.Info("Replay: applying block", "height", height)
+	// The persisted state can be ahead of this block by a quorum rotation.
+	if !bytes.Equal(state.Validators.QuorumHash, commit.QuorumHash) {
+		validators, err := r.stateStore.LoadValidators(height, r.store)
+		if err != nil {
+			return sm.CurrentRoundState{}, nil, fmt.Errorf("blockReplayer load validators at height %d: %w", height, err)
+		}
+		state.Validators = validators
+	}
 	// Extra check to ensure the app was not changed in a way it shouldn't have.
 	// The replayer holds no proof for block.LastCommit.
 	ucState, err := r.blockExec.ProcessProposal(ctx, block, commit.Round, state, false,

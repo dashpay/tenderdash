@@ -284,7 +284,7 @@ dial-timeout = "3s"
 # TODO: Remove once MConnConnection is removed.
 flush-throttle-timeout = "100ms"
 
-# Maximum size of a message packet payload, in bytes
+# Maximum size of a message packet payload, in bytes; must be greater than 0
 # TODO: Remove once MConnConnection is removed.
 max-packet-msg-payload-size = 1400
 
@@ -398,10 +398,9 @@ fetchers = "4"
 
 wal-file = "data/cs.wal/wal"
 
-# How many blocks to look back to check existence of the node's consensus votes before joining consensus
-# When non-zero, the node will panic upon restart
-# if the same consensus key was used to sign {double-sign-check-height} last blocks.
-# So, validators should stop the state machine, wait for some blocks, and then restart the state machine to avoid panic.
+# Legacy compatibility setting; currently unused by consensus.
+# This does not provide double-sign protection. Preserve the signer's state
+# and never run two active signers with the same consensus identity.
 double-sign-check-height = 0
 
 # EmptyBlocks mode and possible interval between empty blocks
@@ -433,7 +432,7 @@ peer-query-maj23-sleep-duration = "2s"
 
 # This field provides an unsafe override of the Vote timeout consensus parameter.
 # This field configures how long the consensus engine will wait after
-# receiving +2/3 votes in a around.
+# receiving the configured voting threshold in a round.
 # If this field is set to a value greater than 0, it will take effect.
 # unsafe-vote-timeout-override = 0s
 
@@ -483,44 +482,25 @@ max-open-connections = 3
 namespace = "tendermint"
 ```
 
-## Empty blocks VS no empty blocks
+## Empty blocks
 
-### create-empty-blocks = true
+`create-empty-blocks = false` makes round 0 wait for transactions above the
+initial height. A positive `create-empty-blocks-interval` starts a proposal after
+that interval even without transactions. Later rounds do not wait for
+transactions.
 
-If `create-empty-blocks` is set to `true` in your config, empty blocks are
-created as soon as the previous one is committed. You can space them out by
-setting `create-empty-blocks-interval`: with `"10s"`, an empty block follows
-roughly ten seconds after the last one. The interval only paces empty blocks —
-when transactions arrive, a block is proposed without waiting for it.
+The application can bypass that wait for the next height by setting
+`ResponseFinalizeBlock.propose_next_block_immediately`. The hint is local,
+consumed once and not persisted across restarts. There is no commit timeout
+before the next height starts.
 
-Regardless of `create-empty-blocks-interval`, the application can ask for the
-next block without the wait by setting `propose_next_block_immediately` in its
-`ResponseFinalizeBlock`. Round 0 of the following height then enters the
-propose step as soon as `timeout-commit` has passed, exactly as if a
-transaction were waiting in the mempool. The hint is local to the node and
-consumed once; it is not persisted across restarts.
+Tenderdash uses same-block execution: block H's `AppHash` describes the state
+after executing H. An application hash change does not require an additional
+"proof block" at H+1.
 
-### create-empty-blocks = false
-
-In this setting, blocks are created when transactions received.
-
-Note after the block H, Tenderdash creates something we call a "proof block"
-(only if the application hash changed) H+1. The reason for this is to support
-proofs. If you have a transaction in block H that changes the state to X, the
-new application hash will only be included in block H+1. If after your
-transaction is committed, you want to get a light-client proof for the new state
-(X), you need the new block to be committed in order to do that because the new
-block has the new application hash for the state X. That's why we make a new
-(empty) block if the application hash changes. Otherwise, you won't be able to
-make a proof for the new state.
-
-Plus, if you set `create-empty-blocks-interval` to something other than the
-default (`0`), Tenderdash will be creating empty blocks even in the absence of
-transactions every `create-empty-blocks-interval`. For instance, with
-`create-empty-blocks = false` and `create-empty-blocks-interval = "30s"`,
-Tenderdash will only create blocks if there are transactions, or after waiting
-30 seconds without receiving any transactions.
-
+See the canonical [empty-block rules](../../spec/consensus/consensus-alternative-flows.md#mempool-and-empty-blocks),
+[execution order](../../spec/consensus/consensus-happy-path.md#9-commit-and-apply)
+and [timeout parameters](../../spec/consensus/consensus.md#timeouts-and-consensus-parameters).
 
 ## P2P settings
 
@@ -597,6 +577,6 @@ not intended for normal operation.
 - `unsafe-propose-timeout-delta-override`: How much the propose timeout
   increases with each round.
 - `unsafe-vote-timeout-override`: How long the consensus engine will wait after
-  receiving +2/3 votes in a round.
+  receiving the configured voting threshold in a round.
 - `unsafe-vote-timeout-delta-override`: How much the vote timeout increases with
   each round.

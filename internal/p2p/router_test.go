@@ -94,6 +94,7 @@ func TestRouter_Network(t *testing.T) {
 	require.NoError(t, channel.SendError(ctx, p2p.PeerError{
 		NodeID: peers[0].NodeID,
 		Err:    errors.New("boom"),
+		Fatal:  true,
 	}))
 	p2ptest.RequireUpdates(t, peerUpdates, []p2p.PeerUpdate{
 		{NodeID: peers[0].NodeID, Status: p2p.PeerStatusDown},
@@ -283,9 +284,10 @@ func TestRouter_Channel_Error(t *testing.T) {
 	channels := network.MakeChannels(ctx, t, chDesc)
 	a := channels[aID]
 
-	// Erroring b should cause it to be disconnected. It will reconnect shortly after.
+	// A fatal error against b disconnects it, and it reconnects shortly after. The network
+	// has no connection limit, so a non-fatal error would not.
 	sub := network.Nodes[aID].MakePeerUpdates(ctx, t)
-	p2ptest.RequireError(ctx, t, a, p2p.PeerError{NodeID: bID, Err: errors.New("boom")})
+	p2ptest.RequireError(ctx, t, a, p2p.PeerError{NodeID: bID, Err: errors.New("boom"), Fatal: true})
 	p2ptest.RequireUpdates(t, sub, []p2p.PeerUpdate{
 		{NodeID: bID, Status: p2p.PeerStatusDown},
 		{NodeID: bID, Status: p2p.PeerStatusUp},
