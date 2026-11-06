@@ -69,10 +69,26 @@ Every other value is taken on trust.
 | `evidence.max_age_*` (both) | Rejects valid evidence ([`internal/evidence/verify.go:53`](../../internal/evidence/verify.go)); halts on a committed block containing it. | Accepts expired evidence; its own proposals carrying it are rejected. |
 | `evidence.max_bytes` | Rejects blocks with more evidence ([`internal/state/validation.go:129`](../../internal/state/validation.go)); halts on such a committed block. | Its proposals with more evidence are rejected. |
 | `validator.pub_key_types` | Rejects valid validator updates (`validation.go:245`); halts at the next rotation. | Accepts key types honest nodes reject; it cannot commit alone, so this matters only if validators share the forged view. |
-| `validator.voting_power_threshold` | Not forgeable at bootstrap: a mismatch with the pinned value fails state sync. | Same. |
+| `validator.voting_power_threshold` | Not forgeable at bootstrap: a mismatch with the pinned value fails state sync. If it were, the node would unlock on minority polkas (below). | Not forgeable at bootstrap; if it were, it would refuse valid polkas and commits (`vote_set.go:427`) and halt. |
 | `synchrony.*` | Treats timely proposals as too early or late and prevotes nil ([`internal/consensus/state_data.go:361`](../../internal/consensus/state_data.go)). | Accepts untimely proposals. |
 | `timeout.*` | Leaves rounds early and casts more nil votes (`state_data.go:636`, `:651`); local unsafe overrides take precedence. | Slower rounds; affects its own liveness. |
 | `abci.recheck_tx` | Invalid transactions linger in the mempool and in its proposals ([`internal/state/execution.go:766`](../../internal/state/execution.go)). | Needless `CheckTx` load. |
+
+A lowered voting-power threshold cannot finalize a commit on its own: precommit
+finalization recovers a BLS threshold signature, which needs the DKG threshold
+`QuorumTypeThresholdVotingPower`
+([`types/vote_set.go:418`](../../types/vote_set.go), `:437`;
+[`types/validator_set.go:608`](../../types/validator_set.go)). Prevote +2/3, the
+polka behind POL, uses the configurable `QuorumVotingThresholdPower`
+(`vote_set.go:411`, `validator_set.go:585`) with no signature recovery. A low
+threshold therefore lets a small minority create polkas that unlock honest
+validators across rounds
+([`internal/consensus/state_prevoter.go:147`](../../internal/consensus/state_prevoter.go)),
+so the classic cross-round fork no longer needs at least 1/3 Byzantine power.
+This applies to any threshold below the strict 2/3+1 floor. The state-sync pin
+blocks forging one into a validator today; dropping the pin without the full
+commitment would let a forged low threshold make that validator unlock on
+minority polkas.
 
 Halting is the common outcome and survives restarts: the forged values are
 stored, and later partial updates replace only the groups they carry
