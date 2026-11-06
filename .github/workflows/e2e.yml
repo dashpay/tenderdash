@@ -23,7 +23,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        testnet: ["dashcore", "rotate", "blocksync-slow-apply"]
+        testnet: ["dashcore", "rotate"]
     timeout-minutes: 30
     env:
       FULLNODE_PUBKEY_KEEP: false

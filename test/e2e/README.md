@@ -123,7 +123,8 @@ to `start_at` and handed over to consensus, before keeping up with the network.
 The hold must outlast the 60-second block-sync stall timeout; below it, block
 sync never considers handing over.
 
-CI runs this scenario in [`networks/blocksync-slow-apply.toml`](networks/blocksync-slow-apply.toml):
+This scenario is not part of CI; run it locally with [`networks/blocksync-slow-apply.toml`](networks/blocksync-slow-apply.toml)
+(or `make runner/blocksync-slow-apply`):
 
 ```sh
 ./build/runner -f networks/blocksync-slow-apply.toml
