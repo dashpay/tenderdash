@@ -591,31 +591,29 @@ func TestRoundSkipGossipHandler(t *testing.T) {
 	}
 }
 
-// A peer still in the new round step of this node's round after round 0 waits
-// for transactions there, and is sent a prevote of that round at every pass:
-// one copy can be lost after the channel took it, and nothing else would end
-// the peer's wait.
-func TestWaitingPeerPrevoteGossipHandler(t *testing.T) {
+// A peer waiting in this node's round after round 0, or in a round this node
+// left, is sent a vote of its round at every pass: one copy can be lost after
+// the channel took it, and the peer may have nothing else to move it on.
+func TestRoundVoteResendGossipHandler(t *testing.T) {
 	ctx := context.Background()
-	const chainID = "waiting-peer-test-chain"
+	const chainID = "round-vote-resend-test-chain"
 	// privVals[i] signs for valSet.Validators[i].
 	valSet, privVals := types.RandValidatorSet(4)
 	peer := valSet.Validators[0].ProTxHash
-	prevote := func(round int32) *types.Vote {
+	// vote is validator 1's vote of round, for no block.
+	vote := func(voteType tmproto.SignedMsgType, round int32) *types.Vote {
 		stub := newValidatorStub(privVals[1], 1, 5)
 		stub.Round = round
-		return signVote(ctx, t, stub, tmproto.PrevoteType, chainID, types.BlockID{}, valSet.QuorumType, valSet.QuorumHash)
+		return signVote(ctx, t, stub, voteType, chainID, types.BlockID{}, valSet.QuorumType, valSet.QuorumHash)
 	}
-	vote := prevote(2)
+	prevote0, precommit0 := vote(tmproto.PrevoteType, 0), vote(tmproto.PrecommitType, 0)
+	prevote1, precommit1 := vote(tmproto.PrevoteType, 1), vote(tmproto.PrecommitType, 1)
+	prevote2 := vote(tmproto.PrevoteType, 2)
 
-	stateData := func(round int32, version tmproto.VersionParams_ConsensusVersion, prevoted bool) StateData {
+	stateData := func(round int32, version tmproto.VersionParams_ConsensusVersion, held ...*types.Vote) StateData {
 		votes := cstypes.NewHeightVoteSet(chainID, 5, valSet)
 		votes.SetRound(round)
-		if prevoted {
-			v := vote
-			if round != vote.Round {
-				v = prevote(round)
-			}
+		for _, v := range held {
 			added, err := votes.AddVote(v)
 			require.NoError(t, err)
 			require.True(t, added)
@@ -634,39 +632,55 @@ func TestWaitingPeerPrevoteGossipHandler(t *testing.T) {
 		stateData StateData
 		peer      cstypes.PeerRoundState
 		peerID    types.ProTxHash
-		wantSent  bool
+		// want are the votes two passes send.
+		want []*types.Vote
 	}{
 		"should send a prevote to a validator waiting in this node's round": {
-			stateData: stateData(2, v2, true), peer: waiting, peerID: peer, wantSent: true,
+			stateData: stateData(2, v2, prevote1, precommit1, prevote2), peer: waiting, peerID: peer,
+			want: []*types.Vote{prevote2, prevote2},
 		},
-		"should not send one to a peer in the propose step": {
-			stateData: stateData(2, v2, true),
+		"should not send one to a peer in the propose step of this node's round": {
+			stateData: stateData(2, v2, prevote2),
 			peer:      cstypes.PeerRoundState{Height: 5, Round: 2, Step: cstypes.RoundStepPropose},
 			peerID:    peer,
 		},
-		"should not send one to a peer in another round": {
-			stateData: stateData(2, v2, true),
+		"should send the prevotes and precommits of its round to a peer waiting in a round this node left": {
+			stateData: stateData(2, v2, prevote1, precommit1, prevote2),
 			peer:      cstypes.PeerRoundState{Height: 5, Round: 1, Step: cstypes.RoundStepNewRound},
+			peerID:    peer,
+			want:      []*types.Vote{prevote1, precommit1},
+		},
+		"should send them to a peer in any step of round 0 once this node left it": {
+			stateData: stateData(2, v2, prevote0, precommit0, prevote2),
+			peer:      cstypes.PeerRoundState{Height: 5, Round: 0, Step: cstypes.RoundStepPrevote},
+			peerID:    peer,
+			want:      []*types.Vote{prevote0, precommit0},
+		},
+		"should not send one to a peer in a later round": {
+			stateData: stateData(2, v2, prevote2),
+			peer:      cstypes.PeerRoundState{Height: 5, Round: 3, Step: cstypes.RoundStepNewRound},
 			peerID:    peer,
 		},
 		"should not send one to a peer at another height": {
-			stateData: stateData(2, v2, true),
+			stateData: stateData(2, v2, prevote2),
 			peer:      cstypes.PeerRoundState{Height: 4, Round: 2, Step: cstypes.RoundStepNewRound},
 			peerID:    peer,
 		},
-		"should not send one without a prevote in the round": {
-			stateData: stateData(2, v2, false), peer: waiting, peerID: peer,
+		"should not send one without a vote in the peer's round": {
+			stateData: stateData(2, v2, prevote1), peer: waiting, peerID: peer,
 		},
 		"should not send one to a peer that is no validator": {
-			stateData: stateData(2, v2, true), peer: waiting, peerID: crypto.RandProTxHash(),
+			stateData: stateData(2, v2, prevote2), peer: waiting, peerID: crypto.RandProTxHash(),
 		},
-		"should not send one in round 0, which a single prevote does not end": {
-			stateData: stateData(0, v2, true),
+		"should not send one to a peer waiting in round 0, which a single prevote does not end": {
+			stateData: stateData(0, v2, prevote0),
 			peer:      cstypes.PeerRoundState{Height: 5, Round: 0, Step: cstypes.RoundStepNewRound},
 			peerID:    peer,
 		},
 		"should not send one before version 2": {
-			stateData: stateData(2, tmproto.VersionParams_CONSENSUS_VERSION_1, true), peer: waiting, peerID: peer,
+			stateData: stateData(2, tmproto.VersionParams_CONSENSUS_VERSION_1, prevote1, precommit1, prevote2),
+			peer:      cstypes.PeerRoundState{Height: 5, Round: 1, Step: cstypes.RoundStepNewRound},
+			peerID:    peer,
 		},
 	}
 	for name, tc := range testCases {
@@ -678,18 +692,15 @@ func TestWaitingPeerPrevoteGossipHandler(t *testing.T) {
 			}
 			ps := &PeerState{PRS: tc.peer}
 			ps.SetProTxHash(tc.peerID)
-			handler := waitingPeerPrevoteGossipHandler(ps, log.NewNopLogger(), send)
+			handler := roundVoteResendGossipHandler(ps, log.NewNopLogger(), send)
+			// Every pass sends one: the peer is not taken to hold it.
 			handler(ctx, tc.stateData)
-			if !tc.wantSent {
-				require.Empty(t, sent)
-				return
-			}
-			// Every pass sends it again: the peer is not taken to hold it.
 			handler(ctx, tc.stateData)
-			require.Len(t, sent, 2)
-			for _, msg := range sent {
-				require.Equal(t, vote.ToProto(), msg)
+			want := make([]proto.Message, 0, len(tc.want))
+			for _, v := range tc.want {
+				want = append(want, v.ToProto())
 			}
+			require.ElementsMatch(t, want, sent)
 		})
 	}
 }

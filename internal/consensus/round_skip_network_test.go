@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/mempool"
 	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/internal/test/factory"
+	"github.com/dashpay/tenderdash/libs/log"
 	tmcons "github.com/dashpay/tenderdash/proto/tendermint/consensus"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
@@ -177,6 +179,200 @@ func TestReactorRoundAfterASkipFollowsTheValidatorThatSawAPolka(t *testing.T) {
 	assert.Equal(t, nodes-1, lossy.count(), "the first copy of the prevote to each peer was lost")
 }
 
+// Two validators that saw a polka from the skipped round leave the next round
+// for the one after it, on the votes of a third, the round's proposer, which
+// prevotes and precommits a block to them and signs nothing else in the round.
+// Those votes and theirs agree on no block, so no node claims a majority to
+// its peers. The other two validators wait in the round under that proposer's
+// heartbeats, and every vote of the round sent to them is lost after the
+// channel took it while the first two move on. Once nothing more is lost, the
+// two in the later round send them the round's votes again, and the height
+// commits with no transaction anywhere.
+func TestReactorValidatorsLeftWaitingFollowTheRoundAfter(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	const nodes = 4
+	params := factory.ConsensusParams(func(c *types.ConsensusParams) {
+		c.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_2)
+		c.Timeout.Propose = 500 * time.Millisecond
+		c.Timeout.Vote = 50 * time.Millisecond
+		c.Timeout.VoteDelta = 5 * time.Millisecond
+		c.Timeout.ProposerHeartbeat = 50 * time.Millisecond
+		c.Timeout.ProposerSilence = 300 * time.Millisecond
+	})
+	states := makeConsensusStateWithParams(ctx, t, nodes, "consensus_round_skip_left_waiting_test", newTickerFunc(), params,
+		func(c *config.Config) { c.Consensus.CreateEmptyBlocks = false })
+	signers := make([]*voteSilentSigner, nodes)
+	for i, state := range states {
+		signers[i] = &voteSilentSigner{
+			PrivValidator: &roundSilentSigner{PrivValidator: state.privValidator.PrivValidator, height: 2, round: 0},
+			height:        2,
+			round:         1,
+		}
+		state.SetPrivValidator(ctx, signers[i])
+	}
+	congestion := &roundVoteCongestion{height: 2, round: 1}
+	rts := setupWithChannels(ctx, t, nodes, states, 100,
+		func(nodeID types.NodeID, chID p2p.ChannelID, ch p2p.Channel) p2p.Channel {
+			if chID != p2p.ConsensusVoteChannel {
+				return ch
+			}
+			return &lossyVoteChannel{Channel: ch, node: nodeID, loss: congestion}
+		})
+	rts.switchToConsensus(ctx)
+	for _, sub := range rts.subs {
+		require.Equal(t, int64(1), nextBlock(ctx, t, sub).Height)
+	}
+
+	// Round 0 of height 2 is handed on, and every node waits in round 1.
+	require.Eventually(t, func() bool {
+		for _, state := range states {
+			stateData := state.GetStateData()
+			if stateData.Height != 2 || stateData.Round != 1 || stateData.Step != cstypes.RoundStepNewRound {
+				return false
+			}
+		}
+		return true
+	}, 30*time.Second, 20*time.Millisecond, "the silent proposer's round was not handed on")
+
+	// Round 1's proposer signs no vote of the round itself. Of the rest, two
+	// move on and two wait.
+	stateData := states[0].GetStateData()
+	valSet := stateData.Validators
+	proposer, err := stateData.ProposerSelector.GetProposer(2, 1)
+	require.NoError(t, err)
+	byzantine, active, waiting := -1, []int{}, []int{}
+	for i, state := range states {
+		switch {
+		case state.privValidator.IsProTxHashEqual(proposer.ProTxHash):
+			byzantine = i
+			waiting = append(waiting, i)
+		case len(active) < 2:
+			active = append(active, i)
+		default:
+			waiting = append(waiting, i)
+		}
+	}
+	require.NotEqual(t, -1, byzantine)
+	signers[byzantine].mute()
+	nodeID := func(i int) types.NodeID {
+		return rts.network.NodeByProTxHash(states[i].privValidator.ProTxHash).NodeID
+	}
+	congestion.start([]types.NodeID{nodeID(active[0]), nodeID(active[1])},
+		[]types.NodeID{nodeID(waiting[0]), nodeID(waiting[1])})
+
+	signed := func(i int, voteType tmproto.SignedMsgType, round int32, blockID types.BlockID) *types.Vote {
+		index, _ := valSet.GetByProTxHash(states[i].privValidator.ProTxHash)
+		require.GreaterOrEqual(t, index, int32(0))
+		vs := newValidatorStub(signers[i].PrivValidator, index, 2)
+		vs.Round = round
+		return signVote(ctx, t, vs, voteType, stateData.state.ChainID, blockID, valSet.QuorumType, valSet.QuorumHash)
+	}
+	// The other three validators' prevotes for a block in round 0 reach each
+	// active validator, which then cannot wait in round 1. The proposer's
+	// prevote and precommit of round 1, for another block, reach them too.
+	polka := factory.MakeBlockID()
+	other := factory.MakeBlockID()
+	byzantinePrevote := signed(byzantine, tmproto.PrevoteType, 1, other)
+	byzantinePrecommit := signed(byzantine, tmproto.PrecommitType, 1, other)
+	for _, a := range active {
+		for i := range states {
+			if i != a {
+				addVotes(states[a], signed(i, tmproto.PrevoteType, 0, polka))
+			}
+		}
+		addVotes(states[a], byzantinePrevote, byzantinePrecommit)
+	}
+
+	// The active validators prevote and precommit nothing in round 1, and with
+	// the proposer's votes leave it for round 2. Every vote of round 1 they
+	// send the waiting two is lost: their own, each other's and the
+	// proposer's, prevote and precommit, from each of them to each.
+	const lostVotes = 2 * 2 * 6
+	require.Eventually(t, func() bool {
+		for _, a := range active {
+			if states[a].GetStateData().Round < 2 {
+				return false
+			}
+		}
+		return congestion.count() == lostVotes
+	}, 30*time.Second, 20*time.Millisecond, "the active validators did not move on, or not every vote was lost")
+	for _, w := range waiting {
+		stateData := states[w].GetStateData()
+		require.Equal(t, int32(1), stateData.Round)
+		require.Equal(t, cstypes.RoundStepNewRound, stateData.Step)
+	}
+	congestion.stop()
+
+	commitCtx, cancelCommit := context.WithTimeout(ctx, 30*time.Second)
+	defer cancelCommit()
+	for _, sub := range rts.subs {
+		require.Equal(t, int64(2), nextBlock(commitCtx, t, sub).Height, "the waiting validators did not follow")
+	}
+}
+
+// roundVoteCongestion loses, while it is on, every vote of a height and round
+// that the nodes it names send the peers it names, after the channel took it:
+// the senders count each as delivered.
+type roundVoteCongestion struct {
+	height int64
+	round  int32
+
+	mtx     sync.Mutex
+	senders map[types.NodeID]bool
+	peers   map[types.NodeID]bool
+	lost    map[lostVote]bool
+}
+
+// lostVote is a vote one node lost on the way to a peer.
+type lostVote struct {
+	node, peer types.NodeID
+	voter      string
+	voteType   tmproto.SignedMsgType
+}
+
+// start loses the votes senders send peers.
+func (c *roundVoteCongestion) start(senders, peers []types.NodeID) {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+	c.senders, c.peers, c.lost = make(map[types.NodeID]bool), make(map[types.NodeID]bool), make(map[lostVote]bool)
+	for _, node := range senders {
+		c.senders[node] = true
+	}
+	for _, peer := range peers {
+		c.peers[peer] = true
+	}
+}
+
+// stop loses no more votes.
+func (c *roundVoteCongestion) stop() {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+	c.senders, c.peers = nil, nil
+}
+
+func (c *roundVoteCongestion) loses(node, peer types.NodeID, msg proto.Message) bool {
+	vote, ok := msg.(*tmcons.Vote)
+	if !ok || vote.Vote == nil || vote.Vote.Height != c.height || vote.Vote.Round != c.round {
+		return false
+	}
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+	if !c.senders[node] || !c.peers[peer] {
+		return false
+	}
+	c.lost[lostVote{node: node, peer: peer, voter: string(vote.Vote.ValidatorProTxHash), voteType: vote.Vote.Type}] = true
+	return true
+}
+
+// count returns how many different votes were lost, by sender and peer.
+func (c *roundVoteCongestion) count() int {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+	return len(c.lost)
+}
+
 // firstPrevoteLoss loses the first prevote one node sends each peer for a
 // height and round, of the validator it names, after the node's channel took
 // it: as the router's queue, or the peer's limits, can drop a message the
@@ -221,12 +417,17 @@ func (l *firstPrevoteLoss) count() int {
 	return len(l.lost)
 }
 
+// voteLoss names the messages a node's vote channel loses after taking them.
+type voteLoss interface {
+	loses(node, peer types.NodeID, msg proto.Message) bool
+}
+
 // lossyVoteChannel is one node's vote channel, which takes every message and
 // loses those its loss names.
 type lossyVoteChannel struct {
 	p2p.Channel
 	node types.NodeID
-	loss *firstPrevoteLoss
+	loss voteLoss
 }
 
 func (ch *lossyVoteChannel) Send(ctx context.Context, envelope p2p.Envelope) error {
@@ -263,4 +464,33 @@ func (s *roundSilentSigner) SignProposerHeartbeat(
 		return errors.New("silent in this round")
 	}
 	return s.PrivValidator.SignProposerHeartbeat(ctx, chainID, quorumType, quorumHash, heartbeat)
+}
+
+// voteSilentSigner is a validator's signer that, once muted, signs no vote of
+// one round, as a validator that sends its votes of the round to some peers
+// only, and not through its own node.
+type voteSilentSigner struct {
+	types.PrivValidator
+	height int64
+	round  int32
+	muted  atomic.Bool
+}
+
+// mute stops the signer signing votes of its round.
+func (s *voteSilentSigner) mute() {
+	s.muted.Store(true)
+}
+
+func (s *voteSilentSigner) SignVote(
+	ctx context.Context,
+	chainID string,
+	quorumType btcjson.LLMQType,
+	quorumHash crypto.QuorumHash,
+	vote *tmproto.Vote,
+	logger log.Logger,
+) error {
+	if s.muted.Load() && vote.Height == s.height && vote.Round == s.round {
+		return errors.New("signs no vote of this round")
+	}
+	return s.PrivValidator.SignVote(ctx, chainID, quorumType, quorumHash, vote, logger)
 }

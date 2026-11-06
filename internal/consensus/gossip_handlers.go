@@ -10,6 +10,7 @@ import (
 	"github.com/dashpay/tenderdash/libs/log"
 	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmcons "github.com/dashpay/tenderdash/proto/tendermint/consensus"
+	"github.com/dashpay/tenderdash/types"
 )
 
 func queryMaj23GossipHandler(ps *PeerState, gossiper Gossiper) gossipHandlerFunc {
@@ -62,52 +63,82 @@ func roundSkipGossipHandler(
 	}
 }
 
-// waitingPeerPrevoteGossipHandler sends a peer that waits for transactions in
-// this node's round, which a skip certificate began, a prevote of that round
-// again, until the peer moves on.
+// roundVoteResendGossipHandler sends a validator peer at this node's height
+// one vote of the peer's round at every pass, while the peer waits for
+// transactions in this node's round, which a skip certificate began, or is in
+// a round this node has left.
 //
-// A prevote there ends the peer's wait (see StateData.waitsAfterRoundSkip). It
-// comes from a validator that could not wait, and alone that validator cannot
-// end the round. Vote gossip takes a vote as the peer's once the channel takes
-// it, so one lost after that is not sent again, and nothing else moves the
-// peer on: its round has no timeout, and its proposer's heartbeats keep
-// arriving. So the peer is sent one of the round's prevotes at every pass
-// while it still announces the new round step of the round, until it
-// announces the propose step or another round.
-func waitingPeerPrevoteGossipHandler(
+// Vote gossip takes a vote as the peer's once the channel takes it, so one
+// lost after that is not sent again. On a chain that skips rounds, a peer
+// that lost the votes of its round can be left in it for good: a waiting
+// round has no timeout and its proposer's heartbeats keep arriving, and the
+// prevote and precommit steps start their timeouts only on votes. Votes are
+// picked at random, so over the passes the peer gets each one this node has.
+//
+// A peer waiting in this node's round, after round 0, is sent the round's
+// prevotes: one ends the wait (see StateData.waitsAfterRoundSkip). A peer in a
+// round this node has left is sent that round's prevotes and precommits by
+// turns, until it announces a later round: +2/3 precommits of any kind move it
+// to the next round from any step (see addVoteDispatchPrecommitMw), and a
+// prevote ends its wait there as in this node's round.
+func roundVoteResendGossipHandler(
 	ps *PeerState,
 	logger log.Logger,
 	send func(ctx context.Context, msg proto.Message) error,
 ) gossipHandlerFunc {
+	// The worker runs a handler on one goroutine (see runHandler), so its
+	// passes need no lock.
+	passes := 0
 	return func(ctx context.Context, stateData StateData) {
+		if !roundSkipping(&stateData) || !stateData.isValidator(ps.GetProTxHash()) {
+			return
+		}
 		rs := stateData.RoundState
-		if rs.Round == 0 || !roundSkipping(&stateData) || !stateData.isValidator(ps.GetProTxHash()) {
-			return
-		}
 		prs := ps.GetRoundState()
-		if prs.Height != rs.Height || prs.Round != rs.Round || prs.Step != cstypes.RoundStepNewRound {
+		if prs.Height != rs.Height || prs.Round < 0 {
 			return
 		}
-		// The gossip goroutine reads the vote set while the consensus
-		// goroutine adds to it, so only through its locked accessors.
-		prevotes := rs.Votes.Prevotes(rs.Round)
-		index, ok := prevotes.BitArray().PickRandom()
-		if !ok {
+		var voteSets []*types.VoteSet
+		switch {
+		case prs.Round < rs.Round:
+			voteSets = []*types.VoteSet{rs.Votes.Prevotes(prs.Round), rs.Votes.Precommits(prs.Round)}
+		case prs.Round == rs.Round && prs.Round > 0 && prs.Step == cstypes.RoundStepNewRound:
+			voteSets = []*types.VoteSet{rs.Votes.Prevotes(prs.Round)}
+		default:
 			return
 		}
-		valIndex, err := tmmath.SafeConvertInt32(index)
-		if err != nil {
-			return
-		}
-		vote := prevotes.GetByIndex(valIndex)
+		passes++
+		vote := pickRandomVote(voteSets, passes)
 		if vote == nil {
 			return
 		}
-		if err = send(ctx, vote.ToProto()); err != nil {
-			logger.Debug("cannot send a prevote to a peer waiting in its round",
-				"height", rs.Height, "round", rs.Round, "err", err)
+		if err := send(ctx, vote.ToProto()); err != nil {
+			logger.Debug("cannot resend a vote of its round to a peer",
+				"height", vote.Height, "round", vote.Round, "type", vote.Type, "peer_round", prs.Round, "err", err)
 		}
 	}
+}
+
+// pickRandomVote returns a vote picked at random from the first of voteSets,
+// counted from turn, that holds one. The gossip goroutine reads the vote sets
+// while the consensus goroutine adds to them, so only through their locked
+// accessors.
+func pickRandomVote(voteSets []*types.VoteSet, turn int) *types.Vote {
+	for i := range voteSets {
+		voteSet := voteSets[(turn+i)%len(voteSets)]
+		index, ok := voteSet.BitArray().PickRandom()
+		if !ok {
+			continue
+		}
+		valIndex, err := tmmath.SafeConvertInt32(index)
+		if err != nil {
+			continue
+		}
+		if vote := voteSet.GetByIndex(valIndex); vote != nil {
+			return vote
+		}
+	}
+	return nil
 }
 
 func votesAndCommitGossipHandler(
