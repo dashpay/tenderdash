@@ -599,12 +599,10 @@ func (m *RequestFlush) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_RequestFlush proto.InternalMessageInfo
 
-// Return information about the application state.
-//
-// Used to sync Tenderdash with the application during a handshake that happens on startup.
-// The returned app_version will be included in the Header of every block.
-// Tenderdash expects last_block_app_hash and last_block_height to be updated during Commit,
-// ensuring that Commit is never called twice for the same block height.
+// Return information about the application's last committed state.
+// Used during startup reconciliation and by RPC queries. Persist the reported
+// height and application hash in FinalizeBlock. See the
+// [startup handshake](../consensus/consensus-recovery.md#start-up-abci-handshake).
 type RequestInfo struct {
 	Version      string `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
 	BlockVersion uint64 `protobuf:"varint,2,opt,name=block_version,json=blockVersion,proto3" json:"block_version,omitempty"`
@@ -1033,6 +1031,8 @@ func (m *RequestOfferSnapshot) GetAppHash() []byte {
 type RequestLoadSnapshotChunk struct {
 	Height  uint64 `protobuf:"varint,1,opt,name=height,proto3" json:"height,omitempty"`
 	Version uint32 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	// Application-defined chunk identifier: `Snapshot.hash` for the first chunk, then identifiers
+	// returned in `ResponseApplySnapshotChunk.next_chunks`.
 	ChunkId []byte `protobuf:"bytes,3,opt,name=chunk_id,json=chunkId,proto3" json:"chunk_id,omitempty"`
 }
 
@@ -1094,15 +1094,20 @@ func (m *RequestLoadSnapshotChunk) GetChunkId() []byte {
 //
 //   - The application can choose to refetch chunks and/or ban P2P peers as appropriate.
 //     Tenderdash will not do this unless instructed by the application.
-//   - The application may want to verify each chunk, e.g. by attaching chunk hashes in `Snapshot.Metadata“ and/or
+//   - The application may want to verify each chunk, e.g. by attaching chunk hashes in `Snapshot.Metadata` and/or
 //     incrementally verifying contents against AppHash.
-//   - When all chunks have been accepted, Tenderdash will make an ABCI Info call to verify that LastBlockAppHash
-//     and LastBlockHeight matches the expected values, and record the AppVersion in the node state.
-//     It then switches to fast sync or consensus and joins the network.
+//   - On ACCEPT, Tenderdash enqueues `ResponseApplySnapshotChunk.next_chunks` and continues applying chunks.
+//     Restoration finishes only when the application returns COMPLETE_SNAPSHOT; an ACCEPT without
+//     `next_chunks` does not signal completion.
+//   - After COMPLETE_SNAPSHOT, Tenderdash makes an ABCI Info call to verify that LastBlockAppHash,
+//     LastBlockHeight and AppVersion match the expected values.
+//     It then switches to block sync or consensus and joins the network.
 //   - If Tenderdash is unable to retrieve the next chunk after some time (e.g. because no suitable peers are available),
 //     it will reject the snapshot and try a different one via OfferSnapshot. The application should be prepared to reset
 //     and accept it or abort as appropriate.
 type RequestApplySnapshotChunk struct {
+	// Application-defined chunk identifier: `Snapshot.hash` for the first chunk, then identifiers
+	// returned in `ResponseApplySnapshotChunk.next_chunks`.
 	ChunkId []byte `protobuf:"bytes,1,opt,name=chunk_id,json=chunkId,proto3" json:"chunk_id,omitempty"`
 	Chunk   []byte `protobuf:"bytes,2,opt,name=chunk,proto3" json:"chunk,omitempty"`
 	Sender  string `protobuf:"bytes,3,opt,name=sender,proto3" json:"sender,omitempty"`
@@ -1162,89 +1167,13 @@ func (m *RequestApplySnapshotChunk) GetSender() string {
 	return ""
 }
 
-// Prepare new block proposal, potentially altering list of transactions.
-//
-// #### Usage
-//
-//   - The first six parameters of `RequestPrepareProposal` are the same as `RequestProcessProposal`
-//     and `RequestFinalizeBlock`.
-//   - The height and time values match the values from the header of the proposed block.
-//   - `RequestPrepareProposal` contains a preliminary set of transactions `txs` that Tenderdash considers to be a good block proposal, called _raw proposal_. The Application can modify this set via `ResponsePrepareProposal.tx_records` (see [TxRecord](#txrecord)).
-//   - The Application _can_ reorder, remove or add transactions to the raw proposal. Let `tx` be a transaction in `txs`:
-//   - If the Application considers that `tx` should not be proposed in this block, e.g., there are other transactions with higher priority, then it should not include it in `tx_records`. In this case, Tenderdash won't remove `tx` from the mempool. The Application should be extra-careful, as abusing this feature may cause transactions to stay forever in the mempool.
-//   - If the Application considers that a `tx` should not be included in the proposal and removed from the mempool, then the Application should include it in `tx_records` and _mark_ it as `REMOVED`. In this case, Tenderdash will remove `tx` from the mempool.
-//   - If the Application wants to add a new transaction, then the Application should include it in `tx_records` and _mark_ it as `ADD`. In this case, Tenderdash will add it to the mempool.
-//   - The Application should be aware that removing and adding transactions may compromise _traceability_.
-//     > Consider the following example: the Application transforms a client-submitted transaction `t1` into a second transaction `t2`, i.e., the Application asks Tenderdash to remove `t1` and add `t2` to the mempool. If a client wants to eventually check what happened to `t1`, it will discover that `t_1` is not in the mempool or in a committed block, getting the wrong idea that `t_1` did not make it into a block. Note that `t_2` _will be_ in a committed block, but unless the Application tracks this information, no component will be aware of it. Thus, if the Application wants traceability, it is its responsability to support it. For instance, the Application could attach to a transformed transaction a list with the hashes of the transactions it derives from.
-//   - Tenderdash MAY include a list of transactions in `RequestPrepareProposal.txs` whose total size in bytes exceeds `RequestPrepareProposal.max_tx_bytes`.
-//     Therefore, if the size of `RequestPrepareProposal.txs` is greater than `RequestPrepareProposal.max_tx_bytes`, the Application MUST make sure that the
-//     `RequestPrepareProposal.max_tx_bytes` limit is respected by those transaction records returned in `ResponsePrepareProposal.tx_records` that are marked as `UNMODIFIED` or `ADDED`.
-//   - In same-block execution mode, the Application must provide values for `ResponsePrepareProposal.app_hash`,
-//     `ResponsePrepareProposal.tx_results`, `ResponsePrepareProposal.validator_updates`, `ResponsePrepareProposal.core_chain_lock_update` and
-//     `ResponsePrepareProposal.consensus_param_updates`, as a result of fully executing the block.
-//   - The values for `ResponsePrepareProposal.validator_updates`, `ResponsePrepareProposal.core_chain_lock_update` or
-//     `ResponsePrepareProposal.consensus_param_updates` may be empty. In this case, Tenderdash will keep
-//     the current values.
-//   - `ResponsePrepareProposal.validator_updates`, triggered by block `H`, affect validation
-//     for blocks `H+1`, and `H+2`. Heights following a validator update are affected in the following way:
-//   - `H`: `NextValidatorsHash` includes the new `validator_updates` value.
-//   - `H+1`: The validator set change takes effect and `ValidatorsHash` is updated.
-//   - `H+2`: `local_last_commit` now includes the altered validator set.
-//   - `ResponseFinalizeBlock.consensus_param_updates` returned for block `H` apply to the consensus
-//     params for block `H+1` even if the change is agreed in block `H`.
-//     For more information on the consensus parameters,
-//     see the [application spec entry on consensus parameters](../abci/apps.md#consensus-parameters).
-//   - It is the responsibility of the Application to set the right value for _TimeoutPropose_ so that
-//     the (synchronous) execution of the block does not cause other processes to prevote `nil` because
-//     their propose timeout goes off.
-//   - As a result of executing the prepared proposal, the Application may produce header events or transaction events.
-//     The Application must keep those events until a block is decided and then pass them on to Tenderdash via
-//     `ResponsePrepareProposal`.
-//   - As a sanity check, Tenderdash will check the returned parameters for validity if the Application modified them.
-//     In particular, `ResponsePrepareProposal.tx_records` will be deemed invalid if
-//   - There is a duplicate transaction in the list.
-//   - A new or modified transaction is marked as `UNMODIFIED` or `REMOVED`.
-//   - An unmodified transaction is marked as `ADDED`.
-//   - A transaction is marked as `UNKNOWN`.
-//   - `ResponsePrepareProposal.tx_results` contains only results of  `UNMODIFIED` and `ADDED` transactions.
-//
-// `REMOVED` transactions are omitted. The length of `tx_results` can be different than the length of `tx_records`.
-// - If Tenderdash fails to validate the `ResponsePrepareProposal`, Tenderdash will assume the application is faulty and crash.
-//   - The implementation of `PrepareProposal` can be non-deterministic.
-//
-// #### When does Tenderdash call it?
-//
-// When a validator _p_ enters Tenderdash consensus round _r_, height _h_, in which _p_ is the proposer,
-// and _p_'s _validValue_ is `nil`:
-//
-// 1. _p_'s Tenderdash collects outstanding transactions from the mempool
-//   - The transactions will be collected in order of priority
-//   - Let $C$ the list of currently collected transactions
-//   - The collection stops when any of the following conditions are met
-//   - the mempool is empty
-//   - the total size of transactions $\in C$ is greater than or equal to `consensusParams.block.max_bytes`
-//   - the sum of `GasWanted` field of transactions $\in C$ is greater than or equal to
-//     `consensusParams.block.max_gas`
-//   - _p_'s Tenderdash creates a block header.
-//  2. _p_'s Tenderdash calls `RequestPrepareProposal` with the newly generated block.
-//     The call is synchronous: Tenderdash's execution will block until the Application returns from the call.
-//  3. The Application checks the block (hashes, transactions, commit info, misbehavior). Besides,
-//     - in same-block execution mode, the Application can (and should) provide `ResponsePrepareProposal.app_hash`,
-//     `ResponsePrepareProposal.validator_updates`, or
-//     `ResponsePrepareProposal.consensus_param_updates`.
-//     - the Application can manipulate transactions
-//     - leave transactions untouched - `TxAction = UNMODIFIED`
-//     - add new transactions directly to the proposal - `TxAction = ADDED`
-//     - remove transactions (invalid) from the proposal and from the mempool - `TxAction = REMOVED`
-//     - remove transactions from the proposal but not from the mempool (effectively _delaying_ them) - the
-//     Application removes the transaction from the list
-//     - modify transactions (e.g. aggregate them) - `TxAction = ADDED` followed by `TxAction = REMOVED`. As explained above, this compromises client traceability, unless it is implemented at the Application level.
-//     - reorder transactions - the Application reorders transactions in the list
-//  4. If the block is modified, the Application includes the modified block in the return parameters (see the rules in section _Usage_).
-//     The Application returns from the call.
-//  5. _p_'s Tenderdash uses the (possibly) modified block as _p_'s proposal in round _r_, height _h_.
-//
-// Note that, if _p_ has a non-`nil` _validValue_, Tenderdash will use it as proposal and will not call `RequestPrepareProposal`.
+// Prepare and execute a new block proposal, potentially altering its transactions.
+// Return same-block application/results hashes and next-state commitments.
+// ADDED transactions enter the proposal without being added to the mempool;
+// REMOVED transactions are removed from both. Changes to validators and consensus
+// parameters from height H take effect at H+1. Preparation may be non-deterministic.
+// See the [PrepareProposal contract](methods.md#prepareproposal) for transaction
+// constraints, response validation and the exact conditions for preparing a fresh block.
 type RequestPrepareProposal struct {
 	// Currently configured maximum size in bytes taken by the modified transactions.
 	// The modified transactions cannot exceed this size.
@@ -1401,54 +1330,12 @@ func (m *RequestPrepareProposal) GetQuorumHash() []byte {
 	return nil
 }
 
-// Process prepared proposal.
-//
-// #### Usage
-//
-// - Contains fields from the proposed block.
-//   - The Application may fully execute the block as though it was handling `RequestFinalizeBlock`.
-//     However, any resulting state changes must be kept as _candidate state_,
-//     and the Application should be ready to backtrack/discard it in case the decided block is different.
-//   - The height and timestamp values match the values from the header of the proposed block.
-//   - If `ResponseProcessProposal.status` is `REJECT`, Tenderdash assumes the proposal received
-//     is not valid.
-//   - In same-block execution mode, the Application is required to fully execute the block and provide values
-//     for parameters `ResponseProcessProposal.app_hash`, `ResponseProcessProposal.tx_results`,
-//     `ResponseProcessProposal.validator_updates`, and `ResponseProcessProposal.consensus_param_updates`,
-//     so that Tenderdash can then verify the hashes in the block's header are correct.
-//     If the hashes mismatch, Tenderdash will reject the block even if `ResponseProcessProposal.status`
-//     was set to `ACCEPT`.
-//   - The implementation of `ProcessProposal` MUST be deterministic. Moreover, the value of
-//     `ResponseProcessProposal.status` MUST **exclusively** depend on the parameters passed in
-//     the call to `RequestProcessProposal`, and the last committed Application state
-//     (see [Requirements](abci++_app_requirements.md) section).
-//   - Tenderdash may call `ProcessProposal` more than once for the same height and round with the
-//     same block, for example after the application rejected a commit's vote extensions or when block
-//     sync hands over to consensus, and again for a round after processing another round, for example
-//     to verify a commit of that round. The Application MUST treat such a call as re-execution that
-//     replaces its execution context for the height; `FinalizeBlock` refers to the round processed last.
-//   - Moreover, application implementors SHOULD always set `ResponseProcessProposal.status` to `ACCEPT`,
-//     unless they _really_ know what the potential liveness implications of returning `REJECT` are.
-//
-// #### When does Tenderdash call it?
-//
-// When a validator _p_ enters Tenderdash consensus round _r_, height _h_, in which _q_ is the proposer (possibly _p_ = _q_):
-//
-//  1. _p_ sets up timer `ProposeTimeout`.
-//  2. If _p_ is the proposer, _p_ executes steps 1-6 in [PrepareProposal](#prepareproposal).
-//  3. Upon reception of Proposal message (which contains the header) for round _r_, height _h_ from _q_, _p_'s Tenderdash verifies the block header.
-//  4. Upon reception of Proposal message, along with all the block parts, for round _r_, height _h_ from _q_, _p_'s Tenderdash follows its algorithm
-//     to check whether it should prevote for the block just received, or `nil`
-//  5. If Tenderdash should prevote for the block just received
-//  1. Tenderdash calls `RequestProcessProposal` with the block. The call is synchronous.
-//  2. The Application checks/processes the proposed block, which is read-only, and returns true (_accept_) or false (_reject_) in `ResponseProcessProposal.accept`.
-//     - The Application, depending on its needs, may call `ResponseProcessProposal`
-//     - either after it has completely processed the block (the simpler case),
-//     - or immediately (after doing some basic checks), and process the block asynchronously. In this case the Application will
-//     not be able to reject the block, or force prevote/precommit `nil` afterwards.
-//  3. If the returned value is
-//     - _accept_, Tenderdash prevotes on this proposal for round _r_, height _h_.
-//     - _reject_, Tenderdash prevotes `nil`.
+// Execute a proposed block deterministically against the last committed state.
+// Return its status, same-block application/results hashes and next-state commitments.
+// Keep execution speculative until FinalizeBlock. Processing can repeat for the same
+// block and round after another execution context has replaced it.
+// See the [ProcessProposal contract](methods.md#processproposal) and
+// [application requirements](app-requirements.md).
 type RequestProcessProposal struct {
 	// List of transactions that have been picked as part of the proposed
 	Txs [][]byte `protobuf:"bytes,1,rep,name=txs,proto3" json:"txs,omitempty"`
@@ -1613,56 +1500,13 @@ func (m *RequestProcessProposal) GetQuorumHash() []byte {
 	return nil
 }
 
-// Extends a vote with application-side injection
-//
-// #### Usage
-//
-//   - `ResponseExtendVote.vote_extensions` is optional information that, if present, will be signed by Tenderdash and
-//     attached to the Precommit message.
-//   - `RequestExtendVote.hash` corresponds to the hash of a proposed block that was made available to the application
-//     in a previous call to `ProcessProposal` or `PrepareProposal` for the current height.
-//   - `ResponseExtendVote.vote_extensions` will only be attached to a non-`nil` Precommit message. If Tenderdash is to
-//     precommit `nil`, it will not call `RequestExtendVote`.
-//   - The Application logic that creates extensions that are not threshold-recoverable can be
-//     non-deterministic. Threshold-recoverable extensions (`THRESHOLD_RECOVER` and `THRESHOLD_RECOVER_RAW`)
-//     are recovered into the commit, so they MUST be deterministic.
-//   - `ExtendVote` MUST be free of side effects, and the threshold-recoverable subset of its response MUST be
-//     exactly the vector the Application accepts in a commit-level `VerifyVoteExtension` for the same block,
-//     height and round.
-//   - Tenderdash may also call `ExtendVote` on any node, a non-validator included, after a commit-level
-//     `VerifyVoteExtension` rejection that follows `ProcessProposal` of that block and round, to learn the
-//     vector a commit of that block and round must carry; see `VerifyVoteExtension`. An ABCI error or an
-//     invalid response from this call is fatal, as on the Precommit path.
-//
-// #### When does Tenderdash call it?
-//
-// When a validator _p_ is in Tenderdash consensus state _prevote_ of round _r_, height _h_, in which _q_ is the proposer; and _p_ has received
-//
-// - the Proposal message _v_ for round _r_, height _h_, along with all the block parts, from _q_,
-// - `Prevote` messages from _2f + 1_ validators' voting power for round _r_, height _h_, prevoting for the same block _id(v)_,
-//
-// then _p_'s Tenderdash locks _v_  and sends a Precommit message in the following way
-//
-//  1. _p_'s Tenderdash sets _lockedValue_ and _validValue_ to _v_, and sets _lockedRound_ and _validRound_ to _r_
-//  2. _p_'s Tenderdash calls `RequestExtendVote` with _id(v)_ (`RequestExtendVote.hash`). The call is synchronous.
-//  3. The Application optionally returns an array of bytes, `ResponseExtendVote.extension`. Tenderdash does not interpret
-//     it, except that it compares the threshold-recoverable subset with the extension vectors of commits (see below).
-//  4. _p_'s Tenderdash includes `ResponseExtendVote.extension` in a field of type [CanonicalVoteExtension](#canonicalvoteextension),
-//     it then populates the other fields in [CanonicalVoteExtension](#canonicalvoteextension), and signs the populated
-//     data structure.
-//  5. _p_'s Tenderdash constructs and signs the [CanonicalVote](../core/data_structures.md#canonicalvote) structure.
-//  6. _p_'s Tenderdash constructs the Precommit message (i.e. [Vote](../core/data_structures.md#vote) structure)
-//     using [CanonicalVoteExtension](#canonicalvoteextension) and [CanonicalVote](../core/data_structures.md#canonicalvote).
-//  7. _p_'s Tenderdash broadcasts the Precommit message.
-//
-// In the cases when _p_'s Tenderdash is to broadcast `precommit nil` messages (either _2f+1_ `prevote nil` messages received,
-// or _timeoutPrevote_ triggered), _p_'s Tenderdash does **not** call `RequestExtendVote` and will not include
-// a [CanonicalVoteExtension](#canonicalvoteextension) field in the `precommit nil` message.
-//
-// Tenderdash also calls `RequestExtendVote` on any process, a non-validator included, when the Application rejects a
-// commit in a commit-level `RequestVerifyVoteExtension` that follows `ProcessProposal` of the committed block for the
-// commit round, unless it already knows the vector for that block and round. Tenderdash neither signs nor broadcasts
-// that response: it compares the threshold-recoverable subset with later commits of the block and round.
+// Return the vote_extensions vector for the block and round processed last.
+// Before a validator signs a non-nil precommit, Tenderdash requests the extensions
+// to attach to that vote. It may also call ExtendVote on any node after rejecting
+// a commit vector, to learn the expected vector without signing or broadcasting.
+// The call must be free of side effects. Threshold-recoverable extensions must be
+// deterministic and match the vector accepted at commit-level VerifyVoteExtension.
+// See the [ExtendVote contract](methods.md#extendvote).
 type RequestExtendVote struct {
 	Hash   []byte `protobuf:"bytes,1,opt,name=hash,proto3" json:"hash,omitempty"`
 	Height int64  `protobuf:"varint,2,opt,name=height,proto3" json:"height,omitempty"`
@@ -1742,7 +1586,7 @@ func (m *RequestExtendVote) GetRound() int32 {
 //     not to extend it. Tenderdash will always call `RequestVerifyVoteExtension`, even for 0 length vote
 //     extensions.
 //   - For a Precommit, if `ResponseVerifyVoteExtension.status` is `REJECT`, Tenderdash will reject the
-//     whole received vote. See the [Requirements](abci++_app_requirements.md) section to understand the
+//     whole received vote. See the [Requirements](app-requirements.md) section to understand the
 //     potential liveness implications of this.
 //   - For a commit, the Application MUST compare the vector with the threshold-recoverable subset of the
 //     extensions it expects for that block, in order, and return `REJECT` if they differ: a commit whose
@@ -1769,7 +1613,7 @@ func (m *RequestExtendVote) GetRound() int32 {
 //   - The implementation of `VerifyVoteExtension` MUST be deterministic. Moreover, the value of
 //     `ResponseVerifyVoteExtension.status` MUST **exclusively** depend on the parameters passed in
 //     the call to `RequestVerifyVoteExtension`, the block processed by `ProcessProposal`, and the last
-//     committed Application state (see [Requirements](abci++_app_requirements.md) section).
+//     committed Application state (see [Requirements](app-requirements.md) section).
 //   - For a Precommit, application implementers SHOULD always set `ResponseVerifyVoteExtension.status`
 //     to `ACCEPT`, unless they _really_ know what the potential liveness implications of returning
 //     `REJECT` are.
@@ -1786,8 +1630,8 @@ func (m *RequestExtendVote) GetRound() int32 {
 // 3. The Application returns _accept_ or _reject_ via `ResponseVerifyVoteExtension.status`.
 // 4. If the Application returns
 //   - _accept_, _p_'s Tenderdash will keep the received vote, together with its corresponding
-//     vote extension in its internal data structures. It will be used to populate the [ExtendedCommitInfo](#extendedcommitinfo)
-//     structure in calls to `RequestPrepareProposal`, in rounds of height _h + 1_ where _p_ is the proposer.
+//     vote extension in its internal data structures. Threshold-recoverable extensions
+//     are recovered into CommitInfo when the commit is assembled.
 //   - _reject_, _p_'s Tenderdash will deem the Precommit message invalid and discard it.
 //
 // Whenever a process is about to save a block and its commit, in consensus, block sync or replay, it
@@ -1871,34 +1715,14 @@ func (m *RequestVerifyVoteExtension) GetVoteExtensions() []*ExtendVoteExtension 
 	return nil
 }
 
-// Finalize newly decided block.
-//
-// #### Usage
-//
-//   - Contains the fields of the newly decided block.
-//   - The height and timestamp values match the values from the header of the proposed block.
-//   - The Application can use `RequestFinalizeBlock.decided_last_commit` and `RequestFinalizeBlock.byzantine_validators`
-//     to determine rewards and punishments for the validators.
-//   - The application must execute the transactions in full, in the order they appear in `RequestFinalizeBlock.txs`,
-//     before returning control to Tenderdash. Alternatively, it can commit the candidate state corresponding to the same block
-//     previously executed via `PrepareProposal` or `ProcessProposal`, for the round processed last.
-//   - Tenderdash calls `FinalizeBlock` only after the Application has accepted the commit's extension
-//     vector through `VerifyVoteExtension` with an empty `validator_pro_tx_hash`.
-//   - If ProcessProposal for the same arguments have succeeded, FinalizeBlock MUST always succeed.
-//   - Application is expected to persist its state at the end of this call, before returning `ResponseFinalizeBlock`.
-//   - Later calls to `Query` can return proofs about the application state anchored
-//     in this Merkle root hash.
-//   - Use `ResponseFinalizeBlock.retain_height` with caution! If all nodes in the network remove historical
-//     blocks then this data is permanently lost, and no new nodes will be able to join the network and
-//     bootstrap. Historical blocks may also be required for other purposes, e.g. auditing, replay of
-//     non-persisted heights, light client verification, and so on.
-//   - Just as `ProcessProposal`, the implementation of `FinalizeBlock` MUST be deterministic, since it is
-//     making the Application's state evolve in the context of state machine replication.
-//   - Currently, Tenderdash will fill up all fields in `RequestFinalizeBlock`, even if they were
-//     already passed on to the Application via `RequestPrepareProposal` or `RequestProcessProposal`.
-//     If the Application is in same-block execution mode, it applies the right candidate state here
-//     (rather than executing the whole block). In this case the Application disregards all parameters in
-//     `RequestFinalizeBlock` except `RequestFinalizeBlock.hash`.
+// Persist the decided candidate for the block and the round processed last.
+// Tenderdash calls this after processing and accepting the commit extension vector.
+// The application must persist the candidate before returning; execution results
+// and events are provided through proposal processing, not ResponseFinalizeBlock.
+// The response contains retention and next-block scheduling hints only.
+// Use retain_height with care: pruning blocks can prevent replay and bootstrapping.
+// See the [FinalizeBlock contract](methods.md#finalizeblock) and
+// [commit and apply](../consensus/consensus-happy-path.md#9-commit-and-apply).
 type RequestFinalizeBlock struct {
 	// Info about the current commit
 	Commit CommitInfo `protobuf:"bytes,1,opt,name=commit,proto3" json:"commit"`
@@ -2923,14 +2747,13 @@ func (m *ResponseLoadSnapshotChunk) GetChunk() []byte {
 
 type ResponseApplySnapshotChunk struct {
 	Result ResponseApplySnapshotChunk_Result `protobuf:"varint,1,opt,name=result,proto3,enum=tendermint.abci.ResponseApplySnapshotChunk_Result" json:"result,omitempty"`
-	// Refetch and reapply the given chunks, regardless of `result`.
-	// Only the listed chunks will be refetched, and reapplied in sequential order.
+	// Identifiers of chunks to discard, refetch and reapply, regardless of `result`.
 	RefetchChunks [][]byte `protobuf:"bytes,2,rep,name=refetch_chunks,json=refetchChunks,proto3" json:"refetch_chunks,omitempty"`
 	// Reject the given P2P senders, regardless of `Result`. Any chunks already applied will not be refetched
 	// unless explicitly requested, but queued chunks from these senders will be discarded, and new chunks
 	// or other snapshots rejected.
 	RejectSenders []string `protobuf:"bytes,3,rep,name=reject_senders,json=rejectSenders,proto3" json:"reject_senders,omitempty"`
-	// Next chunks provides the list of chunks that should be requested next, if any.
+	// Chunk identifiers to enqueue after ACCEPT; ignored for other results.
 	NextChunks [][]byte `protobuf:"bytes,4,rep,name=next_chunks,json=nextChunks,proto3" json:"next_chunks,omitempty"`
 }
 
@@ -3492,9 +3315,8 @@ func (m *CommitInfo) GetThresholdVoteExtensions() []*types1.VoteExtension {
 	return nil
 }
 
-// Event allows application developers to attach additional information to
-// ResponseCheckTx, ResponsePrepareProposal, ResponseProcessProposal
-// and ResponseFinalizeBlock.
+// Event carries application attributes in ResponseProcessProposal
+// and ExecTxResult.
 //
 // Later, transactions may be queried using these events.
 type Event struct {

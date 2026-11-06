@@ -100,6 +100,16 @@ sets the proposer to **index 1** after a validator-set change ("bug preserved
 to avoid breaking consensus"); the v1 selector uses index 0. See
 [Proposer selection](./proposer-selection.md).
 
+## FilePV repeated proposal returns sign bytes as the signature
+
+`FilePV.signProposal` (`privval/file.go`) checks for an identical persisted
+height/round/step and identical canonical proposal bytes. In that branch it assigns
+`proposal.Signature = lss.BlockSignBytes`, rather than `lss.BlockSignature`.
+The vote path instead reuses `BlockSignature`. The repeated-proposal path therefore
+returns serialized sign bytes in a signature field; verification failure is the
+inferred effect (no reproducing test). This differs from a guarantee of successful
+signature reuse during recovery. WAL replay itself does not create proposals.
+
 ## Code/comment drift and dead code
 
 - `BlockExecutor.ProcessProposal` (`internal/state/execution.go`) checks

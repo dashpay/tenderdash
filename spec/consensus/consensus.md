@@ -13,7 +13,7 @@ implementation wins and the divergence is recorded in
 
 Audience: protocol engineers and auditors. Readers are expected to know the
 Tendermint consensus algorithm ([consensus paper](./consensus-paper/README.md))
-and the ABCI++ interface ([ABCI++ spec](../abci++/README.md)).
+and the ABCI interface ([ABCI spec](../abci/README.md)).
 
 ## Documents
 
@@ -34,17 +34,18 @@ Related specifications that this one links to rather than restates:
 - [Write-ahead log](./wal.md) — WAL file layout and replay.
 - [Evidence](./evidence.md) — evidence model for misbehaviour.
 - [Consensus channel messages](../p2p/messages/consensus.md) — wire format of the messages exchanged.
-- [ABCI++ expected behaviour](../abci++/abci++_tmint_expected_behavior.md) — the ABCI++ call sequence from the application's point of view.
-- [Proposer-based timestamps](./proposer-based-timestamp/README.md) — historical design material that predates the implementation; the rules in force are in [Proposal timestamps and time rules](./consensus-alternative-flows.md#proposal-timestamps-and-time-rules).
+- [ABCI expected behaviour](../abci/expected-behavior.md) — the ABCI call sequence from the application's point of view.
+- [Proposer-based timestamps](./proposer-based-timestamp/README.md) — pointers to current rules and retained historical research; the rules in force are in [Proposal timestamps and time rules](./consensus-alternative-flows.md#proposal-timestamps-and-time-rules).
 
 ## Scope
 
 In scope: the consensus state machine of a single node (validator or
 full node), the rules that decide what it signs, the interaction with the
-application over ABCI++, and the parts of message exchange that change
+application over ABCI, and the parts of message exchange that change
 consensus state. Out of scope: the p2p transport, mempool internals, block
 sync and state sync (except their handover to consensus), light clients,
-and the DoS-defence design (see `docs/CONSENSUS_DOS_*.md`).
+and the complete DoS-defence design. For operational monitoring, see
+[DoS observability](../../docs/dos-observability/README.md).
 
 Source of truth: the code at the revision this document was written against
 (branch `v1.8-dev`). Citations use `path/file.go` and a function name; line

@@ -151,9 +151,11 @@ For unsigned/dev releases, state explicitly which binary artifacts are omitted;
 Docker publication remains separate.
 
 Publishing the draft triggers `.github/workflows/docker.yml`. Check that the
-Platform rollout and release request authorize this publication. Stable releases
-currently promote Docker `latest` and the major alias: an older-line security
-release must not run that promotion without a separately approved safe path.
+Platform rollout and release request authorize this publication. Verify exact source
+SHA, binary version and image labels. Stable alias promotion is serialized and
+requires the current latest stable release with no higher stable tag. Prereleases,
+manual runs and older-line releases must not replace stable aliases. Historical
+source without explicit Docker VERSION support needs a separately reviewed path.
 After publication, verify the remote tag SHA, release assets, Docker image tags
 and digests. If asynchronous publishing fails, report the partial state and resume
 only the missing step; do not move tags or repeat a completed release blindly.

@@ -14,12 +14,13 @@ on:
     branches:
       - master
       - dev
-      # Keep both names until the integration-branch migration is complete.
-      - v1.8-dev
-      - v1.9-dev
 
 permissions:
   contents: read
+
+# Branch creation/rename events can refer to the deleted old branch.
+env:
+  GIT_DIFF: ${{ github.event_name == 'push' && github.event.created && 'all' || '' }}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
@@ -32,6 +33,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: technote-space/get-diff-action@v6
+        if: github.event_name != 'push' || !github.event.created
         with:
           # FILES matches bare file names only, so the workflow path goes in
           # PATTERNS (minimatch globs) to re-run the check when it changes.
@@ -74,6 +76,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: technote-space/get-diff-action@v6
+        if: github.event_name != 'push' || !github.event.created
         with:
           PATTERNS: |
             **/*.proto

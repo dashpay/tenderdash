@@ -83,9 +83,12 @@ to hit the bug at the same point. There is currently no clear solution to help w
 the Application designers/implementors must proceed very carefully with the logic/implementation
 of `ProcessProposal`. As a general rule `ProcessProposal` _should_ always accept the block.
 
-According to the Tenderdash algorithm, a correct process can broadcast at most one precommit message in round $r$, height $h$.
-Since, as stated in the [Description](#description) section, `ResponseExtendVote` is only called when Tenderdash
-is about to broadcast a non-`nil` precommit message, a correct process can only produce one set of vote extensions in round $r$, height $h$.
+A correct validator broadcasts at most one precommit per height and round.
+`ExtendVote` can also run after a rejected commit to discover the expected vector,
+including on an observer. Applications must support repeated calls and return the
+same threshold-recoverable subset for the same block, round and committed state.
+See [expected call sequences](expected-behavior.md#valid-method-call-sequences).
+
 Let $e^r_p$ be the set of vote extensions that the Application of a correct process $p$ returns via `ResponseExtendVote` in round $r$, height $h$.
 Let $w^r_p$ be the proposed block that $p$'s Tenderdash passes to the Application via `RequestExtendVote` in round $r$, height $h$.
 
@@ -127,7 +130,7 @@ extensions it expects for the block, or an altered vector reaches `FinalizeBlock
 requires the contributing validators to sign identical extension content, so a valid recovered extension
 from correct processes matches that expected vector. Rejecting an altered vector therefore costs no
 liveness; a deterministic bug in the check, however, halts the chain, because no commit
-for the block can pass it. See [VerifyVoteExtension](./abci++_methods.md#verifyvoteextension) for what
+for the block can pass it. See [VerifyVoteExtension](methods.md#verifyvoteextension) for what
 Tenderdash does on each path when a commit is rejected.
 
 * Requirement 10 [_all_, no-side-effects]: $p$'s calls to `RequestPrepareProposal`,
@@ -141,7 +144,9 @@ $s_{p,h}$ does not depend on $e$.
 The call to correct process $p$'s `RequestFinalizeBlock` at height $h$, with block $v_{p,h}$
 passed as parameter, creates state $s_{p,h}$.
 
-Additionally,in same-block execution mode, $p$'s `PrepareProposal` creates a set of transaction results $T_{p,h}$ if $p$ was the proposer of $v_{p,h}$, otherwise `FinalizeBlock` creates $T_{p,h}$.
+`PrepareProposal` and `ProcessProposal` compute the transaction results $T_{p,h}$
+for the current block before consensus decides it. `FinalizeBlock` persists the
+selected candidate and returns no transaction results.
 
 * Requirement 12 [`FinalizeBlock`, determinism-1]: For any correct process $p$,
   $s_{p,h}$ exclusively depends on $s_{p,h-1}$ and $v_{p,h}$.
@@ -171,4 +176,18 @@ free of side effects, and the threshold-recoverable subset of its response must 
 the Application accepts in a commit-level `VerifyVoteExtension` for the same block, height and round:
 after such a `VerifyVoteExtension` rejects a commit, following `ProcessProposal` of that block and
 round, Tenderdash calls `ExtendVote` on any node to learn that vector (see
-[VerifyVoteExtension](abci++_methods.md#verifyvoteextension)).
+[VerifyVoteExtension](methods.md#verifyvoteextension)).
+
+## Connections
+
+Tenderdash uses one application client for consensus, mempool, query and
+state-sync calls. Its transport determines concurrency: the reference socket
+server processes one connection sequentially, while gRPC can execute calls
+concurrently over one connection. Explicitly configured routed clients may use
+multiple underlying connections. Local clients call the application directly.
+
+Applications MUST synchronize state shared by concurrent calls, including calls
+on different methods or connections. Waiting for one response does not block
+other callers. Queries must read committed state. See
+[Client and Server](client-server.md#message-protocol-and-synchrony) for transport
+ordering and gRPC concurrency settings.

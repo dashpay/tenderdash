@@ -76,7 +76,7 @@ applications using it. In particular:
   server to understand which operation is requested is to dispatch on the type
   of the request and response payloads. For responses, this means that [any
   error condition is terminal not only to the request, but to the entire ABCI
-  client](https://github.com/dashpay/tenderdash/blob/master/abci/client/socket_client.go#L149).
+  client](../../abci/client/socket_client.go#L149).
 
   The historical intent of terminating for any error seems to have been that
   all ABCI errors are unrecoverable and hence protocol fatal <!-- markdown-link-check-disable-next-line -->
@@ -225,9 +225,9 @@ design.
 - [Initial commit of gRPC client][abci-start]
 
 [abci]: https://github.com/tendermint/spec/tree/master/spec/abci
-[socket-client]: https://github.com/dashpay/tenderdash/blob/master/abci/client/socket_client.go
-[socket-server]: https://github.com/dashpay/tenderdash/blob/master/abci/server/socket_server.go
-[grpc-client]: https://github.com/dashpay/tenderdash/blob/master/abci/client/grpc_client.go
+[socket-client]: ../../abci/client/socket_client.go
+[socket-server]: ../../abci/server/socket_server.go
+[grpc-client]: ../../abci/client/grpc_client.go
 [abci-start]: https://github.com/tendermint/abci/commit/1ab3c747182aaa38418258679c667090c2bb1e0d
 
 ## Notes
