@@ -188,6 +188,69 @@ func TestRefusedCertificatesThatAreNoPeerFault(t *testing.T) {
 	assert.Empty(t, cs.peerErrorQueue.ch)
 }
 
+// The iterator that skips rounds replays only the certificates of the rounds
+// it skips, not their prevotes. A node that crashed just after a certificate
+// moved it into the propose step of the next round, because the round before
+// had a polka, must not then come back waiting in that round for transactions:
+// it would have no timeout running, and the round's proposer's heartbeats
+// would keep it there.
+func TestReplayDoesNotWaitInARoundTheNodeLeftForPropose(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	test := newRoundSkipTest(ctx, t, "consensus_replay_round_skip_polka_test", nil)
+	committed := test.cs.GetStateData().state
+	const height = int64(2)
+
+	// Round 0 of height 2: the three other validators prevote a block whose
+	// parts never reach the node, and a certificate skips the round. The node
+	// enters the propose step of round 1, and crashes.
+	blockID := factory.MakeBlockID()
+	for _, vs := range test.vss[1:] {
+		vs.Height, vs.Round = height, 0
+	}
+	prevotes := signVotes(ctx, t, tmproto.PrevoteType, test.chainID, blockID, nil,
+		committed.Validators.QuorumType, committed.Validators.QuorumHash, test.vss[1:]...)
+	certificate := recoverRoundSkipCertificate(ctx, t, test.cs, test.vss, height, 0)
+	wal := []any{
+		EndHeightMessage{Height: height - 1},
+		newEventDataRoundState(height, 0, cstypes.RoundStepNewHeight),
+	}
+	for _, vote := range prevotes {
+		wal = append(wal, msgInfo{Msg: &VoteMessage{Vote: vote}, PeerID: "peer"})
+	}
+	wal = append(wal,
+		msgInfo{Msg: &RoundSkipCertificateMessage{Certificate: certificate}, PeerID: "peer"},
+		newEventDataRoundState(height, 1, cstypes.RoundStepNewRound),
+		newEventDataRoundState(height, 1, cstypes.RoundStepPropose),
+	)
+
+	for _, skipRounds := range []bool{true, false} {
+		t.Run(fmt.Sprintf("skip rounds %v", skipRounds), func(t *testing.T) {
+			config, err := ResetConfig(t, "consensus_replay_round_skip_polka_restart_test")
+			require.NoError(t, err)
+			config.Consensus.CreateEmptyBlocks = false
+			config.Consensus.WalSkipRoundsToLast = skipRounds
+			replay := newStateWithConfigAndBlockStore(ctx, t, log.NewNopLogger(), config, committed,
+				test.cs.privValidator.PrivValidator, NewCounterApplication(), test.cs.blockStore)
+			replay.emitter.Emit(setReplayModeEventName, true)
+			ctx := dash.ContextWithProTxHash(ctx, replay.privValidator.ProTxHash)
+			require.Equal(t, height, replay.GetStateData().Height)
+
+			iter := newWalIter(&mockWALReader{ret: wal}, skipRounds)
+			for iter.Next() {
+				require.NoError(t, replay.readReplayMessage(ctx, iter.Value(), nil))
+			}
+			require.NoError(t, iter.Err())
+
+			stateData := replay.GetStateData()
+			require.NotNil(t, stateData.RoundSkip)
+			assert.Equal(t, int32(1), stateData.Round)
+			assert.Equal(t, cstypes.RoundStepPropose, stateData.Step,
+				"replay left the node waiting in a round it had left for the propose step")
+		})
+	}
+}
+
 // A certificate hands the round over on the consensus goroutine, which
 // announces the new round to peers. That must not wait for the router, where a
 // peer that stops reading can hold up every send on the state channel. Nor may

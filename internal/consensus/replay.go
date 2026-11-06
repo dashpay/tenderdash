@@ -11,6 +11,7 @@ import (
 	"time"
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	"github.com/dashpay/tenderdash/internal/eventbus"
 	"github.com/dashpay/tenderdash/internal/proxy"
 	sm "github.com/dashpay/tenderdash/internal/state"
@@ -50,6 +51,16 @@ func (cs *State) readReplayMessage(ctx context.Context, msg *TimedWALMessage, ne
 	switch m := msg.Msg.(type) {
 	case types.EventDataRoundState:
 		cs.logger.Trace("Replay: New Step", "height", m.Height, "round", m.Round, "step", m.Step)
+		// A round the node left for the propose step must not be left waiting
+		// for transactions by replay. Whether a round entered on a round skip
+		// certificate waits depends on the prevotes the node had (see
+		// waitsAfterRoundSkip), and the iterator that skips rounds keeps only
+		// their certificates (see keepRoundSkipCertificates), so replay can
+		// rebuild a wait the node never had. The step it recorded settles it.
+		if m.Step == cstypes.RoundStepPropose.String() && m.Height == stateData.Height &&
+			m.Round == stateData.Round && waitingForTxs(&stateData) {
+			_ = cs.ctrl.Dispatch(ctx, &EnterProposeEvent{Height: m.Height, Round: m.Round}, &stateData)
+		}
 		// these are playback checks
 		if newStepSub != nil {
 			ctxto, cancel := context.WithTimeout(ctx, 2*time.Second)
