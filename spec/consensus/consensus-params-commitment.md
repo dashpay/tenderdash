@@ -51,6 +51,42 @@ A threshold BLS signature proves recovery under the quorum key. It does not prov
 that a raised application voting-power threshold was met by enough distinct
 signers. Adding signer-count attestation for that separate issue is out of scope.
 
+## Impact of forged parameters today
+
+A node bootstrapped by state sync takes `ConsensusParams` from its state
+provider: the configured primary RPC server
+([`internal/statesync/stateprovider.go:207`](../../internal/statesync/stateprovider.go))
+or, with P2P state sync, its peers (`stateprovider.go:355`).
+`verifyConsensusParams` (`stateprovider.go:509`) checks only `Block.MaxBytes`,
+`Block.MaxGas` and `Version.ConsensusVersion` against the signed `ConsensusHash`,
+and pins `Validator.VotingPowerThreshold` to the locally trusted genesis/InitChain
+value (`stateprovider.go:522`,
+[`internal/statesync/reactor.go:280`](../../internal/statesync/reactor.go)).
+Every other value is taken on trust.
+
+| Parameter | Forged lower or narrower | Forged higher or wider |
+| --- | --- | --- |
+| `evidence.max_age_*` (both) | Rejects valid evidence ([`internal/evidence/verify.go:53`](../../internal/evidence/verify.go)); halts on a committed block containing it. | Accepts expired evidence; its own proposals carrying it are rejected. |
+| `evidence.max_bytes` | Rejects blocks with more evidence ([`internal/state/validation.go:129`](../../internal/state/validation.go)); halts on such a committed block. | Its proposals with more evidence are rejected. |
+| `validator.pub_key_types` | Rejects valid validator updates (`validation.go:245`); halts at the next rotation. | Accepts key types honest nodes reject; it cannot commit alone, so this matters only if validators share the forged view. |
+| `validator.voting_power_threshold` | Not forgeable at bootstrap: a mismatch with the pinned value fails state sync. | Same. |
+| `synchrony.*` | Treats timely proposals as too early or late and prevotes nil ([`internal/consensus/state_data.go:361`](../../internal/consensus/state_data.go)). | Accepts untimely proposals. |
+| `timeout.*` | Leaves rounds early and casts more nil votes (`state_data.go:636`, `:651`); local unsafe overrides take precedence. | Slower rounds; affects its own liveness. |
+| `abci.recheck_tx` | Invalid transactions linger in the mempool and in its proposals ([`internal/state/execution.go:766`](../../internal/state/execution.go)). | Needless `CheckTx` load. |
+
+Halting is the common outcome and survives restarts: the forged values are
+stored, and later partial updates replace only the groups they carry
+([`types/params.go:408`](../../types/params.go)). Recovery requires wiping the
+node and re-syncing from a trusted source. Divergence is the worse case: a node
+serving clients answers from a different parameter view. A validator with forged
+parameters reduces liveness in proportion to its voting power. Nothing detects
+the forgery today, because the full-node `ConsensusHash` check
+([`internal/state/validation.go:66`](../../internal/state/validation.go)) also
+covers only three fields. A network-wide safety impact requires many nodes or validators
+to sync from the same malicious source, such as a widely used public RPC
+endpoint. With the full commitment, state sync rejects forged parameters at
+bootstrap.
+
 ## Consensus version selects the hash rule
 
 `VersionParams.consensus_version` selects the hash rule of the parameter set that
