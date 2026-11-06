@@ -10,8 +10,28 @@ import (
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
+
+// TestTxFilterRandomBeacon checks that the pre-check reserves room for the last commit's beacon and
+// app hash from consensus version 2, and only then.
+func TestTxFilterRandomBeacon(t *testing.T) {
+	const maxBlockBytes = 3241
+	maxTxSize := maxBlockBytes - 1132
+	genDoc := factory.MinimalGenesisDoc()
+	genDoc.ConsensusParams.Block.MaxBytes = maxBlockBytes
+	genDoc.ConsensusParams.Evidence.MaxBytes = 1500
+	state, err := sm.MakeGenesisState(&genDoc)
+	require.NoError(t, err)
+	require.NoError(t, sm.TxPreCheckForState(state)(types.Tx(tmrand.Bytes(maxTxSize))))
+
+	state.ConsensusParams.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_2)
+	f := sm.TxPreCheckForState(state)
+	maxTxSize -= int(types.MaxCommitRandomnessBytes)
+	require.NoError(t, f(types.Tx(tmrand.Bytes(maxTxSize))))
+	require.Error(t, f(types.Tx(tmrand.Bytes(maxTxSize+1))))
+}
 
 func TestTxFilter(t *testing.T) {
 	const maxBlockBytes = 3241

@@ -42,7 +42,7 @@ func TestReplayUsesHistoricalQuorumAfterRotation(t *testing.T) {
 			}
 			replayer := NewBlockReplayer(client, history, f.node.blockStore, nil, nil, exec)
 
-			_, err := replayer.replayBlock(ctx, f.block, f.commit, latest, f.block.Height)
+			_, _, err := replayer.replayBlock(ctx, f.block, f.commit, latest, f.block.Height)
 			if scenario == "missing historical validators" {
 				var missing sm.ErrNoValSetForHeight
 				require.ErrorAs(t, err, &missing)

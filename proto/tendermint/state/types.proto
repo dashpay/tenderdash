@@ -72,4 +72,8 @@ message State {
 
   // last_block_round is the round number at which the last block was committed.
   int32 last_block_round = 16;
+
+  // last_block_beacon is the random beacon carried by the commit of the last block, from consensus version 2.
+  // The next block's LastCommit must carry the same beacon.
+  bytes last_block_beacon = 17;
 }

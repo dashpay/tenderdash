@@ -321,6 +321,7 @@ func NewState(
 		queueSender:   cs.msgInfoQueue,
 		wal:           wal,
 		voteExtender:  cs.blockExec,
+		randomness:    cs.blockExec,
 	}
 	cs.blockExecutor = &blockExecutor{
 		logger:             cs.logger,

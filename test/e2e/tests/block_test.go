@@ -51,10 +51,11 @@ func TestBlock_Header(t *testing.T) {
 			require.NoError(t, resp.Block.ValidateBasic(),
 				"block at height %d is invalid", block.Header.Height)
 
-			// validate StateID from last commit
+			// validate StateID from last commit: the previous header's, with the app hash
+			// the commit carries from consensus version 2 (after the block's randomness)
 			if prevBlock != nil {
-				stateID := prevBlock.Header.StateID()
-				assert.EqualValues(t, stateID.Hash(), block.LastCommit.BlockID.StateID)
+				_, err := block.LastCommit.VerifyAppHash(&prevBlock.Header)
+				assert.NoError(t, err, "last commit state ID of block at height %d", block.Height)
 			}
 
 			prevBlock = resp.Block

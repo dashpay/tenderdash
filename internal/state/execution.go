@@ -15,6 +15,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/internal/eventbus"
 	"github.com/dashpay/tenderdash/internal/mempool"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmstate "github.com/dashpay/tenderdash/proto/tendermint/state"
 	"github.com/dashpay/tenderdash/types"
@@ -108,6 +109,12 @@ type Executor interface {
 	// when it is empty. It returns an error on REJECT and panics if the ABCI
 	// call itself fails.
 	VerifyVoteExtension(ctx context.Context, vote *types.Vote) error
+
+	// ApplyBlockRandomness asks the application to apply beacon, the random beacon of block for
+	// round, to the state ProcessProposal left for that block and round, and returns the app hash
+	// that precommits and the commit sign (consensus version 2). The block must already be processed
+	// for round. An error means the application failed or answered with an invalid app hash.
+	ApplyBlockRandomness(ctx context.Context, block *types.Block, round int32, beacon []byte) (tmbytes.HexBytes, error)
 }
 
 // BlockExecutor provides the context and accessories for properly executing a block.
@@ -233,6 +240,14 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	maxBytes := state.ConsensusParams.Block.MaxBytes
 	maxGas := state.ConsensusParams.Block.MaxGas
 
+	// The commit may come from a peer, which can set its beacon and app hash: they are empty before
+	// consensus version 2, and releases before them drop them when they decode a block, so block sync
+	// on those releases would rebuild a block that carried them into parts the next commit does not sign.
+	// From the first block committed with a beacon, validateBlock checks both against the state.
+	if len(state.LastBlockBeacon) == 0 {
+		commit = commit.WithoutRandomBeacon()
+	}
+
 	evidence, evSize := blockExec.evpool.PendingEvidence(state.ConsensusParams.Evidence.MaxBytes)
 
 	// Fetch a limited amount of valid txs
@@ -245,7 +260,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	numRequestedTxs := txs.Len()
 	block := state.MakeBlock(height, txs, commit, evidence, proposerProTxHash, proposedAppVersion)
 
-	localLastCommit := buildLastCommitInfo(block, state.InitialHeight)
+	localLastCommit := buildLastCommitInfo(block, state)
 	version := block.Version.ToProto()
 	request := abci.RequestPrepareProposal{
 		MaxTxBytes:         maxDataBytes,
@@ -376,7 +391,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		Round:              round,
 		Time:               block.Header.Time,
 		Txs:                block.Data.Txs.ToSliceOfBytes(),
-		ProposedLastCommit: buildLastCommitInfo(block, state.InitialHeight),
+		ProposedLastCommit: buildLastCommitInfo(block, state),
 		Misbehavior:        block.Evidence.ToABCI(),
 		NextValidatorsHash: block.NextValidatorsHash,
 
@@ -543,6 +558,13 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 // and uncommittedState is the result of the latest such call, for commit.Round. The application must have
 // accepted commit's extension vector through VerifyCommitExtensions; FinalizeBlock does not check it.
 // See also ApplyBlock() to deliver proposal and finalize it in one step.
+//
+// From consensus version 2, blockID must name the same block as commit.BlockID, and FinalizeBlock uses
+// commit.BlockID, whose state ID carries the app hash the commit signs. Before FinalizeBlock reaches the
+// application it calls ApplyBlockRandomness with the commit's beacon and round, and fails if the app hash
+// returned differs from commit.AppHash: this node has diverged from the validators that signed the
+// commit. The commit's beacon and app hash must already be verified against the block (see
+// types.Commit.VerifyRandomBeacon); the new state's LastAppHash and LastBlockBeacon are taken from it.
 
 func (blockExec *BlockExecutor) FinalizeBlock(
 	ctx context.Context,
@@ -578,8 +600,20 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	}
 	stages.done("finalize_save_abci_responses")
 
+	randomBeacon := state.ConsensusParams.Version.RandomBeacon()
+	if randomBeacon {
+		if !blockID.SameBlock(commit.BlockID) {
+			return state, nil, fmt.Errorf("commit block ID %v does not name the finalized block %v", commit.BlockID, blockID)
+		}
+		blockID = commit.BlockID
+		if err := VerifyBlockRandomness(ctx, blockExec, block, commit); err != nil {
+			return state, nil, err
+		}
+		stages.done("finalize_apply_block_randomness")
+	}
+
 	startTime := time.Now().UnixNano()
-	fbResp, err := execBlockWithoutState(ctx, blockExec.appClient, block, commit, blockExec.logger)
+	fbResp, err := execBlockWithoutState(ctx, blockExec.appClient, block, blockID, commit, blockExec.logger)
 	if err != nil {
 		return state, nil, ErrInvalidBlock{err}
 	}
@@ -589,6 +623,10 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 
 	if state, err = state.Update(blockID, &block.Header, &uncommittedState); err != nil {
 		return state, nil, fmt.Errorf("commit failed for application: %w", err)
+	}
+	if randomBeacon {
+		state.LastAppHash = commit.AppHash.Copy()
+		state.LastBlockBeacon = bytes.Clone(commit.Beacon)
 	}
 	stages.done("finalize_state_update")
 
@@ -650,6 +688,11 @@ func (blockExec *BlockExecutor) ApplyBlock(
 	if err != nil {
 		return state, err
 	}
+	if state.ConsensusParams.Version.RandomBeacon() {
+		if err := VerifyBlockRandomness(ctx, blockExec, block, commit); err != nil {
+			return state, err
+		}
+	}
 	if err := VerifyCommitExtensions(ctx, blockExec, commit); err != nil {
 		return state, err
 	}
@@ -694,6 +737,50 @@ func (blockExec *BlockExecutor) ExtendVote(ctx context.Context, vote *types.Vote
 		panic(fmt.Errorf("ExtendVote returned an invalid vote extension: %w", err))
 	}
 	vote.VoteExtensions = extensions
+}
+
+// ApplyBlockRandomness asks the application to apply beacon, the random beacon of block for round, and
+// returns the app hash it answers with. The block must already be processed for round.
+func (blockExec *BlockExecutor) ApplyBlockRandomness(
+	ctx context.Context,
+	block *types.Block,
+	round int32,
+	beacon []byte,
+) (tmbytes.HexBytes, error) {
+	resp, err := blockExec.appClient.ApplyBlockRandomness(ctx, &abci.RequestApplyBlockRandomness{
+		Hash:   block.Hash(),
+		Height: block.Height,
+		Round:  round,
+		Beacon: bytes.Clone(beacon),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("ApplyBlockRandomness at height %d round %d: %w", block.Height, round, err)
+	}
+	if len(resp.GetAppHash()) != blockExec.appHashSize {
+		return nil, fmt.Errorf("ApplyBlockRandomness at height %d round %d returned an app hash of %d bytes, expected %d",
+			block.Height, round, len(resp.GetAppHash()), blockExec.appHashSize)
+	}
+	return resp.AppHash, nil
+}
+
+// VerifyBlockRandomness asks the application to apply commit's random beacon to block for the commit
+// round (consensus version 2) and checks that it reaches the app hash the commit signs. Callers run it
+// after ProcessProposal of the block for the commit round and before FinalizeBlock, which runs it again:
+// the application answers a repeated call from its cache. An error wrapping ErrAppHashMismatch means
+// this node has diverged from the validators that signed the commit, so the block must not be finalized.
+func VerifyBlockRandomness(ctx context.Context, executor Executor, block *types.Block, commit *types.Commit) error {
+	if len(commit.Beacon) != types.SignatureSize || len(commit.AppHash) == 0 {
+		return fmt.Errorf("commit at height %d round %d carries no random beacon or app hash", commit.Height, commit.Round)
+	}
+	appHash, err := executor.ApplyBlockRandomness(ctx, block, commit.Round, commit.Beacon)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(appHash, commit.AppHash) {
+		return fmt.Errorf("%w: the application's app hash %X after applying the block's randomness at height %d round %d "+
+			"differs from the app hash %X the commit signs", ErrAppHashMismatch, appHash, block.Height, commit.Round, commit.AppHash)
+	}
+	return nil
 }
 
 func (blockExec *BlockExecutor) VerifyVoteExtension(ctx context.Context, vote *types.Vote) error {
@@ -769,18 +856,27 @@ func (blockExec *BlockExecutor) flushMempool(
 	return err
 }
 
-func buildLastCommitInfo(block *types.Block, initialHeight int64) abci.CommitInfo {
-	if block.Height == initialHeight {
+// buildLastCommitInfo returns the CommitInfo of block.LastCommit, the commit of the block state was
+// last updated with.
+//
+// From consensus version 2 it also carries that commit's beacon and app hash. They are taken from
+// state, which holds the values the last block was finalized with: block.LastCommit carries the
+// proposer's copy, which is checked against them only when the block is validated, after
+// ProcessProposal.
+func buildLastCommitInfo(block *types.Block, state State) abci.CommitInfo {
+	if block.Height == state.InitialHeight {
 		// there is no last commit for the initial height.
 		// return an empty value.
 		return abci.CommitInfo{}
 	}
-	return abci.CommitInfo{
-		Round:                   block.LastCommit.Round,
-		QuorumHash:              block.LastCommit.QuorumHash,
-		BlockSignature:          block.LastCommit.ThresholdBlockSignature,
-		ThresholdVoteExtensions: block.LastCommit.ThresholdVoteExtensions,
+	info := block.LastCommit.ToCommitInfo()
+	// Never the proposer's copy.
+	info.Beacon, info.AppHash = nil, nil
+	if len(state.LastBlockBeacon) > 0 {
+		info.Beacon = bytes.Clone(state.LastBlockBeacon)
+		info.AppHash = bytes.Clone(state.LastAppHash)
 	}
+	return info
 }
 
 // Update returns a copy of state with the fields set using the arguments passed in.
@@ -822,10 +918,14 @@ func (blockExec *BlockExecutor) SetAppHashSize(size int) {
 	blockExec.appHashSize = size
 }
 
+// execBlock sends block to the application's FinalizeBlock. blockID is the block ID the commit signs:
+// from consensus version 2 its state ID carries the app hash ApplyBlockRandomness returned, not the
+// header's.
 func execBlock(
 	ctx context.Context,
 	appConn abciclient.Client,
 	block *types.Block,
+	blockID types.BlockID,
 	commit *types.Commit,
 	logger log.Logger,
 ) (*abci.ResponseFinalizeBlock, error) {
@@ -835,7 +935,6 @@ func execBlock(
 	if err != nil {
 		return nil, err
 	}
-	blockID := block.BlockID(nil)
 	protoBlockID := blockID.ToProto()
 
 	responseFinalizeBlock, err := appConn.FinalizeBlock(
@@ -872,7 +971,7 @@ func ExecReplayedCommitBlock(
 	commit *types.Commit,
 	logger log.Logger,
 ) (*abci.ResponseFinalizeBlock, error) {
-	fbResp, err := execBlockWithoutState(ctx, appConn, block, commit, logger)
+	fbResp, err := execBlockWithoutState(ctx, appConn, block, commit.BlockID, commit, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -884,10 +983,11 @@ func execBlockWithoutState(
 	ctx context.Context,
 	appConn abciclient.Client,
 	block *types.Block,
+	blockID types.BlockID,
 	commit *types.Commit,
 	logger log.Logger,
 ) (*abci.ResponseFinalizeBlock, error) {
-	return execBlock(ctx, appConn, block, commit, logger)
+	return execBlock(ctx, appConn, block, blockID, commit, logger)
 }
 
 func (blockExec *BlockExecutor) pruneBlocks(retainHeight int64) {

@@ -193,7 +193,13 @@ func (c *Client) ABCIQueryWithOptions(ctx context.Context, path string, data tmb
 		return nil, err
 	}
 
-	// Validate the value proof against the trusted header.
+	// Validate the value proof against the trusted header. From consensus version 2
+	// the state is the one after the block's randomness is applied, whose app hash
+	// the commit signs.
+	appHash, err := l.CommittedAppHash()
+	if err != nil {
+		return nil, err
+	}
 
 	// build a Merkle key path from path and resp.Key
 	if c.keyPathFn == nil {
@@ -207,12 +213,12 @@ func (c *Client) ABCIQueryWithOptions(ctx context.Context, path string, data tmb
 
 	// verify value
 	if resp.Value != nil {
-		err = c.prt.VerifyValue(resp.ProofOps, l.AppHash, kp.String(), resp.Value)
+		err = c.prt.VerifyValue(resp.ProofOps, appHash, kp.String(), resp.Value)
 		if err != nil {
 			return nil, fmt.Errorf("verify value proof: %w", err)
 		}
 	} else { // OR validate the absence proof against the trusted header.
-		err = c.prt.VerifyAbsence(resp.ProofOps, l.AppHash, kp.String())
+		err = c.prt.VerifyAbsence(resp.ProofOps, appHash, kp.String())
 		if err != nil {
 			return nil, fmt.Errorf("verify absence proof: %w", err)
 		}

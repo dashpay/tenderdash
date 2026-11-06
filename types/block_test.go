@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
 	"github.com/dashpay/tenderdash/crypto/merkle"
@@ -314,6 +315,45 @@ func TestCommit(t *testing.T) {
 	assert.True(t, commit.IsCommit())
 }
 
+// TestCommitBeaconFields checks that the beacon and the app hash of a commit survive protobuf
+// encoding and decoding, reach the CommitInfo passed to the application, and show in the commit's
+// string form.
+func TestCommitBeaconFields(t *testing.T) {
+	commit := &Commit{
+		Height: 3,
+		Round:  1,
+		BlockID: BlockID{
+			Hash:          crypto.Checksum([]byte("block")),
+			PartSetHeader: PartSetHeader{Total: 1, Hash: crypto.Checksum([]byte("parts"))},
+			StateID:       RandStateID().Hash(),
+		},
+		QuorumHash:              crypto.RandQuorumHash(),
+		ThresholdBlockSignature: crypto.CRandBytes(SignatureSize),
+		Beacon:                  crypto.CRandBytes(SignatureSize),
+		AppHash:                 crypto.Checksum([]byte("final app hash")),
+	}
+
+	bz, err := commit.ToProto().Marshal()
+	require.NoError(t, err)
+	var pb tmproto.Commit
+	require.NoError(t, pb.Unmarshal(bz))
+	decoded, err := CommitFromProto(&pb)
+	require.NoError(t, err)
+	require.Equal(t, commit, decoded)
+
+	info := commit.ToCommitInfo()
+	assert.Equal(t, commit.Beacon, info.Beacon)
+	assert.EqualValues(t, commit.AppHash, info.AppHash)
+	bz, err = info.Marshal()
+	require.NoError(t, err)
+	var decodedInfo abci.CommitInfo
+	require.NoError(t, decodedInfo.Unmarshal(bz))
+	require.Equal(t, info, decodedInfo)
+
+	assert.Contains(t, commit.String(), commit.AppHash.String())
+	assert.Contains(t, commit.StringIndented(""), commit.AppHash.String())
+}
+
 func TestCommitValidateBasic(t *testing.T) {
 	const height int64 = 5
 	testCases := []struct {
@@ -357,6 +397,8 @@ func TestMaxCommitBytes(t *testing.T) {
 		},
 		QuorumHash:              crypto.Checksum([]byte("QuorumHash")),
 		ThresholdBlockSignature: crypto.CRandBytes(SignatureSize),
+		Beacon:                  crypto.CRandBytes(SignatureSize),
+		AppHash:                 crypto.Checksum([]byte("AppHash")),
 	}
 
 	bIDProto := commit.BlockID.ToProto()
@@ -364,7 +406,10 @@ func TestMaxCommitBytes(t *testing.T) {
 
 	pb := commit.ToProto()
 	pbSize := int64(pb.Size())
-	assert.EqualValues(t, MaxCommitOverheadBytes, pbSize)
+	assert.EqualValues(t, MaxCommitOverheadBytes+MaxCommitRandomnessBytes, pbSize)
+
+	commit.Beacon, commit.AppHash = nil, nil
+	assert.EqualValues(t, MaxCommitOverheadBytes, commit.ToProto().Size())
 }
 
 func TestHeaderHash(t *testing.T) {
@@ -1493,4 +1538,82 @@ func TestCommit_ValidateBasic_RejectsUnknownExtensionType(t *testing.T) {
 	require.ErrorIs(t, nilErr, ErrNilVoteExtension,
 		"a nil extension must not reach a consumer that will dereference it")
 	require.EqualError(t, nilErr, "nil vote extension at index 0")
+}
+
+// TestCommitValidateBasicRandomnessSizes checks that a commit's beacon and app hash must be both empty
+// or exactly a threshold signature and an app hash. Neither is covered by the commit hash or its
+// signature, so a peer relaying a commit can fill them with anything.
+func TestCommitValidateBasicRandomnessSizes(t *testing.T) {
+	testCases := map[string]struct {
+		beacon  []byte
+		appHash []byte
+		valid   bool
+	}{
+		"both empty":        {valid: true},
+		"both set":          {beacon: crypto.CRandBytes(SignatureSize), appHash: crypto.CRandBytes(crypto.DefaultAppHashSize), valid: true},
+		"beacon only":       {beacon: crypto.CRandBytes(SignatureSize)},
+		"app hash only":     {appHash: crypto.CRandBytes(crypto.DefaultAppHashSize)},
+		"long beacon":       {beacon: crypto.CRandBytes(SignatureSize + 1), appHash: crypto.CRandBytes(crypto.DefaultAppHashSize)},
+		"short app hash":    {beacon: crypto.CRandBytes(SignatureSize), appHash: crypto.CRandBytes(crypto.DefaultAppHashSize - 1)},
+		"one MiB of beacon": {beacon: make([]byte, 1<<20), appHash: crypto.CRandBytes(crypto.DefaultAppHashSize)},
+	}
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			commit := &Commit{
+				Height:                  3,
+				BlockID:                 makeBlockIDRandom(),
+				QuorumHash:              crypto.RandQuorumHash(),
+				ThresholdBlockSignature: crypto.CRandBytes(SignatureSize),
+				Beacon:                  tc.beacon,
+				AppHash:                 tc.appHash,
+			}
+			_, err := CommitFromProto(commit.ToProto())
+			if tc.valid {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, ErrInvalidCommitRandomness)
+			}
+		})
+	}
+}
+
+// TestBlockFromProtoMalformedLastCommitRandomness checks that a block whose LastCommit carries a beacon
+// or app hash of the wrong size is decoded without them rather than refused: releases before these
+// fields skip them, and refusing such a block would split an upgraded node from them.
+func TestBlockFromProtoMalformedLastCommitRandomness(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	lastID := makeBlockIDRandom()
+	voteSet, _, vals := randVoteSet(ctx, t, 2, 1, tmproto.PrecommitType, 4)
+	lastCommit, err := makeCommit(ctx, lastID, 2, 1, voteSet, vals)
+	require.NoError(t, err)
+	block := MakeBlock(3, []Tx{Tx("tx")}, lastCommit, nil)
+	block.ProposerProTxHash = crypto.RandProTxHash()
+	block.ValidatorsHash = crypto.CRandBytes(crypto.HashSize)
+
+	decode := func(beacon, appHash []byte) *Block {
+		t.Helper()
+		pb, err := block.ToProto()
+		require.NoError(t, err)
+		pb.LastCommit.Beacon = beacon
+		pb.LastCommit.AppHash = appHash
+		bz, err := pb.Marshal()
+		require.NoError(t, err)
+		var decoded tmproto.Block
+		require.NoError(t, decoded.Unmarshal(bz))
+		got, err := BlockFromProto(&decoded)
+		require.NoError(t, err)
+		return got
+	}
+
+	got := decode(make([]byte, 10), []byte("junk"))
+	require.Empty(t, got.LastCommit.Beacon, "a malformed beacon is dropped, not stored")
+	require.Empty(t, got.LastCommit.AppHash)
+	require.Equal(t, block.LastCommit.Hash(), got.LastCommit.Hash(), "the commit hash covers neither field")
+
+	beacon, appHash := crypto.CRandBytes(SignatureSize), crypto.CRandBytes(crypto.DefaultAppHashSize)
+	got = decode(beacon, appHash)
+	require.Equal(t, beacon, got.LastCommit.Beacon, "well-formed fields are kept")
+	require.EqualValues(t, appHash, got.LastCommit.AppHash)
 }

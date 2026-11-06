@@ -93,6 +93,23 @@ func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *ty
 	blockID := block.BlockID(blockParts)
 	partSetTime := e.observeSince("partset", start)
 
+	// From consensus version 2 the commit signs a state ID with the app hash after the block's
+	// randomness is applied, and carries that app hash and the round's random beacon: both are
+	// checked against the block, and the commit's BlockID is the block's from here on. Before, a
+	// commit carries neither.
+	randomBeacon := e.state.ConsensusParams.Version.RandomBeacon()
+	if randomBeacon {
+		if !blockID.SameBlock(commit.BlockID) {
+			return fmt.Errorf("invalid a commit: block ID %v does not name block %v", commit.BlockID, blockID)
+		}
+		if err := commit.VerifyRandomBeacon(e.state.ChainID, e.state.Validators, &block.Header); err != nil {
+			return fmt.Errorf("invalid a commit: %w", err)
+		}
+		blockID = commit.BlockID
+	} else {
+		commit = commit.WithoutRandomBeacon()
+	}
+
 	start = time.Now()
 	verified, err := e.verify(ctx, blockID, block, commit)
 	if err != nil {
@@ -113,6 +130,11 @@ func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *ty
 			panic(fmt.Sprintf("failed to process committed block (%d:%X): %v", block.Height, block.Hash(), err))
 		}
 		e.processedState = &processed
+	}
+	if randomBeacon {
+		if err := sm.VerifyBlockRandomness(ctx, e.blockExec, block, commit); err != nil {
+			panic(fmt.Sprintf("failed to apply the randomness of committed block (%d:%X): %v", block.Height, block.Hash(), err))
+		}
 	}
 	if err := sm.VerifyCommitExtensions(ctx, e.blockExec, commit); err != nil {
 		e.metrics.CommitVerifyFailures.With("reason", consensus.CommitVerifyFailureReason(err)).Add(1)

@@ -21,9 +21,11 @@ succeeds in round zero. Its ordinary application calls are:
 | --- | --- |
 | Proposer creating a fresh block | `PrepareProposal` supplies transactions, same-block application/results hashes and next-state changes. A reused valid block does not require another `PrepareProposal`. |
 | Processing before voting or commit application | `ProcessProposal` for the block and the round being checked, unless that exact result is already current. |
+| Validator signing a non-nil precommit, from consensus version 2 | `ApplyBlockRandomness` with the beacon recovered from the round's Prevotes, before `ExtendVote`. Before version 2 it is never called. |
 | Validator signing a non-nil precommit | `ExtendVote` after processing for that round. Nil precommits and prevotes carry no extensions. |
 | Peer non-nil precommit | `VerifyVoteExtension` with the validator's pro-tx-hash, after signature verification. |
 | Commit, on any full node | `VerifyVoteExtension` with an empty validator pro-tx-hash, after processing for the commit round. |
+| Commit, on any full node, from consensus version 2 | `ApplyBlockRandomness` with the commit's beacon, before verifying the commit and again before `FinalizeBlock`. |
 | Accepted decided block | `FinalizeBlock` persists the candidate corresponding to that block and round. |
 
 These are not exact per-height callback counts. A node can finish on a commit
@@ -81,6 +83,10 @@ Keep speculative execution as candidate state; publish and persist it only when
 `propose_next_block_immediately`; it returns neither `AppHash`, transaction results,
 nor events. Block/transaction events belong to `ProcessProposal` results; see
 [Events](basic-concepts.md#events).
+From consensus version 2, the state `FinalizeBlock` persists also has the block's
+randomness applied, and its root is the app hash `ApplyBlockRandomness` returned,
+which the commit carries. An Application that uses no randomness returns the app hash
+`ProcessProposal` returned for the block and round, without changing any state.
 
 An Application returning no vote extensions must accept an empty expected commit
 vector and reject a nonempty one at commit-level verification. Other Applications

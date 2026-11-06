@@ -92,6 +92,10 @@ message VersionParams {
     CONSENSUS_VERSION_0 = 0;
     // CONSENSUS_VERSION_1 changes proposer selection algorithm to not double-propose when previous proposer is offline.
     CONSENSUS_VERSION_1 = 1;
+    // CONSENSUS_VERSION_2 adds same-block randomness: the threshold signature recovered from a block's prevotes is
+    // the block's random beacon, the application applies it with ApplyBlockRandomness, and precommits sign the
+    // resulting app hash. Proposer selection is the same as in CONSENSUS_VERSION_1.
+    CONSENSUS_VERSION_2 = 2;
   }
 }
 

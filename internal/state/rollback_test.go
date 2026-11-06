@@ -118,12 +118,15 @@ func TestRollbackDifferentStateHeight(t *testing.T) {
 	require.Equal(t, err.Error(), "statestore height (100) is not one below or equal to blockstore height (102)")
 }
 
-func setupStateStore(t *testing.T, height int64) state.Store {
+func setupStateStore(t *testing.T, height int64, paramsOpts ...func(*types.ConsensusParams)) state.Store {
 	stateStore := state.NewStore(dbm.NewMemDB())
 	valSet, _ := types.RandValidatorSet(5)
 
 	params := types.DefaultConsensusParams()
 	params.Version.AppVersion = 10
+	for _, opt := range paramsOpts {
+		opt(params)
+	}
 
 	initialState := state.State{
 		Version: state.Version{
@@ -145,6 +148,77 @@ func setupStateStore(t *testing.T, height int64) state.Store {
 		ConsensusParams:                  *params,
 		LastHeightConsensusParamsChanged: height + 1,
 	}
+	// The state of the previous height holds the consensus params of this one, as in a node's store.
+	previousState := initialState.Copy()
+	previousState.LastBlockHeight = height - 1
+	previousState.LastHeightConsensusParamsChanged = height
+	require.NoError(t, stateStore.Bootstrap(previousState))
 	require.NoError(t, stateStore.Bootstrap(initialState))
 	return stateStore
+}
+
+// TestRollbackRandomBeacon checks that rolling back a block committed at consensus version 2 restores the
+// commit's BlockID, app hash and beacon, which the next block's header and LastCommit carry.
+func TestRollbackRandomBeacon(t *testing.T) {
+	const (
+		height     int64 = 100
+		nextHeight int64 = 101
+	)
+	stateStore := setupStateStore(t, height, func(cp *types.ConsensusParams) {
+		cp.Version.ConsensusVersion = 2
+	})
+	initialState, err := stateStore.Load()
+	require.NoError(t, err)
+
+	nextState := initialState.Copy()
+	nextState.LastBlockHeight = nextHeight
+	nextState.LastBlockID = factory.MakeBlockID()
+	nextState.LastAppHash = factory.RandomHash()
+	nextState.LastValidators = initialState.Validators
+	nextState.LastHeightConsensusParamsChanged = nextHeight + 1
+	require.NoError(t, stateStore.Save(nextState))
+
+	headerBlockID := factory.MakeBlockID()
+	commit := &types.Commit{
+		Height:  height,
+		BlockID: headerBlockID.Copy(),
+		Beacon:  factory.RandomHash(),
+		AppHash: factory.RandomHash(),
+	}
+	commit.BlockID.StateID = factory.RandomHash()
+	block := &types.BlockMeta{
+		BlockID: headerBlockID,
+		Header: types.Header{
+			Height:            height,
+			AppHash:           factory.RandomHash(),
+			ProposerProTxHash: initialState.Validators.Validators[0].ProTxHash,
+			ValidatorsHash:    initialState.Validators.Hash(),
+		},
+	}
+	nextBlock := &types.BlockMeta{
+		BlockID: factory.MakeBlockID(),
+		Header: types.Header{
+			Height:            nextHeight,
+			AppHash:           factory.RandomHash(),
+			LastBlockID:       commit.BlockID,
+			ProposerProTxHash: nextState.Validators.Validators[1].ProTxHash,
+			ValidatorsHash:    nextState.Validators.Hash(),
+		},
+	}
+	blockStore := &mocks.BlockStore{}
+	blockStore.On("LoadBlockMeta", height).Return(block)
+	blockStore.On("LoadBlockMeta", nextHeight).Return(nextBlock)
+	blockStore.On("LoadBlockCommit", height).Return(commit)
+	blockStore.On("Height").Return(nextHeight)
+	blockStore.On("Base").Return(height)
+
+	rollbackHeight, _, err := state.Rollback(blockStore, stateStore)
+	require.NoError(t, err)
+	require.EqualValues(t, height, rollbackHeight)
+
+	loaded, err := stateStore.Load()
+	require.NoError(t, err)
+	require.True(t, loaded.LastBlockID.Equals(commit.BlockID))
+	require.EqualValues(t, commit.AppHash, loaded.LastAppHash)
+	require.Equal(t, commit.Beacon, loaded.LastBlockBeacon)
 }

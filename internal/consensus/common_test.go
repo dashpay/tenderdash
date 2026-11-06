@@ -854,15 +854,29 @@ func consensusLogger(t *testing.T) log.Logger {
 func makeConsensusState(
 	ctx context.Context,
 	t *testing.T,
-	_cfg *config.Config,
+	cfg *config.Config,
 	nValidators int,
 	testName string,
 	tickerFunc func() TimeoutTicker,
 	configOpts ...func(*config.Config),
 ) []*State {
 	t.Helper()
+	return makeConsensusStateWithParams(ctx, t, cfg, nValidators, testName, tickerFunc, factory.ConsensusParams(), configOpts...)
+}
 
-	genDoc, privVals := factory.RandGenesisDoc(nValidators, factory.ConsensusParams())
+func makeConsensusStateWithParams(
+	ctx context.Context,
+	t *testing.T,
+	_cfg *config.Config,
+	nValidators int,
+	testName string,
+	tickerFunc func() TimeoutTicker,
+	params *types.ConsensusParams,
+	configOpts ...func(*config.Config),
+) []*State {
+	t.Helper()
+
+	genDoc, privVals := factory.RandGenesisDoc(nValidators, params)
 	css := make([]*State, nValidators)
 	logger := consensusLogger(t)
 

@@ -46,6 +46,8 @@ type HeightVoteSet struct {
 	height  int64
 	valSet  *types.ValidatorSet
 	logger  log.Logger
+	// randomBeacon makes prevote majorities count only once their beacon is recovered
+	randomBeacon bool
 
 	mtx               sync.Mutex
 	round             int32                  // max tracked round
@@ -63,6 +65,14 @@ func WithLogger(logger log.Logger) HeightVoteSetOption {
 		if logger != nil {
 			hvs.logger = logger
 		}
+	}
+}
+
+// WithRandomBeacon makes every prevote VoteSet this HeightVoteSet constructs recover the random beacon
+// of a +2/3 majority for a block (consensus version 2); see types.WithRandomBeacon.
+func WithRandomBeacon(enabled bool) HeightVoteSetOption {
+	return func(hvs *HeightVoteSet) {
+		hvs.randomBeacon = enabled
 	}
 }
 
@@ -135,7 +145,8 @@ func (hvs *HeightVoteSet) addRound(round int32) {
 	}
 	rvs := RoundVoteSet{}
 	if hvs.valSet.HasPublicKeys {
-		rvs.Prevotes = types.NewVoteSet(hvs.chainID, hvs.height, round, tmproto.PrevoteType, hvs.valSet, types.WithLogger(hvs.logger))
+		rvs.Prevotes = types.NewVoteSet(hvs.chainID, hvs.height, round, tmproto.PrevoteType, hvs.valSet,
+			types.WithLogger(hvs.logger), types.WithRandomBeacon(hvs.randomBeacon))
 		rvs.Precommits = types.NewVoteSet(hvs.chainID, hvs.height, round, tmproto.PrecommitType, hvs.valSet, types.WithLogger(hvs.logger))
 	}
 	hvs.roundVoteSets[round] = rvs

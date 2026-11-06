@@ -9,6 +9,7 @@ import (
 
 	types0 "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/internal/state"
+	"github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/types"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -135,6 +136,86 @@ func (_c *Executor_ApplyBlock_Call) Return(state11 state.State, err error) *Exec
 }
 
 func (_c *Executor_ApplyBlock_Call) RunAndReturn(run func(ctx context.Context, state1 state.State, blockID types.BlockID, block *types.Block, commit *types.Commit, lastCommit types.VerifiedCommit) (state.State, error)) *Executor_ApplyBlock_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ApplyBlockRandomness provides a mock function for the type Executor
+func (_mock *Executor) ApplyBlockRandomness(ctx context.Context, block *types.Block, round int32, beacon []byte) (bytes.HexBytes, error) {
+	ret := _mock.Called(ctx, block, round, beacon)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ApplyBlockRandomness")
+	}
+
+	var r0 bytes.HexBytes
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *types.Block, int32, []byte) (bytes.HexBytes, error)); ok {
+		return returnFunc(ctx, block, round, beacon)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *types.Block, int32, []byte) bytes.HexBytes); ok {
+		r0 = returnFunc(ctx, block, round, beacon)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(bytes.HexBytes)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *types.Block, int32, []byte) error); ok {
+		r1 = returnFunc(ctx, block, round, beacon)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// Executor_ApplyBlockRandomness_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ApplyBlockRandomness'
+type Executor_ApplyBlockRandomness_Call struct {
+	*mock.Call
+}
+
+// ApplyBlockRandomness is a helper method to define mock.On call
+//   - ctx context.Context
+//   - block *types.Block
+//   - round int32
+//   - beacon []byte
+func (_e *Executor_Expecter) ApplyBlockRandomness(ctx any, block any, round any, beacon any) *Executor_ApplyBlockRandomness_Call {
+	return &Executor_ApplyBlockRandomness_Call{Call: _e.mock.On("ApplyBlockRandomness", ctx, block, round, beacon)}
+}
+
+func (_c *Executor_ApplyBlockRandomness_Call) Run(run func(ctx context.Context, block *types.Block, round int32, beacon []byte)) *Executor_ApplyBlockRandomness_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *types.Block
+		if args[1] != nil {
+			arg1 = args[1].(*types.Block)
+		}
+		var arg2 int32
+		if args[2] != nil {
+			arg2 = args[2].(int32)
+		}
+		var arg3 []byte
+		if args[3] != nil {
+			arg3 = args[3].([]byte)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *Executor_ApplyBlockRandomness_Call) Return(hexBytes bytes.HexBytes, err error) *Executor_ApplyBlockRandomness_Call {
+	_c.Call.Return(hexBytes, err)
+	return _c
+}
+
+func (_c *Executor_ApplyBlockRandomness_Call) RunAndReturn(run func(ctx context.Context, block *types.Block, round int32, beacon []byte) (bytes.HexBytes, error)) *Executor_ApplyBlockRandomness_Call {
 	_c.Call.Return(run)
 	return _c
 }
