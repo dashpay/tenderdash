@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/dash"
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	"github.com/dashpay/tenderdash/internal/p2p"
@@ -160,6 +161,31 @@ func TestPeerCertificateIsWrittenToTheWALOnlyOnceVerified(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 1, certificates)
+}
+
+// Replay dispatches a certificate again under the peer that sent it, long
+// after the fact, and a certificate naming another quorum is what a peer with
+// another validator set sends. Neither has its sender reported.
+func TestRefusedCertificatesThatAreNoPeerFault(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	ctx, cs, vss := newRoundSkipCatchupState(ctx, t)
+	stateData := cs.GetStateData()
+	height := stateData.Height
+
+	forged := recoverRoundSkipCertificate(ctx, t, cs, vss, height, 3)
+	forged.Round = 0
+	require.NoError(t, cs.msgDispatcher.dispatch(ctx, &stateData,
+		msgInfo{Msg: &RoundSkipCertificateMessage{Certificate: forged}, PeerID: "peer"}, msgFromReplay()))
+
+	otherQuorum := recoverRoundSkipCertificate(ctx, t, cs, vss, height, 0)
+	otherQuorum.QuorumHash = crypto.RandQuorumHash()
+	require.NoError(t, cs.msgDispatcher.dispatch(ctx, &stateData,
+		msgInfo{Msg: &RoundSkipCertificateMessage{Certificate: otherQuorum}, PeerID: "peer"}))
+
+	require.Nil(t, stateData.RoundSkip)
+	require.Equal(t, int32(0), stateData.Round)
+	assert.Empty(t, cs.peerErrorQueue.ch)
 }
 
 // A certificate hands the round over on the consensus goroutine, which

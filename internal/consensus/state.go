@@ -358,7 +358,7 @@ func NewState(
 	cs.msgMiddlewares = append(cs.msgMiddlewares,
 		verificationBudgetMiddleware(cs.verificationBudget, cs.metrics, cs.logger))
 	cs.msgDispatcher = newMsgInfoDispatcher(cs.ctrl, propler, wal, cs.logger, cs.verificationBudget,
-		cs.handleLivenessMessage, cs.msgMiddlewares...)
+		cs.handleLivenessMessage, cs.peerErrorQueue, cs.msgMiddlewares...)
 
 	// this is not ideal, but it lets the consensus tests start
 	// node-fragments gracefully while letting the nodes

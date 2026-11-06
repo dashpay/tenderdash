@@ -136,11 +136,15 @@ func newMsgInfoDispatcher(
 	logger log.Logger,
 	budget types.VerificationBudget,
 	liveness livenessMessageFunc,
+	peerErrors *chanQueue[peerErrorMsg],
 	middleware ...msgMiddlewareFunc,
 ) *msgInfoDispatcher {
 
+	// Each middleware wraps those before it, so forgedLivenessMiddleware sees a
+	// handler's error before loggingMiddleware logs and drops it.
 	mws := []msgMiddlewareFunc{
 		msgInfoWithCtxMiddleware(),
+		forgedLivenessMiddleware(peerErrors),
 		loggingMiddleware(logger),
 		walMiddleware(wal, logger),
 	}
@@ -397,6 +401,54 @@ func loggingMiddleware(logger log.Logger) msgMiddlewareFunc {
 			return nil
 		}
 	}
+}
+
+// forgedLivenessMiddleware reports the peer that sent a heartbeat, skip vote or
+// certificate whose signature does not verify, so that forging one costs the
+// peer its connection. Their signatures are checked on the consensus goroutine,
+// after the reactor has handed the message on, so the reactor never learns of
+// the failure, and loggingMiddleware only logs it.
+//
+// Only a forged signature qualifies (see isForgedLivenessSignature), as for
+// commits in TryAddCommitAction.handleCommitVerifyError: a node relays a
+// heartbeat or skip vote only once it has verified it, and passes on only a
+// certificate it verified or recovered, so an honest peer never sends one. A
+// message dropped unverified for want of verification budget, this node's own,
+// and one replayed from the WAL are not the sender's fault.
+func forgedLivenessMiddleware(peerErrors *chanQueue[peerErrorMsg]) msgMiddlewareFunc {
+	return func(hd msgHandlerFunc) msgHandlerFunc {
+		return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
+			err := hd(ctx, stateData, envelope)
+			if err == nil || peerErrors == nil || envelope.PeerID == "" || envelope.fromReplay ||
+				!isForgedLivenessSignature(err) {
+				return err
+			}
+			// Never block: this runs on the consensus goroutine, and the reactor
+			// drains the queue. A report dropped under saturation costs one
+			// missed eviction, whereas blocking would stall consensus.
+			select {
+			case peerErrors.ch <- peerErrorMsg{
+				PeerID: envelope.PeerID,
+				ConnID: envelope.ConnID,
+				// Any peer can send one, so the eviction is logged at Debug.
+				Err:   fmt.Errorf("%w: %w", p2p.ErrRejectedPeerInput, err),
+				Fatal: true,
+			}:
+			default:
+			}
+			return err
+		}
+	}
+}
+
+// isForgedLivenessSignature reports whether err is the failure of a heartbeat,
+// skip vote or certificate signature against the key this node holds for its
+// height, round and quorum. A certificate naming another quorum is not one: a
+// peer with a stale validator set sends that honestly.
+func isForgedLivenessSignature(err error) bool {
+	return errors.Is(err, types.ErrProposerHeartbeatInvalidSignature) ||
+		errors.Is(err, types.ErrRoundSkipVoteInvalidSignature) ||
+		errors.Is(err, types.ErrRoundSkipCertificateInvalidSignature)
 }
 
 func msgInfoWithCtxMiddleware() msgMiddlewareFunc {

@@ -52,7 +52,7 @@ func TestLivenessMessagesDispatch(t *testing.T) {
 		func(_ context.Context, _ *StateData, msg Message, peerID types.NodeID) error {
 			delivered = append(delivered, delivery{msg, peerID})
 			return nil
-		})
+		}, nil)
 
 	heartbeat := &ProposerHeartbeatMessage{Heartbeat: &types.ProposerHeartbeat{
 		Height: 3, Round: 1, Sequence: 9, ProposerProTxHash: crypto.RandProTxHash(),
@@ -340,6 +340,62 @@ func TestReactorReportsMalformedLivenessMessagesAsRejectedPeerInput(t *testing.T
 			t.Fatalf("the malformed %T was not reported", msg)
 		}
 	}
+}
+
+// A heartbeat, skip vote or certificate whose signature does not verify is
+// found out on the consensus goroutine, after the reactor has queued it, and
+// only a peer that forged it sends one. Its sender is reported from there for
+// eviction, against the connection that delivered it.
+func TestForgedLivenessMessagesAreReportedOnceVerified(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	f := newLivenessReactorFixture(ctx, t)
+	const connID = uint64(7)
+	f.r.peers[livenessTestPeer].SetLaneAdmission(connID, f.cs.msgInfoQueue.admitPeer(livenessTestPeer))
+	f.budget.tokens = 2 * baseMessageCost
+	height, round := f.stateData.Height, f.stateData.Round
+
+	proposer, err := f.vss[1].GetProTxHash(ctx)
+	require.NoError(t, err)
+	// vss[2]'s vote, sent in vss[3]'s name.
+	vote := signRoundSkipVote(ctx, t, f.cs, f.vss[2], height, round)
+	vote.ValidatorProTxHash, err = f.vss[3].GetProTxHash(ctx)
+	require.NoError(t, err)
+	vote.ValidatorIndex = f.vss[3].Index
+	// Signed for a later round.
+	certificate := recoverRoundSkipCertificate(ctx, t, f.cs, f.vss, height, round+3)
+	certificate.Round = round
+	forged := []struct {
+		msg proto.Message
+		err error
+	}{
+		// Signed by vss[2] in the proposer's name.
+		{f.heartbeat(ctx, t, f.vss[2], proposer), types.ErrProposerHeartbeatInvalidSignature},
+		{&tmcons.RoundSkipVote{Vote: *vote.ToProto()}, types.ErrRoundSkipVoteInvalidSignature},
+		{&tmcons.RoundSkipCertificate{Certificate: *certificate.ToProto()}, types.ErrRoundSkipCertificateInvalidSignature},
+	}
+	for _, m := range forged {
+		f.inCh <- p2p.Envelope{From: livenessTestPeer, ChannelID: p2p.ConsensusStateChannel, Message: m.msg, ConnID: connID}
+	}
+	f.refused(ctx, t)
+	require.Equal(t, len(forged), f.cs.msgInfoQueue.lanes.buffered(), "the reactor verifies none of them itself")
+
+	for _, m := range forged {
+		mi, ok := f.cs.msgInfoQueue.lanes.next()
+		require.True(t, ok)
+		require.NoError(t, f.cs.msgDispatcher.dispatch(ctx, &f.stateData, mi))
+		select {
+		case reported := <-f.cs.peerErrorQueue.ch:
+			assert.Equal(t, livenessTestPeer, reported.PeerID, "%T", m.msg)
+			assert.Equal(t, connID, reported.ConnID, "%T", m.msg)
+			assert.True(t, reported.Fatal, "%T", m.msg)
+			assert.ErrorIs(t, reported.Err, m.err)
+			assert.ErrorIs(t, reported.Err, p2p.ErrRejectedPeerInput, "%T", m.msg)
+		default:
+			t.Fatalf("the sender of the forged %T was not reported", m.msg)
+		}
+	}
+	assert.Nil(t, f.stateData.RoundSkip)
 }
 
 // The liveness listeners run on the consensus goroutine and on the proposer's
