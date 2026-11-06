@@ -1,11 +1,14 @@
 package consensus
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/cosmos/gogoproto/proto"
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,7 +18,9 @@ import (
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	"github.com/dashpay/tenderdash/internal/eventbus"
 	"github.com/dashpay/tenderdash/internal/mempool"
+	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/internal/test/factory"
+	tmcons "github.com/dashpay/tenderdash/proto/tendermint/consensus"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -89,7 +94,8 @@ func TestReactorHandsASilentProposersRoundOn(t *testing.T) {
 // only, after every node entered the next round on the certificate. That
 // validator cannot wait, and the rest wait under a proposer whose heartbeats
 // arrive. Its prevote in the round brings them along, and the height commits
-// with no transaction anywhere.
+// with no transaction anywhere, even though the first copy of that prevote to
+// each peer is lost after its channel took it.
 func TestReactorRoundAfterASkipFollowsTheValidatorThatSawAPolka(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -108,7 +114,14 @@ func TestReactorRoundAfterASkipFollowsTheValidatorThatSawAPolka(t *testing.T) {
 	for _, state := range states {
 		state.SetPrivValidator(ctx, &roundSilentSigner{PrivValidator: state.privValidator.PrivValidator, height: 2, round: 0})
 	}
-	rts := setup(ctx, t, nodes, states, 100)
+	lossy := &firstPrevoteLoss{height: 2, round: 1, lost: make(map[types.NodeID]bool)}
+	rts := setupWithChannels(ctx, t, nodes, states, 100,
+		func(nodeID types.NodeID, chID p2p.ChannelID, ch p2p.Channel) p2p.Channel {
+			if chID != p2p.ConsensusVoteChannel {
+				return ch
+			}
+			return &lossyVoteChannel{Channel: ch, node: nodeID, loss: lossy}
+		})
 	rts.switchToConsensus(ctx)
 	for _, sub := range rts.subs {
 		require.Equal(t, int64(1), nextBlock(ctx, t, sub).Height)
@@ -137,6 +150,8 @@ func TestReactorRoundAfterASkipFollowsTheValidatorThatSawAPolka(t *testing.T) {
 		}
 	}
 	require.NotEqual(t, -1, witness)
+	lossy.from(rts.network.NodeByProTxHash(states[witness].privValidator.ProTxHash).NodeID,
+		states[witness].privValidator.ProTxHash)
 
 	// The other three validators' prevotes for a block in round 0 reach it
 	// alone.
@@ -159,6 +174,66 @@ func TestReactorRoundAfterASkipFollowsTheValidatorThatSawAPolka(t *testing.T) {
 	for _, sub := range rts.subs {
 		require.Equal(t, int64(2), nextBlock(commitCtx, t, sub).Height, "the waiting nodes did not follow")
 	}
+	assert.Equal(t, nodes-1, lossy.count(), "the first copy of the prevote to each peer was lost")
+}
+
+// firstPrevoteLoss loses the first prevote one node sends each peer for a
+// height and round, of the validator it names, after the node's channel took
+// it: as the router's queue, or the peer's limits, can drop a message the
+// sender already counts as delivered.
+type firstPrevoteLoss struct {
+	height int64
+	round  int32
+
+	mtx   sync.Mutex
+	node  types.NodeID
+	voter crypto.ProTxHash
+	lost  map[types.NodeID]bool
+}
+
+// from names the node whose prevotes are lost, and the validator whose.
+func (l *firstPrevoteLoss) from(node types.NodeID, voter crypto.ProTxHash) {
+	l.mtx.Lock()
+	defer l.mtx.Unlock()
+	l.node, l.voter = node, voter
+}
+
+// loses reports whether node's message to peer is lost, and records the loss.
+func (l *firstPrevoteLoss) loses(node, peer types.NodeID, msg proto.Message) bool {
+	vote, ok := msg.(*tmcons.Vote)
+	if !ok || vote.Vote == nil {
+		return false
+	}
+	l.mtx.Lock()
+	defer l.mtx.Unlock()
+	if node != l.node || l.lost[peer] || vote.Vote.Type != tmproto.PrevoteType ||
+		vote.Vote.Height != l.height || vote.Vote.Round != l.round ||
+		!bytes.Equal(vote.Vote.ValidatorProTxHash, l.voter) {
+		return false
+	}
+	l.lost[peer] = true
+	return true
+}
+
+func (l *firstPrevoteLoss) count() int {
+	l.mtx.Lock()
+	defer l.mtx.Unlock()
+	return len(l.lost)
+}
+
+// lossyVoteChannel is one node's vote channel, which takes every message and
+// loses those its loss names.
+type lossyVoteChannel struct {
+	p2p.Channel
+	node types.NodeID
+	loss *firstPrevoteLoss
+}
+
+func (ch *lossyVoteChannel) Send(ctx context.Context, envelope p2p.Envelope) error {
+	if ch.loss.loses(ch.node, envelope.To, envelope.Message) {
+		return nil
+	}
+	return ch.Channel.Send(ctx, envelope)
 }
 
 // nextBlock returns the block of the next new-block event on sub.

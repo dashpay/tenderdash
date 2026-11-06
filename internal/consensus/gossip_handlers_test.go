@@ -19,6 +19,7 @@ import (
 	"github.com/dashpay/tenderdash/libs/log"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
 	tmcons "github.com/dashpay/tenderdash/proto/tendermint/consensus"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -586,6 +587,109 @@ func TestRoundSkipGossipHandler(t *testing.T) {
 			msg, ok := sent[0].(*tmcons.RoundSkipCertificate)
 			require.True(t, ok, "sent %T", sent[0])
 			require.Equal(t, *certificate.ToProto(), msg.Certificate)
+		})
+	}
+}
+
+// A peer still in the new round step of this node's round after round 0 waits
+// for transactions there, and is sent a prevote of that round at every pass:
+// one copy can be lost after the channel took it, and nothing else would end
+// the peer's wait.
+func TestWaitingPeerPrevoteGossipHandler(t *testing.T) {
+	ctx := context.Background()
+	const chainID = "waiting-peer-test-chain"
+	// privVals[i] signs for valSet.Validators[i].
+	valSet, privVals := types.RandValidatorSet(4)
+	peer := valSet.Validators[0].ProTxHash
+	prevote := func(round int32) *types.Vote {
+		stub := newValidatorStub(privVals[1], 1, 5)
+		stub.Round = round
+		return signVote(ctx, t, stub, tmproto.PrevoteType, chainID, types.BlockID{}, valSet.QuorumType, valSet.QuorumHash)
+	}
+	vote := prevote(2)
+
+	stateData := func(round int32, version tmproto.VersionParams_ConsensusVersion, prevoted bool) StateData {
+		votes := cstypes.NewHeightVoteSet(chainID, 5, valSet)
+		votes.SetRound(round)
+		if prevoted {
+			v := vote
+			if round != vote.Round {
+				v = prevote(round)
+			}
+			added, err := votes.AddVote(v)
+			require.NoError(t, err)
+			require.True(t, added)
+		}
+		params := *types.DefaultConsensusParams()
+		params.Version.ConsensusVersion = int32(version)
+		return StateData{
+			state:      sm.State{Validators: valSet, ConsensusParams: params},
+			RoundState: cstypes.RoundState{Height: 5, Round: round, Step: cstypes.RoundStepPrevote, Validators: valSet, Votes: votes},
+		}
+	}
+	waiting := cstypes.PeerRoundState{Height: 5, Round: 2, Step: cstypes.RoundStepNewRound}
+	v2 := tmproto.VersionParams_CONSENSUS_VERSION_2
+
+	testCases := map[string]struct {
+		stateData StateData
+		peer      cstypes.PeerRoundState
+		peerID    types.ProTxHash
+		wantSent  bool
+	}{
+		"should send a prevote to a validator waiting in this node's round": {
+			stateData: stateData(2, v2, true), peer: waiting, peerID: peer, wantSent: true,
+		},
+		"should not send one to a peer in the propose step": {
+			stateData: stateData(2, v2, true),
+			peer:      cstypes.PeerRoundState{Height: 5, Round: 2, Step: cstypes.RoundStepPropose},
+			peerID:    peer,
+		},
+		"should not send one to a peer in another round": {
+			stateData: stateData(2, v2, true),
+			peer:      cstypes.PeerRoundState{Height: 5, Round: 1, Step: cstypes.RoundStepNewRound},
+			peerID:    peer,
+		},
+		"should not send one to a peer at another height": {
+			stateData: stateData(2, v2, true),
+			peer:      cstypes.PeerRoundState{Height: 4, Round: 2, Step: cstypes.RoundStepNewRound},
+			peerID:    peer,
+		},
+		"should not send one without a prevote in the round": {
+			stateData: stateData(2, v2, false), peer: waiting, peerID: peer,
+		},
+		"should not send one to a peer that is no validator": {
+			stateData: stateData(2, v2, true), peer: waiting, peerID: crypto.RandProTxHash(),
+		},
+		"should not send one in round 0, which a single prevote does not end": {
+			stateData: stateData(0, v2, true),
+			peer:      cstypes.PeerRoundState{Height: 5, Round: 0, Step: cstypes.RoundStepNewRound},
+			peerID:    peer,
+		},
+		"should not send one before version 2": {
+			stateData: stateData(2, tmproto.VersionParams_CONSENSUS_VERSION_1, true), peer: waiting, peerID: peer,
+		},
+	}
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			var sent []proto.Message
+			send := func(_ context.Context, msg proto.Message) error {
+				sent = append(sent, msg)
+				return nil
+			}
+			ps := &PeerState{PRS: tc.peer}
+			ps.SetProTxHash(tc.peerID)
+			handler := waitingPeerPrevoteGossipHandler(ps, log.NewNopLogger(), send)
+			handler(ctx, tc.stateData)
+			if !tc.wantSent {
+				require.Empty(t, sent)
+				return
+			}
+			// Every pass sends it again: the peer is not taken to hold it.
+			handler(ctx, tc.stateData)
+			require.Len(t, sent, 2)
+			for _, msg := range sent {
+				require.Equal(t, vote.ToProto(), msg)
+			}
 		})
 	}
 }

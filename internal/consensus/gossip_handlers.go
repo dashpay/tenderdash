@@ -61,6 +61,50 @@ func roundSkipGossipHandler(
 	}
 }
 
+// waitingPeerPrevoteGossipHandler sends a peer that waits for transactions in
+// this node's round, which a skip certificate began, a prevote of that round
+// again, until the peer moves on.
+//
+// A prevote there ends the peer's wait (see StateData.waitsAfterRoundSkip). It
+// comes from a validator that could not wait, and alone that validator cannot
+// end the round. Vote gossip takes a vote as the peer's once the channel takes
+// it, so one lost after that is not sent again, and nothing else moves the
+// peer on: its round has no timeout, and its proposer's heartbeats keep
+// arriving. So the peer is sent one of the round's prevotes at every pass
+// while it still announces the new round step of the round, until it
+// announces the propose step or another round.
+func waitingPeerPrevoteGossipHandler(
+	ps *PeerState,
+	logger log.Logger,
+	send func(ctx context.Context, msg proto.Message) error,
+) gossipHandlerFunc {
+	return func(ctx context.Context, stateData StateData) {
+		rs := stateData.RoundState
+		if rs.Round == 0 || !roundSkipping(&stateData) || !stateData.isValidator(ps.GetProTxHash()) {
+			return
+		}
+		prs := ps.GetRoundState()
+		if prs.Height != rs.Height || prs.Round != rs.Round || prs.Step != cstypes.RoundStepNewRound {
+			return
+		}
+		// The gossip goroutine reads the vote set while the consensus
+		// goroutine adds to it, so only through its locked accessors.
+		prevotes := rs.Votes.Prevotes(rs.Round)
+		index, ok := prevotes.BitArray().PickRandom()
+		if !ok {
+			return
+		}
+		vote := prevotes.GetByIndex(int32(index))
+		if vote == nil {
+			return
+		}
+		if err := send(ctx, vote.ToProto()); err != nil {
+			logger.Debug("cannot send a prevote to a peer waiting in its round",
+				"height", rs.Height, "round", rs.Round, "err", err)
+		}
+	}
+}
+
 func votesAndCommitGossipHandler(
 	ps *PeerState,
 	blockStore sm.BlockStore,
