@@ -1088,7 +1088,7 @@ nondeterministic
 | consensus_param_updates | [tendermint.types.ConsensusParams](#tendermint-types-ConsensusParams) |  | Changes to consensus-critical gas, size, and other parameters that will be applied at next height. |
 | core_chain_lock_update | [tendermint.types.CoreChainLock](#tendermint-types-CoreChainLock) |  | Core chain lock that will be used for next block. |
 | validator_set_update | [ValidatorSetUpdate](#tendermint-abci-ValidatorSetUpdate) |  | Changes to validator set that will be applied at next height. |
-| app_version | [uint64](#uint64) |  | Application version that was used to create the current proposal. |
+| app_version | [uint64](#uint64) |  | Application protocol version used to create this proposal; MUST be non-zero. It becomes Header.Version.App. Validators&#39; applications verify it in ProcessProposal. |
 
 
 

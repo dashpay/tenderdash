@@ -1,9 +1,12 @@
 # Full Consensus Parameter Commitment
 
 **DRAFT.** This is a normative design and source schema proposal,
-not implemented consensus behavior. Generated bindings, runtime support and
-activation are deliberately deferred. The current Go implementation is unchanged.
-MUST, MUST NOT and SHOULD describe the target implementation.
+not implemented consensus behavior. The schema has generated bindings; runtime
+support and activation are deliberately deferred, and current Go behavior is
+unchanged. MUST, MUST NOT and SHOULD describe the target implementation.
+
+In this document FULL means effective `Version.ConsensusVersion >= 2`, and
+LEGACY means a lower consensus version.
 
 ## Acceptance scenarios
 
@@ -11,12 +14,12 @@ MUST, MUST NOT and SHOULD describe the target implementation.
 | --- | --- |
 | Change any effective parameter, including evidence limits, timeout or threshold presence | The full commitment changes; a substituted snapshot fails authentication. |
 | Equivalent complete state reached through different partial updates | Identical canonical bytes and hash; raw ABCI patches are never hashed. |
-| Omit the commitment selector in a partial update | Retain the current selector. An explicit FULL-to-LEGACY downgrade is rejected. |
-| Activate FULL at height H | H-1 signs the full next-parameter hash; H uses the full current-parameter hash. |
+| Omit the version group in a partial update after activation | Retain the current consensus version. Any update lowering it below 2 is rejected. |
+| Raise the consensus version to 2 at height H | H-1 signs the full next-parameter hash; H uses the full current-parameter hash. |
 | Attempt activation with incomplete groups or duration fields | Reject before accepting a candidate; unauthenticated legacy values cannot fill gaps. |
 | Bootstrap from FULL history with a changed threshold | Authenticate each required height's parameters and validator context; do not pin a legitimate mutable threshold to genesis. |
-| Replay or restart across activation | Preserve selector presence and historical hash rules; produce the original block IDs and verify the original signatures. |
-| Receive unknown selectors, unsupported parameter fields or noncanonical snapshot bytes | Fail closed; never silently downgrade or omit a new parameter. |
+| Replay or restart across activation | Hash each height's parameters by their own consensus version; produce the original block IDs and verify the original signatures. |
+| Receive unknown consensus versions, unsupported parameter fields or noncanonical snapshot bytes | Fail closed; never silently downgrade or omit a new parameter. |
 
 ## Existing commitment and threat boundary
 
@@ -25,8 +28,9 @@ At this proposal's base, `types/params.go:HashConsensusParams` hashes only
 `HashedParams` message. Evidence limits, validator key types and voting threshold,
 synchrony bounds, timeouts and ABCI rechecking are outside that digest. The
 application version leaves consensus parameters entirely; see
-[application version](#application-version-is-not-a-consensus-parameter). Actual evidence proofs already contribute to `EvidenceHash`; this
-proposal adds their configurable limits, not a second commitment to the proofs.
+[application version](#application-version-is-not-a-consensus-parameter).
+Actual evidence proofs already contribute to `EvidenceHash`; this proposal adds
+their configurable limits, not a second commitment to the proofs.
 
 `Header.Hash` already includes `ConsensusHash` and `NextConsensusHash`. Its result
 enters `BlockID.Hash`, the canonical block-ID digest, `CanonicalVote` and the
@@ -45,28 +49,58 @@ A threshold BLS signature proves recovery under the quorum key. It does not prov
 that a raised application voting-power threshold was met by enough distinct
 signers. Adding signer-count attestation for that separate issue is out of scope.
 
-## Independent commitment selector
+## Consensus version selects the hash rule
 
-`ConsensusParams.commitment_version`, optional field 8, selects the hash rule:
+`VersionParams.consensus_version` selects the hash rule of the parameter set that
+contains it:
 
-| Value | Meaning |
+| Effective `consensus_version` | Hash rule for `ConsensusHash` and `NextConsensusHash` |
 | --- | --- |
-| `COMMITMENT_VERSION_LEGACY = 0` | Preserve the hash rule applicable to that historical protocol/height. |
-| `COMMITMENT_VERSION_FULL = 1` | Domain-separated hash of the complete `HashedParamsV2` snapshot below. |
+| `CONSENSUS_VERSION_0`, `CONSENSUS_VERSION_1` | Legacy `HashedParams` hash, unchanged |
+| `CONSENSUS_VERSION_2` | `FullHash` of the complete `HashedParamsV2` snapshot below |
+| Any other value | Rejected |
 
-Omission in an existing genesis document means LEGACY. Omission in an ABCI partial
-update means retain the current value, including FULL. An explicit selector is
-validated before merging the update; unknown values and FULL-to-LEGACY transitions
-MUST be rejected. ABCI patch conversions and no-op detection MUST preserve selector
-presence and value: an explicit LEGACY value and an omitted update are different
-inputs. Materialized state MUST serialize its resolved selector explicitly through
-domain/protobuf/JSON, state-store and state-sync conversions; state equality MUST
-compare that value as well as threshold presence and value.
+`CONSENSUS_VERSION_2` keeps the version 1 proposer selection
+(`NewHeightRoundProposerSelector`) and adds the full commitment.
+`NewProposerSelector`
+([`internal/consensus/versioned/selectproposer/proposer_selector.go:59`](../../internal/consensus/versioned/selectproposer/proposer_selector.go))
+MUST map version 2 accordingly; today it rejects every value above 1.
 
-This selector is independent of `VersionParams.ConsensusVersion`, the block wire
-protocol version, and release numbering. FULL does not allocate
-`CONSENSUS_VERSION_2` or any new block protocol constant. The `V2` in
-`HashedParamsV2` and the hash domain names the snapshot schema, not a release.
+The rule is self-describing: each parameter set is hashed by its own version. At
+H-1, `NextConsensusHash` is computed from the next parameters, which already carry
+version 2, so it uses the full rule while `ConsensusHash` stays legacy. The domain
+prefix starts with byte `0x74`, which no legacy `HashedParams` encoding (tags 1–3)
+can start with, so legacy and full preimages never coincide.
+
+Validation MUST add two checks that do not exist today:
+
+1. **Known versions only.** `ValidateConsensusParams`
+   ([`types/params.go:291`](../../types/params.go)) does not range-check
+   `Version.ConsensusVersion`. It MUST reject values outside the defined enum,
+   including negative values, for genesis, InitChain, updates and state sync.
+2. **No downgrade from FULL.** Where an ABCI update is merged and validated
+   ([`internal/state/current_round_state.go:172`](../../internal/state/current_round_state.go)),
+   reject a candidate below 2 when the current version is 2 or higher.
+   `ValidateConsensusParams` sees only the candidate, so this check compares the
+   current and candidate parameters. Transitions between 0 and 1 are unchanged.
+
+Activation uses the existing mechanism: the application returns
+`consensus_param_updates` with `version.consensus_version = 2`, as e2e testnets do
+with `consensus_version_updates`
+([`test/e2e/pkg/manifest.go:63`](../../test/e2e/pkg/manifest.go)). A genesis
+document without a version group resolves to version 0
+([`types/params.go:144`](../../types/params.go)) and therefore LEGACY.
+
+`UpdateConsensusParams` replaces the whole version group
+([`types/params.go:422`](../../types/params.go)). Today a group sent only to set
+`app_version` also overwrites `consensus_version`, typically with 0. With
+`app_version` removed, the group carries only `consensus_version` and that pitfall
+disappears. Protobuf cannot distinguish an omitted enum inside a present group
+from an explicit 0, so after activation a present version group with 0 is a
+downgrade and is rejected; omitting the group retains the version.
+
+The `V2` in `HashedParamsV2` and the hash domain names the snapshot schema, not a
+release. A later consensus version may keep this schema or define a new one.
 
 ## Complete snapshot and frozen mapping
 
@@ -80,14 +114,13 @@ The source of truth is
 [`proto/tendermint/types/params.proto`](../../proto/tendermint/types/params.proto).
 `HashedParamsV2` is a flat message; the following mapping is exhaustive for the
 seven parameter groups in this base. Durations are signed 64-bit nanosecond counts.
-Tag 9 and the name `version_app_version` are reserved and never assigned:
-`Version.AppVersion` is removed rather than committed (see
-[application version](#application-version-is-not-a-consensus-parameter)), so
-the snapshot covers every remaining effective parameter.
+`Version.AppVersion` is deprecated and excluded rather than committed (see
+[application version](#application-version-is-not-a-consensus-parameter)).
+Tags are contiguous; the schema is not frozen yet.
 
 | Tag | Snapshot field | Protobuf type | Effective source |
 | --- | --- | --- | --- |
-| 1 | `commitment_version` | `uint32` | Constant 1 for FULL |
+| 1 | `consensus_version` | `int32` | `Version.ConsensusVersion`; always 2 or higher, so always encoded |
 | 2 | `block_max_bytes` | `int64` | `Block.MaxBytes` |
 | 3 | `block_max_gas` | `int64` | `Block.MaxGas` |
 | 4 | `evidence_max_age_num_blocks` | `int64` | `Evidence.MaxAgeNumBlocks` |
@@ -95,14 +128,13 @@ the snapshot covers every remaining effective parameter.
 | 6 | `evidence_max_bytes` | `int64` | `Evidence.MaxBytes` |
 | 7 | `validator_pub_key_types` | repeated `string` | `Validator.PubKeyTypes`, preserving order |
 | 8 | `validator_voting_power_threshold` | optional `uint64` | `Validator.VotingPowerThreshold`, preserving absence versus explicit zero |
-| 10 | `version_consensus_version` | `int32` | `Version.ConsensusVersion` |
-| 11 | `synchrony_message_delay_ns` | `int64` | `Synchrony.MessageDelay` |
-| 12 | `synchrony_precision_ns` | `int64` | `Synchrony.Precision` |
-| 13 | `timeout_propose_ns` | `int64` | `Timeout.Propose` |
-| 14 | `timeout_propose_delta_ns` | `int64` | `Timeout.ProposeDelta` |
-| 15 | `timeout_vote_ns` | `int64` | `Timeout.Vote` |
-| 16 | `timeout_vote_delta_ns` | `int64` | `Timeout.VoteDelta` |
-| 17 | `abci_recheck_tx` | `bool` | `ABCI.RecheckTx` |
+| 9 | `synchrony_message_delay_ns` | `int64` | `Synchrony.MessageDelay` |
+| 10 | `synchrony_precision_ns` | `int64` | `Synchrony.Precision` |
+| 11 | `timeout_propose_ns` | `int64` | `Timeout.Propose` |
+| 12 | `timeout_propose_delta_ns` | `int64` | `Timeout.ProposeDelta` |
+| 13 | `timeout_vote_ns` | `int64` | `Timeout.Vote` |
+| 14 | `timeout_vote_delta_ns` | `int64` | `Timeout.VoteDelta` |
+| 15 | `abci_recheck_tx` | `bool` | `ABCI.RecheckTx` |
 
 Do not sort or deduplicate public-key types during hashing. Their order is part of
 the committed value even if current validation treats the list as a membership
@@ -112,7 +144,7 @@ MUST be exact and within int64 range; reject overflow and invalid effective valu
 
 The `HashedParamsV2` field meanings, tags, wire types and canonical encoding MUST
 be frozen before activation. A future parameter or changed interpretation requires
-an explicit reviewed commitment-version upgrade, not silent omission or mutation
+a new consensus version with a reviewed hash rule, not silent omission or mutation
 of this snapshot. The existing `HashedParams` schema and historical bytes remain
 unchanged.
 
@@ -154,19 +186,20 @@ never apply it retroactively to a legacy hash.
 
 ## Activation and ordinary updates
 
-Let H be the first height whose current parameters select FULL. The software and
-application upgrade MUST be deployed before height H-1, whose candidate already
-needs to construct and validate a full next-parameter commitment.
+Let H be the first height whose current parameters have consensus version 2 or
+higher. The software and application upgrade MUST be deployed before height H-1,
+whose candidate already needs to construct and validate a full next-parameter
+commitment.
 
-| Block height | Current selector and `ConsensusHash` | Next selector and `NextConsensusHash` |
+| Block height | Current version and `ConsensusHash` | Next version and `NextConsensusHash` |
 | --- | --- | --- |
-| H-2 | LEGACY / historical hash | LEGACY / historical hash |
-| H-1 | LEGACY / historical hash | FULL / `FullHash(P_H)` |
-| H and later | FULL / `FullHash(P_h)` | FULL / `FullHash(P_(h+1))` |
+| H-2 | Below 2 / historical hash | Below 2 / historical hash |
+| H-1 | Below 2 / historical hash | 2 / `FullHash(P_H)` |
+| H and later | 2 or higher / `FullHash(P_h)` | 2 or higher / `FullHash(P_(h+1))` |
 
-At H-1 the application MUST explicitly supply `commitment_version = FULL` and all
-seven parameter-group messages: block, evidence, validator, version, synchrony,
-timeout and ABCI. Every duration field MUST be supplied. Each supplied group is
+The parameter update returned for H-1 that raises the consensus version to 2 MUST
+explicitly supply all seven parameter-group messages: block, evidence, validator,
+version, synchrony, timeout and ABCI. Every duration field MUST be supplied. Each supplied group is
 the complete intended replacement under the normal update semantics; zero scalar
 values are intentional values where valid. Within the complete validator group,
 an absent threshold explicitly means no configured override, not inheritance.
@@ -182,24 +215,25 @@ uncommitted values, or fail normal validation. Validate completeness before any
 completion routine can fill omissions. This prevents an earlier unauthenticated
 state-sync parameter from seeding the first full snapshot. Validate the complete
 candidate after normal ABCI processing and require the proposer and validator to
-derive identical next commitments before acceptance. A chain starting in FULL
-MUST likewise supply a complete validated genesis/InitChain parameter snapshot.
+derive identical next commitments before acceptance. A chain starting at
+consensus version 2 MUST likewise supply a complete validated genesis/InitChain parameter snapshot.
 
 After activation, ordinary partial updates are allowed: merge into the last
-authenticated full state, preserve an omitted selector, validate the result and
-hash the complete effective value. Unchanged updates produce unchanged hashes.
+authenticated full state, retain the consensus version when the version group is
+omitted, reject any decrease below 2, validate the result and hash the complete
+effective value. Unchanged updates produce unchanged hashes.
 Persist the selected current and next states atomically with their normal block
 application state; restart and replay MUST recover the original transition.
 
 ## State sync, light verification and history
 
-Both RPC and P2P state providers MUST select the commitment rule from authenticated
-protocol/height context and the candidate selector, verify it against the signed
-header hash, and reject mismatches or unknown rules before installing state.
-A peer's selector is not independently trusted. Authenticate the snapshot at the
+Both RPC and P2P state providers MUST select the hash rule from the candidate's
+consensus version, verify the result against the signed header hash, and reject
+mismatches or unknown versions before installing state. A peer's claimed version
+is authenticated only by reproducing the signed hash under the rule it selects. Authenticate the snapshot at the
 height whose `ConsensusHash` is used; if using a prior header's `NextConsensusHash`,
 bind it to the successor height. Do not infer authenticity from structural
-validation, a claimed response height or the mere presence of FULL.
+validation, a claimed response height or a claimed version of 2 or higher.
 
 For FULL, allow legitimate threshold updates only after complete-hash verification;
 do not keep the legacy genesis pin as a substitute for that authentication.
@@ -213,15 +247,17 @@ because it accompanies an application snapshot.
 For LEGACY history, retain existing genesis-threshold and quorum-binding defenses;
 FULL is not a reason to weaken verification of old blocks. Keep each historical
 hash variant applicable to its original protocol and height. Old clients that
-ignore the selector cannot safely follow activation: interoperability is an
+do not know version 2 cannot safely follow activation: interoperability is an
 upgrade requirement, not a fallback to legacy verification.
 
 ## Application version is not a consensus parameter
 
 `ConsensusParams.Version.AppVersion` (`VersionParams.app_version`, field 1) is
-removed. Field 1 and its name are reserved in `VersionParams`. The legacy
-`HashedParams` never included it, so no historical or LEGACY hash changes, and the
-removal needs no activation height. Citations below describe this base.
+removed. This schema only marks the field DEPRECATED so that generated bindings and
+current code still build; reserving field 1 and its name lands with the
+implementation. The legacy `HashedParams` never included it, so no historical or
+LEGACY hash changes, and the removal needs no activation height. Citations below
+describe this base.
 
 1. **Block header.** `ResponsePrepareProposal.app_version` MUST be non-zero and is
    the only source of `Header.Version.App`. `ResponsePrepareProposal.Validate`
@@ -243,8 +279,9 @@ removal needs no activation height. Citations below describe this base.
    `State.MakeBlock` does not seed the header's app version from state
    ([`internal/state/state.go:291`](../../internal/state/state.go)), so
    `RequestPrepareProposal.version` carries only the block version; Tenderdash
-   leaves `app` unset. The shared `tendermint.version.Consensus` message keeps
-   `app` because `Header.Version` uses it.
+   leaves `app` unset, and that field's comment changes with the implementation.
+   The shared `tendermint.version.Consensus` message keeps `app` because
+   `Header.Version` uses it.
 3. **Node info.** `NodeInfo.ProtocolVersion.App` is taken from
    `ResponseInfo.app_version`, which the handshake already returns
    ([`internal/consensus/replay.go:287`](../../internal/consensus/replay.go),
@@ -265,35 +302,36 @@ removal needs no activation height. Citations below describe this base.
    in `InitChain`, `PrepareProposal` or `FinalizeBlock` parameter updates. Genesis
    JSON containing `consensus_params.version.app_version` still loads, because
    [`types/genesis.go`](../../types/genesis.go) decodes with lenient
-   `json.Unmarshal`. Generated ABCI clients drop the field, which requires a
-   coordinated application release.
+   `json.Unmarshal`. Once field 1 is reserved, generated ABCI clients drop it,
+   which requires a coordinated application release.
 
 ## Integration and implementation sequence
 
-1. Resolve the integration blocker before freezing this snapshot. Open
-   [#1572](https://github.com/dashpay/tenderdash/pull/1572) assigns heartbeat behavior
-   `ConsensusVersion = 2` and adds two timeouts to its legacy hash;
-   [#1583](https://github.com/dashpay/tenderdash/pull/1583) also uses version 2 for
-   randomness. Reconcile those protocol assignments separately. Any heartbeat
-   parameters merged before activation MUST be added to the full mapping/schema
-   and vectors before freezing it. Preserve any merged legacy hash variant for
-   replay. The 16-field draft above MUST NOT activate while that coverage is stale.
-2. Generate bindings and implement selector-preserving conversions, defaults,
-   equality and update validation in `types/params.go` and ABCI/state messages.
-   `Equals` currently omits voting-threshold presence/value; include both that
-   comparison and the selector to avoid incorrect empty/no-op shortcuts.
-3. Implement the canonical snapshot encoder and version dispatch; retain the
-   existing legacy encoder. Wire current/next hashes through
-   `internal/state/current_round_state.go`, `internal/state/validation.go` and
+1. Resolve the integration blocker before freezing this snapshot. This document
+   allocates `CONSENSUS_VERSION_2`. Open
+   [#1572](https://github.com/dashpay/tenderdash/pull/1572) also assigns
+   `ConsensusVersion = 2` to heartbeat behavior and adds two timeouts to its legacy
+   hash; [#1583](https://github.com/dashpay/tenderdash/pull/1583) also uses version 2
+   for randomness. Reconcile these number assignments before any of them merges.
+   Any heartbeat parameters merged before activation MUST be added to the full
+   mapping/schema and vectors before freezing it. Preserve any merged legacy hash
+   variant for replay. The 15-field draft above MUST NOT activate while that
+   coverage is stale.
+2. Implement the version range check, the no-downgrade check, conversions,
+   defaults and equality in `types/params.go` and ABCI/state messages, and map
+   version 2 in `NewProposerSelector`. `Equals` currently omits voting-threshold
+   presence/value; include it to avoid incorrect empty/no-op shortcuts.
+3. Implement the canonical snapshot encoder and dispatch `HashConsensusParams` by
+   consensus version; retain the existing legacy encoder. Wire current/next hashes
+   through `internal/state/current_round_state.go`, `internal/state/validation.go` and
    proposal/block validation. Enforce the complete transition in genesis/InitChain
    and proposal processing. Recompute derived validator thresholds, including
    clearing a prior positive override when the complete new snapshot has none;
-   do not depend on a membership update to perform this reset. Do not allocate a
-   new consensus version implicitly.
+   do not depend on a membership update to perform this reset.
 4. Update persisted-state conversions, replay and startup handling. Update both
    `internal/statesync/stateprovider.go` providers, `verifyConsensusParams`,
    `applyVotingPowerThreshold` and P2P parameter-response conversion. Audit RPC,
-   light-client and SDK consumers for selector transport and height binding.
+   light-client and SDK consumers for consensus-version transport and height binding.
 5. Publish cross-language vectors and run the tests below. Coordinate an explicit
    H, deploy before H-1, exercise mixed-version rejection on a test network, and
    permit activation only after all blockers and acceptance tests pass.
@@ -303,12 +341,12 @@ removal needs no activation height. Citations below describe this base.
 | Area | Required tests |
 | --- | --- |
 | Coverage | Mutate every mapped scalar and each list element/order; test nil, present zero and positive threshold separately. Every effective change changes the full hash. |
-| Updates | Different patches reaching the same state hash equally; omitted groups/durations retain values only after activation; invalid values, unknown selectors, unsupported fields and downgrade attempts fail closed. |
-| Transition | Complete H-1 proposal accepted, incomplete transition rejected; current/next hashes at H-2/H-1/H agree across proposer, validators, stored state and RPC. Old positive live threshold to FULL with no override clears the derived threshold even with unchanged members. Complete FULL genesis works. |
+| Updates | Different patches reaching the same state hash equally; omitted groups/durations retain values only after activation; invalid values, unknown consensus versions, unsupported fields and decreases below 2, including a present version group with 0, fail closed. |
+| Transition | Complete H-1 proposal accepted, incomplete transition rejected; current/next hashes at H-2/H-1/H agree across proposer, validators, stored state and RPC. Old positive live threshold to FULL with no override clears the derived threshold even with unchanged members. Complete genesis at consensus version 2 works. |
 | Encoding | Cross-language bytes and hashes for valid complete snapshots, zero-value omission, threshold presence, `max_gas = -1`, list order, UTF-8 and duration boundaries; reject duplicate/unknown fields and nonminimal encodings. |
 | Authentication | Substitute each previously unhashed field in RPC/P2P responses; correlate response height and signed header; require per-height thresholds when validator sets cross an update. |
 | Application version | Proposal with zero `app_version` rejected; header app version always equals the proposer response; legacy hashes unchanged; field 1 from an old application and in genesis JSON ignored; state sync accepts Info above the header version and rejects below. |
-| Recovery | Replay and restart before/at/after H; historical signature/block-ID vectors unchanged; persisted selector and optional threshold survive round trips. |
+| Recovery | Replay and restart before/at/after H; historical signature/block-ID vectors unchanged; persisted consensus version and optional threshold survive round trips. |
 | Quorum and policy | Retain Core-backed membership/key binding and all legacy trust defenses; authenticate FULL mutable thresholds without genesis pinning; do not claim raised-threshold signer-count attestation. |
 
 ## Tracking
