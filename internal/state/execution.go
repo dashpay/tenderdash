@@ -791,6 +791,8 @@ func (state State) Update(
 ) (State, error) {
 
 	nextVersion := state.Version
+	// The proposer's PrepareProposal response sets the committed header's app version.
+	nextVersion.Consensus.App = header.Version.App
 
 	// NOTE: LastBlockRound, LastStateIDHash, AppHash and VoteExtension has not been populated.
 	// It will be filled on state.Save.

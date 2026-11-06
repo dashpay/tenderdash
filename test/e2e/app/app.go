@@ -71,7 +71,6 @@ func NewApplication(cfg kvstore.Config, opts ...kvstore.OptFunc) (*Application, 
 		params := types1.ConsensusParams{
 			Version: &types1.VersionParams{
 				ConsensusVersion: types1.VersionParams_ConsensusVersion(ver),
-				AppVersion:       kvstore.ProtocolVersion,
 			},
 		}
 		app.AddConsensusParamsUpdate(params, int64(height))

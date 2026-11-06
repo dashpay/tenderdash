@@ -14,7 +14,7 @@ message ConsensusParams {
   BlockParams     block     = 1;
   EvidenceParams  evidence  = 2;
   ValidatorParams validator = 3;
-  // Consensus protocol version; its app_version field is deprecated.
+  // Consensus protocol version.
   VersionParams   version   = 4;
   SynchronyParams synchrony = 5;
   TimeoutParams   timeout   = 6;
@@ -82,9 +82,9 @@ message ValidatorParams {
 
 // VersionParams contains the consensus protocol version.
 message VersionParams {
-  // DEPRECATED: ResponsePrepareProposal.app_version sets Header.Version.App.
-  // Removal: spec/consensus/consensus-params-commitment.md#application-version-is-not-a-consensus-parameter
-  uint64 app_version = 1;
+  // ResponsePrepareProposal.app_version sets Header.Version.App instead.
+  reserved 1;
+  reserved "app_version";
   // Version of consensus protocol, used to upgrade consensus without hard forks
   ConsensusVersion consensus_version = 2;
 

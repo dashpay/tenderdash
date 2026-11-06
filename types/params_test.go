@@ -238,7 +238,6 @@ func makeParams(args makeParamsArgs) ConsensusParams {
 
 	if args.consensusVersion != 0 {
 		cp.Version = VersionParams{
-			AppVersion:       1,
 			ConsensusVersion: args.consensusVersion,
 		}
 	}
@@ -369,7 +368,6 @@ func TestConsensusParamsUpdate(t *testing.T) {
 			initialParams: makeParams(makeParamsArgs{blockBytes: 100, blockGas: 200, evidenceAge: 300}),
 			updates: &tmproto.ConsensusParams{
 				Version: &tmproto.VersionParams{
-					AppVersion:       1,
 					ConsensusVersion: 1,
 				},
 			},
@@ -390,12 +388,11 @@ func TestConsensusParamsUpdate(t *testing.T) {
 func TestConsensusParamsUpdate_Version(t *testing.T) {
 	params := makeParams(makeParamsArgs{blockBytes: 1, blockGas: 2, evidenceAge: 3})
 
-	assert.EqualValues(t, 0, params.Version.AppVersion)
+	assert.EqualValues(t, 0, params.Version.ConsensusVersion)
 
 	updated := params.UpdateConsensusParams(
-		&tmproto.ConsensusParams{Version: &tmproto.VersionParams{AppVersion: 1, ConsensusVersion: 1}})
+		&tmproto.ConsensusParams{Version: &tmproto.VersionParams{ConsensusVersion: 1}})
 
-	assert.EqualValues(t, 1, updated.Version.AppVersion)
 	assert.EqualValues(t, 1, updated.Version.ConsensusVersion)
 }
 

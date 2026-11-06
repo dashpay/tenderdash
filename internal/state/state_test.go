@@ -26,6 +26,7 @@ import (
 	statefactory "github.com/dashpay/tenderdash/internal/state/test/factory"
 	tmstate "github.com/dashpay/tenderdash/proto/tendermint/state"
 	"github.com/dashpay/tenderdash/types"
+	"github.com/dashpay/tenderdash/version"
 )
 
 // setupTestCase does setup common to all test cases.
@@ -768,4 +769,25 @@ func assertLLMQDataWithValidatorSet(t *testing.T, ld *llmq.Data, valSet *types.V
 		require.True(t, ok)
 	}
 	require.Equal(t, ld.ThresholdPubKey, valSet.ThresholdPublicKey)
+}
+
+// The application version recorded in state follows the committed block header,
+// which the proposer's PrepareProposal response sets; consensus parameters carry
+// no application version.
+func TestStateUpdateTakesAppVersionFromCommittedHeader(t *testing.T) {
+	tearDown, _, state := setupTestCase(t)
+	defer tearDown(t)
+
+	state.Version.Consensus.App = 1
+	ctx := dash.ContextWithProTxHash(context.Background(), state.Validators.GetByIndex(0).ProTxHash)
+	changes, err := state.NewStateChangeset(ctx, sm.RoundParams{})
+	require.NoError(t, err)
+
+	header := types.Header{
+		Version: version.Consensus{Block: version.BlockProtocol, App: 7},
+		Height:  state.LastBlockHeight + 1,
+	}
+	newState, err := state.Update(types.BlockID{}, &header, &changes)
+	require.NoError(t, err)
+	assert.EqualValues(t, 7, newState.Version.Consensus.App)
 }

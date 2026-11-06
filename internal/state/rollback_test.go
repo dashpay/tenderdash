@@ -27,7 +27,6 @@ func TestRollback(t *testing.T) {
 
 	// perform the rollback over a version bump
 	newParams := types.DefaultConsensusParams()
-	newParams.Version.AppVersion = 11
 	newParams.Block.MaxBytes = 1000
 	nextState := initialState.Copy()
 	nextState.LastBlockHeight = nextHeight
@@ -45,6 +44,8 @@ func TestRollback(t *testing.T) {
 	block := &types.BlockMeta{
 		BlockID: initialState.LastBlockID,
 		Header: types.Header{
+			// The rolled-back state's app version comes from this header.
+			Version:            version.Consensus{Block: version.BlockProtocol, App: initialState.Version.Consensus.App},
 			Height:             initialState.LastBlockHeight,
 			AppHash:            factory.RandomHash(),
 			LastBlockID:        factory.MakeBlockID(),
@@ -57,6 +58,7 @@ func TestRollback(t *testing.T) {
 	nextBlock := &types.BlockMeta{
 		BlockID: initialState.LastBlockID,
 		Header: types.Header{
+			Version:           version.Consensus{Block: version.BlockProtocol, App: 11},
 			Height:            nextState.LastBlockHeight,
 			AppHash:           initialState.LastAppHash,
 			LastBlockID:       block.BlockID,
@@ -123,7 +125,6 @@ func setupStateStore(t *testing.T, height int64) state.Store {
 	valSet, _ := types.RandValidatorSet(5)
 
 	params := types.DefaultConsensusParams()
-	params.Version.AppVersion = 10
 
 	initialState := state.State{
 		Version: state.Version{

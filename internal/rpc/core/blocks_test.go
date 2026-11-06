@@ -81,7 +81,7 @@ func TestBlockResults(t *testing.T) {
 			},
 			ConsensusParamUpdates: &types.ConsensusParams{
 				Version: &types.VersionParams{
-					AppVersion: 1,
+					ConsensusVersion: types.VersionParams_CONSENSUS_VERSION_1,
 				},
 			},
 		},
@@ -111,7 +111,7 @@ func TestBlockResults(t *testing.T) {
 			FinalizeBlockEvents: results.ProcessProposal.Events,
 			ValidatorSetUpdate:  results.ProcessProposal.ValidatorSetUpdate,
 			ConsensusParamUpdates: &tmtypes.ConsensusParams{
-				Version: tmtypes.VersionParams{AppVersion: 1},
+				Version: tmtypes.VersionParams{ConsensusVersion: 1},
 			},
 		}},
 	}
