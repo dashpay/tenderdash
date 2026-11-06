@@ -12,12 +12,19 @@ on:
   push:
     branches:
       - master
-      - v[0-9]+.[0-9]+-dev
+      - dev
+      # Keep both names until the integration-branch migration is complete.
+      - v1.8-dev
+      - v1.9-dev
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   golangci:
     name: golangci-lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     env:
       CGO_LDFLAGS: "-L/usr/local/lib -ldashbls -lrelic_s -lmimalloc-secure -lgmp"
@@ -35,6 +42,9 @@ jobs:
       - uses: technote-space/get-diff-action@v6
         with:
           PATTERNS: |
+            .github/workflows/lint.yml
+            .github/actions/bls/**
+            third_party/bls-signatures/**
             **/**.go
             .github/linters/*
           FILES: |

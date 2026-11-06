@@ -30,6 +30,10 @@ type (
 		// missingThrough records unavailable history independently of advertised status.
 		missingThrough int64
 		peerID         types.NodeID
+		// connID is the newest connection generation this peer advertised its
+		// status on. Requests go out by node ID, so a reservation's copy of it is
+		// the only generation known for a request that never gets an answer.
+		connID uint64
 	}
 )
 
@@ -82,6 +86,7 @@ func (p *InMemPeerStore) Upsert(newPeer PeerData) {
 	p.store.Upsert(newPeer.peerID, newPeer, func(_ types.NodeID, peer *PeerData) {
 		peer.base = newPeer.base
 		peer.height = newPeer.height
+		peer.connID = max(peer.connID, newPeer.connID)
 	})
 }
 

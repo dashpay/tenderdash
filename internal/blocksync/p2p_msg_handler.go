@@ -143,7 +143,9 @@ func (h *blockP2PMessageHandler) Handle(ctx context.Context, p2pClient *client.C
 				"height", msg.Height)
 			return nil
 		}
-		h.peerAdder.AddPeer(newPeerData(envelope.From, msg.Base, msg.Height))
+		peer := newPeerData(envelope.From, msg.Base, msg.Height)
+		peer.connID = envelope.ConnID
+		h.peerAdder.AddPeer(peer)
 	default:
 		return fmt.Errorf("received unknown message: %T", msg)
 	}
