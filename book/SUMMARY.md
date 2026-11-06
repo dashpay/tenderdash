@@ -80,7 +80,7 @@
     - [Commit handling](spec/consensus/consensus-commit.md)
     - [Recovery and synchronisation](spec/consensus/consensus-recovery.md)
     - [Known issues and discrepancies](spec/consensus/consensus-known-issues.md)
-    - [Full consensus parameter commitment (v2.0 draft)](spec/consensus/consensus-params-v2.md)
+    - [Full consensus parameter commitment (draft)](spec/consensus/consensus-params-commitment.md)
 
 # ABCI++
 

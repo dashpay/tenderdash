@@ -21,9 +21,9 @@ message ConsensusParams {
   TimeoutParams   timeout   = 6;
   ABCIParams      abci      = 7;
 
-  // Draft v2.0 selector, independent of the consensus protocol version.
+  // Draft commitment selector, independent of the consensus protocol version.
   // Omission retains the current value in a partial update; FULL cannot downgrade.
-  // See spec/consensus/consensus-params-v2.md; runtime support is deferred.
+  // See spec/consensus/consensus-params-commitment.md; runtime support is deferred.
   optional CommitmentVersion commitment_version = 8;
 
   enum CommitmentVersion {
@@ -91,9 +91,12 @@ message ValidatorParams {
   optional uint64 voting_power_threshold = 2;  //[(gogoproto.nullable) = true]
 }
 
-// VersionParams contains the ABCI application version.
+// VersionParams contains the consensus protocol version.
+// The application protocol version is not a consensus parameter: the proposer's
+// ResponsePrepareProposal.app_version sets Header.Version.App for each block.
 message VersionParams {
-  uint64 app_version = 1;
+  reserved 1;
+  reserved "app_version";
   // Version of consensus protocol, used to upgrade consensus without hard forks
   ConsensusVersion consensus_version = 2;
 
@@ -115,7 +118,7 @@ message HashedParams {
 
 // HashedParamsV2 is the draft complete effective-parameter snapshot for FULL.
 // Freeze this mapping and its encoding before activation; do not hash ABCI patches.
-// See spec/consensus/consensus-params-v2.md for canonical bytes and domain separation.
+// See spec/consensus/consensus-params-commitment.md for canonical bytes and domain separation.
 message HashedParamsV2 {
   option (gogoproto.stable_marshaler) = true;
 
@@ -127,7 +130,6 @@ message HashedParamsV2 {
   int64           evidence_max_bytes               = 6;
   repeated string validator_pub_key_types          = 7;
   optional uint64 validator_voting_power_threshold = 8;
-  uint64          version_app_version              = 9;
   int32           version_consensus_version        = 10;
   int64           synchrony_message_delay_ns       = 11;
   int64           synchrony_precision_ns           = 12;
@@ -136,6 +138,10 @@ message HashedParamsV2 {
   int64           timeout_vote_ns                  = 15;
   int64           timeout_vote_delta_ns            = 16;
   bool            abci_recheck_tx                  = 17;
+
+  // Tag 9 is never assigned: the application version is not a consensus parameter.
+  reserved 9;
+  reserved "version_app_version";
 }
 
 // SynchronyParams configure the bounds under which a proposed block's timestamp is considered valid.

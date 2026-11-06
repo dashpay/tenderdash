@@ -4,8 +4,8 @@ order: 2
 
 # Tenderdash Consensus Protocol
 
-For the proposed v2.0 parameter authentication change, see the
-[Full Consensus Parameter Commitment draft](consensus-params-v2.md).
+For the proposed parameter authentication change, see the
+[Full Consensus Parameter Commitment draft](consensus-params-commitment.md).
 It defines a future schema and activation plan; current runtime behavior is unchanged.
 
 This document and its companions specify the Tenderdash consensus protocol

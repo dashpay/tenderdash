@@ -290,8 +290,8 @@ message RequestPrepareProposal {
   bytes proposer_pro_tx_hash = 10;
   // Proposer's latest available app protocol version.
   uint64 proposed_app_version = 11;
-  // App and block version used to generate the block.
-  // App version included in the block can be modified by setting ResponsePrepareProposal.app_version.
+  // Block version used to generate the block. App is not set by Tenderdash;
+  // the application sets the block's app version in ResponsePrepareProposal.app_version.
   tendermint.version.Consensus version = 12;
   // quorum_hash contains hash of validator quorum that will sign the block
   bytes quorum_hash = 13;
@@ -703,7 +703,8 @@ message ResponsePrepareProposal {
   tendermint.types.CoreChainLock core_chain_lock_update = 5;
   // Changes to validator set that will be applied at next height.
   ValidatorSetUpdate validator_set_update = 6 [(gogoproto.nullable) = true];
-  // Application version that was used to create the current proposal.
+  // Application protocol version used to create this proposal; MUST be non-zero.
+  // It becomes Header.Version.App. Validators' applications verify it in ProcessProposal.
   uint64 app_version = 7;
 }
 

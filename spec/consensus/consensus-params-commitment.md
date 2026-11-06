@@ -1,6 +1,6 @@
 # Full Consensus Parameter Commitment
 
-**DRAFT — v2.0 target.** This is a normative design and source schema proposal,
+**DRAFT.** This is a normative design and source schema proposal,
 not implemented consensus behavior. Generated bindings, runtime support and
 activation are deliberately deferred. The current Go implementation is unchanged.
 MUST, MUST NOT and SHOULD describe the target implementation.
@@ -23,8 +23,9 @@ MUST, MUST NOT and SHOULD describe the target implementation.
 At this proposal's base, `types/params.go:HashConsensusParams` hashes only
 `Block.MaxBytes`, `Block.MaxGas` and `Version.ConsensusVersion` through the existing
 `HashedParams` message. Evidence limits, validator key types and voting threshold,
-application version, synchrony bounds, timeouts and ABCI rechecking are outside
-that digest. Actual evidence proofs already contribute to `EvidenceHash`; this
+synchrony bounds, timeouts and ABCI rechecking are outside that digest. The
+application version leaves consensus parameters entirely; see
+[application version](#application-version-is-not-a-consensus-parameter). Actual evidence proofs already contribute to `EvidenceHash`; this
 proposal adds their configurable limits, not a second commitment to the proofs.
 
 `Header.Hash` already includes `ConsensusHash` and `NextConsensusHash`. Its result
@@ -63,8 +64,9 @@ domain/protobuf/JSON, state-store and state-sync conversions; state equality MUS
 compare that value as well as threshold presence and value.
 
 This selector is independent of `VersionParams.ConsensusVersion`, the block wire
-protocol version, and release numbering. The v2.0 release label does not allocate
-`CONSENSUS_VERSION_2` or any new block protocol constant.
+protocol version, and release numbering. FULL does not allocate
+`CONSENSUS_VERSION_2` or any new block protocol constant. The `V2` in
+`HashedParamsV2` and the hash domain names the snapshot schema, not a release.
 
 ## Complete snapshot and frozen mapping
 
@@ -78,6 +80,10 @@ The source of truth is
 [`proto/tendermint/types/params.proto`](../../proto/tendermint/types/params.proto).
 `HashedParamsV2` is a flat message; the following mapping is exhaustive for the
 seven parameter groups in this base. Durations are signed 64-bit nanosecond counts.
+Tag 9 and the name `version_app_version` are reserved and never assigned:
+`Version.AppVersion` is removed rather than committed (see
+[application version](#application-version-is-not-a-consensus-parameter)), so
+the snapshot covers every remaining effective parameter.
 
 | Tag | Snapshot field | Protobuf type | Effective source |
 | --- | --- | --- | --- |
@@ -89,7 +95,6 @@ seven parameter groups in this base. Durations are signed 64-bit nanosecond coun
 | 6 | `evidence_max_bytes` | `int64` | `Evidence.MaxBytes` |
 | 7 | `validator_pub_key_types` | repeated `string` | `Validator.PubKeyTypes`, preserving order |
 | 8 | `validator_voting_power_threshold` | optional `uint64` | `Validator.VotingPowerThreshold`, preserving absence versus explicit zero |
-| 9 | `version_app_version` | `uint64` | `Version.AppVersion` |
 | 10 | `version_consensus_version` | `int32` | `Version.ConsensusVersion` |
 | 11 | `synchrony_message_delay_ns` | `int64` | `Synchrony.MessageDelay` |
 | 12 | `synchrony_precision_ns` | `int64` | `Synchrony.Precision` |
@@ -211,6 +216,58 @@ hash variant applicable to its original protocol and height. Old clients that
 ignore the selector cannot safely follow activation: interoperability is an
 upgrade requirement, not a fallback to legacy verification.
 
+## Application version is not a consensus parameter
+
+`ConsensusParams.Version.AppVersion` (`VersionParams.app_version`, field 1) is
+removed. Field 1 and its name are reserved in `VersionParams`. The legacy
+`HashedParams` never included it, so no historical or LEGACY hash changes, and the
+removal needs no activation height. Citations below describe this base.
+
+1. **Block header.** `ResponsePrepareProposal.app_version` MUST be non-zero and is
+   the only source of `Header.Version.App`. `ResponsePrepareProposal.Validate`
+   already rejects zero ([`abci/types/types.go:275`](../../abci/types/types.go),
+   called at [`internal/state/execution.go:301`](../../internal/state/execution.go));
+   the proposer cannot produce a proposal without it, and the `ver > 0` guard at
+   `execution.go:324` becomes an unconditional assignment. The value enters
+   `StateID.AppVersion` ([`types/block.go:553`](../../types/block.go)) and is signed.
+   Tenderdash does not check `Version.App` on non-proposers
+   ([`internal/state/validation.go:33`](../../internal/state/validation.go)); the
+   application MUST verify it in ProcessProposal.
+2. **Node state.** `State.Version.Consensus.App` is removed with its writers:
+   parameters at commit
+   ([`internal/state/current_round_state.go:100`](../../internal/state/current_round_state.go)),
+   `ResponseInfo` at height 0
+   ([`internal/consensus/replay.go:273`](../../internal/consensus/replay.go)) and
+   previous parameters on rollback
+   ([`internal/state/rollback.go:78`](../../internal/state/rollback.go)).
+   `State.MakeBlock` does not seed the header's app version from state
+   ([`internal/state/state.go:291`](../../internal/state/state.go)), so
+   `RequestPrepareProposal.version` carries only the block version; Tenderdash
+   leaves `app` unset. The shared `tendermint.version.Consensus` message keeps
+   `app` because `Header.Version` uses it.
+3. **Node info.** `NodeInfo.ProtocolVersion.App` is taken from
+   `ResponseInfo.app_version`, which the handshake already returns
+   ([`internal/consensus/replay.go:287`](../../internal/consensus/replay.go),
+   [`node/node.go:514`](../../node/node.go)), instead of from state
+   ([`node/node.go:533`](../../node/node.go),
+   [`node/setup.go:447`](../../node/setup.go) for seeds, which have no application
+   and report 0). Peer compatibility checks only the block version
+   ([`types/node_info.go:148`](../../types/node_info.go)).
+4. **State sync.** `verifyApp`
+   ([`internal/statesync/syncer.go:697`](../../internal/statesync/syncer.go)) MUST
+   require `ResponseInfo.app_version >= Header.Version.App` of the trusted snapshot
+   header instead of equality; the header value is today reached through the state
+   provider's `State.Version`
+   ([`internal/statesync/stateprovider.go:176`](../../internal/statesync/stateprovider.go)).
+   Applications may report their latest supported protocol version in Info, as
+   Dash Platform does.
+5. **Compatibility.** Protobuf decoding ignores field 1 sent by older applications
+   in `InitChain`, `PrepareProposal` or `FinalizeBlock` parameter updates. Genesis
+   JSON containing `consensus_params.version.app_version` still loads, because
+   [`types/genesis.go`](../../types/genesis.go) decodes with lenient
+   `json.Unmarshal`. Generated ABCI clients drop the field, which requires a
+   coordinated application release.
+
 ## Integration and implementation sequence
 
 1. Resolve the integration blocker before freezing this snapshot. Open
@@ -220,7 +277,7 @@ upgrade requirement, not a fallback to legacy verification.
    randomness. Reconcile those protocol assignments separately. Any heartbeat
    parameters merged before activation MUST be added to the full mapping/schema
    and vectors before freezing it. Preserve any merged legacy hash variant for
-   replay. The 17-field draft above MUST NOT activate while that coverage is stale.
+   replay. The 16-field draft above MUST NOT activate while that coverage is stale.
 2. Generate bindings and implement selector-preserving conversions, defaults,
    equality and update validation in `types/params.go` and ABCI/state messages.
    `Equals` currently omits voting-threshold presence/value; include both that
@@ -250,6 +307,7 @@ upgrade requirement, not a fallback to legacy verification.
 | Transition | Complete H-1 proposal accepted, incomplete transition rejected; current/next hashes at H-2/H-1/H agree across proposer, validators, stored state and RPC. Old positive live threshold to FULL with no override clears the derived threshold even with unchanged members. Complete FULL genesis works. |
 | Encoding | Cross-language bytes and hashes for valid complete snapshots, zero-value omission, threshold presence, `max_gas = -1`, list order, UTF-8 and duration boundaries; reject duplicate/unknown fields and nonminimal encodings. |
 | Authentication | Substitute each previously unhashed field in RPC/P2P responses; correlate response height and signed header; require per-height thresholds when validator sets cross an update. |
+| Application version | Proposal with zero `app_version` rejected; header app version always equals the proposer response; legacy hashes unchanged; field 1 from an old application and in genesis JSON ignored; state sync accepts Info above the header version and rejects below. |
 | Recovery | Replay and restart before/at/after H; historical signature/block-ID vectors unchanged; persisted selector and optional threshold survive round trips. |
 | Quorum and policy | Retain Core-backed membership/key binding and all legacy trust defenses; authenticate FULL mutable thresholds without genesis pinning; do not claim raised-threshold signer-count attestation. |
 
