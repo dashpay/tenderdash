@@ -746,8 +746,12 @@ enum ProposalStatus {
 * **Usage**:
 * Used within the [ProcessProposal](#processproposal) response.
     * If `Status` is `UNKNOWN`, a problem happened in the Application. Tenderdash will assume the application is faulty and crash.
-    * If `Status` is `ACCEPT`, Tenderdash accepts the proposal and will issue a Prevote message for it.
-    * If `Status` is `REJECT`, Tenderdash rejects the proposal and will issue a Prevote for `nil` instead.
+    * If `Status` is `ACCEPT`, the application finds the proposal valid. Tenderdash still validates
+      the returned execution results, which can reject the block. On the prevote path, the lock and
+      POL rules then decide between a prevote for the block and a nil prevote.
+    * If `Status` is `REJECT`, the application finds the proposal invalid. On the prevote path,
+      Tenderdash prevotes nil; during commit processing or replay, the call fails and the block
+      is not applied. See [ProcessProposal](#processproposal) for each call path.
 
 ### VerifyStatus
 
@@ -779,7 +783,7 @@ enum VerifyStatus {
     | height    | sfixed64          | Height in which the extension was provided.                             | 2            |
     | round     | sfixed64          | Round in which the extension was provided.                              | 3            |
     | chain_id  | string            | ID of the blockchain running consensus.                                 | 4            |
-    | type      | VoteExtensionType | [VoteExtensionType](../core/data_structures.md#voteExtensiontype)       | 5            |
+    | type      | VoteExtensionType | [VoteExtensionType](#voteextensiontype)                                 | 5            |
 
 * **Usage**:
 * Tenderdash is to sign the whole data structure and attach it to a Precommit message

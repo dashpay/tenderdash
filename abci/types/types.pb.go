@@ -1094,13 +1094,18 @@ func (m *RequestLoadSnapshotChunk) GetChunkId() []byte {
 //     Tenderdash will not do this unless instructed by the application.
 //   - The application may want to verify each chunk, e.g. by attaching chunk hashes in `Snapshot.Metadata“ and/or
 //     incrementally verifying contents against AppHash.
-//   - When all chunks have been accepted, Tenderdash will make an ABCI Info call to verify that LastBlockAppHash
-//     and LastBlockHeight matches the expected values, and record the AppVersion in the node state.
-//     It then switches to fast sync or consensus and joins the network.
+//   - On ACCEPT, Tenderdash enqueues `ResponseApplySnapshotChunk.next_chunks` and continues applying chunks.
+//     Restoration finishes only when the application returns COMPLETE_SNAPSHOT; an ACCEPT without
+//     `next_chunks` does not signal completion.
+//   - After COMPLETE_SNAPSHOT, Tenderdash makes an ABCI Info call to verify that LastBlockAppHash,
+//     LastBlockHeight and AppVersion match the expected values.
+//     It then switches to block sync or consensus and joins the network.
 //   - If Tenderdash is unable to retrieve the next chunk after some time (e.g. because no suitable peers are available),
 //     it will reject the snapshot and try a different one via OfferSnapshot. The application should be prepared to reset
 //     and accept it or abort as appropriate.
 type RequestApplySnapshotChunk struct {
+	// Application-defined chunk identifier: `Snapshot.hash` for the first chunk, then identifiers
+	// returned in `ResponseApplySnapshotChunk.next_chunks`.
 	ChunkId []byte `protobuf:"bytes,1,opt,name=chunk_id,json=chunkId,proto3" json:"chunk_id,omitempty"`
 	Chunk   []byte `protobuf:"bytes,2,opt,name=chunk,proto3" json:"chunk,omitempty"`
 	Sender  string `protobuf:"bytes,3,opt,name=sender,proto3" json:"sender,omitempty"`
@@ -2740,14 +2745,13 @@ func (m *ResponseLoadSnapshotChunk) GetChunk() []byte {
 
 type ResponseApplySnapshotChunk struct {
 	Result ResponseApplySnapshotChunk_Result `protobuf:"varint,1,opt,name=result,proto3,enum=tendermint.abci.ResponseApplySnapshotChunk_Result" json:"result,omitempty"`
-	// Refetch and reapply the given chunks, regardless of `result`.
-	// Only the listed chunks will be refetched, and reapplied in sequential order.
+	// Identifiers of chunks to discard, refetch and reapply, regardless of `result`.
 	RefetchChunks [][]byte `protobuf:"bytes,2,rep,name=refetch_chunks,json=refetchChunks,proto3" json:"refetch_chunks,omitempty"`
 	// Reject the given P2P senders, regardless of `Result`. Any chunks already applied will not be refetched
 	// unless explicitly requested, but queued chunks from these senders will be discarded, and new chunks
 	// or other snapshots rejected.
 	RejectSenders []string `protobuf:"bytes,3,rep,name=reject_senders,json=rejectSenders,proto3" json:"reject_senders,omitempty"`
-	// Next chunks provides the list of chunks that should be requested next, if any.
+	// Chunk identifiers to enqueue after ACCEPT; ignored for other results.
 	NextChunks [][]byte `protobuf:"bytes,4,rep,name=next_chunks,json=nextChunks,proto3" json:"next_chunks,omitempty"`
 }
 

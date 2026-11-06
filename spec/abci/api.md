@@ -266,9 +266,12 @@ Applies a snapshot chunk.
   Tenderdash will not do this unless instructed by the application.
 - The application may want to verify each chunk, e.g. by attaching chunk hashes in `Snapshot.Metadata`` and/or
   incrementally verifying contents against AppHash.
-- When all chunks have been accepted, Tenderdash will make an ABCI Info call to verify that LastBlockAppHash
-  and LastBlockHeight matches the expected values, and record the AppVersion in the node state.
-  It then switches to fast sync or consensus and joins the network.
+- On ACCEPT, Tenderdash enqueues `ResponseApplySnapshotChunk.next_chunks` and continues applying chunks.
+  Restoration finishes only when the application returns COMPLETE_SNAPSHOT; an ACCEPT without
+  `next_chunks` does not signal completion.
+- After COMPLETE_SNAPSHOT, Tenderdash makes an ABCI Info call to verify that LastBlockAppHash,
+  LastBlockHeight and AppVersion match the expected values.
+  It then switches to block sync or consensus and joins the network.
 - If Tenderdash is unable to retrieve the next chunk after some time (e.g. because no suitable peers are available),
   it will reject the snapshot and try a different one via OfferSnapshot. The application should be prepared to reset
   and accept it or abort as appropriate.
@@ -276,7 +279,7 @@ Applies a snapshot chunk.
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| chunk_id | [bytes](#bytes) |  | The chunk index, starting from 0. Tenderdash applies chunks sequentially. |
+| chunk_id | [bytes](#bytes) |  | Application-defined chunk identifier: `Snapshot.hash` for the first chunk, then identifiers returned in `ResponseApplySnapshotChunk.next_chunks`. |
 | chunk | [bytes](#bytes) |  | The binary chunk contents, as returned by LoadSnapshotChunk. |
 | sender | [string](#string) |  | The P2P ID of the node who sent this chunk. |
 
@@ -706,9 +709,9 @@ block. This includes commits the process assembled from its own &#43;2/3 precomm
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | result | [ResponseApplySnapshotChunk.Result](#tendermint-abci-ResponseApplySnapshotChunk-Result) |  | The result of applying this chunk. |
-| refetch_chunks | [bytes](#bytes) | repeated | Refetch and reapply the given chunks, regardless of `result`. Only the listed chunks will be refetched, and reapplied in sequential order. |
+| refetch_chunks | [bytes](#bytes) | repeated | Identifiers of chunks to discard, refetch and reapply, regardless of `result`. |
 | reject_senders | [string](#string) | repeated | Reject the given P2P senders, regardless of `Result`. Any chunks already applied will not be refetched unless explicitly requested, but queued chunks from these senders will be discarded, and new chunks or other snapshots rejected. |
-| next_chunks | [bytes](#bytes) | repeated | Next chunks provides the list of chunks that should be requested next, if any. |
+| next_chunks | [bytes](#bytes) | repeated | Chunk identifiers to enqueue after ACCEPT; ignored for other results. |
 
 
 
@@ -1189,7 +1192,7 @@ Type of transaction check
 | ---- | ------ | ----------- |
 | UNKNOWN | 0 | Unspecified error occurred |
 | ACCEPT | 1 | Proposal accepted |
-| REJECT | 2 | Proposal is not valid; prevoting `nil` |
+| REJECT | 2 | Proposal is not valid |
 
 
 
