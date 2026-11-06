@@ -85,10 +85,12 @@ threshold therefore lets a small minority create polkas that unlock honest
 validators across rounds
 ([`internal/consensus/state_prevoter.go:147`](../../internal/consensus/state_prevoter.go)),
 so the classic cross-round fork no longer needs at least 1/3 Byzantine power.
-This applies to any threshold below the strict 2/3+1 floor. The state-sync pin
-blocks forging one into a validator today; dropping the pin without the full
-commitment would let a forged low threshold make that validator unlock on
-minority polkas.
+This applies to any threshold below the strict 2/3+1 floor, which the override
+from [#1052](https://github.com/dashpay/tenderdash/pull/1052) permits through
+genesis or `consensus_param_updates`. It is a configuration risk, not a
+bootstrap-forgery one: state sync pins the threshold to the trusted local value.
+Dropping that pin without the full commitment would let a forged low threshold
+make a state-synced validator unlock on minority polkas.
 
 Halting is the common outcome and survives restarts: the forged values are
 stored, and later partial updates replace only the groups they carry
