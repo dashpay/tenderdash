@@ -223,6 +223,9 @@ func MakeConfig(node *e2e.Node) (*config.Config, error) {
 
 	cfg.Mempool.TxEnqueueTimeout = 10 * time.Millisecond
 	cfg.Consensus.CreateEmptyBlocks = node.Testnet.CreateEmptyBlocks
+	if node.Testnet.CreateEmptyBlocksInterval > 0 {
+		cfg.Consensus.CreateEmptyBlocksInterval = node.Testnet.CreateEmptyBlocksInterval
+	}
 
 	cfg.RPC.ListenAddress = "tcp://0.0.0.0:26657"
 	cfg.RPC.PprofListenAddress = ":6060"
@@ -355,6 +358,9 @@ func MakeAppConfig(node *e2e.Node) ([]byte, error) {
 		"finalize_block_delay_ms":   node.Testnet.FinalizeBlockDelayMS,
 
 		"propose_next_block_immediately": node.Testnet.ProposeNextBlockImmediately,
+	}
+	if node.FinalizeHold > 0 {
+		cfg["finalize_hold"] = node.FinalizeHold.String()
 	}
 
 	switch node.Testnet.ABCIProtocol {
