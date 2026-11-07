@@ -9,6 +9,10 @@ import (
 	"github.com/cosmos/gogoproto/proto"
 )
 
+// simpleQueueTrimFraction sets how far below maxSize an overflowing heap is
+// trimmed: by 1/simpleQueueTrimFraction of maxSize.
+const simpleQueueTrimFraction = 16
+
 type simpleQueue struct {
 	input   chan Envelope
 	output  chan Envelope
@@ -73,17 +77,13 @@ func (q *simpleQueue) run(ctx context.Context) {
 				timestamp: time.Now().UTC(),
 			})
 
-			// Trim on every push, so the heap never holds more than
-			// maxSize. Trimming only when the signal was already pending
+			// Check on every push, so the heap never holds more than
+			// maxSize. Checking only when the signal was already pending
 			// let every push that refilled it skip the trim, so with
 			// nobody draining, the heap ran past maxSize until the next
 			// tick.
 			if len(pq) > q.maxSize {
-				sort.Sort(pq)
-				for _, dropped := range pq[q.maxSize:] {
-					dropped.envelope.NotifyDelivery()
-				}
-				pq = pq[:q.maxSize]
+				pq = q.trim(pq)
 			}
 
 			select {
@@ -116,4 +116,22 @@ func (q *simpleQueue) run(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// trim drops the lowest-ranked envelopes from a heap that has outgrown maxSize.
+// Sorting takes time in proportion to the whole heap, and the run loop accepts
+// nothing while it sorts, so trimming back to exactly maxSize would sort again
+// on the very next push. Trimming a fraction below it leaves room for the pushes
+// that follow, which spreads the cost of one sort across all of them. The sorted
+// slice it returns is still a valid heap.
+func (q *simpleQueue) trim(pq priorityQueue) priorityQueue {
+	sort.Sort(pq)
+	keep := q.maxSize - q.maxSize/simpleQueueTrimFraction
+	for _, dropped := range pq[keep:] {
+		dropped.envelope.NotifyDelivery()
+	}
+	// Later pushes reclaim these slots only one at a time, so release the
+	// dropped envelopes now.
+	clear(pq[keep:])
+	return pq[:keep]
 }
