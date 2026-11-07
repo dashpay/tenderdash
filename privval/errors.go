@@ -3,6 +3,8 @@ package privval
 import (
 	"errors"
 	"fmt"
+
+	"github.com/dashpay/tenderdash/types"
 )
 
 // EndpointTimeoutError occurs when endpoint times out.
@@ -30,6 +32,16 @@ type RemoteSignerError struct {
 	Description string
 }
 
+// remoteSignerNotImplemented is the code of a request the remote signer cannot
+// serve at all.
+const remoteSignerNotImplemented = 501
+
 func (e *RemoteSignerError) Error() string {
 	return fmt.Sprintf("signerEndpoint returned error #%d: %s", e.Code, e.Description)
+}
+
+// Is reports a request the signer cannot serve at all as
+// types.ErrSigningNotSupported, so callers stop asking.
+func (e *RemoteSignerError) Is(target error) bool {
+	return e.Code == remoteSignerNotImplemented && target == types.ErrSigningNotSupported
 }

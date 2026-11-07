@@ -599,6 +599,65 @@ func (pv *FilePV) SignProposal(
 	return signID, nil
 }
 
+// SignProposerHeartbeat signs a heartbeat sent while this validator is the
+// proposer of a round that waits for transactions. Implements PrivValidator.
+//
+// Heartbeats change no consensus state and cannot conflict with one another, so
+// unlike votes and proposals they are not recorded in LastSignState.
+func (pv *FilePV) SignProposerHeartbeat(
+	ctx context.Context,
+	chainID string,
+	quorumType btcjson.LLMQType,
+	quorumHash crypto.QuorumHash,
+	heartbeat *tmproto.ProposerHeartbeat,
+) error {
+	signItem := types.ProposerHeartbeatSignItem(chainID, heartbeat, quorumType, quorumHash)
+	sig, err := pv.signWithQuorumKey(ctx, quorumHash, signItem)
+	if err != nil {
+		return fmt.Errorf("error signing proposer heartbeat: %w", err)
+	}
+	heartbeat.Signature = sig
+	return nil
+}
+
+// SignRoundSkipVote signs this validator's vote to skip a round whose proposer
+// went silent. Implements PrivValidator.
+//
+// Every validator signs the same bytes to skip a given round, so there is only
+// one skip vote to make for a round and nothing to record in LastSignState.
+func (pv *FilePV) SignRoundSkipVote(
+	ctx context.Context,
+	chainID string,
+	quorumType btcjson.LLMQType,
+	quorumHash crypto.QuorumHash,
+	vote *tmproto.RoundSkipVote,
+) error {
+	signItem := types.RoundSkipSignItem(chainID, vote.Height, vote.Round, quorumType, quorumHash)
+	sig, err := pv.signWithQuorumKey(ctx, quorumHash, signItem)
+	if err != nil {
+		return fmt.Errorf("error signing round skip vote: %w", err)
+	}
+	vote.Signature = sig
+	return nil
+}
+
+// signWithQuorumKey signs signItem with this validator's key share for
+// quorumHash. Nothing is recorded in LastSignState.
+func (pv *FilePV) signWithQuorumKey(
+	ctx context.Context,
+	quorumHash crypto.QuorumHash,
+	signItem types.SignItem,
+) ([]byte, error) {
+	pv.mtx.RLock()
+	defer pv.mtx.RUnlock()
+
+	privKey, err := pv.getPrivateKey(ctx, quorumHash)
+	if err != nil {
+		return nil, err
+	}
+	return privKey.SignDigest(signItem.SignHash)
+}
+
 // Save persists the FilePV to disk.
 func (pv *FilePV) Save() error {
 	pv.mtx.Lock()

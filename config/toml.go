@@ -550,7 +550,8 @@ fetchers = "{{ .StateSync.Fetchers }}"
 wal-file = "{{ js .Consensus.WalPath }}"
 # wal-skip-rounds-to-last set to true will skip replaying all non-committed rounds stored in
 # WAL, increasing performance in a significant way. It should be set to false by default, as it
-# can have security side-effects.
+# can have security side-effects. It has no effect on a chain that skips the rounds of silent
+# proposers (consensus version 2), whose replay needs every round of the height.
 wal-skip-rounds-to-last = "{{ .Consensus.WalSkipRoundsToLast }}"
 
 # Legacy compatibility setting; currently unused by consensus.
