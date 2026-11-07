@@ -104,8 +104,10 @@ func roundVoteResendGossipHandler(
 		var voteSets []*types.VoteSet
 		switch {
 		case prs.Round < rs.Round:
-			voteSets = []*types.VoteSet{rs.Votes.Prevotes(prs.Round), rs.Votes.Precommits(prs.Round)}
-			voteSets = append(voteSets, laterRoundVotes(rs.Votes, prs.Round, rs.Round)...)
+			later := laterRoundVotes(rs.Votes, prs.Round, rs.Round)
+			voteSets = make([]*types.VoteSet, 0, 2+len(later))
+			voteSets = append(voteSets, rs.Votes.Prevotes(prs.Round), rs.Votes.Precommits(prs.Round))
+			voteSets = append(voteSets, later...)
 		case prs.Round == rs.Round && prs.Round > 0 && prs.Step == cstypes.RoundStepNewRound:
 			voteSets = []*types.VoteSet{rs.Votes.Prevotes(prs.Round)}
 		default:
@@ -133,7 +135,7 @@ func roundVoteResendGossipHandler(
 // it has not reached as a catch-up round of its voter, two per voter at a
 // height (see HeightVoteSet.AddVote), and drops any more without blame.
 func laterRoundVotes(votes *cstypes.HeightVoteSet, from, round int32) []*types.VoteSet {
-	var voteSets []*types.VoteSet
+	voteSets := make([]*types.VoteSet, 0, 2)
 	for ; round > from && len(voteSets) == 0; round-- {
 		for _, voteSet := range []*types.VoteSet{votes.Prevotes(round), votes.Precommits(round)} {
 			if voteSet.HasTwoThirdsAny() {
