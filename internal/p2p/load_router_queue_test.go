@@ -34,13 +34,14 @@ func TestLoadRouterSharedQueueOccupancyAndDrops(t *testing.T) {
 	const capacity = 8
 	q := newSimplePriorityQueue(ctx, capacity)
 	// The queue holds envelopes in three places: waiting in the input buffer,
-	// in the heap, and popped into the output buffer. The heap is trimmed to
-	// maxSize on every push. The run loop holds one envelope in none of these
-	// between taking it from input and pushing it, which frees an input slot
-	// for the producer, but that push trims the heap back to maxSize, so the
-	// envelope replaces one already held instead of adding to the count. A
-	// flood that nobody drains fills all three, and draining can then hand
-	// over every one of them before a later push trims the heap again.
+	// in the heap, and popped into the output buffer. A push that takes the
+	// heap past maxSize trims it, so it holds at most maxSize once a push
+	// finishes. The run loop holds one envelope in none of these between taking
+	// it from input and pushing it, which frees an input slot for the producer,
+	// but if that push overflows the heap it also trims it, so the envelope
+	// cannot add to the count. A flood that nobody drains can fill all three,
+	// and draining can then hand over every one of them before a later push
+	// trims the heap again.
 	ceiling := q.maxSize + cap(q.input) + cap(q.output)
 
 	// Nothing drains while this runs, which is the case that matters: a
