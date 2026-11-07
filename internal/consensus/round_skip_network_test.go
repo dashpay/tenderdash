@@ -312,6 +312,100 @@ func TestReactorValidatorsLeftWaitingFollowTheRoundAfter(t *testing.T) {
 	}
 }
 
+// A node that reached a later round on that round's votes alone holds no vote
+// of the round its peers wait in. Here one validator is given the prevotes and
+// precommits of round 2 of the other three, for three different blocks, while
+// every node waits in round 1 under a proposer whose heartbeats arrive, and
+// the three sign nothing else in round 2. That validator goes on to round 3.
+// The others follow on the round 2 votes it sends them, and the height
+// commits with no transaction anywhere.
+func TestReactorWaitingValidatorsFollowANodeThatSkippedAhead(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	const nodes = 4
+	params := factory.ConsensusParams(func(c *types.ConsensusParams) {
+		c.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_2)
+		c.Timeout.Propose = 500 * time.Millisecond
+		c.Timeout.Vote = 50 * time.Millisecond
+		c.Timeout.VoteDelta = 5 * time.Millisecond
+		c.Timeout.ProposerHeartbeat = 50 * time.Millisecond
+		c.Timeout.ProposerSilence = 300 * time.Millisecond
+	})
+	states := makeConsensusStateWithParams(ctx, t, nodes, "consensus_round_skip_ahead_test", newTickerFunc(), params,
+		func(c *config.Config) { c.Consensus.CreateEmptyBlocks = false })
+	signers := make([]*voteSilentSigner, nodes)
+	for i, state := range states {
+		signers[i] = &voteSilentSigner{
+			PrivValidator: &roundSilentSigner{PrivValidator: state.privValidator.PrivValidator, height: 2, round: 0},
+			height:        2,
+			round:         2,
+		}
+		state.SetPrivValidator(ctx, signers[i])
+	}
+	rts := setup(ctx, t, nodes, states, 100)
+	rts.switchToConsensus(ctx)
+	for _, sub := range rts.subs {
+		require.Equal(t, int64(1), nextBlock(ctx, t, sub).Height)
+	}
+
+	// Round 0 of height 2 is handed on, and every node waits in round 1.
+	require.Eventually(t, func() bool {
+		for _, state := range states {
+			stateData := state.GetStateData()
+			if stateData.Height != 2 || stateData.Round != 1 || stateData.Step != cstypes.RoundStepNewRound {
+				return false
+			}
+		}
+		return true
+	}, 30*time.Second, 20*time.Millisecond, "the silent proposer's round was not handed on")
+
+	// The node that skips ahead is not the proposer of round 1, whose
+	// heartbeats keep the others waiting. They sign nothing in round 2.
+	stateData := states[0].GetStateData()
+	valSet := stateData.Validators
+	proposer, err := stateData.ProposerSelector.GetProposer(2, 1)
+	require.NoError(t, err)
+	ahead := -1
+	for i, state := range states {
+		if ahead == -1 && !state.privValidator.IsProTxHashEqual(proposer.ProTxHash) {
+			ahead = i
+			continue
+		}
+		signers[i].mute()
+	}
+	require.NotEqual(t, -1, ahead)
+
+	// Round 2 votes of the other three, each for a block of its own.
+	votesOf := func(voteType tmproto.SignedMsgType) []*types.Vote {
+		votes := make([]*types.Vote, 0, nodes-1)
+		for i, state := range states {
+			if i == ahead {
+				continue
+			}
+			index, _ := valSet.GetByProTxHash(state.privValidator.ProTxHash)
+			require.GreaterOrEqual(t, index, int32(0))
+			vs := newValidatorStub(signers[i].PrivValidator, index, 2)
+			vs.Round = 2
+			votes = append(votes, signVote(ctx, t, vs, voteType, stateData.state.ChainID, factory.MakeBlockID(),
+				valSet.QuorumType, valSet.QuorumHash))
+		}
+		return votes
+	}
+	addVotes(states[ahead], votesOf(tmproto.PrevoteType)...)
+	require.Eventually(t, func() bool {
+		stateData := states[ahead].GetStateData()
+		return stateData.Round == 2 && stateData.Step >= cstypes.RoundStepPrecommit
+	}, 30*time.Second, 20*time.Millisecond, "the node did not follow the prevotes of round 2")
+	addVotes(states[ahead], votesOf(tmproto.PrecommitType)...)
+
+	commitCtx, cancelCommit := context.WithTimeout(ctx, 30*time.Second)
+	defer cancelCommit()
+	for _, sub := range rts.subs {
+		require.Equal(t, int64(2), nextBlock(commitCtx, t, sub).Height, "the waiting validators did not follow")
+	}
+}
+
 // roundVoteCongestion loses, while it is on, every vote of a height and round
 // that the nodes it names send the peers it names, after the channel took it:
 // the senders count each as delivered.

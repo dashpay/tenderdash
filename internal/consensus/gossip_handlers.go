@@ -80,7 +80,10 @@ func roundSkipGossipHandler(
 // round this node has left is sent that round's prevotes and precommits by
 // turns, until it announces a later round: +2/3 precommits of any kind move it
 // to the next round from any step (see addVoteDispatchPrecommitMw), and a
-// prevote ends its wait there as in this node's round.
+// prevote ends its wait there as in this node's round. It is sent too, by
+// turns, the votes of the latest round after its own that +2/3 of any kind
+// prevoted or precommitted in (see laterRoundVotes): this node may have
+// reached its round on those alone, holding no vote of the peer's round.
 func roundVoteResendGossipHandler(
 	ps *PeerState,
 	logger log.Logger,
@@ -102,6 +105,7 @@ func roundVoteResendGossipHandler(
 		switch {
 		case prs.Round < rs.Round:
 			voteSets = []*types.VoteSet{rs.Votes.Prevotes(prs.Round), rs.Votes.Precommits(prs.Round)}
+			voteSets = append(voteSets, laterRoundVotes(rs.Votes, prs.Round, rs.Round)...)
 		case prs.Round == rs.Round && prs.Round > 0 && prs.Step == cstypes.RoundStepNewRound:
 			voteSets = []*types.VoteSet{rs.Votes.Prevotes(prs.Round)}
 		default:
@@ -117,6 +121,27 @@ func roundVoteResendGossipHandler(
 				"height", vote.Height, "round", vote.Round, "type", vote.Type, "peer_round", prs.Round, "err", err)
 		}
 	}
+}
+
+// laterRoundVotes returns the vote sets of the latest round after from, up to
+// round, that hold +2/3 of any kind, or none.
+//
+// A node goes on to a later round from any round before it once +2/3 of any
+// kind prevoted or precommitted there (see addVoteDispatchPrevoteMw and
+// addVoteDispatchPrecommitMw), so those votes take a peer from round from to
+// that round, or the one after it, in one step. A peer keeps a vote of a round
+// it has not reached as a catch-up round of its voter, two per voter at a
+// height (see HeightVoteSet.AddVote), and drops any more without blame.
+func laterRoundVotes(votes *cstypes.HeightVoteSet, from, round int32) []*types.VoteSet {
+	var voteSets []*types.VoteSet
+	for ; round > from && len(voteSets) == 0; round-- {
+		for _, voteSet := range []*types.VoteSet{votes.Prevotes(round), votes.Precommits(round)} {
+			if voteSet.HasTwoThirdsAny() {
+				voteSets = append(voteSets, voteSet)
+			}
+		}
+	}
+	return voteSets
 }
 
 // pickRandomVote returns a vote picked at random from the first of voteSets,

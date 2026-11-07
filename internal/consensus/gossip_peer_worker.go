@@ -76,11 +76,12 @@ func newPeerGossipWorker(
 				roundSkipGossipHandler(ps, logger, msgSender.send),
 				state.config.PeerQueryMaj23SleepDuration,
 			),
-			// So is a vote of its round to a peer that waits in this node's
-			// round, or is in a round this node left: a vote lost after the
-			// channel took it is not sent again, and the peer may have no
-			// timeout to fall back on. It stops once the peer announces the
-			// propose step, or this node's round.
+			// So is a vote of its round, or of a later round +2/3 voted in, to
+			// a peer that waits in this node's round, or is in a round this
+			// node left: a vote lost after the channel took it is not sent
+			// again, and the peer may have no timeout to fall back on. It
+			// stops once the peer announces the propose step, or this node's
+			// round.
 			newGossipHandler(
 				roundVoteResendGossipHandler(ps, logger, msgSender.send),
 				state.config.PeerQueryMaj23SleepDuration,
