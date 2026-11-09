@@ -116,8 +116,10 @@ func WithMaj23AnswerTTL(ttl time.Duration) PeerStateOptionFunc {
 }
 
 // WithVoteResendInterval sets how long a vote gossiped to the peer stays off the
-// offer before, still unacknowledged, it is offered again. Sized against the
-// majority-claim gossip cadence by default (see ReofferUnackedVotes).
+// offer before, still unacknowledged, it is offered again (see
+// ReofferUnackedVotes). The reactor passes PeerQueryMaj23SleepDuration, the
+// cadence of the in-round repairs the redelivery backs up; NewPeerState falls
+// back to its default.
 func WithVoteResendInterval(interval time.Duration) PeerStateOptionFunc {
 	return func(ps *PeerState) {
 		ps.voteResendInterval = interval

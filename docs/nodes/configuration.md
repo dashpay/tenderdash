@@ -407,7 +407,12 @@ double-sign-check-height = 0
 create-empty-blocks = true
 create-empty-blocks-interval = "0s"
 
-# Reactor sleep duration parameters
+# Reactor sleep duration parameters. peer-gossip-sleep-duration also sets the
+# tick rate a lagging peer's catch-up block-part replay is metered against
+# (a fixed 500ms internal throttle): raising this above 500ms disables that
+# throttle. peer-query-maj23-sleep-duration also paces the redelivery of votes a
+# peer has not acknowledged: one interval after a vote went out, then doubling
+# up to 8 intervals. Raising it slows stall recovery.
 peer-gossip-sleep-duration = "100ms"
 peer-query-maj23-sleep-duration = "2s"
 
