@@ -237,16 +237,17 @@ func (ps *PeerState) SetHasProposal(proposal *types.Proposal) {
 	}
 
 	ps.PRS.Proposal = true
+	ps.PRS.ProposalPOLRound = proposal.POLRound
+	ps.PRS.ProposalPOL = nil // Nil until ProposalPOLMessage received.
 
-	// ps.PRS.ProposalBlockParts is set due to NewValidBlockMessage
+	// A NewValidBlockMessage may already have told us which parts the peer
+	// holds; the proposal's POL round is recorded above regardless.
 	if ps.PRS.ProposalBlockParts != nil {
 		return
 	}
 
 	ps.PRS.ProposalBlockPartSetHeader = proposal.BlockID.PartSetHeader
 	ps.PRS.ProposalBlockParts = bits.NewBitArray(int(proposal.BlockID.PartSetHeader.Total))
-	ps.PRS.ProposalPOLRound = proposal.POLRound
-	ps.PRS.ProposalPOL = nil // Nil until ProposalPOLMessage received.
 }
 
 // InitProposalBlockParts initializes the peer's proposal block parts header
@@ -658,6 +659,12 @@ func (ps *PeerState) ApplyNewRoundStepMessage(msg *NewRoundStepMessage) {
 }
 
 // ApplyNewValidBlockMessage updates the peer state for the new valid block.
+//
+// The header and holdings replace what is held, with no ordering guard: the
+// message carries no sequence, and the peer repeats it every gossip pass, so a
+// stale copy that lands after a newer one is corrected within one pass. A
+// guard that only let holdings grow would instead make a wrong bit permanent,
+// and a part the peer is marked as holding is never sent to it.
 func (ps *PeerState) ApplyNewValidBlockMessage(msg *NewValidBlockMessage) {
 	ps.mtx.Lock()
 	defer ps.mtx.Unlock()

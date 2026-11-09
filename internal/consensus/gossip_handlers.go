@@ -21,8 +21,11 @@ import (
 // to a full router queue or the peer's state-channel allowance — would leave
 // the peer gossiping for the round it last heard of until the next change, and
 // the step this node is in may be waiting on exactly the votes, proposal or
-// block parts the peer is holding back. A repeat is a no-op for a peer whose
-// picture is current. A failed send is left to the next pass.
+// block parts the peer is holding back. A repeated round step is ignored by a
+// peer whose picture is current; a repeated NewValidBlock re-applies it, which
+// also corrects, within a pass, a stale copy that landed after a newer one
+// (see PeerState.ApplyNewValidBlockMessage). A failed send is left to the next
+// pass.
 func roundStateGossipHandler(logger log.Logger, send func(context.Context, proto.Message) error) gossipHandlerFunc {
 	return func(ctx context.Context, stateData StateData) {
 		for _, msg := range roundStateMessages(stateData.RoundState) {
