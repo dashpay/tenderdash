@@ -817,6 +817,14 @@ func (state State) Update(
 	return newState, nil
 }
 
+// AppReady reports whether the application backends that build a block
+// answer, as a proposer checks before telling validators it could propose. A
+// routed ABCI client may send PrepareProposal to other backends than Echo, so
+// those are the ones probed.
+func (blockExec *BlockExecutor) AppReady(ctx context.Context) error {
+	return abciclient.EchoRoute(ctx, blockExec.appClient, "PrepareProposal", "proposer heartbeat")
+}
+
 // SetAppHashSize ...
 func (blockExec *BlockExecutor) SetAppHashSize(size int) {
 	blockExec.appHashSize = size

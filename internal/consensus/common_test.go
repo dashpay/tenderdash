@@ -861,8 +861,22 @@ func makeConsensusState(
 	configOpts ...func(*config.Config),
 ) []*State {
 	t.Helper()
+	return makeConsensusStateWithParams(ctx, t, nValidators, testName, tickerFunc, factory.ConsensusParams(), configOpts...)
+}
 
-	genDoc, privVals := factory.RandGenesisDoc(nValidators, factory.ConsensusParams())
+// makeConsensusStateWithParams is makeConsensusState for a genesis with params.
+func makeConsensusStateWithParams(
+	ctx context.Context,
+	t *testing.T,
+	nValidators int,
+	testName string,
+	tickerFunc func() TimeoutTicker,
+	params *types.ConsensusParams,
+	configOpts ...func(*config.Config),
+) []*State {
+	t.Helper()
+
+	genDoc, privVals := factory.RandGenesisDoc(nValidators, params)
 	css := make([]*State, nValidators)
 	logger := consensusLogger(t)
 

@@ -1147,7 +1147,8 @@ type ConsensusConfig struct {
 	RootDir string `mapstructure:"home"`
 	WalPath string `mapstructure:"wal-file"`
 	walFile string // overrides WalPath if set
-	// Use "true" to skip the rounds to the last during WAL replay messages
+	// Use "true" to skip the rounds to the last during WAL replay messages.
+	// Ignored on a chain that skips the rounds of silent proposers.
 	WalSkipRoundsToLast bool `mapstructure:"wal-skip-rounds-to-last"`
 
 	// EmptyBlocks mode and possible interval between empty blocks
