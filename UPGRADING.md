@@ -74,7 +74,7 @@ and migration boundaries.
 
 The ABCI version is 1.5.0. The `Application` interface and the gRPC `ABCIApplication` service gain
 `ApplyBlockRandomness`, which hands the application a block's random beacon from consensus version 2.
-This release defines consensus versions 0 and 1 only and never calls it.
+This release never calls it, at any consensus version.
 
 - Go applications that do not embed `abci/types.BaseApplication` must implement the method to
   compile. `BaseApplication.ApplyBlockRandomness` returns `ErrApplyBlockRandomnessNotImplemented`,

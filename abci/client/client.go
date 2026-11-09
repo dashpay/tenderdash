@@ -33,6 +33,25 @@ type Client interface {
 	Echo(context.Context, string) (*types.ResponseEcho, error)
 }
 
+// RouteProber is a Client that may send a request to other application
+// backends than the one Echo goes to, as a routed client does (see
+// NewRoutedClient), or a Client that wraps one.
+type RouteProber interface {
+	// EchoRoute sends Echo to each backend that requests of method go to.
+	EchoRoute(ctx context.Context, method RequestType, msg string) error
+}
+
+// EchoRoute checks that the application backends client sends requests of
+// method to answer, by sending each of them Echo. For a client with a single
+// backend, that is Echo itself.
+func EchoRoute(ctx context.Context, client Client, method RequestType, msg string) error {
+	if prober, ok := client.(RouteProber); ok {
+		return prober.EchoRoute(ctx, method, msg)
+	}
+	_, err := client.Echo(ctx, msg)
+	return err
+}
+
 //----------------------------------------
 
 // NewClient returns a new ABCI client of the specified transport type.

@@ -278,6 +278,30 @@ func PrometheusMetrics(namespace string, labelsAndValues ...string) *Metrics {
 
 			Buckets: stdprometheus.ExponentialBucketsRange(0.01, 1000, 12),
 		}, append(labels, "stage")).With(labelsAndValues...),
+		ProposerHeartbeatsSent: prometheus.NewCounterFrom(stdprometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: MetricsSubsystem,
+			Name:      "proposer_heartbeats_sent",
+			Help:      "Number of proposer heartbeats this node sent.",
+		}, labels).With(labelsAndValues...),
+		ProposerHeartbeatsReceived: prometheus.NewCounterFrom(stdprometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: MetricsSubsystem,
+			Name:      "proposer_heartbeats_received",
+			Help:      "Number of proposer heartbeats this node accepted.",
+		}, labels).With(labelsAndValues...),
+		ProposerSilences: prometheus.NewCounterFrom(stdprometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: MetricsSubsystem,
+			Name:      "proposer_silences",
+			Help:      "Number of rounds in which the proposer went silent while this validator waited for transactions.",
+		}, labels).With(labelsAndValues...),
+		RoundSkips: prometheus.NewCounterFrom(stdprometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: MetricsSubsystem,
+			Name:      "round_skips",
+			Help:      "Number of rounds skipped on a certificate from +2/3 of the validators.",
+		}, labels).With(labelsAndValues...),
 	}
 }
 
@@ -325,5 +349,9 @@ func NopMetrics() *Metrics {
 		PeerLaneActiveCount:          discard.NewGauge(),
 		PeerLaneMaxDepth:             discard.NewGauge(),
 		BlockSyncApplyStageDuration:  discard.NewHistogram(),
+		ProposerHeartbeatsSent:       discard.NewCounter(),
+		ProposerHeartbeatsReceived:   discard.NewCounter(),
+		ProposerSilences:             discard.NewCounter(),
+		RoundSkips:                   discard.NewCounter(),
 	}
 }

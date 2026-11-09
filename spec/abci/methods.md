@@ -571,7 +571,7 @@ contract above and [Commit handling](../consensus/consensus-commit.md).
 #### Usage
 
 * Used from consensus version 2 (`VersionParams.consensus_version`). Before that, Tenderdash never calls it.
-  This release defines consensus versions 0 and 1 only, so it never calls it.
+  This release never calls it, at any consensus version.
 * The beacon is the BLS threshold signature recovered from the Prevotes of round `round` for block `hash`.
   Every set of threshold shares recovers the same bytes, and nobody can compute them before the Prevotes exist.
   Tenderdash verifies the beacon against the quorum's threshold public key before the call.

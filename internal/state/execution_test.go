@@ -1862,3 +1862,39 @@ func TestEvidenceModeChangesOnlyOnCommit(t *testing.T) {
 		})
 	}
 }
+
+// A proposer heartbeat says the node could propose, so readiness probes the
+// application backends that build a block. A routed ABCI client may send
+// PrepareProposal to other backends than the one that answers Echo.
+func TestAppReadyProbesTheProposalBackends(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	logger := log.NewNopLogger()
+	backend := func(stalled bool) abciclient.Client {
+		c := abciclientmocks.NewClient(t)
+		c.On("Echo", mock.Anything, mock.Anything).Return(
+			func(ctx context.Context, msg string) (*abci.ResponseEcho, error) {
+				if stalled {
+					<-ctx.Done()
+					return nil, ctx.Err()
+				}
+				return &abci.ResponseEcho{Message: msg}, nil
+			}).Maybe()
+		return c
+	}
+	ready := func(defaultBackend, proposalBackend abciclient.Client) error {
+		routed, err := abciclient.NewRoutedClient(logger, defaultBackend, abciclient.Routing{
+			"PrepareProposal": {{Client: proposalBackend, ClientID: "proposal"}},
+		})
+		require.NoError(t, err)
+		blockExec := sm.NewBlockExecutor(nil, proxy.New(routed, logger, proxy.NopMetrics()), nil, nil, nil, nil)
+		ctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+		defer cancel()
+		return blockExec.AppReady(ctx)
+	}
+
+	assert.ErrorIs(t, ready(backend(false), backend(true)), context.DeadlineExceeded,
+		"a healthy default backend does not stand in for a stalled proposal backend")
+	assert.NoError(t, ready(backend(true), backend(false)),
+		"a stalled default backend does not hold back a healthy proposal backend")
+}

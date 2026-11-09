@@ -443,3 +443,45 @@ func newTestFilePV(t *testing.T) (*FilePV, string, string) {
 
 	return privVal, tempKeyFile.Name(), tempStateFile.Name()
 }
+
+// FilePV signs proposer heartbeats and skip votes with its quorum key share,
+// and records neither in LastSignState: they change no consensus state and
+// cannot conflict with one another.
+func TestSignProposerLivenessMessages(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	privVal, _, _ := newTestFilePV(t)
+	quorumHash, err := privVal.GetFirstQuorumHash(ctx)
+	require.NoError(t, err)
+	pubKey, err := privVal.GetPubKey(ctx, quorumHash)
+	require.NoError(t, err)
+	proTxHash, err := privVal.GetProTxHash(ctx)
+	require.NoError(t, err)
+	const chainID = "mychainid"
+	quorumType := btcjson.LLMQType_5_60
+	lastSignState := privVal.LastSignState
+
+	pbHeartbeat := &tmproto.ProposerHeartbeat{
+		Height:            10,
+		Round:             1,
+		Sequence:          5,
+		ProposerProTxHash: proTxHash,
+		Timestamp:         tmtime.Now(),
+	}
+	require.NoError(t, privVal.SignProposerHeartbeat(ctx, chainID, quorumType, quorumHash, pbHeartbeat))
+	heartbeat, err := types.ProposerHeartbeatFromProto(pbHeartbeat)
+	require.NoError(t, err)
+	assert.NoError(t, heartbeat.Verify(chainID, quorumType, quorumHash, pubKey))
+
+	pbVote := &tmproto.RoundSkipVote{Height: 10, Round: 1, ValidatorProTxHash: proTxHash}
+	require.NoError(t, privVal.SignRoundSkipVote(ctx, chainID, quorumType, quorumHash, pbVote))
+	vote, err := types.RoundSkipVoteFromProto(pbVote)
+	require.NoError(t, err)
+	assert.NoError(t, vote.Verify(chainID, quorumType, quorumHash, pubKey))
+
+	assert.Equal(t, lastSignState, privVal.LastSignState, "nothing is recorded for either")
+
+	err = privVal.SignRoundSkipVote(ctx, chainID, quorumType, crypto.RandQuorumHash(), pbVote)
+	assert.Error(t, err, "no key share for another quorum")
+}
