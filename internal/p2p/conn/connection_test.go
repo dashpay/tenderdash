@@ -3,8 +3,10 @@ package conn
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"io"
 	"net"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -689,5 +691,38 @@ func closeAll(t *testing.T, closers ...closer) func() {
 				t.Log(err)
 			}
 		}
+	}
+}
+
+// A malformed frame must be recorded before shutdown is observable, even when
+// another failure already won the first-error race and suppresses onError.
+func TestMConnectionPeerInputErrorSurvivesLostErrorRace(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		feed      func(net.Conn) error
+		malformed bool
+	}{
+		{"malformed frame", func(c net.Conn) error { _, err := c.Write([]byte{0x02, 0x0a, 0x05}); return err }, true},
+		{"connection dropped", func(c net.Conn) error { return c.Close() }, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			server, client := net.Pipe()
+			var callbacks atomic.Int32
+			mconn := createMConnectionWithCallbacks(log.NewNopLogger(), server,
+				func(context.Context, ChannelID, []byte) {},
+				func(context.Context, interface{}) { callbacks.Add(1) })
+			require.NoError(t, mconn.Start(ctx))
+			t.Cleanup(func() { _ = client.Close() })
+
+			atomic.StoreUint32(&mconn.errored, 1) // a send-side failure won the race
+			require.NoError(t, tc.feed(client))
+
+			err := mconn.PeerInputError() // waits for the receive routine to exit
+			require.Equal(t, tc.malformed, errors.Is(err, protoio.ErrMalformedMsg), "err: %v", err)
+			require.Zero(t, callbacks.Load(), "onError must have been suppressed, as in the race")
+		})
 	}
 }

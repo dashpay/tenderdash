@@ -4,11 +4,11 @@ order: 7
 
 ## Logging
 
-Logging adds detail and allows the node operator to better identify what they are looking for. Tendermint supports log levels on a global and per-module basis. This allows the node operator to see only the information they need and the developer to hone in on specific changes they are working on.
+Logging adds detail and allows the node operator to better identify what they are looking for. Tenderdash supports log levels on a global and per-module basis. This allows the node operator to see only the information they need and the developer to hone in on specific changes they are working on.
 
 ## Configuring Log Levels
 
-There are three log levels, `info`, `debug` and `error`. These can be configured either through the command line via  `tendermint start --log-level ""` or within the `config.toml` file.
+There are three log levels, `info`, `debug` and `error`. These can be configured either through the command line via  `tenderdash start --log-level ""` or within the `config.toml` file.
 
 - `info` Info represents an informational message. It is used to show that modules have started, stopped and how they are functioning.
 - `debug` Debug is used to trace various calls or problems. Debug is used widely throughout a codebase and can lead to overly verbose logging.
@@ -24,35 +24,35 @@ log-level = "info"
 Via the command line:
 
 ```sh
-tendermint start --log-level "info"
+tenderdash start --log-level "info"
 ```
 
 ## List of modules
 
-Here is the list of modules you may encounter in Tendermint's log and a
+Here is the list of modules you may encounter in Tenderdash's log and a
 little overview what they do.
 
-- `abci-client` As mentioned in [Application Architecture Guide](../app-dev/app-architecture.md), Tendermint acts as an ABCI
+- `abci-client` As mentioned in [Application Architecture Guide](../app-dev/app-architecture.md), Tenderdash acts as an ABCI
   client with respect to the application and maintains 3 connections:
-  mempool, consensus and query. The code used by Tendermint Core can
-  be found [here](https://github.com/tendermint/tendermint/blob/v0.35.x/abci/client).
+  mempool, consensus and query. The code used by Tenderdash Core can
+  be found [here](../../abci/client).
 - `blockchain` Provides storage, pool (a group of peers), and reactor
   for both storing and exchanging blocks between peers.
-- `consensus` The heart of Tendermint core, which is the
+- `consensus` The heart of Tenderdash core, which is the
   implementation of the consensus algorithm. Includes two
   "submodules": `wal` (write-ahead logging) for ensuring data
   integrity and `replay` to replay blocks and messages on recovery
   from a crash.
-  [here](https://github.com/tendermint/tendermint/blob/v0.35.x/types/events.go).
+  [here](../../types/events.go).
   You can subscribe to them by calling `subscribe` RPC method. Refer
-  to [RPC docs](../tendermint-core/rpc.md) for additional information.
+  to [RPC docs](../tenderdash-core/rpc.md) for additional information.
 - `mempool` Mempool module handles all incoming transactions, whenever
   they are coming from peers or the application.
 - `p2p` Provides an abstraction around peer-to-peer communication. For
   more details, please check out the
-  [README](https://github.com/tendermint/tendermint/tree/master/spec/p2p).
+  [README](../../spec/p2p).
 - `rpc-server` RPC server. For implementation details, please read the
-  [doc.go](https://github.com/tendermint/tendermint/blob/v0.35.x/rpc/jsonrpc/doc.go).
+  [doc.go](../../rpc/jsonrpc/doc.go).
 - `state` Represents the latest state and execution submodule, which
   executes blocks against the application.
 - `statesync` Provides a way to quickly sync a node with pruned history.
@@ -69,12 +69,12 @@ I[10-04|13:54:27.366] Starting localClient                         module=abci-c
 I[10-04|13:54:27.367] Starting localClient                         module=abci-client connection=consensus impl=localClient
 ```
 
-Then Tendermint Core and the application perform a handshake.
+Then Tenderdash Core and the application perform a handshake.
 
 ```sh
 I[10-04|13:54:27.367] ABCI Handshake                               module=consensus appHeight=90 appHash=E0FBAFBF6FCED8B9786DDFEB1A0D4FA2501BADAD
 I[10-04|13:54:27.368] ABCI Replay Blocks                           module=consensus appHeight=90 storeHeight=90 stateHeight=90
-I[10-04|13:54:27.368] Completed ABCI Handshake - Tendermint and App are synced module=consensus appHeight=90 appHash=E0FBAFBF6FCED8B9786DDFEB1A0D4FA2501BADAD
+I[10-04|13:54:27.368] Completed ABCI Handshake - Tenderdash and App are synced module=consensus appHeight=90 appHash=E0FBAFBF6FCED8B9786DDFEB1A0D4FA2501BADAD
 ```
 
 After that, we start a few more things like the event switch, reactors,
@@ -94,11 +94,11 @@ I[10-04|13:54:30.387] Starting BlockchainReactor                   module=blockc
 I[10-04|13:54:30.387] Starting ConsensusReactor                    module=consensus impl=ConsensusReactor
 I[10-04|13:54:30.387] ConsensusReactor                             module=consensus fastSync=false
 I[10-04|13:54:30.387] Starting ConsensusState                      module=consensus impl=ConsensusState
-I[10-04|13:54:30.387] Starting WAL                                 module=consensus wal=/home/vagrant/.tendermint/data/cs.wal/wal impl=WAL
+I[10-04|13:54:30.387] Starting WAL                                 module=consensus wal=/home/vagrant/.tenderdash/data/cs.wal/wal impl=WAL
 I[10-04|13:54:30.388] Starting TimeoutTicker                       module=consensus impl=TimeoutTicker
 ```
 
-Notice the second row where Tendermint Core reports that "This node is a
+Notice the second row where Tenderdash Core reports that "This node is a
 validator". It also could be just an observer (regular node).
 
 Next we replay all the messages from the WAL.
@@ -120,7 +120,7 @@ Next follows a standard block creation cycle, where we enter a new
 round, propose a block, receive more than 2/3 of prevotes, then
 precommits and finally have a chance to commit a block. For details,
 please refer to [Byzantine Consensus
-Algorithm](https://github.com/tendermint/tendermint/blob/master/spec/consensus/consensus.md).
+Algorithm](../../spec/consensus/consensus.md).
 
 ```sh
 I[10-04|13:54:30.393] enterNewRound(91/0). Current: 91/0/RoundStepNewHeight module=consensus

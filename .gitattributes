@@ -1,0 +1,2 @@
+# Keep the vendored Mermaid distribution byte-for-byte identical to Platform.
+book/mermaid.min.js -whitespace linguist-vendored=true

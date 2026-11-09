@@ -7,7 +7,7 @@ on:
     inputs:
       tag:
         type: string
-        description: "Docker tag"
+        description: "Existing release tag to build (empty uses the selected branch/tag)"
         required: false
 
       platforms:
@@ -22,71 +22,69 @@ on:
     types:
       - published
 
+# Docker Hub auth uses repository secrets; GITHUB_TOKEN only needs to read the repo.
+permissions:
+  contents: read
+
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-26.04
+    outputs:
+      source_sha: ${{ steps.source.outputs.source_sha }}
+      digest: ${{ steps.docker_build.outputs.digest }}
     env:
       PLATFORMS: ${{ github.event_name == 'release' && 'linux/amd64,linux/arm64' || github.event.inputs.platforms }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Validate Docker publication contract
+        run: python3 -B -m unittest discover -s scripts/tests -p test_docker_metadata.py
+
+      - name: Resolve exact build source and version
+        id: source
+        env:
+          LATEST_RELEASE_TAG: pending
+        run: python3 scripts/docker-metadata.py
+
+      - name: Checkout resolved source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ steps.source.outputs.source_sha }}
+          fetch-depth: 0
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@master
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1  # v4.4.0
         with:
           platforms: all
 
       - name: Set up Docker Build
-        uses: docker/setup-buildx-action@v4.4.1
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
       - name: Login to DockerHub
         if: ${{ github.event_name != 'pull_request' }}
-        uses: docker/login-action@v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6  # v4.7.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Set suffix to Docker tags
-        uses: actions/github-script@v8
-        id: suffix
-        if: ${{ github.event.release != null }}
-        with:
-          result-encoding: string
-          script: "return (context.payload.release.tag_name.includes('-dev') ? '-dev' : '');"
-
-      - name: Determine TENDERMINT_BUILD_OPTIONS
-        uses: actions/github-script@v8
-        id: TENDERMINT_BUILD_OPTIONS
-        with:
-          result-encoding: string
-          script: |
-            if ('${{ github.ref_type }}' == 'tag' && ! '${{ github.ref_name }}'.includes('-dev')) {
-              return 'tenderdash,stable'
-            }
-            return 'tenderdash,dev'
-
       - name: Set Docker tags and labels
         id: docker_meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
         with:
           images: dashpay/tenderdash
-          tags: |
-            type=semver,pattern={{version}},value=${{ github.event.inputs.tag }}
-            type=raw,priority=650,value=${{ github.event.inputs.tag }},enable=${{ github.event.inputs.tag != '' }}
-            type=ref,event=branch
-            type=ref,event=pr
-            type=match,pattern=v(\d+),group=1
-            type=match,pattern=v(\d+.\d+),group=1
-            type=match,pattern=v(\d+.\d+.\d+),group=1
-            type=match,pattern=v(.*),group=1,suffix=,enable=${{ contains(github.event.release.tag_name, '-dev') }}
-          flavor: |
-            latest=${{ github.event.release != null && !contains(github.event.release.tag_name, '-dev') }}
-            suffix=${{ steps.suffix.outputs.result }}
+          tags: ${{ steps.source.outputs.tags }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.source.outputs.version }}
+            org.opencontainers.image.revision=${{ steps.source.outputs.source_sha }}
+          flavor: latest=false
 
       # We build some dependencies and libraries separately. Layers are cached
       # on Docker Hub, as Github caches are not available for other branches.
       - name: Build and cache image with dependencies
         id: docker_bls
-        uses: docker/build-push-action@v7.4.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
         with:
           context: .
           file: ./DOCKER/Dockerfile
@@ -98,11 +96,12 @@ jobs:
           cache-to: |
             type=registry,ref=dashpay/tenderdash:buildcache-deps,mode=max
           build-args: |
-            TENDERMINT_BUILD_OPTIONS="${{ steps.TENDERMINT_BUILD_OPTIONS.outputs.result }}"
+            TENDERMINT_BUILD_OPTIONS=${{ steps.source.outputs.build_options }}
+            VERSION=${{ steps.source.outputs.version }}
 
       - name: Publish to Docker Hub
         id: docker_build
-        uses: docker/build-push-action@v7.4.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
         with:
           context: .
           file: ./DOCKER/Dockerfile
@@ -115,6 +114,61 @@ jobs:
             type=registry,ref=dashpay/tenderdash:buildcache-deps
           cache-to: type=gha,mode=max
           build-args: |
-            TENDERMINT_BUILD_OPTIONS="${{ steps.TENDERMINT_BUILD_OPTIONS.outputs.result }}"
+            TENDERMINT_BUILD_OPTIONS=${{ steps.source.outputs.build_options }}
+            VERSION=${{ steps.source.outputs.version }}
       - name: Show Docker image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
+
+  # Serialize alias checks/writes without replacing pending release promotions.
+  promote-aliases:
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-26.04
+    concurrency:
+      group: docker-stable-aliases
+      cancel-in-progress: false
+      queue: max
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ needs.build.outputs.source_sha }}
+          fetch-depth: 0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6  # v4.7.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Read current latest release after building
+        if: github.event_name == 'release'
+        id: latest
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd  # v8.0.0
+        with:
+          result-encoding: string
+          script: |
+            try {
+              const {data} = await github.rest.repos.getLatestRelease(context.repo);
+              return data.tag_name;
+            } catch (error) {
+              if (error.status === 404) return '';
+              throw error;
+            }
+
+      - name: Resolve stable aliases
+        if: github.event_name == 'release'
+        id: aliases
+        env:
+          LATEST_RELEASE_TAG: ${{ steps.latest.outputs.result }}
+        run: python3 scripts/docker-metadata.py
+
+      - name: Promote current stable aliases
+        if: github.event_name == 'release' && steps.aliases.outputs.aliases != ''
+        env:
+          ALIASES: ${{ steps.aliases.outputs.aliases }}
+          SOURCE_IMAGE: dashpay/tenderdash@${{ needs.build.outputs.digest }}
+        run: |
+          set --
+          while IFS= read -r alias; do
+            set -- "$@" --tag "dashpay/tenderdash:$alias"
+          done <<< "$ALIASES"
+          docker buildx imagetools create "$@" "$SOURCE_IMAGE"

@@ -4,17 +4,17 @@ order: 3
 
 # Configuration
 
-Tendermint Core can be configured via a TOML file in
+Tenderdash Core can be configured via a TOML file in
 `$TMHOME/config/config.toml`. Some of these parameters can be overridden by
 command-line flags. For most users, the options in the `##### main base configuration options #####` are intended to be modified while config options
 further below are intended for advance power users.
 
 ## Options
 
-The default configuration file create by `tendermint init` has all
+The default configuration file create by `tenderdash init` has all
 the parameters set with their default values. It will look something
 like the file below, however, double check by inspecting the
-`config.toml` created with your version of `tendermint` installed:
+`config.toml` created with your version of `tenderdash` installed:
 
 ```toml
 # This is a TOML config file.
@@ -22,7 +22,7 @@ like the file below, however, double check by inspecting the
 
 # NOTE: Any path below can be absolute (e.g. "/var/myawesomeapp/data") or
 # relative to the home directory (e.g. "data"). The home directory is
-# "$HOME/.tendermint" by default, but could be changed via $TMHOME env variable
+# "$HOME/.tenderdash" by default, but could be changed via $TMHOME env variable
 # or --home cmd flag.
 
 #######################################################################
@@ -30,7 +30,7 @@ like the file below, however, double check by inspecting the
 #######################################################################
 
 # TCP or UNIX socket address of the ABCI application,
-# or the name of an ABCI application compiled in with the Tendermint binary
+# or the name of an ABCI application compiled in with the Tenderdash binary
 proxy-app = "tcp://127.0.0.1:26658"
 
 # A custom human readable name for this node
@@ -102,7 +102,7 @@ key-file = "config/priv_validator_key.json"
 # Path to the JSON file containing the last sign state of a validator
 state-file = "data/priv_validator_state.json"
 
-# TCP or UNIX socket address for Tendermint to listen on for
+# TCP or UNIX socket address for Tenderdash to listen on for
 # connections from an external PrivValidator process
 # when the listenAddr is prefixed with grpc instead of tcp it will use the gRPC Client
 laddr = ""
@@ -171,7 +171,7 @@ max-subscriptions-per-client = 5
 # the effect of disabling the /subscribe, /unsubscribe, and /unsubscribe_all
 # methods for event subscription.
 #
-# EXPERIMENTAL: This setting will be removed in Tendermint v0.37.
+# Event log settings; check support in your Tenderdash release.
 experimental-disable-websocket = false
 
 # The time window size for the event log. All events up to this long before
@@ -207,17 +207,17 @@ max-body-bytes = 1000000
 max-header-bytes = 1048576
 
 # The path to a file containing certificate that is used to create the HTTPS server.
-# Might be either absolute path or path related to Tendermint's config directory.
+# Might be either absolute path or path related to Tenderdash's config directory.
 # If the certificate is signed by a certificate authority,
 # the certFile should be the concatenation of the server's certificate, any intermediates,
 # and the CA's certificate.
-# NOTE: both tls-cert-file and tls-key-file must be present for Tendermint to create HTTPS server.
+# NOTE: both tls-cert-file and tls-key-file must be present for Tenderdash to create HTTPS server.
 # Otherwise, HTTP server is run.
 tls-cert-file = ""
 
 # The path to a file containing matching private key that is used to create the HTTPS server.
-# Might be either absolute path or path related to Tendermint's config directory.
-# NOTE: both tls-cert-file and tls-key-file must be present for Tendermint to create HTTPS server.
+# Might be either absolute path or path related to Tenderdash's config directory.
+# NOTE: both tls-cert-file and tls-key-file must be present for Tenderdash to create HTTPS server.
 # Otherwise, HTTP server is run.
 tls-key-file = ""
 
@@ -284,7 +284,7 @@ dial-timeout = "3s"
 # TODO: Remove once MConnConnection is removed.
 flush-throttle-timeout = "100ms"
 
-# Maximum size of a message packet payload, in bytes
+# Maximum size of a message packet payload, in bytes; must be greater than 0
 # TODO: Remove once MConnConnection is removed.
 max-packet-msg-payload-size = 1400
 
@@ -398,10 +398,9 @@ fetchers = "4"
 
 wal-file = "data/cs.wal/wal"
 
-# How many blocks to look back to check existence of the node's consensus votes before joining consensus
-# When non-zero, the node will panic upon restart
-# if the same consensus key was used to sign {double-sign-check-height} last blocks.
-# So, validators should stop the state machine, wait for some blocks, and then restart the state machine to avoid panic.
+# Legacy compatibility setting; currently unused by consensus.
+# This does not provide double-sign protection. Preserve the signer's state
+# and never run two active signers with the same consensus identity.
 double-sign-check-height = 0
 
 # EmptyBlocks mode and possible interval between empty blocks
@@ -433,7 +432,7 @@ peer-query-maj23-sleep-duration = "2s"
 
 # This field provides an unsafe override of the Vote timeout consensus parameter.
 # This field configures how long the consensus engine will wait after
-# receiving +2/3 votes in a around.
+# receiving the configured voting threshold in a round.
 # If this field is set to a value greater than 0, it will take effect.
 # unsafe-vote-timeout-override = 0s
 
@@ -483,57 +482,39 @@ max-open-connections = 3
 namespace = "tendermint"
 ```
 
-## Empty blocks VS no empty blocks
+## Empty blocks
 
-### create-empty-blocks = true
+`create-empty-blocks = false` makes round 0 wait for transactions above the
+initial height. A positive `create-empty-blocks-interval` starts a proposal after
+that interval even without transactions. Later rounds do not wait for
+transactions.
 
-If `create-empty-blocks` is set to `true` in your config, empty blocks are
-created as soon as the previous one is committed. You can space them out by
-setting `create-empty-blocks-interval`: with `"10s"`, an empty block follows
-roughly ten seconds after the last one. The interval only paces empty blocks —
-when transactions arrive, a block is proposed without waiting for it.
+The application can bypass that wait for the next height by setting
+`ResponseFinalizeBlock.propose_next_block_immediately`. The hint is local,
+consumed once and not persisted across restarts. There is no commit timeout
+before the next height starts.
 
-Regardless of `create-empty-blocks-interval`, the application can ask for the
-next block without the wait by setting `propose_next_block_immediately` in its
-`ResponseFinalizeBlock`. Round 0 of the following height then enters the
-propose step as soon as `timeout-commit` has passed, exactly as if a
-transaction were waiting in the mempool. The hint is local to the node and
-consumed once; it is not persisted across restarts.
+Tenderdash uses same-block execution: block H's `AppHash` describes the state
+after executing H. An application hash change does not require an additional
+"proof block" at H+1.
 
-### create-empty-blocks = false
-
-In this setting, blocks are created when transactions received.
-
-Note after the block H, Tendermint creates something we call a "proof block"
-(only if the application hash changed) H+1. The reason for this is to support
-proofs. If you have a transaction in block H that changes the state to X, the
-new application hash will only be included in block H+1. If after your
-transaction is committed, you want to get a light-client proof for the new state
-(X), you need the new block to be committed in order to do that because the new
-block has the new application hash for the state X. That's why we make a new
-(empty) block if the application hash changes. Otherwise, you won't be able to
-make a proof for the new state.
-
-Plus, if you set `create-empty-blocks-interval` to something other than the
-default (`0`), Tendermint will be creating empty blocks even in the absence of
-transactions every `create-empty-blocks-interval`. For instance, with
-`create-empty-blocks = false` and `create-empty-blocks-interval = "30s"`,
-Tendermint will only create blocks if there are transactions, or after waiting
-30 seconds without receiving any transactions.
-
+See the canonical [empty-block rules](../../spec/consensus/consensus-alternative-flows.md#mempool-and-empty-blocks),
+[execution order](../../spec/consensus/consensus-happy-path.md#9-commit-and-apply)
+and [timeout parameters](../../spec/consensus/consensus.md#timeouts-and-consensus-parameters).
 
 ## P2P settings
 
 This section will cover settings within the p2p section of the `config.toml`.
 
 - `external-address` = is the address that will be advertised for other nodes to use. We recommend setting this field with your public IP and p2p port.
-    - > We recommend setting an external address. When used in a private network, Tendermint Core currently doesn't advertise the node's public address. There is active and ongoing work to improve the P2P system, but this is a helpful workaround for now.
+    - > We recommend setting an external address. When used in a private network, Tenderdash Core currently doesn't advertise the node's public address. There is active and ongoing work to improve the P2P system, but this is a helpful workaround for now.
 - `persistent-peers` = is a list of comma separated peers that you will always want to be connected to. If you're already connected to the maximum number of peers, persistent peers will not be added.
 - `pex` = turns the peer exchange reactor on or off. Validator node will want the `pex` turned off so it would not begin gossiping to unknown peers on the network. PeX can also be turned off for statically configured networks with fixed network connectivity. For full nodes on open, dynamic networks, it should be turned on.
 - `allowlist-only` = if true, only peers from `persistent-peers` and `bootstrap-peers` are allowed to connect (inbound and outbound).
 - `private-peer-ids` = is a comma-separated list of node ids that will _not_ be exposed to other peers (i.e., you will not tell other peers about the ids in this list). This can be filled with a validator's node id.
 
-Recently the Tendermint Team conducted a refactor of the p2p layer. This lead to multiple config parameters being deprecated and/or replaced.
+The P2P configuration includes parameters for the router and legacy networking
+implementations. Check the configuration generated by your installed version.
 
 We will cover the new and deprecated parameters below.
 
@@ -547,7 +528,8 @@ There are three new parameters, which are enabled if use-legacy is set to false.
 
 ### Deprecated Parameters
 
-> Note: For Tendermint 0.35, there are two p2p implementations. The old version is used by default with the deprecated fields. The new implementation uses different config parameters, explained above.
+> These legacy settings differ from the router settings above. Use the settings
+> supported by the networking implementation in your Tenderdash release.
 
 - `max-num-inbound-peers` = is the maximum number of peers you will accept inbound connections from at one time (where they dial your address and initiate the connection). _This was replaced by `max-connections`_
 - `max-num-outbound-peers` = is the maximum number of peers you will initiate outbound connects to at one time (where you dial their address and initiate the connection)._This was replaced by `max-connections`_
@@ -565,8 +547,8 @@ be turned off. All configured indexer names must still be supported.
 #### KV
 
 The `kv` indexer type is an embedded key-value store supported by the main
-underlying Tendermint database. Using the `kv` indexer type allows you to query
-for block and transaction events directly against Tendermint's RPC. However, the
+underlying Tenderdash database. Using the `kv` indexer type allows you to query
+for block and transaction events directly against Tenderdash's RPC. However, the
 query syntax is limited to the supported event-query operators.
 
 #### Removed PostgreSQL indexer
@@ -590,11 +572,11 @@ operator override the timings for a single node. Because they make one node
 disagree with the rest of the network about timing, they are unsafe and are
 not intended for normal operation.
 
-- `unsafe-propose-timeout-override`: How long the Tendermint consensus engine
+- `unsafe-propose-timeout-override`: How long the Tenderdash consensus engine
   will wait for a proposal block before prevoting nil.
 - `unsafe-propose-timeout-delta-override`: How much the propose timeout
   increases with each round.
 - `unsafe-vote-timeout-override`: How long the consensus engine will wait after
-  receiving +2/3 votes in a round.
+  receiving the configured voting threshold in a round.
 - `unsafe-vote-timeout-delta-override`: How much the vote timeout increases with
   each round.

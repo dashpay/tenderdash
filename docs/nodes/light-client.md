@@ -4,36 +4,33 @@ order: 6
 
 # Configure a Light Client
 
-Tendermint comes with a built-in `tendermint light` command, which can be used
-to run a light client proxy server, verifying Tendermint RPC. All calls that
-can be tracked back to a block header by a proof will be verified before
-passing them back to the caller. Other than that, it will present the same
-interface as a full Tendermint node.
+> **Unsupported.** The Tenderdash light client is currently unsupported.
+> The implementation details below are provided for reference.
 
-You can start the light client proxy server by running `tendermint light <chainID>`,
-with a variety of flags to specify the primary node,  the witness nodes (which cross-check
-the information provided by the primary), the hash and height of the trusted header,
-and more.
+Tenderdash includes a `tenderdash light` command that runs an RPC proxy backed by
+a verifying light client. Requests with supported proofs can be checked before
+results are returned. Other RPC methods do not automatically gain proof verification.
 
-For example:
+The proxy requires a chain ID, a primary Tenderdash RPC provider and witness
+providers. The current implementation uses Dash Core verification for quorum
+signatures, so it also requires access to the appropriate Dash Core RPC service.
+It does not use upstream trust-height and trust-hash flags.
 
-```bash
-$ tendermint light supernova -p tcp://233.123.0.140:26657 \
-  -w tcp://179.63.29.15:26657,tcp://144.165.223.135:26657 \
-  --height=10 --hash=37E9A6DD3FA25E83B22C18835401E8E56088D0D7ABC6FD99FCDC920DD76C1C57
+Inspect the options for your installed release:
+
+```sh
+tenderdash light --help
 ```
 
-For additional options, run `tendermint light --help`.
+Set `--primary`, `--witnesses` and the Dash Core connection settings for your
+network. Use `--dir` to select an explicit directory for the light client's
+local database and `--laddr` to control the proxy listen address.
 
-## Where to obtain trusted height & hash
+Keep Core credentials private and restrict RPC network access. Ensure that the
+application's query proof format is compatible with the proxy before relying
+on `/abci_query` verification.
 
-One way to obtain a semi-trusted hash & height is to query multiple full nodes
-and compare their hashes:
-
-```bash
-$ curl -s https://233.123.0.140:26657:26657/commit | jq "{height: .result.signed_header.header.height, hash: .result.signed_header.commit.block_id.hash}"
-{
-  "height": "273",
-  "hash": "188F4F36CBCD2C91B57509BBF231C777E79B52EE3E0D90D06B1A25EB16E6E23D"
-}
-```
+See the [light client overview](../tenderdash-core/light-client.md),
+[command implementation](../../cmd/tenderdash/commands/light.go)
+and [client implementation](../../light/client.go)
+for the supported configuration and verification behavior.

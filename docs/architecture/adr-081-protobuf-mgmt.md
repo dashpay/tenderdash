@@ -1,5 +1,8 @@
 # ADR 081: Protocol Buffers Management
 
+> Inherited design record. This proposal provides design context, not a guarantee
+> of current behavior. See the [current protocol specification](../../spec/README.md).
+
 ## Changelog
 
 - 2022-02-28: First draft
@@ -13,7 +16,7 @@ Accepted
 ## Context
 
 At present, we manage the [Protocol Buffers] schema files ("protos") that define
-our wire-level data formats within the Tendermint repository itself (see the
+our wire-level data formats within the Tenderdash repository itself (see the
 [`proto`](../../proto/) directory). Recently, we have been making use of [Buf],
 both locally and in CI, in order to generate Go stubs, and lint and check
 `.proto` files for breaking changes.
@@ -27,17 +30,17 @@ and easily accessible from the [Buf] registry.
 The three main sets of stakeholders for the `.proto` files and their needs, as
 currently understood, are as follows.
 
-1. Tendermint needs Go code generated from `.proto` files.
-2. Consumers of Tendermint's `.proto` files, specifically projects that want to
-   interoperate with Tendermint and need to generate code for their own
+1. Tenderdash needs Go code generated from `.proto` files.
+2. Consumers of Tenderdash's `.proto` files, specifically projects that want to
+   interoperate with Tenderdash and need to generate code for their own
    programming language, want to be able to access these files in a reliable and
    efficient way.
-3. The Tendermint Core team wants to provide stable interfaces that are as easy
+3. The Tenderdash Core team wants to provide stable interfaces that are as easy
    as possible to maintain, on which consumers can depend, and to be able to
    notify those consumers promptly when those interfaces change. To this end, we
    want to:
    1. Prevent any breaking changes from being introduced in minor/patch releases
-      of Tendermint. Only major version updates should be able to contain
+      of Tenderdash. Only major version updates should be able to contain
       breaking interface changes.
    2. Prevent generated code from diverging from the Protobuf schema files.
 
@@ -69,9 +72,9 @@ themselves.
    1. [clang-format] locally and a [clang-format GitHub Action] in CI to check
       that files are formatted properly on every pull request.
 5. Sharing of `.proto` files in a versioned, reliable manner:
-   1. Consumers could simply clone the Tendermint repository, check out a
+   1. Consumers could simply clone the Tenderdash repository, check out a
       specific commit, tag or branch and manually copy out all of the `.proto`
-      files they need. This requires no effort from the Tendermint Core team and
+      files they need. This requires no effort from the Tenderdash Core team and
       will continue to be an option for consumers. The drawback of this approach
       is that it requires manual coding/scripting to implement and is brittle in
       the face of bigger changes.
@@ -126,7 +129,7 @@ Docker image with embedded gogoprotobuf.
 
 Along these lines, we could eventually consider coming up with a [Nix]- or
 [redo]-based approach to developer tooling to ensure tooling consistency across
-the team and for anyone who wants to be able to contribute to Tendermint.
+the team and for anyone who wants to be able to contribute to Tenderdash.
 
 ## Decision
 
@@ -152,7 +155,7 @@ We currently aim to:
       CI accordingly - see [\#8003].
    4. Add [clang-format GitHub Action] to check `.proto` file formatting. Format
       checking should be considered a requirement for accepting PRs.
-3. Update the Tendermint [`Makefile`](../../Makefile) to primarily facilitate
+3. Update the Tenderdash [`Makefile`](../../Makefile) to primarily facilitate
    local Protobuf stub generation, linting, formatting and breaking change
    checking. More specifically:
    1. This includes removing the dependency on Docker and introducing the

@@ -2,6 +2,7 @@ package blocksync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -17,6 +18,7 @@ import (
 type (
 	errBlockFetch struct {
 		peerID types.NodeID
+		connID uint64
 		height int64
 		err    error
 	}
@@ -36,35 +38,54 @@ func blockFetchJobHandler(blockClient client.BlockClient, peer PeerData, height 
 		ctx = client.WithBlockRequestObserver(ctx, observation)
 		promise, err := blockClient.GetBlock(ctx, height, peer.peerID)
 		if err != nil {
-			return errorResult(peer.peerID, height, err)
+			return errorResult(peer, height, err)
 		}
 		protoResp, err := promise.Await()
+		responder := peer
+		responder.connID = attributedConn(peer.connID, observation, err)
 		if err != nil {
-			return errorResult(peer.peerID, height, err)
+			return errorResult(responder, height, err)
 		}
 		resp, err := BlockResponseFromProto(protoResp, peer.peerID)
 		if err != nil {
-			return errorResult(peer.peerID, height, err)
+			return errorResult(responder, height, err)
 		}
 		err = resp.Validate()
 		if err != nil {
-			return errorResult(peer.peerID, height, err)
+			return errorResult(responder, height, err)
 		}
 		if resp.Block.Height != height {
-			return errorResult(peer.peerID, height,
+			return errorResult(responder, height,
 				fmt.Errorf("peer sent block at height %d, requested height %d", resp.Block.Height, height))
 		}
+		resp.ConnID = responder.connID
 		size = protoResp.Size()
 		return workerpool.Result{Value: resp}
 	}
 }
 
-func errorResult(peerID types.NodeID, height int64, err error) workerpool.Result {
+// attributedConn returns the generation a request's outcome is attributed to: the
+// connection that delivered the response, or the reservation's when there is none.
+// A timeout can race a late delivery, so only an answer may read the delivered one;
+// that keeps a report's generation independent of how the race fell.
+func attributedConn(reserved uint64, request *serviceRequest, awaitErr error) uint64 {
+	var missing *client.ErrBlockNotFound
+	if awaitErr != nil && !errors.As(awaitErr, &missing) {
+		return reserved
+	}
+	if delivered := request.deliveredConnID(); delivered != 0 {
+		return delivered
+	}
+	return reserved
+}
+
+func errorResult(peer PeerData, height int64, err error) workerpool.Result {
 	return workerpool.Result{
 		Err: &errBlockFetch{
 			err:    err,
 			height: height,
-			peerID: peerID,
+			peerID: peer.peerID,
+			connID: peer.connID,
 		},
 	}
 }

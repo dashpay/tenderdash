@@ -1,6 +1,6 @@
 # Genesis
 
-The genesis file is the starting point of a chain. An application will populate the `app_state` field in the genesis with their required fields. Tendermint is not able to validate this section because it is unaware what application state consists of.
+The genesis file is the starting point of a chain. An application will populate the `app_state` field in the genesis with their required fields. Tenderdash is not able to validate this section because it is unaware what application state consists of.
 
 ## Genesis Fields
 
@@ -16,18 +16,18 @@ The genesis file is the starting point of a chain. An application will populate 
         - `max_age_duration`: After this preset amount of time has passed a single piece of evidence is considered invalid.
         - `max_bytes`: The max amount of bytes of all evidence included in a block.
     - `validator`
-        - `pub_key_types`: Defines which curves are to be accepted as a valid validator consensus key. Tendermint supports ed25519, sr25519 and secp256k1.
+        - `pub_key_types`: Lists the validator consensus key types allowed by the chain. Recognized values are `ed25519`, `secp256k1`, and `bls12381`; the default allows only `bls12381` (BLS12-381).
     - `version`
         - `app_version`: The version of the application. This is set by the application and is used to identify which version of the app a user should be using in order to operate a node.
     - `synchrony`
         - `message_delay`: A bound on how long a proposal message may take to reach all validators on a network and still be considered valid.
         - `precision`: A bound on how skewed the proposer's clock may be from any validator on the network while still producing valid proposals.
     - `timeout`
-        - `propose`: How long the Tendermint consensus engine will wait for a proposal block before prevoting nil.
+        - `propose`: How long the Tenderdash consensus engine will wait for a proposal block before prevoting nil.
         - `propose_delta`: How much the propose timeout increase with each round.
         - `vote`: How long the consensus engine will wait after receiving +2/3 votes in a round.
         - `vote_delta`: How much the vote timeout increases with each round.
 - `validators`
     - This is an array of validators. This validator set is used as the starting validator set of the chain. This field can be empty, if the application sets the validator set in `InitChain`.
 - `app_hash`: The applications state root hash. This field does not need to be populated at the start of the chain, the application may provide the needed information via `Initchain`.
-- `app_state`: This section is filled in by the application and is unknown to Tendermint.
+- `app_state`: This section is filled in by the application and is unknown to Tenderdash.

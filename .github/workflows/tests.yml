@@ -5,10 +5,19 @@ on:
   push:
     branches:
       - master
-      - v[0-9].[0-9]+-dev
+      - dev
+
+# Branch creation/rename events can refer to the deleted old branch.
+env:
+  GIT_DIFF: ${{ github.event_name == 'push' && github.event.created && 'all' || '' }}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -17,8 +26,12 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: technote-space/get-diff-action@v6
+        if: github.event_name != 'push' || !github.event.created
         with:
           PATTERNS: |
+            .github/workflows/tests.yml
+            .github/actions/bls/**
+            third_party/bls-signatures/**
             **/**.go
             "!test/"
           FILES: |

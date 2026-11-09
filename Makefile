@@ -156,12 +156,12 @@ proto-check-breaking: check-proto-deps
 .PHONY: proto-check-breaking
 
 proto-doc:
-	@echo Generating Protobuf API specification: spec/abci++/api.md
+	@echo Generating Protobuf API specification: spec/abci/api.md
 	@protoc \
 		-I $(realpath .)/proto \
 		-I "$(GOGOPROTO_PATH)" \
 		--doc_opt=markdown,api.md \
-		--doc_out=spec/abci++ \
+		--doc_out=spec/abci \
 		tendermint/abci/types.proto
 
 ###############################################################################
@@ -279,12 +279,8 @@ format:
 GOLANGCI_LINT_VERSION ?= v2.15.0
 GOLANGCI_LINT := $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
-# Use the newest fetched development branch by default. For another PR target,
-# override with: make lint LINT_BASE=origin/<target-branch>
-# Once the base advances past your branch point, its own commits enter the diff
-# and can raise findings you did not write. Rebase; changing the flag would make
-# this a different gate from the one CI enforces.
-LINT_BASE ?= $(shell git for-each-ref --sort=-version:refname --format='%(refname:short)' 'refs/remotes/origin/v[0-9]*-dev' | head -n 1)
+# Override for stable/stacked PR targets.
+LINT_BASE ?= $(shell git rev-parse --verify --quiet refs/remotes/origin/dev >/dev/null && echo origin/dev)
 
 # What CI enforces: findings on lines this branch changed. The repository carries
 # several hundred pre-existing findings, so an unfiltered run can never exit 0 --
@@ -330,19 +326,21 @@ DESTINATION = ./index.html.md
 ###############################################################################
 ###                           Documentation                                 ###
 ###############################################################################
-# todo remove once tendermint.com DNS is solved
-build-docs:
-	@cd docs && \
-	while read -r branch path_prefix; do \
-		( git checkout $${branch} && npm ci --quiet && \
-			VUEPRESS_BASE="/$${path_prefix}/" npm run build --quiet ) ; \
-		mkdir -p ~/output/$${path_prefix} ; \
-		cp -r .vuepress/dist/* ~/output/$${path_prefix}/ ; \
-		cp ~/output/$${path_prefix}/index.html ~/output ; \
-	done < versions ; \
-	mkdir -p ~/output/master ; \
-	cp -r .vuepress/dist/* ~/output/master/
+MDBOOK ?= mdbook
+DOCS_SOURCE_REF ?= $(shell git rev-parse HEAD)
+
+prepare-docs:
+	python3 scripts/prepare-docs.py --source-ref "$(DOCS_SOURCE_REF)"
+.PHONY: prepare-docs
+
+build-docs: prepare-docs
+	$(MDBOOK) build book
+	python3 scripts/check-docs.py book/book
 .PHONY: build-docs
+
+serve-docs: prepare-docs
+	$(MDBOOK) serve book
+.PHONY: serve-docs
 
 ###############################################################################
 ###                            Docker image                                 ###

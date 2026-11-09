@@ -4,7 +4,7 @@
 # * compile - builds final binaries
 # * image - creates final image of minimal size
 
-ARG ALPINE_VERSION=3.23
+ARG ALPINE_VERSION=3.24
 ARG GOLANG_VERSION=1.27.3
 #################################
 # STAGE 1: install dependencies #
@@ -46,9 +46,10 @@ COPY . .
 
 ARG TENDERMINT_BUILD_OPTIONS=tenderdash
 ARG GOOS=linux
+ARG VERSION
 
 RUN rm -r /src/tenderdash/third_party && ln -s /src/bls/third_party /src/tenderdash/third_party && \
-    make build-binary && \
+    if [ -n "$VERSION" ]; then make build-binary VERSION="$VERSION"; else make build-binary; fi && \
     make build_abcidump && \
     go clean && go clean -cache -fuzzcache -testcache -modcache
 

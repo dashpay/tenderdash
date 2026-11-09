@@ -2,6 +2,14 @@
 
 # Proposer-Based Time (first draft)
 
+> **Historical and outdated.** This Tendermint draft is retained for its original
+> comparison with BFT Time, including aggregate-signature tradeoffs, which the
+> [newer protocol draft](../pbts-algorithm_002_draft.md) and
+> [newer system model](../pbts-sysmodel_002_draft.md) do not reproduce.
+> Its proposed algorithm is superseded by those drafts. For current Tenderdash
+> behavior, use [Proposal timestamps and time rules](../../consensus-alternative-flows.md#proposal-timestamps-and-time-rules)
+> and [proposal validity](../../consensus-transitions.md#proposal-validity-summary).
+
 ## Current BFTTime
 
 ### Description
@@ -262,6 +270,6 @@ This specification describes the changes needed to be done to the Tendermint con
 [proposertla]: ../tla/TendermintPBT_001_draft.tla
 
 [bfttime]: ../../bft-time.md
-[tlatender]: https://github.com/tendermint/spec/blob/master/rust-spec/tendermint-accountability/README.md
+[tlatender]: ../../../light-client/accountability/README.md
 [lcspec]: ../../light-client/
 [arXiv]: https://arxiv.org/abs/1807.04938

@@ -1,11 +1,33 @@
 package p2p
 
 import (
+	"errors"
 	"fmt"
 	"net"
 
 	"github.com/dashpay/tenderdash/types"
 )
+
+// ErrInvalidData marks malformed peer data that requires eviction, even for a
+// reserved peer. Ordinary peers also retain a score penalty. Wrap only errors
+// attributable to the sender, never local failures or unknown message types
+// that could reflect version skew. Unmarked errors follow the normal capacity
+// policy unless explicitly marked fatal.
+var ErrInvalidData = errors.New("peer sent invalid data")
+
+// ErrUnrecognizedMessage marks unknown peer payloads that may reflect version
+// skew. They follow ordinary scoring and eviction policy, but log at Debug.
+var ErrUnrecognizedMessage = errors.New("unrecognized peer message")
+
+// ErrRejectedPeerInput marks a peer message a reactor rejected for a reason any
+// peer can trigger at will. It changes logging only (Debug), never scoring or
+// eviction policy.
+var ErrRejectedPeerInput = errors.New("rejected peer input")
+
+func isPeerInputError(err error) bool {
+	return errors.Is(err, ErrInvalidData) || errors.Is(err, ErrUnrecognizedMessage) ||
+		errors.Is(err, ErrRejectedPeerInput)
+}
 
 // ErrFilterTimeout indicates that a filter operation timed out.
 type ErrFilterTimeout struct{}

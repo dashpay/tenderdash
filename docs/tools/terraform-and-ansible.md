@@ -4,7 +4,7 @@ order: 3
 
 # Terraform & Ansible
 
-> Note: These commands/files are not being maintained by the tendermint team currently. Please use them carefully.
+> Note: These commands/files are not being maintained by the Tenderdash team currently. Please use them carefully.
 
 Automated deployments are done using
 [Terraform](https://www.terraform.io/) to create servers on Digital
@@ -14,7 +14,7 @@ testnets on those servers.
 ## Install
 
 NOTE: see the [integration bash
-script](https://github.com/tendermint/tendermint/blob/master/networks/remote/integration.sh)
+script](../../networks/remote/integration.sh)
 that can be run on a fresh DO droplet and will automatically spin up a 4
 node testnet. The script more or less does everything described below.
 
@@ -41,7 +41,7 @@ This step will create four Digital Ocean droplets. First, go to the
 correct directory:
 
 ```sh
-cd $GOPATH/src/github.com/tendermint/tendermint/networks/remote/terraform
+cd $GOPATH/src/github.com/dashpay/tenderdash/networks/remote/terraform
 ```
 
 then:
@@ -58,14 +58,14 @@ With the droplets created and running, let's setup Ansible.
 ## Ansible
 
 The playbooks in [the ansible
-directory](https://github.com/tendermint/tendermint/tree/master/networks/remote/ansible)
+directory](../../networks/remote/ansible)
 run ansible roles to configure the sentry node architecture. You must
 switch to this directory to run ansible
-(`cd $GOPATH/src/github.com/tendermint/tendermint/networks/remote/ansible`).
+(`cd $GOPATH/src/github.com/dashpay/tenderdash/networks/remote/ansible`).
 
 There are several roles that are self-explanatory:
 
-First, we configure our droplets by specifying the paths for tendermint
+First, we configure our droplets by specifying the paths for tenderdash
 (`BINARY`) and the node files (`CONFIGDIR`). The latter expects any
 number of directories named `node0, node1, ...` and so on (equal to the
 number of droplets created).
@@ -73,16 +73,16 @@ number of droplets created).
 To create the node files run:
 
 ```sh
-tendermint testnet
+tenderdash testnet
 ```
 
 Then, to configure our droplets run:
 
 ```sh
-ansible-playbook -i inventory/digital_ocean.py -l sentrynet config.yml -e BINARY=$GOPATH/src/github.com/tendermint/tendermint/build/tendermint -e CONFIGDIR=$GOPATH/src/github.com/tendermint/tendermint/networks/remote/ansible/mytestnet
+ansible-playbook -i inventory/digital_ocean.py -l sentrynet config.yml -e BINARY=$GOPATH/src/github.com/dashpay/tenderdash/build/tenderdash -e CONFIGDIR=$GOPATH/src/github.com/dashpay/tenderdash/networks/remote/ansible/mytestnet
 ```
 
-Voila! All your droplets now have the `tendermint` binary and required
+Voila! All your droplets now have the `tenderdash` binary and required
 configuration files to run a testnet.
 
 Next, we run the install role:
@@ -92,7 +92,7 @@ ansible-playbook -i inventory/digital_ocean.py -l sentrynet install.yml
 ```
 
 which as you'll see below, executes
-`tendermint node --proxy-app=kvstore` on all droplets. Although we'll
+`tenderdash node --proxy-app=kvstore` on all droplets. Although we'll
 soon be modifying this role and running it again, this first execution
 allows us to get each `node_info.id` that corresponds to each
 `node_info.listen_addr`. (This part will be automated in the future). In
@@ -105,7 +105,7 @@ Next, open `roles/install/templates/systemd.service.j2` and look for the
 line `ExecStart` which should look something like:
 
 ```sh
-ExecStart=/usr/bin/tendermint node --proxy-app=kvstore
+ExecStart=/usr/bin/tenderdash node --proxy-app=kvstore
 ```
 
 and add the `--p2p.persistent-peers` flag with the relevant information
@@ -122,7 +122,7 @@ Restart=on-failure
 User={{service}}
 Group={{service}}
 PermissionsStartOnly=true
-ExecStart=/usr/bin/tendermint node --proxy-app=kvstore --p2p.persistent-peers=167b80242c300bf0ccfb3ced3dec60dc2a81776e@165.227.41.206:26656,3c7a5920811550c04bf7a0b2f1e02ab52317b5e6@165.227.43.146:26656,303a1a4312c30525c99ba66522dd81cca56a361a@159.89.115.32:26656,b686c2a7f4b1b46dca96af3a0f31a6a7beae0be4@159.89.119.125:26656
+ExecStart=/usr/bin/tenderdash node --proxy-app=kvstore --p2p.persistent-peers=167b80242c300bf0ccfb3ced3dec60dc2a81776e@165.227.41.206:26656,3c7a5920811550c04bf7a0b2f1e02ab52317b5e6@165.227.43.146:26656,303a1a4312c30525c99ba66522dd81cca56a361a@159.89.115.32:26656,b686c2a7f4b1b46dca96af3a0f31a6a7beae0be4@159.89.119.125:26656
 ExecReload=/bin/kill -HUP $MAINPID
 KillSignal=SIGTERM
 
@@ -142,7 +142,7 @@ Finally, we run the install role again:
 ansible-playbook -i inventory/digital_ocean.py -l sentrynet install.yml
 ```
 
-to re-run `tendermint node` with the new flag, on all droplets. The
+to re-run `tenderdash node` with the new flag, on all droplets. The
 `latest_block_hash` should now be changing and `latest_block_height`
 increasing. Your testnet is now up and running :)
 

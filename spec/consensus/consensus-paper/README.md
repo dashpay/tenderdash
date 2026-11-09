@@ -1,24 +1,7 @@
-# Tendermint-spec
+# Consensus Paper
 
-The repository contains the specification (and the proofs) of the Tendermint
-consensus protocol.
+See the original Tendermint paper, [The latest gossip on BFT consensus](https://arxiv.org/abs/1807.04938),
+by Ethan Buchman, Jae Kwon and Zarko Milosevic.
 
-## How to install Latex on Mac OS
-
-MacTex is Latex distribution for Mac OS. You can download it [here](http://www.tug.org/mactex/mactex-download.html).
-
-Popular IDE for Latex-based projects is TexStudio. It can be downloaded
-[here](https://www.texstudio.org/).
-
-## How to build project
-
-In order to compile the latex files (and write bibliography), execute
-
-`$ pdflatex paper` <br/>
-`$ bibtex paper` <br/>
-`$ pdflatex paper` <br/>
-`$ pdflatex paper` <br/>
-
-The generated file is paper.pdf. You can open it with
-
-`$ open paper.pdf`
+For the current Tenderdash implementation, use the
+[Tenderdash consensus protocol](../consensus.md).
