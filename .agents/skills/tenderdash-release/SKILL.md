@@ -96,7 +96,12 @@ Protocol counters and `ABCISemVer` are independent of `TMVersionDefault`: explai
 whether each must change, and why. `ABCISemVer` is the ABCI contract's own
 SemVer (Drive accepts `^major.minor`), `P2PProtocol` changes with P2P messages or
 behavior, and `BlockProtocol` changes only with the block format; nodes enforce it
-strictly, so its bump also implies a software major. Do not mechanically increment
+strictly, so its bump also implies a software major.
+
+A `BlockProtocol` change is a red flag: it is a full hard fork that invalidates
+existing chains for nodes on either side. Never bump it, or prepare a release that
+changes it, without the user's explicit confirmation of that specific change;
+stop and ask even when a release was otherwise authorized. Do not mechanically increment
 every counter, or use a software major to conceal an unhandled network
 compatibility change.
 If the diff contains unresolved compatibility questions, report them and defer

@@ -60,6 +60,9 @@ data can be rebuilt by resync and rollback is an edge case.
 The skill separately reviews `P2PProtocol`, `BlockProtocol`, and `ABCISemVer`; a
 software version bump does not update those contracts automatically.
 `BlockProtocol` is enforced strictly, so bumping it also requires a major.
+A `BlockProtocol` change is a full hard fork and a red flag: it needs explicit
+confirmation from the release owner for that specific change, even within an
+otherwise authorized release.
 
 Full-release promotion and stable-to-dev synchronization should preserve
 ancestry. Master currently has protection rules that must be reconciled with
