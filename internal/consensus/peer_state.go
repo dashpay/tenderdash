@@ -46,12 +46,16 @@ func (pss peerStateStats) String() string {
 type PeerState struct {
 	peerID types.NodeID
 	logger log.Logger
-	// clock is the time source the majority-claim answer memory is dated
-	// against; the wall clock unless a test overrides it.
+	// clock is the time source the majority-claim answer memory and the vote
+	// redelivery windows are dated against; the wall clock unless a test
+	// overrides it.
 	clock clockwork.Clock
 	// maj23AnswerTTL is how long an answer keeps the same majority claim from
 	// being answered again.
 	maj23AnswerTTL time.Duration
+	// voteResendInterval is how long a vote handed to the transport stays off
+	// the offer before, still unacknowledged, it is offered again.
+	voteResendInterval time.Duration
 
 	// NOTE: Modify below using setters, never directly.
 	mtx     sync.RWMutex
@@ -66,6 +70,11 @@ type PeerState struct {
 	// new.
 	answeredMaj23     [maj23AnswerMemory]maj23Answer
 	answeredMaj23Next int
+
+	// unacked are the current-round votes gossiped to the peer that it has not
+	// acknowledged yet; voteResendAt is when they are next due for re-offer.
+	unacked      unackedVotes
+	voteResendAt time.Time
 
 	// ProTxHash is accessible only for the validator
 	ProTxHash types.ProTxHash
@@ -101,6 +110,15 @@ func WithMaj23AnswerTTL(ttl time.Duration) PeerStateOptionFunc {
 	}
 }
 
+// WithVoteResendInterval sets how long a vote gossiped to the peer stays off the
+// offer before, still unacknowledged, it is offered again. Sized against the
+// majority-claim gossip cadence by default (see ReofferUnackedVotes).
+func WithVoteResendInterval(interval time.Duration) PeerStateOptionFunc {
+	return func(ps *PeerState) {
+		ps.voteResendInterval = interval
+	}
+}
+
 // NewPeerState returns a new PeerState for the given node ID.
 func NewPeerState(logger log.Logger, peerID types.NodeID, opts ...PeerStateOptionFunc) *PeerState {
 	ps := &PeerState{
@@ -120,6 +138,9 @@ func NewPeerState(logger log.Logger, peerID types.NodeID, opts ...PeerStateOptio
 	}
 	if ps.maj23AnswerTTL <= 0 {
 		ps.maj23AnswerTTL = maj23AnswerTTLFor(0)
+	}
+	if ps.voteResendInterval <= 0 {
+		ps.voteResendInterval = config.DefaultConsensusConfig().PeerQueryMaj23SleepDuration
 	}
 	return ps
 }
@@ -536,7 +557,136 @@ func (ps *PeerState) setHasVote(height int64, round int32, voteType tmproto.Sign
 			return ErrPeerStateInvalidVoteIndex
 		}
 	}
+	ps.ackVote(height, round, voteType, index)
 	return nil
+}
+
+// unackedVotes are the votes of one height/round that were handed to the
+// transport for the peer and that the peer has not confirmed having, split by
+// the redelivery window they were sent in: recent since the last rotation, due
+// before it. Slots follow unackedVoteTypes.
+type unackedVotes struct {
+	height int64
+	round  int32
+	due    [len(unackedVoteTypes)]*bits.BitArray
+	recent [len(unackedVoteTypes)]*bits.BitArray
+}
+
+var unackedVoteTypes = [...]tmproto.SignedMsgType{tmproto.PrevoteType, tmproto.PrecommitType}
+
+func unackedVoteSlot(voteType tmproto.SignedMsgType) (int, bool) {
+	for slot, t := range unackedVoteTypes {
+		if t == voteType {
+			return slot, true
+		}
+	}
+	return 0, false
+}
+
+// SetVoteSent records that the vote was handed to the transport for the peer.
+// The peer is treated as having it, so it is not offered again — until a
+// redelivery interval passes without the peer confirming it, which puts it
+// back on offer (see ReofferUnackedVotes). Only the peer's current round is
+// tracked: votes for any other round are marked exactly like SetHasVote.
+func (ps *PeerState) SetVoteSent(vote *types.Vote) error {
+	if vote == nil {
+		return ErrPeerStateSetNilVote
+	}
+	ps.mtx.Lock()
+	defer ps.mtx.Unlock()
+
+	if err := ps.setHasVote(vote.Height, vote.Round, vote.Type, vote.ValidatorIndex); err != nil {
+		return err
+	}
+	slot, ok := unackedVoteSlot(vote.Type)
+	if !ok || vote.Height != ps.PRS.Height || vote.Round != ps.PRS.Round {
+		return nil
+	}
+	psVotes := ps.getVoteBitArray(vote.Height, vote.Round, vote.Type)
+	if psVotes == nil {
+		return nil
+	}
+	if ps.unacked.height != vote.Height || ps.unacked.round != vote.Round {
+		ps.unacked = unackedVotes{height: vote.Height, round: vote.Round}
+	}
+	if ps.unacked.recent[slot] == nil {
+		ps.unacked.recent[slot] = bits.NewBitArray(psVotes.Size())
+	}
+	ps.unacked.recent[slot].SetIndex(int(vote.ValidatorIndex), true)
+	return nil
+}
+
+// ackVote drops a vote from redelivery tracking: the peer has shown it has it.
+func (ps *PeerState) ackVote(height int64, round int32, voteType tmproto.SignedMsgType, index int32) {
+	slot, ok := unackedVoteSlot(voteType)
+	if !ok || ps.unacked.height != height || ps.unacked.round != round {
+		return
+	}
+	ps.unacked.due[slot].SetIndex(int(index), false)
+	ps.unacked.recent[slot].SetIndex(int(index), false)
+}
+
+// ackVoteBits drops every vote set in acked from redelivery tracking.
+func (ps *PeerState) ackVoteBits(height int64, round int32, voteType tmproto.SignedMsgType, acked *bits.BitArray) {
+	slot, ok := unackedVoteSlot(voteType)
+	if !ok || acked == nil || ps.unacked.height != height || ps.unacked.round != round {
+		return
+	}
+	if ps.unacked.due[slot] != nil {
+		ps.unacked.due[slot] = ps.unacked.due[slot].Sub(acked)
+	}
+	if ps.unacked.recent[slot] != nil {
+		ps.unacked.recent[slot] = ps.unacked.recent[slot].Sub(acked)
+	}
+}
+
+// ReofferUnackedVotes puts current-round votes the peer has not acknowledged
+// back on offer, once per voteResendInterval.
+//
+// Gossip marks a vote as the peer's the moment it is handed to the transport;
+// a copy dropped after that (router queue overflow, receiver over its
+// allowance) is otherwise never sent again, and the only in-round repair — a
+// VoteSetMaj23 exchange — needs a +2/3 majority on one side. When the lost
+// votes are exactly what both sides lack to reach one, the round stalls with
+// no timeout to fall back on.
+//
+// Each rotation clears the peer's bits for votes sent before the previous
+// rotation and promotes those sent since, so an unacknowledged vote is offered
+// again between one and two intervals after it went out, while one whose
+// HasVote is merely in flight is not: the healthy path sends nothing twice.
+// Bookkeeping of a round the peer has left is dropped, never applied to the
+// new round's bits.
+func (ps *PeerState) ReofferUnackedVotes() {
+	ps.mtx.Lock()
+	defer ps.mtx.Unlock()
+
+	now := ps.clock.Now()
+	if now.Before(ps.voteResendAt) {
+		return
+	}
+	ps.voteResendAt = now.Add(ps.voteResendInterval)
+
+	if ps.unacked.height != ps.PRS.Height || ps.unacked.round != ps.PRS.Round {
+		ps.unacked = unackedVotes{}
+		return
+	}
+	reoffered := 0
+	for slot, due := range ps.unacked.due {
+		if due == nil {
+			continue
+		}
+		psVotes := ps.getVoteBitArray(ps.unacked.height, ps.unacked.round, unackedVoteTypes[slot])
+		if psVotes == nil {
+			continue
+		}
+		reoffered += due.CountTrueBits()
+		psVotes.Update(psVotes.Sub(due))
+	}
+	if reoffered > 0 {
+		ps.logger.Debug("re-offering votes the peer has not acknowledged",
+			"height", ps.unacked.height, "round", ps.unacked.round, "votes", reoffered)
+	}
+	ps.unacked.due, ps.unacked.recent = ps.unacked.recent, [len(unackedVoteTypes)]*bits.BitArray{}
 }
 
 // SetHasCommit sets the given vote as known by the peer
@@ -842,6 +992,7 @@ func (ps *PeerState) ApplyVoteSetBitsMessage(msg *VoteSetBitsMessage, ourVotes *
 			votes.Update(hasVotes)
 		}
 	}
+	ps.ackVoteBits(msg.Height, msg.Round, msg.Type, msg.Votes)
 }
 
 // String returns a string representation of the PeerState
