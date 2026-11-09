@@ -746,9 +746,9 @@ const maj23AnswerTicks = 2
 // the cadence at which a gossip loop repeats it.
 func maj23AnswerTTLFor(sleep time.Duration) time.Duration {
 	if sleep <= 0 {
-		// Nothing throttles the gossip loop, so there is no cadence to count
-		// passes of. The default is what the rest of these ceilings are sized
-		// against.
+		// The gossip loop runs such a cadence at its floor (see
+		// minGossipSleepDuration), too fast for a pass count to mean anything.
+		// The default is what the rest of these ceilings are sized against.
 		sleep = config.DefaultConsensusConfig().PeerQueryMaj23SleepDuration
 	}
 	return maj23AnswerTicks * sleep

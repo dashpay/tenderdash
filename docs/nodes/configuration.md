@@ -411,8 +411,8 @@ create-empty-blocks-interval = "0s"
 # tick rate a lagging peer's catch-up block-part replay is metered against
 # (a fixed 500ms internal throttle): raising this above 500ms disables that
 # throttle. peer-query-maj23-sleep-duration also sets how often the node
-# re-announces its round step to each peer (recovery latency after a lost
-# announcement); it must be positive.
+# re-announces its round state to each peer (recovery latency after a lost
+# announcement). Either duration under 1ms is run at 1ms.
 peer-gossip-sleep-duration = "100ms"
 peer-query-maj23-sleep-duration = "2s"
 

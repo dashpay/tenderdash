@@ -11,6 +11,15 @@ import (
 	"github.com/dashpay/tenderdash/libs/log"
 )
 
+// minGossipSleepDuration is the shortest cadence a gossip handler runs at,
+// whatever the config says. A handler sleeping for zero runs back to back, and
+// the round-state handler sends on every pass, so a config of 0s — or a stray
+// "2" read as 2ns — would spin a goroutine per handler per peer and flood the
+// peer's state channel. Config validation runs only on the CLI path, so the
+// worker holds the floor itself. 1ms is the same floor as
+// incoming-connection-window; the test config runs at 5ms.
+const minGossipSleepDuration = time.Millisecond
+
 type gossipHandlerFunc func(ctx context.Context, appState StateData)
 
 type gossipHandler struct {
@@ -43,6 +52,8 @@ func newPeerGossipWorker(
 	msgSender *p2pMsgSender,
 ) *peerGossipWorker {
 	clock := clockwork.NewRealClock()
+	gossipSleep := flooredGossipSleep(logger, "peer-gossip-sleep-duration", state.config.PeerGossipSleepDuration)
+	queryMaj23Sleep := flooredGossipSleep(logger, "peer-query-maj23-sleep-duration", state.config.PeerQueryMaj23SleepDuration)
 	gossiper := msgGossiper{
 		ps:         ps,
 		blockStore: &blockRepository{BlockStore: state.blockStore, logger: logger},
@@ -59,26 +70,26 @@ func newPeerGossipWorker(
 		handlers: []gossipHandler{
 			newGossipHandler(
 				votesAndCommitGossipHandler(ps, state.blockStore, &gossiper),
-				state.config.PeerGossipSleepDuration,
+				gossipSleep,
 			),
 			newGossipHandler(
 				dataGossipHandler(ps, logger, state.blockStore, &gossiper),
-				state.config.PeerGossipSleepDuration,
+				gossipSleep,
 			),
 			newGossipHandler(
 				queryMaj23GossipHandler(ps, &gossiper),
-				state.config.PeerQueryMaj23SleepDuration,
+				queryMaj23Sleep,
 			),
 			newGossipHandler(
 				roundStateGossipHandler(logger, msgSender.send),
-				state.config.PeerQueryMaj23SleepDuration,
+				queryMaj23Sleep,
 			),
 			// A certificate is resent at the majority-claim cadence: a peer
 			// behind waits for nothing else, and one that applied it stops
 			// being sent it as soon as it announces its new round.
 			newGossipHandler(
 				roundSkipGossipHandler(ps, logger, msgSender.send),
-				state.config.PeerQueryMaj23SleepDuration,
+				queryMaj23Sleep,
 			),
 			// So is a vote of its round, or of a later round +2/3 voted in, to
 			// a peer that waits in this node's round, or is in a round this
@@ -88,10 +99,21 @@ func newPeerGossipWorker(
 			// round.
 			newGossipHandler(
 				roundVoteResendGossipHandler(ps, logger, msgSender.send),
-				state.config.PeerQueryMaj23SleepDuration,
+				queryMaj23Sleep,
 			),
 		},
 	}
+}
+
+// flooredGossipSleep returns the configured sleep, or minGossipSleepDuration
+// if it is shorter. It is logged once per worker, not per pass.
+func flooredGossipSleep(logger log.Logger, key string, configured time.Duration) time.Duration {
+	if configured >= minGossipSleepDuration {
+		return configured
+	}
+	logger.Warn("gossip sleep duration below the minimum, gossiping at the minimum instead",
+		"key", key, "configured", configured, "minimum", minGossipSleepDuration)
+	return minGossipSleepDuration
 }
 
 func (g *peerGossipWorker) IsRunning() bool {
