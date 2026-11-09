@@ -754,8 +754,11 @@ func (suite *GossipHandlerTestSuite) TestDataGossipHandlerServesHeldBlockToLaggi
 	logger := log.NewTestingLogger(suite.T())
 	valSet, _ := factory.MockValidatorSet()
 	validator, nonValidator := valSet.GetProTxHashes()[0], crypto.RandProTxHash()
-	held := types.NewPartSetFromData(tmrand.Bytes(100), 100)
+	held := types.NewPartSetFromData(tmrand.Bytes(200), 100)
 	other := types.NewPartSetFromData(tmrand.Bytes(100), 100)
+	incomplete := types.NewPartSetFromHeader(held.Header())
+	_, err := incomplete.AddPart(held.GetPart(0))
+	suite.Require().NoError(err)
 	collecting := func(parts *types.PartSet, height int64, round int32) cstypes.PeerRoundState {
 		return cstypes.PeerRoundState{
 			Height:                     height,
@@ -809,6 +812,12 @@ func (suite *GossipHandlerTestSuite) TestDataGossipHandlerServesHeldBlockToLaggi
 			proTxHash: validator,
 			rs:        cstypes.RoundState{Height: 10, Round: 2, ValidRound: 1, ValidBlockParts: held},
 			prs:       collecting(held, 10, 2),
+		},
+		{
+			name:      "not an incomplete block",
+			proTxHash: validator,
+			rs:        cstypes.RoundState{Height: 10, Round: 2, ValidRound: 1, ValidBlockParts: incomplete},
+			prs:       collecting(held, 10, 1),
 		},
 		{
 			name:      "not to a non-validator",
