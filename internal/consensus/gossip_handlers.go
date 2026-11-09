@@ -215,6 +215,14 @@ func dataGossipHandler(ps *PeerState, logger log.Logger, blockStore sm.BlockStor
 				return
 			}
 		}
+		if parts := heldBlockPartsFor(rs, prs, isValidator); parts != nil {
+			// rs is this handler's copy of the snapshot. The gossiper serves its
+			// part set and marks each part sent as the peer's under its round
+			// (see PeerState.SetHasProposalBlockPart), the peer's own here.
+			rs.ProposalBlockParts, rs.Round = parts, prs.Round
+			gossiper.GossipProposalBlockParts(ctx, rs, prs)
+			return
+		}
 
 		// if the peer is on a previous height that we have, help catch up
 		blockStoreBase := blockStore.Base()
@@ -265,6 +273,27 @@ func dataGossipHandler(ps *PeerState, logger log.Logger, blockStore sm.BlockStor
 
 func shouldProposalBeGossiped(rs cstypes.RoundState, prs *cstypes.PeerRoundState, isValidator bool) bool {
 	return rs.Proposal != nil && !prs.Proposal && isValidator
+}
+
+// heldBlockPartsFor returns the complete part set of this node's valid or
+// locked block when a validator peer at this height, in an earlier round, is
+// collecting that block and rs.ProposalBlockParts is not it. Entering a later
+// round drops the proposal part set, and a peer whose polka retargeted it at
+// the block (see addVoteUpdateValidBlockMw) has nowhere else to get the parts
+// from: without them it rejects every precommit for the block, counts none of
+// them towards leaving its round, and stays there for good. The part set
+// header is the block's identity; a round or a hash alone names no bytes.
+func heldBlockPartsFor(rs cstypes.RoundState, prs *cstypes.PeerRoundState, isValidator bool) *types.PartSet {
+	if !isValidator || rs.Height != prs.Height || prs.Round >= rs.Round ||
+		rs.ProposalBlockParts.HasHeader(prs.ProposalBlockPartSetHeader) {
+		return nil
+	}
+	for _, parts := range []*types.PartSet{rs.ValidBlockParts, rs.LockedBlockParts} {
+		if parts.HasHeader(prs.ProposalBlockPartSetHeader) && parts.IsComplete() {
+			return parts
+		}
+	}
+	return nil
 }
 
 func shouldBlockPartsBeGossiped(rs cstypes.RoundState, prs *cstypes.PeerRoundState, isValidator bool) bool {
