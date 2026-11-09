@@ -736,13 +736,11 @@ func (r *Reactor) sendState(ctx context.Context, stateCh p2p.Channel) {
 // has block parts, which of them it holds.
 func (r *Reactor) resendRoundState(ctx context.Context, stateCh p2p.Channel) {
 	rs := r.state.GetStateData().RoundState
-	err := r.broadcast(ctx, stateCh, rs.NewRoundStepMessage())
-	r.logResult(err, r.logger, "broadcasting round step message again", "height", rs.Height, "round", rs.Round)
-	if rs.ProposalBlockParts == nil {
-		return
+	for _, msg := range roundStateMessages(rs) {
+		err := r.broadcast(ctx, stateCh, msg)
+		r.logResult(err, r.logger, "broadcasting round state message again",
+			"msg_type", fmt.Sprintf("%T", msg), "height", rs.Height, "round", rs.Round)
 	}
-	err = r.broadcast(ctx, stateCh, rs.NewValidBlockMessage())
-	r.logResult(err, r.logger, "broadcasting new valid block message again", "height", rs.Height, "round", rs.Round)
 }
 
 // broadcast sends a broadcast message to all peers connected to the `channel`.
@@ -976,18 +974,9 @@ func (r *Reactor) peerUp(ctx context.Context, peerUpdate p2p.PeerUpdate, retries
 			if !ps.IsRunning() {
 				return
 			}
-			// start goroutines for this peer
+			// start goroutines for this peer; the round-state handler's first
+			// pass announces our height, round and step to the peer at once
 			_ = pgw.Start(ctx)
-
-			// Send our state to the peer. If we're block-syncing, broadcast a
-			// RoundStepMessage later upon SwitchToConsensus().
-			if !r.WaitSync() {
-				go func() {
-					rs := r.state.GetRoundState()
-					err := msgSender.send(ctx, rs.NewRoundStepMessage())
-					r.logResult(err, r.logger, "sending round step msg", "height", rs.Height, "round", rs.Round)
-				}()
-			}
 		}()
 	}
 }

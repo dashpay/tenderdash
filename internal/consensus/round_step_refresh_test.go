@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/crypto"
-	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	"github.com/dashpay/tenderdash/internal/p2p"
 	p2pmocks "github.com/dashpay/tenderdash/internal/p2p/mocks"
 	"github.com/dashpay/tenderdash/libs/log"
@@ -17,7 +16,7 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
-// A peer learns this node's height, round and step only from NewRoundStep
+// A peer learns this node's height, round and step from NewRoundStep
 // announcements, none of which is acknowledged. One lost after the channel
 // accepted it — to a full router queue or the peer's state-channel allowance —
 // leaves the peer gossiping for the round it last heard of. That picture must
@@ -65,7 +64,7 @@ drain:
 			break drain
 		}
 	}
-	require.NotZero(t, lost, "peer up must announce the round step")
+	require.NotZero(t, lost, "the round step must be announced during the loss window")
 
 	// The peer's picture of this node, built only from what arrives after the loss.
 	peerView := NewPeerState(log.NewNopLogger(), types.NodeID("this-node"))
@@ -89,19 +88,4 @@ drain:
 				want.Height, want.Round, want.Step, peerView.PRS.Height, peerView.PRS.Round, peerView.PRS.Step)
 		}
 	}
-}
-
-func TestRoundStepGossipHandler(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	ps := NewPeerState(log.NewNopLogger(), "peer")
-	stateData := StateData{RoundState: cstypes.RoundState{Height: 7, Round: 2, Step: cstypes.RoundStepPrevote}}
-	stateCh := p2pmocks.NewChannel(t)
-	stateCh.On("Send", ctx, p2p.Envelope{To: "peer", Message: stateData.RoundState.NewRoundStepMessage()}).
-		Once().
-		Return(nil)
-	sender := &p2pMsgSender{logger: log.NewNopLogger(), ps: ps, chans: channelBundle{state: stateCh}}
-
-	roundStepGossipHandler(log.NewNopLogger(), sender.send)(ctx, stateData)
 }

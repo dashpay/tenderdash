@@ -70,7 +70,7 @@ func newPeerGossipWorker(
 				state.config.PeerQueryMaj23SleepDuration,
 			),
 			newGossipHandler(
-				roundStepGossipHandler(logger, msgSender.send),
+				roundStateGossipHandler(logger, msgSender.send),
 				state.config.PeerQueryMaj23SleepDuration,
 			),
 			// A certificate is resent at the majority-claim cadence: a peer
