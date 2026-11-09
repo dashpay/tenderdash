@@ -1166,6 +1166,10 @@ type ConsensusConfig struct {
 	// tick then already exceeds the gap it is meant to enforce. Lowering it
 	// does not shrink the gap — it only fits more ticks (and so more sends of
 	// a multi-part block) into that same fixed window before it applies.
+	//
+	// PeerQueryMaj23SleepDuration also sets how often the node re-announces its
+	// round step to each peer, which bounds how long a peer's view of this
+	// node stays stale after a lost announcement. It must be positive.
 	PeerGossipSleepDuration     time.Duration `mapstructure:"peer-gossip-sleep-duration"`
 	PeerQueryMaj23SleepDuration time.Duration `mapstructure:"peer-query-maj23-sleep-duration"`
 
@@ -1315,8 +1319,8 @@ func (cfg *ConsensusConfig) ValidateBasic() error {
 	if cfg.PeerGossipSleepDuration < 0 {
 		return errors.New("peer-gossip-sleep-duration can't be negative")
 	}
-	if cfg.PeerQueryMaj23SleepDuration < 0 {
-		return errors.New("peer-query-maj23-sleep-duration can't be negative")
+	if cfg.PeerQueryMaj23SleepDuration <= 0 {
+		return errors.New("peer-query-maj23-sleep-duration must be positive")
 	}
 	if cfg.DoubleSignCheckHeight < 0 {
 		return errors.New("double-sign-check-height can't be negative")
