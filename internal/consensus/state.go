@@ -22,6 +22,7 @@ import (
 	tmos "github.com/dashpay/tenderdash/libs/os"
 	"github.com/dashpay/tenderdash/libs/service"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -151,6 +152,8 @@ type State struct {
 
 	// create and execute blocks
 	blockExec *sm.BlockExecutor
+	// appReadiness probes blockExec's application for the proposer heartbeat.
+	appReadiness *appReadiness
 
 	// notify us if txs are available
 	txNotifier txNotifier
@@ -203,7 +206,16 @@ type State struct {
 	ctrl           *Controller
 	roundScheduler *roundScheduler
 	// holds back proposals while the node catches up after a block-sync handover
-	catchup        *catchupTracker
+	catchup *catchupTracker
+	// sends or watches proposer heartbeats while the node waits for transactions
+	liveness *proposerLiveness
+	// gathers the votes to skip a round whose proposer went silent
+	roundSkips *roundSkipCollector
+	// signs this validator's votes to skip a round, off the consensus goroutine
+	roundSkipSigner *roundSkipSigner
+	// the round whose silence ProposerSilences last counted; only the
+	// consensus goroutine uses it
+	silenceCounted silentRound
 	msgMiddlewares []msgMiddlewareFunc
 
 	stopFn func(cs *State) bool
@@ -312,6 +324,13 @@ func NewState(
 		withLaneMetrics(cs.metrics),
 	)
 
+	if cs.blockExec != nil {
+		cs.appReadiness = newAppReadiness(cs.blockExec.AppReady)
+	}
+	cs.liveness = newProposerLiveness(cs.logger, cs.metrics, cs.emitter, cs.proposerReady, cs.verificationBudget)
+	cs.roundSkips = newRoundSkipCollector(cs.logger, cs.verificationBudget)
+	cs.roundSkipSigner = newRoundSkipSigner()
+
 	cs.stateDataStore = NewStateDataStore(cs.metrics, logger, cfg, cs.emitter)
 	wal := &wrapWAL{getter: func() WALWriteFlusher { return cs.wal }}
 
@@ -346,7 +365,8 @@ func NewState(
 	// cannot cover must cost nothing at all, in particular no WAL record.
 	cs.msgMiddlewares = append(cs.msgMiddlewares,
 		verificationBudgetMiddleware(cs.verificationBudget, cs.metrics, cs.logger))
-	cs.msgDispatcher = newMsgInfoDispatcher(cs.ctrl, propler, wal, cs.logger, cs.verificationBudget, cs.msgMiddlewares...)
+	cs.msgDispatcher = newMsgInfoDispatcher(cs.ctrl, propler, wal, cs.logger, cs.verificationBudget,
+		cs.handleLivenessMessage, cs.peerErrorQueue, cs.msgMiddlewares...)
 
 	// this is not ideal, but it lets the consensus tests start
 	// node-fragments gracefully while letting the nodes
@@ -703,6 +723,7 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 		cs.wal.Stop()
 		cs.wal.Wait()
 		cs.msgInfoQueue.stop()
+		cs.liveness.stop()
 	}
 
 	defer func() {
@@ -749,6 +770,7 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 	}()
 	defer func() { onExit(cs); <-queueDone }()
 
+	cs.followLiveness(ctx)
 	for {
 		if ctx.Err() != nil {
 			return
@@ -799,12 +821,41 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 			if err != nil {
 				cs.logger.Error("failed update state-data", "err", err)
 			}
+		case silence := <-cs.liveness.silent():
+			stateData := cs.stateDataStore.Get()
+			cs.handleProposerSilence(ctx, &stateData, silence)
+			err := stateData.Save()
+			if err != nil {
+				cs.logger.Error("failed update state-data", "err", err)
+			}
+		case signed := <-cs.roundSkipSigner.signed():
+			stateData := cs.stateDataStore.Get()
+			cs.handleSignedRoundSkipVote(ctx, &stateData, signed)
+			err := stateData.Save()
+			if err != nil {
+				cs.logger.Error("failed update state-data", "err", err)
+			}
 		case <-ctx.Done():
 			return
 
 		}
+		// Whatever was handled may have moved the node into or out of a round
+		// that waits for transactions.
+		cs.followLiveness(ctx)
 		// TODO should we handle context cancels here?
 	}
+}
+
+// followLiveness points the round skip collector and the proposer liveness
+// watch at the round the node is in. The receive routine runs it after every
+// input, and once before the first: a node restarted into a waiting round
+// replays its WAL before the routine starts, and may get no input for as long
+// as the round waits.
+func (cs *State) followLiveness(ctx context.Context) {
+	stateData := cs.stateDataStore.Get()
+	cs.roundSkips.track(&stateData)
+	cs.liveness.followRounds(&stateData)
+	cs.liveness.reconcile(ctx, &stateData, cs.privValidator)
 }
 
 func (cs *State) handleTimeout(
@@ -859,8 +910,13 @@ func (cs *State) handleTimeout(
 func (cs *State) handleTxsAvailable(ctx context.Context, stateData *StateData) {
 	// TODO: Change to trace
 	cs.logger.Debug("new transactions are available", "height", stateData.Height, "round", stateData.Round, "step", stateData.Step)
-	// We only need to do this for round 0.
-	if stateData.Round != 0 {
+	// Only round 0 waits for transactions, and a round entered because +2/3
+	// skipped the one before it while waiting. Whichever round hears it, the
+	// report is the only one this height gets, so it is recorded: a round
+	// entered later must not wait for another.
+	waiting := stateData.Round == 0 || stateData.mayWaitAfterRoundSkip(stateData.Round)
+	stateData.TxsReported = true
+	if !waiting {
 		return
 	}
 
@@ -878,6 +934,197 @@ func (cs *State) handleTxsAvailable(ctx context.Context, stateData *StateData) {
 	case cstypes.RoundStepNewRound: // after timeoutCommit
 		_ = cs.ctrl.Dispatch(ctx, &EnterProposeEvent{Height: stateData.Height, Round: stateData.Round}, stateData)
 	}
+}
+
+// errProposerCatchingUp is why a node still catching up after a block-sync
+// handover sends no proposer heartbeat.
+var errProposerCatchingUp = errors.New("catching up after block sync, not proposing yet")
+
+// proposerReady reports whether this node could propose at height right now,
+// which is what its proposer heartbeat tells the validators: the propose step
+// would not hold it back after a block-sync handover, and the application
+// answers before ctx ends. A probe of the application still unanswered then
+// stays in flight under life (see appReadiness).
+func (cs *State) proposerReady(life, ctx context.Context, height int64) error {
+	if !cs.catchup.mayPropose(height) {
+		return errProposerCatchingUp
+	}
+	if cs.appReadiness == nil {
+		return nil
+	}
+	return cs.appReadiness.check(life, ctx)
+}
+
+// handleProposerSilence acts on a report that the proposer of the round this
+// node waits in has stopped sending heartbeats.
+func (cs *State) handleProposerSilence(ctx context.Context, stateData *StateData, silence proposerSilence) {
+	// The report was raised on another goroutine and may describe a round the
+	// node has already left, or a proposer whose heartbeat arrived since.
+	if silence.Height != stateData.Height || silence.Round != stateData.Round || !waitingRound(stateData) ||
+		!cs.liveness.current(silence) {
+		return
+	}
+	if !stateData.isValidator(cs.privValidator.ProTxHash) {
+		return
+	}
+	// A silence reported again for the same round is not another silent round:
+	// it is the resend timer of this validator's vote (see voteToSkipRound), or
+	// the retry of a vote that could not be signed, or had to wait for the
+	// signing of an earlier round's vote.
+	if round := (silentRound{height: silence.Height, round: silence.Round}); cs.silenceCounted != round {
+		cs.silenceCounted = round
+		cs.metrics.ProposerSilences.Add(1)
+		cs.logger.Info("proposer of the round is silent, voting to skip the round",
+			"height", silence.Height,
+			"round", silence.Round,
+			"proposer", silence.Proposer.ShortString())
+	}
+	cs.voteToSkipRound(ctx, stateData, silence)
+}
+
+// silentRound is a height and round in which the proposer went silent.
+type silentRound struct {
+	height int64
+	round  int32
+}
+
+// voteToSkipRound has this validator's vote to skip the round it waits in
+// signed, off the consensus goroutine (see roundSkipSigner). The signed vote
+// comes back to handleSignedRoundSkipVote.
+func (cs *State) voteToSkipRound(ctx context.Context, stateData *StateData, silence proposerSilence) {
+	pv := cs.privValidator
+	index, val := stateData.Validators.GetByProTxHash(pv.ProTxHash)
+	if pv.IsZero() || val == nil {
+		return
+	}
+	// The proposer is still silent a silence timeout after this validator's
+	// vote, or went silent again after a heartbeat that followed it. The vote
+	// stands, as every validator signs the same bytes for the round; it is
+	// broadcast again, not signed again.
+	if vote := cs.roundSkips.voteOf(stateData.Height, stateData.Round, pv.ProTxHash); vote != nil {
+		cs.emitter.Emit(roundSkipVoteEventName, vote)
+		cs.liveness.rearm(silence)
+		return
+	}
+	pb := &tmproto.RoundSkipVote{
+		Height:             stateData.Height,
+		Round:              stateData.Round,
+		ValidatorProTxHash: pv.ProTxHash,
+		ValidatorIndex:     index,
+	}
+	timeouts := stateData.state.ConsensusParams.Timeout.TimeoutParamsOrDefaults()
+	started := cs.roundSkipSigner.sign(ctx, pv, stateData.state.ChainID,
+		stateData.Validators.QuorumType, stateData.Validators.QuorumHash, pb,
+		timeouts.ProposerSilenceTimeout(stateData.Round), silence)
+	if !started {
+		// The signer has yet to return the vote for an earlier round. Rather
+		// than wait for it, this one is tried again after the silence timeout.
+		cs.logger.Debug("still signing an earlier round skip vote; trying again after the silence timeout",
+			"height", pb.Height, "round", pb.Round)
+		cs.liveness.rearm(silence)
+	}
+}
+
+// handleSignedRoundSkipVote takes this validator's vote to skip a round from
+// the signer, counts it, and hands it to the reactor to broadcast. If the vote
+// completes +2/3, the certificate goes to the state machine like one from a
+// peer.
+func (cs *State) handleSignedRoundSkipVote(ctx context.Context, stateData *StateData, signed signedRoundSkipVote) {
+	cs.roundSkipSigner.done()
+	pb, silence := signed.vote, signed.silence
+	// The node went on taking messages while the vote was signed. It may have
+	// left the round since, or heard from the proposer, which re-armed the
+	// watch: it votes again if the proposer goes silent again.
+	if pb.Height != stateData.Height || pb.Round != stateData.Round || !waitingRound(stateData) ||
+		!cs.liveness.current(silence) {
+		return
+	}
+	if errors.Is(signed.err, types.ErrSigningNotSupported) {
+		cs.logger.Debug("this node's signer cannot sign round skip votes", "height", pb.Height, "round", pb.Round)
+		return
+	}
+	if signed.err != nil {
+		// The silence still stands, so the vote is tried again after another
+		// silence timeout rather than never.
+		cs.logger.Error("cannot sign round skip vote; trying again after the silence timeout",
+			"height", pb.Height, "round", pb.Round, "err", signed.err)
+		cs.liveness.rearm(silence)
+		return
+	}
+	vote, err := types.RoundSkipVoteFromProto(pb)
+	if err != nil {
+		cs.logger.Error("signed an invalid round skip vote", "vote", vote, "err", err)
+		return
+	}
+	_, certificate, err := cs.roundSkips.add(vote, false)
+	if err != nil {
+		cs.logger.Error("cannot count own round skip vote", "vote", vote, "err", err)
+		return
+	}
+	cs.emitter.Emit(roundSkipVoteEventName, vote)
+	// The vote is broadcast once, and a broadcast can be dropped on its way to
+	// peers. While the round stays silent it goes out again every silence
+	// timeout, so the certificate still forms; peers count each validator's
+	// vote once. Moving on from the round ends the watch, and with it the timer.
+	cs.liveness.rearm(silence)
+	if certificate != nil {
+		cs.applyRecoveredCertificate(ctx, stateData, certificate)
+	}
+}
+
+// applyRecoveredCertificate hands a round skip certificate this node recovered
+// to the state machine at once, on the consensus goroutine it was recovered on,
+// as if it had come in as a message. Queuing it instead could fail with the
+// queue full, and nothing would recover it again: the collector recovers a
+// round's certificate once.
+func (cs *State) applyRecoveredCertificate(
+	ctx context.Context,
+	stateData *StateData,
+	certificate *types.RoundSkipCertificate,
+) {
+	mi := msgInfo{Msg: &RoundSkipCertificateMessage{Certificate: certificate}, ReceiveTime: tmtime.Now()}
+	if err := cs.msgDispatcher.dispatch(ctx, stateData, mi); err != nil {
+		cs.logger.Error("cannot apply round skip certificate", "certificate", certificate, "err", err)
+	}
+}
+
+// handleLivenessMessage takes a proposer heartbeat or round skip vote from a
+// peer, which the peer scheduler handed over with room in the verification
+// budget for its signature check. One that is news is passed on to the reactor
+// to relay, and a vote that completes +2/3 for its round has the certificate it
+// recovered applied at once (see applyRecoveredCertificate).
+func (cs *State) handleLivenessMessage(
+	ctx context.Context,
+	stateData *StateData,
+	msg Message,
+	peerID types.NodeID,
+) error {
+	switch m := msg.(type) {
+	case *ProposerHeartbeatMessage:
+		relay, err := cs.liveness.heard(m.Heartbeat)
+		if err != nil {
+			return err
+		}
+		// Each node relays a heartbeat the first time it verifies one, so it
+		// reaches validators that are not connected to the proposer.
+		if relay {
+			cs.emitter.Emit(livenessRelayEventName, livenessRelay{msg: m, from: peerID})
+		}
+	case *RoundSkipVoteMessage:
+		added, certificate, err := cs.roundSkips.add(m.Vote, true)
+		if err != nil {
+			return err
+		}
+		// Relayed the first time it is counted, as heartbeats are, so every
+		// validator can recover the certificate whoever it is connected to.
+		if added {
+			cs.emitter.Emit(livenessRelayEventName, livenessRelay{msg: m, from: peerID})
+		}
+		if certificate != nil {
+			cs.applyRecoveredCertificate(ctx, stateData, certificate)
+		}
+	}
+	return nil
 }
 
 //-----------------------------------------------------------------------------

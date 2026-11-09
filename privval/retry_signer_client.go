@@ -158,6 +158,26 @@ func (sc *RetrySignerClient) SignProposal(
 	})
 }
 
+func (sc *RetrySignerClient) SignProposerHeartbeat(
+	ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash,
+	heartbeat *tmproto.ProposerHeartbeat,
+) error {
+	_, err := retry(ctx, sc, func() (struct{}, error) {
+		return struct{}{}, sc.next.SignProposerHeartbeat(ctx, chainID, quorumType, quorumHash, heartbeat)
+	})
+	return err
+}
+
+func (sc *RetrySignerClient) SignRoundSkipVote(
+	ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash,
+	vote *tmproto.RoundSkipVote,
+) error {
+	_, err := retry(ctx, sc, func() (struct{}, error) {
+		return struct{}{}, sc.next.SignRoundSkipVote(ctx, chainID, quorumType, quorumHash, vote)
+	})
+	return err
+}
+
 func (sc *RetrySignerClient) UpdatePrivateKey(
 	ctx context.Context, privateKey crypto.PrivKey, quorumHash crypto.QuorumHash, thresholdPublicKey crypto.PubKey, height int64,
 ) {
