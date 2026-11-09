@@ -1,6 +1,7 @@
 package consensus
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -695,4 +696,57 @@ func TestPolkaRetargetKeepsProposalForTheChosenBlock(t *testing.T) {
 	assert.Same(t, proposal, stateData.Proposal, "a proposal for the block the network chose must survive")
 	assert.Equal(t, receiveTime, stateData.ProposalReceiveTime,
 		"dropping the receive time of a surviving proposal loses its timeliness")
+}
+
+// recordingEvidencePool counts the conflicting-vote pairs reported to it.
+type recordingEvidencePool struct{ reports int }
+
+func (p *recordingEvidencePool) ReportConflictingVotes(_, _ *types.Vote) { p.reports++ }
+
+// A conflicting vote is never stored, so its sender re-offers it for the rest
+// of the round (see PeerState.ReofferUnackedVotes). The first copy is reported
+// to the evidence pool and logged at Error; a redelivered copy is neither, as
+// the pool holds that equivocation already. Another block from the same
+// validator, or the same pair at a later height, is a new report.
+func TestAddVoteErrorMwReportsEachConflictOnce(t *testing.T) {
+	valSet, privVals := factory.MockValidatorSet()
+	privVal := privValidator{PrivValidator: privVals[0], ProTxHash: valSet.Validators[0].ProTxHash}
+	pool := &recordingEvidencePool{}
+	var buf bytes.Buffer
+	logger, err := log.NewLogger("debug", &buf)
+	require.NoError(t, err)
+
+	voteFor := func(height int64, block string) *types.Vote {
+		return &types.Vote{
+			Type: tmproto.PrecommitType, Height: height, Round: 0,
+			ValidatorIndex: 1, ValidatorProTxHash: valSet.Validators[1].ProTxHash,
+			BlockID: types.BlockID{Hash: []byte(block)},
+		}
+	}
+	existing := voteFor(1, "block A")
+	conflicting := func(_ context.Context, _ *StateData, vote *types.Vote) (bool, error) {
+		return false, types.NewConflictingVoteError(existing, vote)
+	}
+	mw := addVoteErrorMw(pool, logger, privVal, eventemitter.New())(conflicting)
+	deliver := func(vote *types.Vote) string {
+		buf.Reset()
+		_, err := mw(context.Background(), &StateData{}, vote)
+		require.ErrorAs(t, err, new(*types.ErrVoteConflictingVotes), "the conflict is still reported to the caller")
+		return buf.String()
+	}
+
+	out := deliver(voteFor(1, "block B"))
+	assert.Equal(t, 1, pool.reports)
+	assert.Contains(t, out, `"level":"error"`, "the first copy of an equivocation is news")
+
+	out = deliver(voteFor(1, "block B"))
+	assert.Equal(t, 1, pool.reports, "a redelivered conflicting vote is in the pool already")
+	assert.NotContains(t, out, `"level":"error"`)
+	assert.Contains(t, out, `"level":"debug"`)
+
+	deliver(voteFor(1, "block C"))
+	assert.Equal(t, 2, pool.reports, "a third block from the same validator is a new equivocation")
+
+	deliver(voteFor(2, "block B"))
+	assert.Equal(t, 3, pool.reports, "a new height starts afresh")
 }

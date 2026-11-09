@@ -74,7 +74,13 @@ func isPeerFloodableError(err error) bool {
 		// block signature, and the vector is covered by no signature a peer must
 		// forge. The rejection of the commit this node assembled from its own
 		// precommits is not a message error: tryFinalizeCommit logs it at Error.
-		errors.Is(err, sm.ErrCommitExtensionsRejected)
+		errors.Is(err, sm.ErrCommitExtensionsRejected) ||
+		// A precommit whose extensions the application refuses — as it does for
+		// a block this node has not processed — is never stored, so any peer can
+		// replay it for free and its sender re-offers it for the rest of the
+		// round (see PeerState.ReofferUnackedVotes). Its first copy is reported
+		// by addVoteVerifyVoteExtensionMw.
+		errors.Is(err, sm.ErrVoteExtensionRejected)
 }
 
 type msgInfoDispatcher struct {

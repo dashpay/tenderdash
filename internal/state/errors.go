@@ -8,6 +8,7 @@ import (
 var (
 	ErrBlockRejected            = errors.New("block not accepted by abci app")
 	ErrCommitExtensionsRejected = errors.New("commit vote extensions not accepted by abci app")
+	ErrVoteExtensionRejected    = errors.New("vote extensions not accepted by abci app")
 )
 
 type (

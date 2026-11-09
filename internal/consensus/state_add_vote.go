@@ -9,6 +9,7 @@ import (
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
+	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/eventemitter"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -275,6 +276,8 @@ func addVoteVerifyVoteExtensionMw(
 		privVal = data.(privValidator)
 		return nil
 	})
+	// Touched only by the consensus goroutine, like every vote middleware.
+	var rejected rejectedVotes
 	return func(next AddVoteFunc) AddVoteFunc {
 		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 			// Verify VoteExtension if precommit and not nil
@@ -333,6 +336,15 @@ func addVoteVerifyVoteExtensionMw(
 			err = blockExec.blockExec.VerifyVoteExtension(ctx, vote)
 			metrics.MarkVoteExtensionReceived(err == nil)
 			if err != nil {
+				// Every copy logs at Debug (see isPeerFloodableError); the first
+				// is worth more. A refusal of a block not processed for the round
+				// is transient — the application has no context for it yet — where
+				// one of a processed block is a disagreement over the extensions.
+				if errors.Is(err, sm.ErrVoteExtensionRejected) && rejected.remember(vote) {
+					rs := &stateData.RoundState
+					log.FromCtxOrNop(ctx).Warn("application rejected a precommit's vote extensions; the precommit is not counted",
+						"voted_block_processed", processedFor(rs, vote.Round) && rs.ProcessedBlockID.Equals(vote.BlockID))
+				}
 				return false, err
 			}
 			return next(ctxWithVoteVerification(ctx, vote, verified), stateData, vote)
@@ -379,6 +391,8 @@ func addVoteErrorMw(evpool evidencePool, logger log.Logger, privVal privValidato
 		privVal = data.(privValidator)
 		return nil
 	})
+	// Touched only by the consensus goroutine, like every vote middleware.
+	var reported rejectedVotes
 	return func(next AddVoteFunc) AddVoteFunc {
 		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 			added, err := next(ctx, stateData, vote)
@@ -408,7 +422,15 @@ func addVoteErrorMw(evpool evidencePool, logger log.Logger, privVal privValidato
 				return added, err
 			}
 
-			// report conflicting votes to the evidence pool
+			// A conflicting vote is never stored, so its sender re-offers it
+			// for the rest of the round (see PeerState.ReofferUnackedVotes).
+			// The pool drops a duplicate when it forms the evidence; reporting
+			// it once spares the pool's buffer and the log the copies.
+			if !reported.remember(vote) {
+				logger.Debug("conflicting vote delivered again; already reported to the evidence pool",
+					"height", vote.Height, "round", vote.Round, "type", vote.Type, "val_index", vote.ValidatorIndex)
+				return added, err
+			}
 			evpool.ReportConflictingVotes(voteErr.VoteA, voteErr.VoteB)
 			logger.Error("found and sent conflicting votes to the evidence pool",
 				"vote_a", voteErr.VoteA,
@@ -416,6 +438,37 @@ func addVoteErrorMw(evpool evidencePool, logger log.Logger, privVal privValidato
 			return added, err
 		}
 	}
+}
+
+// rejectedVotes remembers the peer votes of one height that were rejected for
+// a reason no resend can change. A rejected vote is never stored, so no HasVote
+// acknowledges it and its sender re-offers it for the rest of the round (see
+// PeerState.ReofferUnackedVotes); remembering it lets only the first copy be
+// reported. The memory is reset when the height changes.
+type rejectedVotes struct {
+	height int64
+	seen   map[rejectedVoteKey]struct{}
+}
+
+type rejectedVoteKey struct {
+	round          int32
+	voteType       tmproto.SignedMsgType
+	validatorIndex int32
+	blockKey       string
+}
+
+// remember records the vote's rejection and reports whether it is the first of
+// that vote at its height.
+func (r *rejectedVotes) remember(vote *types.Vote) (first bool) {
+	if r.seen == nil || r.height != vote.Height {
+		r.height, r.seen = vote.Height, map[rejectedVoteKey]struct{}{}
+	}
+	key := rejectedVoteKey{vote.Round, vote.Type, vote.ValidatorIndex, vote.BlockID.Key()}
+	if _, seen := r.seen[key]; seen {
+		return false
+	}
+	r.seen[key] = struct{}{}
+	return true
 }
 
 func addVoteLoggingMw() AddVoteMiddlewareFunc {

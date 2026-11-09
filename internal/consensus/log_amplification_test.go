@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dashpay/tenderdash/abci/example/kvstore"
+	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/dash"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/log"
@@ -41,6 +44,9 @@ func TestIsPeerFloodableError(t *testing.T) {
 	assert.True(t, isPeerFloodableError(types.ErrRoundSkipCertificateInvalidSignature))
 	assert.True(t, isPeerFloodableError(fmt.Errorf("%w: AB12, expected CD34", types.ErrRoundSkipCertificateWrongQuorum)),
 		"a certificate naming another quorum is refused before any signature is read")
+
+	assert.True(t, isPeerFloodableError(fmt.Errorf("verifying precommit: %w", sm.ErrVoteExtensionRejected)),
+		"a precommit the application refuses is never stored, so it is replayed and re-sent for the rest of the round")
 
 	assert.False(t, isPeerFloodableError(ErrPrivValidatorNotSet),
 		"an internal fault must not be treated as floodable")
@@ -323,4 +329,57 @@ func TestLoggingMiddlewareSeparatesLocalFaultsFromReplay(t *testing.T) {
 		assert.NotContains(t, out, `"level":"warn"`)
 		assert.Contains(t, out, `"level":"debug"`)
 	})
+}
+
+// voteExtensionRejectingApp refuses every vote extension, as an application
+// does for a precommit of a block it has not processed.
+type voteExtensionRejectingApp struct{ abci.Application }
+
+func (voteExtensionRejectingApp) VerifyVoteExtension(
+	context.Context, *abci.RequestVerifyVoteExtension,
+) (*abci.ResponseVerifyVoteExtension, error) {
+	return &abci.ResponseVerifyVoteExtension{Status: abci.ResponseVerifyVoteExtension_REJECT}, nil
+}
+
+// A precommit the application refuses is never stored, so no HasVote answers it
+// and its sender re-offers it for the rest of the round (see
+// PeerState.ReofferUnackedVotes); any peer can also replay it for free. The
+// first copy is worth one Warn line to an operator; every further copy of it
+// logs at Debug, and none logs at Error.
+func TestRejectedVoteExtensionLogsOnceThenDebug(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	inner, err := kvstore.NewMemoryApp()
+	require.NoError(t, err)
+	h := newFloodHarness(ctx, t, floodHarnessArgs{validators: 4, application: voteExtensionRejectingApp{inner}})
+	stateData := h.stateData()
+	vote := signPrecommitWithExtensions(ctx, t, h.vss[1], &stateData, 1)
+
+	var buf bytes.Buffer
+	logger, err := log.NewLogger("debug", &buf)
+	require.NoError(t, err)
+	handler := loggingMiddleware(logger)(func(ctx context.Context, sd *StateData, env msgEnvelope) error {
+		return h.cs.ctrl.Dispatch(ctx, &AddVoteEvent{Vote: env.Msg.(*VoteMessage).Vote, PeerID: env.PeerID}, sd)
+	})
+	deliver := func() string {
+		buf.Reset()
+		sd := h.stateData()
+		env := msgEnvelope{msgInfo: msgInfo{Msg: &VoteMessage{Vote: vote}, PeerID: "peer"}}
+		require.NoError(t, handler(h.runCtx(ctx), &sd, env))
+		return buf.String()
+	}
+
+	first := deliver()
+	assert.NotContains(t, first, `"level":"error"`, "a rejected peer precommit must not log at Error")
+	assert.Equal(t, 1, strings.Count(first, `"level":"warn"`), "the first rejection is reported once:\n%s", first)
+
+	for range 3 {
+		again := deliver()
+		assert.NotContains(t, again, `"level":"error"`, "a redelivered rejected precommit must not log at Error")
+		assert.NotContains(t, again, `"level":"warn"`, "a redelivered rejected precommit is not news")
+		assert.Contains(t, again, `"level":"debug"`)
+	}
+	stateData = h.stateData()
+	require.Nil(t, storedVote(&stateData, vote), "a rejected precommit is not stored")
 }
