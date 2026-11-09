@@ -13,6 +13,7 @@ import (
 	"github.com/dashpay/tenderdash/dash"
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	sf "github.com/dashpay/tenderdash/internal/state/test/factory"
+	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -261,9 +262,8 @@ func TestStatePolkaBlockDeliveryEndsThePrecommitStall(t *testing.T) {
 	require.Equal(t, int32(1), n.sd.Round)
 }
 
-// A polka block the application rejects is processed once: neither the
-// precommits for it, which stay rejected, nor its parts arriving again process
-// it anew.
+// A polka block the application rejects is processed once: the precommits for
+// it stay rejected and do not have it processed anew.
 func TestStatePolkaBlockRejectedByTheApplicationIsNotRetried(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -277,7 +277,6 @@ func TestStatePolkaBlockRejectedByTheApplicationIsNotRetried(t *testing.T) {
 	for _, v := range precommits {
 		n.deliver(t, &VoteMessage{Vote: v})
 	}
-	n.deliverParts(t)
 	calls, accepted, rejected := n.app.counts()
 	require.Equal(t, [3]int{1, 0, 4}, [3]int{calls, accepted, rejected})
 	require.Equal(t, cstypes.RoundStepPrecommit, n.sd.Step)
@@ -338,6 +337,37 @@ func TestStateCompletedBlockWithoutItsPolkaIsNotProcessed(t *testing.T) {
 
 	n.deliverParts(t)
 	require.True(t, n.sd.ProposalBlock.HashesTo(n.blockID.Hash))
+	calls, _, _ := n.app.counts()
+	require.Equal(t, 0, calls)
+	require.False(t, processedFor(&n.sd.RoundState, 1))
+	require.Equal(t, int32(-1), n.sd.ValidRound)
+}
+
+// A block that completes while this round's polka is for another block is not
+// processed. A polka retargets the part set at its block, so the other block's
+// parts stop at the part set; only a polka that leaves it be, after a block of
+// this round was already valid, lets both exist, so the completion is driven at
+// the state machine with the votes placed in the vote set directly.
+func TestStateCompletedBlockOtherThanThePolkaBlockIsNotProcessed(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	n := newRound1Node(ctx, t, &verifyExtensionContractApp{}, cstypes.RoundStepPrevote)
+	n.deliverProposal(t)
+	n.deliverParts(t)
+	require.True(t, n.sd.ProposalBlock.HashesTo(n.blockID.Hash))
+	n.sd.updateRoundStep(1, cstypes.RoundStepPrecommit)
+
+	other := factory.MakeBlockID()
+	for _, vs := range n.peers {
+		added, err := n.sd.Votes.AddVote(n.vote(t, vs, tmproto.PrevoteType, other))
+		require.NoError(t, err)
+		require.True(t, added)
+	}
+	polka, ok := n.sd.Votes.Prevotes(1).TwoThirdsMajority()
+	require.True(t, ok)
+	require.True(t, polka.Equals(other))
+
+	require.NoError(t, n.cs.ctrl.Dispatch(n.ctx, &ProposalCompletedEvent{Height: 1}, &n.sd))
 	calls, _, _ := n.app.counts()
 	require.Equal(t, 0, calls)
 	require.False(t, processedFor(&n.sd.RoundState, 1))
