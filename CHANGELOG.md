@@ -2,12 +2,17 @@
 
 ### Breaking Changes
 
+- Consensus: new `CONSENSUS_VERSION_2` (proposer liveness and round skipping); once a chain enables it, only nodes running this version or later can follow it, so every node must upgrade before activation (#1572)
+- RPC: `broadcast_tx*` return the original `CheckTx` rejection, not "Tx already exists in cache", for resubmitted invalid transactions when `keep-invalid-txs-in-cache` is enabled (#1530)
+- RPC: `broadcast_evidence` returns `ErrEvidenceDisabled` while the committed `evidence.max_bytes` is zero (#1547)
+
+### Migration Notes
+
 - `types.PrivValidator` gains `SignProposerHeartbeat` and `SignRoundSkipVote`; signer implementations outside this repository must add them (#1572)
 - Exported database APIs use Tenderdash's own `libs/db` interfaces; custom providers must update imports and `Batch`/`Iterator` return types (#1551)
 - The PostgreSQL event sink and `tx-index.psql-conn` are removed; select `kv` or `null` indexing explicitly (#1553)
 - Invalid P2P configuration prevents startup; an explicit zero `incoming-connection-window` is rejected (#1550)
-- `broadcast_tx*` return the original `CheckTx` rejection, not "Tx already exists in cache", for resubmitted invalid transactions when `keep-invalid-txs-in-cache` is enabled (#1530)
-- `ExtendVote` responses with `DEFAULT` vote extensions are rejected with a clear error (#1565)
+- `ExtendVote` responses with `DEFAULT` vote extensions are rejected with a clear error; they previously crashed the signer or produced votes peers rejected (#1565)
 - The CLI waits up to `--shutdown-timeout` (default 30s) for cleanup after cancellation; supervisors need a longer termination grace period, and embedded `service` callers must `Stop` then `Wait` (#1513)
 - The Go module path stays `github.com/dashpay/tenderdash`, so Go tooling does not resolve `v2.x` tags; Go consumers pin commit pseudo-versions
 
