@@ -1577,7 +1577,7 @@ func (suite *GossiperSuiteTest) TestGossipVoteRedeliversUnacknowledged() {
 			votes := cstypes.NewHeightVoteSet(factory.DefaultTestChainID, 100, suite.valSet)
 			_, _ = votes.AddVote(vote)
 			rs := cstypes.RoundState{Height: 100, Round: 0, Votes: votes}
-			ps.PRS = cstypes.PeerRoundState{Height: 100, Round: 0, Step: tc.step, ProposalPOLRound: -1}
+			ps.PRS = cstypes.PeerRoundState{Height: 100, Round: 0, Step: tc.step, ProposalPOLRound: -1, CatchupCommitRound: -1}
 
 			sends := 0
 			suite.voteCh.
@@ -1617,10 +1617,10 @@ func (suite *GossiperSuiteTest) TestGossipVoteRedeliversUnacknowledged() {
 	}
 }
 
-// TestGossipVoteRedeliveryStopsWhenPeerMovesOn verifies that an unacknowledged
-// vote is no longer pushed once the peer has left the round it belongs to:
-// the peer's new round keeps the regular offer rules, so stale bookkeeping
-// from the old round must not clear bits in it.
+// TestGossipVoteRedeliveryStopsWhenPeerMovesOn verifies that bookkeeping of a
+// round the peer has left is dropped at the next rotation rather than applied
+// to the bits the old round number now stands for: here the peer's proposal
+// POL bits, which name that same round under its new round state.
 func (suite *GossiperSuiteTest) TestGossipVoteRedeliveryStopsWhenPeerMovesOn() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1636,7 +1636,7 @@ func (suite *GossiperSuiteTest) TestGossipVoteRedeliveryStopsWhenPeerMovesOn() {
 	votes := cstypes.NewHeightVoteSet(factory.DefaultTestChainID, 100, suite.valSet)
 	_, _ = votes.AddVote(prevoteR0)
 	_, _ = votes.AddVote(prevoteR1)
-	ps.PRS = cstypes.PeerRoundState{Height: 100, Round: 0, Step: cstypes.RoundStepPrevote, ProposalPOLRound: -1}
+	ps.PRS = cstypes.PeerRoundState{Height: 100, Round: 0, Step: cstypes.RoundStepPrevote, ProposalPOLRound: -1, CatchupCommitRound: -1}
 
 	suite.voteCh.
 		On("Send", ctx, p2p.Envelope{To: ps.peerID, Message: &tmcons.Vote{Vote: prevoteR0.ToProto()}}).
@@ -1644,10 +1644,19 @@ func (suite *GossiperSuiteTest) TestGossipVoteRedeliveryStopsWhenPeerMovesOn() {
 		Return(nil)
 	suite.gossiper.GossipVote(ctx, cstypes.RoundState{Height: 100, Round: 0, Votes: votes}, ps.GetRoundState())
 
-	// Peer advances to round 1 before acknowledging; the round-1 prevote is
-	// sent and acknowledged normally.
+	// Peer moves to round 1 without acknowledging, and reports (via its
+	// proposal's POL) that it holds the round-0 prevote after all.
 	ps.ApplyNewRoundStepMessage(&NewRoundStepMessage{Height: 100, Round: 1, Step: cstypes.RoundStepPrevote, LastCommitRound: -1})
+	ps.PRS.ProposalPOLRound = 0
+	ps.PRS.ProposalPOL = bits.NewBitArray(suite.valSet.Size())
+	ps.PRS.ProposalPOL.SetIndex(int(prevoteR0.ValidatorIndex), true)
+
+	// The first rotation after the move sees round-0 bookkeeping against a
+	// round-1 peer and must drop it; the round-1 prevote then goes out once and
+	// is acknowledged. The round-0 prevote must never be offered again, which
+	// is what clearing POL bit 0 from the stale bookkeeping would cause.
 	rsR1 := cstypes.RoundState{Height: 100, Round: 1, Votes: votes}
+	suite.clock.Advance(voteResendInterval)
 	suite.voteCh.
 		On("Send", ctx, p2p.Envelope{To: ps.peerID, Message: &tmcons.Vote{Vote: prevoteR1.ToProto()}}).
 		Once().
@@ -1656,13 +1665,12 @@ func (suite *GossiperSuiteTest) TestGossipVoteRedeliveryStopsWhenPeerMovesOn() {
 	suite.Require().NoError(ps.ApplyHasVoteMessage(&HasVoteMessage{
 		Height: 100, Round: 1, Type: tmproto.PrevoteType, Index: prevoteR1.ValidatorIndex,
 	}))
-
-	// Nothing from round 0 may be resent, and the acknowledged round-1 vote
-	// must not be cleared by the stale round-0 bookkeeping.
 	for range 3 {
 		suite.clock.Advance(voteResendInterval)
 		for range 10 {
 			suite.gossiper.GossipVote(ctx, rsR1, ps.GetRoundState())
 		}
 	}
+	suite.Require().True(ps.PRS.ProposalPOL.GetIndex(int(prevoteR0.ValidatorIndex)),
+		"stale round-0 bookkeeping must not clear the peer's POL bits for round 0")
 }

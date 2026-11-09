@@ -72,7 +72,7 @@ type PeerState struct {
 	answeredMaj23Next int
 
 	// unacked are the current-round votes gossiped to the peer that it has not
-	// acknowledged yet; voteResendAt is when they are next due for re-offer.
+	// acknowledged yet; voteResendAt is when they are next checked for re-offer.
 	unacked      unackedVotes
 	voteResendAt time.Time
 
@@ -535,8 +535,18 @@ func (ps *PeerState) SetHasVote(vote *types.Vote) error {
 	return ps.setHasVote(vote.Height, vote.Round, vote.Type, vote.ValidatorIndex)
 }
 
-// setHasVote will return an error when the index exceeds the bitArray length
+// setHasVote records a vote the peer has shown it holds. It returns an error
+// when the index exceeds the bitArray length.
 func (ps *PeerState) setHasVote(height int64, round int32, voteType tmproto.SignedMsgType, index int32) error {
+	if err := ps.setVoteBit(height, round, voteType, index); err != nil {
+		return err
+	}
+	ps.ackVote(height, round, voteType, index)
+	return nil
+}
+
+// setVoteBit marks the vote as the peer's without touching redelivery tracking.
+func (ps *PeerState) setVoteBit(height int64, round int32, voteType tmproto.SignedMsgType, index int32) error {
 	ps.logger.Trace(
 		"peerState setHasVote",
 		"peer", ps.peerID,
@@ -557,19 +567,31 @@ func (ps *PeerState) setHasVote(height int64, round int32, voteType tmproto.Sign
 			return ErrPeerStateInvalidVoteIndex
 		}
 	}
-	ps.ackVote(height, round, voteType, index)
 	return nil
 }
 
+// voteResendMaxBackoff caps how many times the wait before re-offering one
+// unacknowledged vote doubles. A vote whose HasVote was lost can never be
+// acknowledged by resending it — the receiver drops the duplicate before any
+// HasVote is published — so without backoff it would be resent every interval
+// for the rest of the round; without a cap it would effectively be given up
+// on, which is the permanent loss redelivery exists to prevent.
+const voteResendMaxBackoff = 3
+
+// unackedVote is one vote handed to the transport for the peer and not yet
+// confirmed by it. A zero sentAt means the vote is not tracked.
+type unackedVote struct {
+	sentAt   time.Time
+	reoffers uint8
+}
+
 // unackedVotes are the votes of one height/round that were handed to the
-// transport for the peer and that the peer has not confirmed having, split by
-// the redelivery window they were sent in: recent since the last rotation, due
-// before it. Slots follow unackedVoteTypes.
+// transport for the peer and that the peer has not confirmed having, indexed
+// by validator index; slots follow unackedVoteTypes.
 type unackedVotes struct {
 	height int64
 	round  int32
-	due    [len(unackedVoteTypes)]*bits.BitArray
-	recent [len(unackedVoteTypes)]*bits.BitArray
+	votes  [len(unackedVoteTypes)][]unackedVote
 }
 
 var unackedVoteTypes = [...]tmproto.SignedMsgType{tmproto.PrevoteType, tmproto.PrecommitType}
@@ -588,6 +610,11 @@ func unackedVoteSlot(voteType tmproto.SignedMsgType) (int, bool) {
 // redelivery interval passes without the peer confirming it, which puts it
 // back on offer (see ReofferUnackedVotes). Only the peer's current round is
 // tracked: votes for any other round are marked exactly like SetHasVote.
+//
+// Gossip picks a vote only while the peer's bit for it is clear, and the send
+// runs between that pick and this call, unlocked. A bit found already set here
+// therefore means the peer confirmed the vote in that window, and the vote is
+// not tracked: a resend could never be acknowledged.
 func (ps *PeerState) SetVoteSent(vote *types.Vote) error {
 	if vote == nil {
 		return ErrPeerStateSetNilVote
@@ -595,24 +622,27 @@ func (ps *PeerState) SetVoteSent(vote *types.Vote) error {
 	ps.mtx.Lock()
 	defer ps.mtx.Unlock()
 
-	if err := ps.setHasVote(vote.Height, vote.Round, vote.Type, vote.ValidatorIndex); err != nil {
+	slot, ok := unackedVoteSlot(vote.Type)
+	track := ok && vote.Height == ps.PRS.Height && vote.Round == ps.PRS.Round
+	var psVotes *bits.BitArray
+	if track {
+		psVotes = ps.getVoteBitArray(vote.Height, vote.Round, vote.Type)
+		track = psVotes != nil && !psVotes.GetIndex(int(vote.ValidatorIndex))
+	}
+	if err := ps.setVoteBit(vote.Height, vote.Round, vote.Type, vote.ValidatorIndex); err != nil {
 		return err
 	}
-	slot, ok := unackedVoteSlot(vote.Type)
-	if !ok || vote.Height != ps.PRS.Height || vote.Round != ps.PRS.Round {
-		return nil
-	}
-	psVotes := ps.getVoteBitArray(vote.Height, vote.Round, vote.Type)
-	if psVotes == nil {
+	if !track {
 		return nil
 	}
 	if ps.unacked.height != vote.Height || ps.unacked.round != vote.Round {
 		ps.unacked = unackedVotes{height: vote.Height, round: vote.Round}
 	}
-	if ps.unacked.recent[slot] == nil {
-		ps.unacked.recent[slot] = bits.NewBitArray(psVotes.Size())
+	if len(ps.unacked.votes[slot]) != psVotes.Size() {
+		ps.unacked.votes[slot] = make([]unackedVote, psVotes.Size())
 	}
-	ps.unacked.recent[slot].SetIndex(int(vote.ValidatorIndex), true)
+	// A re-offered vote keeps its backoff; setVoteBit validated the index.
+	ps.unacked.votes[slot][vote.ValidatorIndex].sentAt = ps.clock.Now()
 	return nil
 }
 
@@ -622,8 +652,9 @@ func (ps *PeerState) ackVote(height int64, round int32, voteType tmproto.SignedM
 	if !ok || ps.unacked.height != height || ps.unacked.round != round {
 		return
 	}
-	ps.unacked.due[slot].SetIndex(int(index), false)
-	ps.unacked.recent[slot].SetIndex(int(index), false)
+	if entries := ps.unacked.votes[slot]; 0 <= index && int(index) < len(entries) {
+		entries[index] = unackedVote{}
+	}
 }
 
 // ackVoteBits drops every vote set in acked from redelivery tracking.
@@ -632,16 +663,15 @@ func (ps *PeerState) ackVoteBits(height int64, round int32, voteType tmproto.Sig
 	if !ok || acked == nil || ps.unacked.height != height || ps.unacked.round != round {
 		return
 	}
-	if ps.unacked.due[slot] != nil {
-		ps.unacked.due[slot] = ps.unacked.due[slot].Sub(acked)
-	}
-	if ps.unacked.recent[slot] != nil {
-		ps.unacked.recent[slot] = ps.unacked.recent[slot].Sub(acked)
+	for index := range ps.unacked.votes[slot] {
+		if acked.GetIndex(index) {
+			ps.unacked.votes[slot][index] = unackedVote{}
+		}
 	}
 }
 
 // ReofferUnackedVotes puts current-round votes the peer has not acknowledged
-// back on offer, once per voteResendInterval.
+// back on offer, checking once per voteResendInterval.
 //
 // Gossip marks a vote as the peer's the moment it is handed to the transport;
 // a copy dropped after that (router queue overflow, receiver over its
@@ -650,12 +680,12 @@ func (ps *PeerState) ackVoteBits(height int64, round int32, voteType tmproto.Sig
 // votes are exactly what both sides lack to reach one, the round stalls with
 // no timeout to fall back on.
 //
-// Each rotation clears the peer's bits for votes sent before the previous
-// rotation and promotes those sent since, so an unacknowledged vote is offered
-// again between one and two intervals after it went out, while one whose
-// HasVote is merely in flight is not: the healthy path sends nothing twice.
-// Bookkeeping of a round the peer has left is dropped, never applied to the
-// new round's bits.
+// A vote is re-offered once a full interval has passed since it was sent — so
+// one whose HasVote is merely in flight is not, and the healthy path sends
+// nothing twice — and at most two intervals after, given the once-per-interval
+// check. Each re-offer doubles the wait before the next, up to
+// voteResendMaxBackoff doublings. Bookkeeping of a round the peer has left is
+// dropped, never applied to the bits that round number now stands for.
 func (ps *PeerState) ReofferUnackedVotes() {
 	ps.mtx.Lock()
 	defer ps.mtx.Unlock()
@@ -671,22 +701,31 @@ func (ps *PeerState) ReofferUnackedVotes() {
 		return
 	}
 	reoffered := 0
-	for slot, due := range ps.unacked.due {
-		if due == nil {
+	for slot, entries := range ps.unacked.votes {
+		if len(entries) == 0 {
 			continue
 		}
 		psVotes := ps.getVoteBitArray(ps.unacked.height, ps.unacked.round, unackedVoteTypes[slot])
 		if psVotes == nil {
 			continue
 		}
-		reoffered += due.CountTrueBits()
-		psVotes.Update(psVotes.Sub(due))
+		for index := range entries {
+			entry := &entries[index]
+			if entry.sentAt.IsZero() || now.Sub(entry.sentAt) < ps.voteResendInterval<<entry.reoffers {
+				continue
+			}
+			psVotes.SetIndex(index, false)
+			entry.sentAt = now
+			if entry.reoffers < voteResendMaxBackoff {
+				entry.reoffers++
+			}
+			reoffered++
+		}
 	}
 	if reoffered > 0 {
 		ps.logger.Debug("re-offering votes the peer has not acknowledged",
 			"height", ps.unacked.height, "round", ps.unacked.round, "votes", reoffered)
 	}
-	ps.unacked.due, ps.unacked.recent = ps.unacked.recent, [len(unackedVoteTypes)]*bits.BitArray{}
 }
 
 // SetHasCommit sets the given vote as known by the peer
