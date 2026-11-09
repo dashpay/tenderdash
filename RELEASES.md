@@ -36,9 +36,30 @@ A fix for another deployed line starts from its exact released tag and requires
 an explicit Platform support decision rather than automatic maintenance promises.
 
 Release tags remain `vX.Y.Z`; prereleases use `vX.Y.Z-dev.N`. The skill evaluates
-SemVer from compatibility, not branch names or `feat`/`fix` labels. It separately
-reviews `P2PProtocol`, `BlockProtocol`, and `ABCISemVer`; a software version bump
-does not update those contracts automatically.
+SemVer from compatibility, not branch names or `feat`/`fix` labels.
+
+## Versioning policy
+
+The software version is decided only by these contracts: RPC, ABCI, P2P and
+consensus, and the block format.
+
+- **Major:** a backward-incompatible change to any of them. A new consensus
+  version (for example `CONSENSUS_VERSION_3`) is a major even when a chain
+  parameter activates it, as are changes older nodes cannot follow, removed or
+  semantically changed RPC, and an `ABCISemVer` major.
+- **Minor:** a backward-compatible extension, such as new optional fields, RPC
+  methods or parameters that leave existing networks unchanged.
+- **Patch:** fixes that change none of these contracts.
+
+Exported Go APIs, configuration and CLI (including removed settings and tightened
+validation), tooling, CI and documentation do not affect the version; the
+changelog describes them and any operator action. Persisted data is not versioned:
+storage changes must migrate automatically and invisibly to operators, since most
+data can be rebuilt by resync and rollback is an edge case.
+
+The skill separately reviews `P2PProtocol`, `BlockProtocol`, and `ABCISemVer`; a
+software version bump does not update those contracts automatically.
+`BlockProtocol` is enforced strictly, so bumping it also requires a major.
 
 Full-release promotion and stable-to-dev synchronization should preserve
 ancestry. Master currently has protection rules that must be reconciled with

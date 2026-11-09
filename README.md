@@ -45,9 +45,11 @@ See the [installation instructions](docs/introduction/install.md),
 Building from source requires Go 1.27.3 or newer and the BLS native dependency;
 `make build` handles the dependency build.
 
-Tenderdash uses Semantic Versioning for releases. Compatibility review includes
-exported Go APIs, RPC, ABCI, P2P and block protocols, persisted data, and operator
-configuration. Release notes describe migration and coordinated rollout needs.
+Tenderdash uses Semantic Versioning for releases. The version follows the RPC,
+ABCI, P2P/consensus and block-format contracts: a backward-incompatible change to
+any of them, including a new consensus version, is a major release. Exported Go
+APIs and configuration do not affect the version, and storage changes migrate
+automatically. Release notes describe migration and coordinated rollout needs.
 The [project release skill](.agents/skills/tenderdash-release/SKILL.md) reviews
 actual changes before choosing a version; commit prefixes alone do not decide it.
 
