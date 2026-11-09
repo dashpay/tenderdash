@@ -837,6 +837,6 @@ func BlockResponseFromProto(resp *bcproto.BlockResponse, peerID types.NodeID) (*
 		Block:  block,
 		Parts:  parts,
 		Commit: commit,
-		Size:   committedPartsSize(resp),
+		Size:   len(resp.Block) + len(resp.PartLayout),
 	}, nil
 }

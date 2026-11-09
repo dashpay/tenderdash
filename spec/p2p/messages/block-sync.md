@@ -40,12 +40,22 @@ BlockResponse contains the block requested and its commit.
 |------------|------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------|
 | Block      | bytes                                          | Requested [Block](../../core/data_structures.md#block), serialized as it was committed: the bytes of its parts, in order. On the wire this is the same as an embedded Block.                  | 1            |
 | Commit     | [Commit](../../core/data_structures.md#commit) | Commit for the requested block                                                                                                                                                                | 2            |
-| PartSizes  | repeated uint32                                | Size of each part the block was committed with, in order. Empty when the block was cut into parts of 64kB, the last one shorter                                                               | 3            |
-| PartProofs | repeated [Proof](../../core/data_structures.md#proof) | Merkle proof of each part the block was committed with, in order, alongside PartSizes. Empty when the part set header can be computed from the parts, which it cannot when a proof's total differs from the header's | 4            |
+| PartLayout | bytes                                          | Serialized BlockPartLayout. Empty when the block was cut into parts of 64kB, the last one shorter | 3            |
 
-The receiver rebuilds the block's part set from `Block`, `PartSizes` and
-`PartProofs`: the part set header in the commit's block ID is computed over the
-committed parts, and decoding and re-encoding the block can change its bytes.
+The receiver rebuilds the block's part set from `Block` and `PartLayout`: the
+part set header in the commit's block ID is computed over the committed parts,
+and decoding and re-encoding the block can change its bytes.
+
+### BlockPartLayout
+
+BlockPartLayout describes the parts a block was committed with, when they cannot
+be derived from the block's bytes. It is carried as opaque bytes so that it is
+only decoded for a response to a request, after bounds checks on its encoding.
+
+| Name   | Type                                                  | Description                                                                                                                                             | Field Number |
+|--------|-------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|--------------|
+| Sizes  | repeated uint32                                       | Size of each part, in order                                                                                                                             | 1            |
+| Proofs | repeated [Proof](../../core/data_structures.md#proof) | Merkle proof of each part, in order. Empty when the part set header can be computed from the parts, which it cannot when a proof's total differs from the header's | 2            |
 
 ### StatusRequest
 

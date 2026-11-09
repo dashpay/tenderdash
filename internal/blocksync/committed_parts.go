@@ -3,8 +3,14 @@ package blocksync
 import (
 	"errors"
 	"fmt"
+	"slices"
 
+	"github.com/cosmos/gogoproto/proto"
+	"google.golang.org/protobuf/encoding/protowire"
+
+	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/merkle"
+	"github.com/dashpay/tenderdash/internal/p2p"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	tmmath "github.com/dashpay/tenderdash/libs/math"
 	bcproto "github.com/dashpay/tenderdash/proto/tendermint/blocksync"
@@ -91,21 +97,42 @@ func standardPartSizes(partSizes []uint32, size int) bool {
 // committedPartsFromProto returns the parts in a block response, after checking
 // that they are well formed. It does not check them against the commit.
 func committedPartsFromProto(resp *bcproto.BlockResponse) (CommittedParts, error) {
-	parts := CommittedParts{Bytes: resp.Block, Sizes: resp.PartSizes}
-	if len(resp.PartSizes) > 0 {
-		if err := types.ValidatePartSizes(len(resp.Block), resp.PartSizes); err != nil {
+	blockBytes := resp.Block
+	// A repeated block field leaves the allocation of its longest occurrence
+	// behind the last one, and only the length is charged to the backlog.
+	if cap(blockBytes) > 2*len(blockBytes) {
+		blockBytes = slices.Clone(blockBytes)
+	}
+	parts := CommittedParts{Bytes: blockBytes}
+	if len(resp.PartLayout) == 0 {
+		return parts, nil
+	}
+	if len(resp.PartLayout) > p2p.BlockPartLayoutMaxBytes {
+		return CommittedParts{}, fmt.Errorf("part layout too big: %d bytes, max: %d",
+			len(resp.PartLayout), p2p.BlockPartLayoutMaxBytes)
+	}
+	if err := checkPartLayoutBounds(resp.PartLayout); err != nil {
+		return CommittedParts{}, err
+	}
+	var layout bcproto.BlockPartLayout
+	if err := proto.Unmarshal(resp.PartLayout, &layout); err != nil {
+		return CommittedParts{}, fmt.Errorf("cannot decode part layout: %w", err)
+	}
+	parts.Sizes = layout.Sizes
+	if len(layout.Sizes) > 0 {
+		if err := types.ValidatePartSizes(len(blockBytes), layout.Sizes); err != nil {
 			return CommittedParts{}, err
 		}
 	}
-	if len(resp.PartProofs) == 0 {
+	if len(layout.Proofs) == 0 {
 		return parts, nil
 	}
-	if len(resp.PartProofs) != len(resp.PartSizes) {
-		return CommittedParts{}, fmt.Errorf("%d proofs for %d parts", len(resp.PartProofs), len(resp.PartSizes))
+	if len(layout.Proofs) != len(layout.Sizes) {
+		return CommittedParts{}, fmt.Errorf("%d proofs for %d parts", len(layout.Proofs), len(layout.Sizes))
 	}
-	parts.Proofs = make([]merkle.Proof, len(resp.PartProofs))
-	for i := range resp.PartProofs {
-		proof, err := merkle.ProofFromProto(&resp.PartProofs[i])
+	parts.Proofs = make([]merkle.Proof, len(layout.Proofs))
+	for i := range layout.Proofs {
+		proof, err := merkle.ProofFromProto(&layout.Proofs[i])
 		if err != nil {
 			return CommittedParts{}, fmt.Errorf("proof of part %d: %w", i, err)
 		}
@@ -117,26 +144,106 @@ func committedPartsFromProto(resp *bcproto.BlockResponse) (CommittedParts, error
 	return parts, nil
 }
 
-// committedPartsSize returns the serialized size of the parts in a block
-// response.
-func committedPartsSize(resp *bcproto.BlockResponse) int {
-	size := len(resp.Block) + 4*len(resp.PartSizes)
-	for i := range resp.PartProofs {
-		size += resp.PartProofs[i].Size()
-	}
-	return size
+// Field numbers of BlockPartLayout and tendermint.crypto.Proof.
+const (
+	layoutSizesField   protowire.Number = 1
+	layoutProofsField  protowire.Number = 2
+	proofLeafHashField protowire.Number = 3
+	proofAuntsField    protowire.Number = 4
+)
+
+// checkPartLayoutBounds refuses a serialized BlockPartLayout with more entries
+// than a block can have, without decoding it. Decoding allocates tens of bytes
+// for every occurrence of a repeated field, and an occurrence can take two
+// bytes, so the limits have to hold before the layout is decoded.
+func checkPartLayoutBounds(layout []byte) error {
+	sizes, proofs := 0, 0
+	return walkFields(layout, func(number protowire.Number, wireType protowire.Type, value []byte) error {
+		switch {
+		case number == layoutSizesField && wireType == protowire.VarintType:
+			sizes++
+		case number == layoutSizesField && wireType == protowire.BytesType:
+			// a packed list has one varint per byte without the continuation bit
+			for _, b := range value {
+				if b < 0x80 {
+					sizes++
+				}
+			}
+		case number == layoutProofsField && wireType == protowire.BytesType:
+			proofs++
+			if err := checkProofBounds(value); err != nil {
+				return fmt.Errorf("proof %d: %w", proofs-1, err)
+			}
+		}
+		if sizes > int(types.MaxBlockPartsCount) {
+			return fmt.Errorf("too many parts: more than %d", types.MaxBlockPartsCount)
+		}
+		if proofs > int(types.MaxBlockPartsCount) {
+			return fmt.Errorf("too many proofs: more than %d", types.MaxBlockPartsCount)
+		}
+		return nil
+	})
 }
 
-// protoProofs returns Proofs in their protobuf form.
-func (p CommittedParts) protoProofs() []tmcrypto.Proof {
-	if p.Proofs == nil {
+// checkProofBounds is checkPartLayoutBounds for a serialized proof.
+func checkProofBounds(proof []byte) error {
+	aunts := 0
+	return walkFields(proof, func(number protowire.Number, wireType protowire.Type, value []byte) error {
+		if wireType != protowire.BytesType || (number != proofLeafHashField && number != proofAuntsField) {
+			return nil
+		}
+		if len(value) > crypto.HashSize {
+			return fmt.Errorf("hash too long: %d bytes, max: %d", len(value), crypto.HashSize)
+		}
+		if number == proofAuntsField {
+			aunts++
+		}
+		if aunts > merkle.MaxAunts {
+			return fmt.Errorf("too many aunts: more than %d", merkle.MaxAunts)
+		}
 		return nil
+	})
+}
+
+// walkFields calls visit for every field of a serialized message, with the
+// contents of the field when it is length-delimited.
+func walkFields(bz []byte, visit func(protowire.Number, protowire.Type, []byte) error) error {
+	for len(bz) > 0 {
+		number, wireType, n := protowire.ConsumeTag(bz)
+		if n < 0 {
+			return protowire.ParseError(n)
+		}
+		bz = bz[n:]
+		n = protowire.ConsumeFieldValue(number, wireType, bz)
+		if n < 0 {
+			return protowire.ParseError(n)
+		}
+		value := bz[:n]
+		if wireType == protowire.BytesType {
+			value, _ = protowire.ConsumeBytes(value)
+		}
+		if err := visit(number, wireType, value); err != nil {
+			return err
+		}
+		bz = bz[n:]
 	}
-	proofs := make([]tmcrypto.Proof, len(p.Proofs))
-	for i := range p.Proofs {
-		proofs[i] = *p.Proofs[i].ToProto()
+	return nil
+}
+
+// partLayout returns the serialized BlockPartLayout of the parts, nil when the
+// parts need none.
+func (p CommittedParts) partLayout() ([]byte, error) {
+	if len(p.Sizes) == 0 && len(p.Proofs) == 0 {
+		return nil, nil
 	}
-	return proofs
+	layout := bcproto.BlockPartLayout{Sizes: p.Sizes}
+	if len(p.Proofs) > 0 {
+		layout.Proofs = make([]tmcrypto.Proof, len(p.Proofs))
+		for i := range p.Proofs {
+			layout.Proofs[i] = *p.Proofs[i].ToProto()
+		}
+	}
+	return proto.Marshal(&layout)
 }
 
 // partSet returns the part set the block was committed with. header is the

@@ -126,15 +126,12 @@ type BlockResponse struct {
 	// releases.
 	Block  []byte        `protobuf:"bytes,1,opt,name=block,proto3" json:"block,omitempty"`
 	Commit *types.Commit `protobuf:"bytes,2,opt,name=commit,proto3" json:"commit,omitempty"`
-	// part_sizes is the size of each part the block was committed with, in
-	// order. It is empty when the block was cut into parts of 64kB, the last
-	// one shorter, the way honest proposers cut it.
-	PartSizes []uint32 `protobuf:"varint,3,rep,packed,name=part_sizes,json=partSizes,proto3" json:"part_sizes,omitempty"`
-	// part_proofs is the Merkle proof of each part the block was committed with,
-	// in order, alongside part_sizes. It is empty when the part set header can
-	// be computed from the parts, which it cannot when a proof's total differs
-	// from the header's.
-	PartProofs []crypto.Proof `protobuf:"bytes,4,rep,name=part_proofs,json=partProofs,proto3" json:"part_proofs"`
+	// part_layout is a serialized BlockPartLayout. It is empty when the block was
+	// cut into parts of 64kB, the last one shorter, the way honest proposers cut
+	// it. It is opaque here because every received message is decoded before it
+	// is matched to a request: the layout is only decoded once it is known to be
+	// the response to one, and within bounds.
+	PartLayout []byte `protobuf:"bytes,3,opt,name=part_layout,json=partLayout,proto3" json:"part_layout,omitempty"`
 }
 
 func (m *BlockResponse) Reset()         { *m = BlockResponse{} }
@@ -184,16 +181,67 @@ func (m *BlockResponse) GetCommit() *types.Commit {
 	return nil
 }
 
-func (m *BlockResponse) GetPartSizes() []uint32 {
+func (m *BlockResponse) GetPartLayout() []byte {
 	if m != nil {
-		return m.PartSizes
+		return m.PartLayout
 	}
 	return nil
 }
 
-func (m *BlockResponse) GetPartProofs() []crypto.Proof {
+// BlockPartLayout describes the parts a block was committed with, when they
+// cannot be derived from the block's bytes.
+type BlockPartLayout struct {
+	// sizes is the size of each part, in order.
+	Sizes []uint32 `protobuf:"varint,1,rep,packed,name=sizes,proto3" json:"sizes,omitempty"`
+	// proofs is the Merkle proof of each part, in order. It is empty when the
+	// part set header can be computed from the parts, which it cannot when a
+	// proof's total differs from the header's.
+	Proofs []crypto.Proof `protobuf:"bytes,2,rep,name=proofs,proto3" json:"proofs"`
+}
+
+func (m *BlockPartLayout) Reset()         { *m = BlockPartLayout{} }
+func (m *BlockPartLayout) String() string { return proto.CompactTextString(m) }
+func (*BlockPartLayout) ProtoMessage()    {}
+func (*BlockPartLayout) Descriptor() ([]byte, []int) {
+	return fileDescriptor_19b397c236e0fa07, []int{3}
+}
+func (m *BlockPartLayout) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *BlockPartLayout) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_BlockPartLayout.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *BlockPartLayout) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BlockPartLayout.Merge(m, src)
+}
+func (m *BlockPartLayout) XXX_Size() int {
+	return m.Size()
+}
+func (m *BlockPartLayout) XXX_DiscardUnknown() {
+	xxx_messageInfo_BlockPartLayout.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_BlockPartLayout proto.InternalMessageInfo
+
+func (m *BlockPartLayout) GetSizes() []uint32 {
 	if m != nil {
-		return m.PartProofs
+		return m.Sizes
+	}
+	return nil
+}
+
+func (m *BlockPartLayout) GetProofs() []crypto.Proof {
+	if m != nil {
+		return m.Proofs
 	}
 	return nil
 }
@@ -206,7 +254,7 @@ func (m *StatusRequest) Reset()         { *m = StatusRequest{} }
 func (m *StatusRequest) String() string { return proto.CompactTextString(m) }
 func (*StatusRequest) ProtoMessage()    {}
 func (*StatusRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_19b397c236e0fa07, []int{3}
+	return fileDescriptor_19b397c236e0fa07, []int{4}
 }
 func (m *StatusRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -245,7 +293,7 @@ func (m *StatusResponse) Reset()         { *m = StatusResponse{} }
 func (m *StatusResponse) String() string { return proto.CompactTextString(m) }
 func (*StatusResponse) ProtoMessage()    {}
 func (*StatusResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_19b397c236e0fa07, []int{4}
+	return fileDescriptor_19b397c236e0fa07, []int{5}
 }
 func (m *StatusResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -292,6 +340,7 @@ func init() {
 	proto.RegisterType((*BlockRequest)(nil), "tendermint.blocksync.BlockRequest")
 	proto.RegisterType((*NoBlockResponse)(nil), "tendermint.blocksync.NoBlockResponse")
 	proto.RegisterType((*BlockResponse)(nil), "tendermint.blocksync.BlockResponse")
+	proto.RegisterType((*BlockPartLayout)(nil), "tendermint.blocksync.BlockPartLayout")
 	proto.RegisterType((*StatusRequest)(nil), "tendermint.blocksync.StatusRequest")
 	proto.RegisterType((*StatusResponse)(nil), "tendermint.blocksync.StatusResponse")
 }
@@ -299,29 +348,30 @@ func init() {
 func init() { proto.RegisterFile("tendermint/blocksync/types.proto", fileDescriptor_19b397c236e0fa07) }
 
 var fileDescriptor_19b397c236e0fa07 = []byte{
-	// 346 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x92, 0xc1, 0x4a, 0xf3, 0x40,
-	0x14, 0x85, 0x33, 0x7f, 0xfa, 0x17, 0xbc, 0x6d, 0x2d, 0x0c, 0x45, 0x42, 0xb1, 0x31, 0x64, 0x21,
-	0x75, 0x93, 0x11, 0xdd, 0xb8, 0x10, 0x84, 0xba, 0x17, 0x99, 0xee, 0xdc, 0x48, 0x92, 0x8e, 0x49,
-	0xd0, 0x64, 0xc6, 0xcc, 0x74, 0x11, 0x9f, 0xc2, 0xb7, 0xf1, 0x15, 0xba, 0xec, 0xd2, 0x95, 0x48,
-	0xf3, 0x22, 0x92, 0x49, 0xd4, 0x28, 0xea, 0x6e, 0xee, 0x39, 0x1f, 0x67, 0xe6, 0xdc, 0x04, 0x1c,
-	0xc5, 0xb2, 0x05, 0xcb, 0xd3, 0x24, 0x53, 0x24, 0xb8, 0xe3, 0xe1, 0xad, 0x2c, 0xb2, 0x90, 0xa8,
-	0x42, 0x30, 0xe9, 0x89, 0x9c, 0x2b, 0x8e, 0x47, 0x9f, 0x84, 0xf7, 0x41, 0x8c, 0x47, 0x11, 0x8f,
-	0xb8, 0x06, 0x48, 0x75, 0xaa, 0xd9, 0xf1, 0xa4, 0x95, 0x16, 0xe6, 0x85, 0x50, 0x9c, 0x88, 0x9c,
-	0xf3, 0x9b, 0xc6, 0xde, 0x6d, 0xd9, 0xfa, 0x8a, 0xf6, 0x45, 0xee, 0x3e, 0xf4, 0x67, 0x55, 0x3e,
-	0x65, 0xf7, 0x4b, 0x26, 0x15, 0xde, 0x81, 0x6e, 0xcc, 0x92, 0x28, 0x56, 0x16, 0x72, 0xd0, 0xd4,
-	0xa4, 0xcd, 0xe4, 0x1e, 0xc0, 0xf0, 0x82, 0x37, 0xa4, 0x14, 0x3c, 0x93, 0xec, 0x57, 0xf4, 0x09,
-	0xc1, 0xe0, 0x2b, 0x39, 0x82, 0xff, 0xba, 0x84, 0x06, 0xfb, 0xb4, 0x1e, 0xf0, 0x21, 0x74, 0x43,
-	0x9e, 0xa6, 0x89, 0xb2, 0xfe, 0x39, 0x68, 0xda, 0x3b, 0xb2, 0xbc, 0x56, 0xe9, 0xfa, 0x8d, 0xe7,
-	0xda, 0xa7, 0x0d, 0x87, 0x27, 0x00, 0xc2, 0xcf, 0xd5, 0xb5, 0x4c, 0x1e, 0x98, 0xb4, 0x4c, 0xc7,
-	0x9c, 0x0e, 0xe8, 0x56, 0xa5, 0xcc, 0x2b, 0x01, 0x9f, 0x41, 0x4f, 0xdb, 0xba, 0xbd, 0xb4, 0x3a,
-	0x8e, 0xf9, 0x3d, 0xb5, 0x5e, 0x8f, 0x77, 0x59, 0x01, 0xb3, 0xce, 0xea, 0x65, 0xcf, 0xa0, 0x3a,
-	0x51, 0x0b, 0xd2, 0x1d, 0xc2, 0x60, 0xae, 0x7c, 0xb5, 0x94, 0xcd, 0x36, 0xdc, 0x53, 0xd8, 0x7e,
-	0x17, 0xfe, 0x2e, 0x8d, 0x31, 0x74, 0x02, 0x5f, 0x32, 0x5d, 0xc5, 0xa4, 0xfa, 0x3c, 0xa3, 0xab,
-	0x8d, 0x8d, 0xd6, 0x1b, 0x1b, 0xbd, 0x6e, 0x6c, 0xf4, 0x58, 0xda, 0xc6, 0xba, 0xb4, 0x8d, 0xe7,
-	0xd2, 0x36, 0xae, 0x4e, 0xa2, 0x44, 0xc5, 0xcb, 0xc0, 0x0b, 0x79, 0x4a, 0x16, 0xbe, 0x8c, 0x85,
-	0x5f, 0x90, 0xfa, 0x99, 0xd5, 0x44, 0xea, 0x4f, 0xfc, 0xd3, 0x4f, 0x12, 0x74, 0xb5, 0x77, 0xfc,
-	0x36, 0x00, 0x9f, 0xdb, 0x4b, 0x3e, 0x43, 0x02, 0x00, 0x00,
+	// 361 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x92, 0xc1, 0x4a, 0xeb, 0x40,
+	0x14, 0x86, 0x93, 0xa6, 0x37, 0x8b, 0xd3, 0xf6, 0x16, 0x42, 0xb9, 0x84, 0x72, 0x6f, 0x1a, 0xb2,
+	0xb8, 0xd4, 0x4d, 0x46, 0x14, 0xc4, 0x85, 0xab, 0xba, 0x15, 0x29, 0xe3, 0xce, 0x4d, 0x49, 0xd2,
+	0x31, 0x09, 0x36, 0x99, 0x31, 0x33, 0x01, 0xe3, 0x53, 0xf8, 0x58, 0x5d, 0x76, 0xe9, 0x4a, 0xa4,
+	0x7d, 0x11, 0xc9, 0x4c, 0xac, 0x51, 0xd4, 0xdd, 0x9c, 0xf3, 0x7f, 0x9c, 0x7f, 0xce, 0xcf, 0x01,
+	0x57, 0x90, 0x7c, 0x49, 0x8a, 0x2c, 0xcd, 0x05, 0x0a, 0x57, 0x34, 0xba, 0xe5, 0x55, 0x1e, 0x21,
+	0x51, 0x31, 0xc2, 0x7d, 0x56, 0x50, 0x41, 0xad, 0xd1, 0x3b, 0xe1, 0xef, 0x89, 0xf1, 0x28, 0xa6,
+	0x31, 0x95, 0x00, 0xaa, 0x5f, 0x8a, 0x1d, 0xff, 0x6b, 0x4d, 0x8b, 0x8a, 0x8a, 0x09, 0x8a, 0x58,
+	0x41, 0xe9, 0x4d, 0x23, 0xff, 0x6d, 0xc9, 0xd2, 0xa2, 0x6d, 0xe4, 0xfd, 0x87, 0xfe, 0xac, 0x9e,
+	0x8f, 0xc9, 0x5d, 0x49, 0xb8, 0xb0, 0xfe, 0x80, 0x99, 0x90, 0x34, 0x4e, 0x84, 0xad, 0xbb, 0xfa,
+	0xd4, 0xc0, 0x4d, 0xe5, 0x1d, 0xc0, 0xf0, 0x92, 0x36, 0x24, 0x67, 0x34, 0xe7, 0xe4, 0x5b, 0xf4,
+	0x1e, 0x06, 0x1f, 0xc1, 0x11, 0xfc, 0x92, 0x3b, 0x48, 0xae, 0x8f, 0x55, 0x61, 0x1d, 0x82, 0x19,
+	0xd1, 0x2c, 0x4b, 0x85, 0xdd, 0x71, 0xf5, 0x69, 0xef, 0xc8, 0xf6, 0x5b, 0x3b, 0xab, 0x2f, 0x9e,
+	0x4b, 0x1d, 0x37, 0x9c, 0x35, 0x81, 0x1e, 0x0b, 0x0a, 0xb1, 0x58, 0x05, 0x15, 0x2d, 0x85, 0x6d,
+	0xc8, 0x69, 0x50, 0xb7, 0x2e, 0x64, 0xc7, 0x5b, 0xc0, 0x50, 0x3a, 0xcf, 0xf7, 0xad, 0xda, 0x9b,
+	0xa7, 0x0f, 0x84, 0xdb, 0xba, 0x6b, 0x4c, 0x07, 0x58, 0x15, 0xd6, 0x09, 0x98, 0x32, 0x22, 0x6e,
+	0x77, 0x5c, 0xe3, 0xb3, 0xb7, 0xca, 0xd0, 0x9f, 0xd7, 0xc0, 0xac, 0xbb, 0x7e, 0x9e, 0x68, 0xb8,
+	0xa1, 0xbd, 0x21, 0x0c, 0xae, 0x44, 0x20, 0x4a, 0xde, 0xc4, 0xe5, 0x9d, 0xc1, 0xef, 0xb7, 0xc6,
+	0xcf, 0xa9, 0x58, 0x16, 0x74, 0xc3, 0x80, 0x13, 0xb9, 0xac, 0x81, 0xe5, 0x7b, 0x86, 0xd7, 0x5b,
+	0x47, 0xdf, 0x6c, 0x1d, 0xfd, 0x65, 0xeb, 0xe8, 0x8f, 0x3b, 0x47, 0xdb, 0xec, 0x1c, 0xed, 0x69,
+	0xe7, 0x68, 0xd7, 0xa7, 0x71, 0x2a, 0x92, 0x32, 0xf4, 0x23, 0x9a, 0xa1, 0x65, 0xc0, 0x13, 0x16,
+	0x54, 0x48, 0x7d, 0xb1, 0xae, 0x90, 0xba, 0x81, 0xaf, 0xae, 0x28, 0x34, 0xa5, 0x76, 0xfc, 0x3a,
+	0x00, 0xfa, 0x6f, 0x07, 0x87, 0x64, 0x02, 0x00, 0x00,
 }
 
 func (m *BlockRequest) Marshal() (dAtA []byte, err error) {
@@ -409,35 +459,10 @@ func (m *BlockResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if len(m.PartProofs) > 0 {
-		for iNdEx := len(m.PartProofs) - 1; iNdEx >= 0; iNdEx-- {
-			{
-				size, err := m.PartProofs[iNdEx].MarshalToSizedBuffer(dAtA[:i])
-				if err != nil {
-					return 0, err
-				}
-				i -= size
-				i = encodeVarintTypes(dAtA, i, uint64(size))
-			}
-			i--
-			dAtA[i] = 0x22
-		}
-	}
-	if len(m.PartSizes) > 0 {
-		dAtA2 := make([]byte, len(m.PartSizes)*10)
-		var j1 int
-		for _, num := range m.PartSizes {
-			for num >= 1<<7 {
-				dAtA2[j1] = uint8(uint64(num)&0x7f | 0x80)
-				num >>= 7
-				j1++
-			}
-			dAtA2[j1] = uint8(num)
-			j1++
-		}
-		i -= j1
-		copy(dAtA[i:], dAtA2[:j1])
-		i = encodeVarintTypes(dAtA, i, uint64(j1))
+	if len(m.PartLayout) > 0 {
+		i -= len(m.PartLayout)
+		copy(dAtA[i:], m.PartLayout)
+		i = encodeVarintTypes(dAtA, i, uint64(len(m.PartLayout)))
 		i--
 		dAtA[i] = 0x1a
 	}
@@ -457,6 +482,64 @@ func (m *BlockResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i -= len(m.Block)
 		copy(dAtA[i:], m.Block)
 		i = encodeVarintTypes(dAtA, i, uint64(len(m.Block)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *BlockPartLayout) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *BlockPartLayout) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *BlockPartLayout) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Proofs) > 0 {
+		for iNdEx := len(m.Proofs) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Proofs[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintTypes(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	if len(m.Sizes) > 0 {
+		dAtA3 := make([]byte, len(m.Sizes)*10)
+		var j2 int
+		for _, num := range m.Sizes {
+			for num >= 1<<7 {
+				dAtA3[j2] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j2++
+			}
+			dAtA3[j2] = uint8(num)
+			j2++
+		}
+		i -= j2
+		copy(dAtA[i:], dAtA3[:j2])
+		i = encodeVarintTypes(dAtA, i, uint64(j2))
 		i--
 		dAtA[i] = 0xa
 	}
@@ -574,15 +657,28 @@ func (m *BlockResponse) Size() (n int) {
 		l = m.Commit.Size()
 		n += 1 + l + sovTypes(uint64(l))
 	}
-	if len(m.PartSizes) > 0 {
+	l = len(m.PartLayout)
+	if l > 0 {
+		n += 1 + l + sovTypes(uint64(l))
+	}
+	return n
+}
+
+func (m *BlockPartLayout) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Sizes) > 0 {
 		l = 0
-		for _, e := range m.PartSizes {
+		for _, e := range m.Sizes {
 			l += sovTypes(uint64(e))
 		}
 		n += 1 + sovTypes(uint64(l)) + l
 	}
-	if len(m.PartProofs) > 0 {
-		for _, e := range m.PartProofs {
+	if len(m.Proofs) > 0 {
+		for _, e := range m.Proofs {
 			l = e.Size()
 			n += 1 + l + sovTypes(uint64(l))
 		}
@@ -858,6 +954,90 @@ func (m *BlockResponse) Unmarshal(dAtA []byte) error {
 			}
 			iNdEx = postIndex
 		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PartLayout", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTypes
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthTypes
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypes
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.PartLayout = append(m.PartLayout[:0], dAtA[iNdEx:postIndex]...)
+			if m.PartLayout == nil {
+				m.PartLayout = []byte{}
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTypes(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthTypes
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *BlockPartLayout) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTypes
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: BlockPartLayout: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: BlockPartLayout: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
 			if wireType == 0 {
 				var v uint32
 				for shift := uint(0); ; shift += 7 {
@@ -874,7 +1054,7 @@ func (m *BlockResponse) Unmarshal(dAtA []byte) error {
 						break
 					}
 				}
-				m.PartSizes = append(m.PartSizes, v)
+				m.Sizes = append(m.Sizes, v)
 			} else if wireType == 2 {
 				var packedLen int
 				for shift := uint(0); ; shift += 7 {
@@ -909,8 +1089,8 @@ func (m *BlockResponse) Unmarshal(dAtA []byte) error {
 					}
 				}
 				elementCount = count
-				if elementCount != 0 && len(m.PartSizes) == 0 {
-					m.PartSizes = make([]uint32, 0, elementCount)
+				if elementCount != 0 && len(m.Sizes) == 0 {
+					m.Sizes = make([]uint32, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v uint32
@@ -928,14 +1108,14 @@ func (m *BlockResponse) Unmarshal(dAtA []byte) error {
 							break
 						}
 					}
-					m.PartSizes = append(m.PartSizes, v)
+					m.Sizes = append(m.Sizes, v)
 				}
 			} else {
-				return fmt.Errorf("proto: wrong wireType = %d for field PartSizes", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Sizes", wireType)
 			}
-		case 4:
+		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field PartProofs", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Proofs", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -962,8 +1142,8 @@ func (m *BlockResponse) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.PartProofs = append(m.PartProofs, crypto.Proof{})
-			if err := m.PartProofs[len(m.PartProofs)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			m.Proofs = append(m.Proofs, crypto.Proof{})
+			if err := m.Proofs[len(m.Proofs)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

@@ -115,7 +115,7 @@ func (suite *BlockFetchJobTestSuite) TestExecuteRejectsOversizedPartMetadata() {
 	ctx := context.Background()
 	const requested = int64(9)
 	oversized := *suite.responses[requested-1]
-	oversized.PartSizes = make([]uint32, types.MaxBlockPartsCount+1)
+	oversized.PartLayout = partLayout(suite.T(), make([]uint32, types.MaxBlockPartsCount+1), nil)
 	suite.client.
 		On("GetBlock", mock.Anything, requested, suite.peer.peerID).
 		Once().
@@ -146,7 +146,7 @@ func (suite *BlockFetchJobTestSuite) TestOversizedPartMetadataIsNotHeldBehindMis
 	pool.AddPeer(suite.peer)
 
 	oversized := *suite.responses[later-1]
-	oversized.PartSizes = make([]uint32, types.MaxBlockPartsCount+1)
+	oversized.PartLayout = partLayout(suite.T(), make([]uint32, types.MaxBlockPartsCount+1), nil)
 	resultCh <- fetch(&oversized)
 	suite.Require().NoError(pool.consumeJobResult(ctx, ctx))
 	height, pendingBytes := pool.backlog()

@@ -1,6 +1,7 @@
 package blocksync
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -587,11 +588,12 @@ func TestServeBlockAsCommitted(t *testing.T) {
 			msg, ok := request(height).(*bcproto.BlockResponse)
 			require.True(t, ok)
 			require.Equal(t, tc.wantBytes, msg.Block)
-			require.Equal(t, tc.wantPartSizes, msg.PartSizes)
-			require.Equal(t, tc.wantProofs, len(msg.PartProofs) > 0)
+			require.Equal(t, tc.wantPartSizes == nil, len(msg.PartLayout) == 0)
 
 			resp, err := BlockResponseFromProto(msg, "peer")
 			require.NoError(t, err)
+			require.Equal(t, tc.wantPartSizes, resp.Parts.Sizes)
+			require.Equal(t, tc.wantProofs, len(resp.Parts.Proofs) > 0)
 			require.Equal(t, blocks[i].Hash(), resp.Block.Hash())
 			require.Equal(t, blocks[i+1].LastCommit.BlockID, resp.Commit.BlockID)
 			parts, err := resp.Parts.partSet(tc.parts.Header())
@@ -626,15 +628,10 @@ func TestBlockResponseWireCompatible(t *testing.T) {
 	commitBytes, err := proto.Marshal(commit)
 	require.NoError(t, err)
 
-	// an embedded message is its encoding, length-delimited
-	field := func(bz []byte, number byte, value []byte) []byte {
-		bz = append(bz, number<<3|2)
-		bz = binary.AppendUvarint(bz, uint64(len(value)))
-		return append(bz, value...)
-	}
 	embedded, err := proto.Marshal(pbb)
 	require.NoError(t, err)
-	older := field(field(nil, 1, embedded), 2, commitBytes)
+	// an embedded message is its encoding, length-delimited
+	older := appendBytesField(appendBytesField(nil, 1, embedded), 2, commitBytes)
 
 	newer, err := proto.Marshal(&bcproto.BlockResponse{Block: blockBytes(t, block), Commit: commit})
 	require.NoError(t, err)
@@ -646,6 +643,21 @@ func TestBlockResponseWireCompatible(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, block.Hash(), resp.Block.Hash())
 	require.Equal(t, CommittedParts{Bytes: embedded}, resp.Parts)
+}
+
+// appendBytesField appends a length-delimited field to serialized protobuf.
+func appendBytesField(bz []byte, number byte, value []byte) []byte {
+	bz = append(bz, number<<3|2)
+	bz = binary.AppendUvarint(bz, uint64(len(value)))
+	return append(bz, value...)
+}
+
+// partLayout returns a serialized BlockPartLayout.
+func partLayout(t *testing.T, sizes []uint32, proofs []crypto.Proof) []byte {
+	t.Helper()
+	bz, err := proto.Marshal(&bcproto.BlockPartLayout{Sizes: sizes, Proofs: proofs})
+	require.NoError(t, err)
+	return bz
 }
 
 // TestBlockResponseFromProtoRejectsMalformedParts checks that part metadata a
@@ -664,33 +676,39 @@ func TestBlockResponseFromProtoRejectsMalformedParts(t *testing.T) {
 	for i := range tooManyAunts.Aunts {
 		tooManyAunts.Aunts[i] = make([]byte, tmcrypto.HashSize)
 	}
+	longAunt := proof
+	longAunt.Aunts = [][]byte{make([]byte, tmcrypto.HashSize+1)}
+	tooManyParts := int(types.MaxBlockPartsCount) + 1
 	testCases := map[string]struct {
-		sizes   []uint32
-		proofs  []crypto.Proof
+		layout  []byte
 		wantErr string
 	}{
-		"too many parts":     {make([]uint32, types.MaxBlockPartsCount+1), nil, "too many parts"},
-		"part too big":       {[]uint32{types.BlockPartSizeBytes + 1}, nil, "too big"},
-		"sizes short":        {[]uint32{size - 1}, nil, "part sizes cover"},
-		"sizes beyond block": {[]uint32{size + 1}, nil, "exceed"},
+		"layout too big":     {make([]byte, p2p.BlockPartLayoutMaxBytes+1), "part layout too big"},
+		"not a layout":       {[]byte{0x0a, 0x05}, "unexpected EOF"},
+		"too many parts":     {partLayout(t, make([]uint32, tooManyParts), nil), "too many parts"},
+		"unpacked parts":     {bytes.Repeat([]byte{1 << 3, 0}, tooManyParts), "too many parts"},
+		"too many proofs":    {bytes.Repeat([]byte{2<<3 | 2, 0}, tooManyParts), "too many proofs"},
+		"too many aunts":     {partLayout(t, []uint32{size}, []crypto.Proof{tooManyAunts}), "too many aunts"},
+		"aunt too long":      {partLayout(t, []uint32{size}, []crypto.Proof{longAunt}), "hash too long"},
+		"part too big":       {partLayout(t, []uint32{types.BlockPartSizeBytes + 1}, nil), "too big"},
+		"sizes short":        {partLayout(t, []uint32{size - 1}, nil), "part sizes cover"},
+		"sizes beyond block": {partLayout(t, []uint32{size + 1}, nil), "exceed"},
 		"proofs without sizes": {
-			nil, []crypto.Proof{proof}, "1 proofs for 0 parts",
+			partLayout(t, nil, []crypto.Proof{proof}), "1 proofs for 0 parts",
 		},
 		"too few proofs": {
-			[]uint32{size - 1, 1}, []crypto.Proof{proof}, "1 proofs for 2 parts",
+			partLayout(t, []uint32{size - 1, 1}, []crypto.Proof{proof}), "1 proofs for 2 parts",
 		},
 		"proof of another part": {
-			[]uint32{size}, []crypto.Proof{{Total: 1, Index: 1, LeafHash: proof.LeafHash}}, "has index 1",
+			partLayout(t, []uint32{size}, []crypto.Proof{{Total: 1, Index: 1, LeafHash: proof.LeafHash}}), "has index 1",
 		},
-		"proof too long": {[]uint32{size}, []crypto.Proof{tooManyAunts}, "aunts"},
 	}
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
 			_, err := BlockResponseFromProto(&bcproto.BlockResponse{
 				Block:      bz,
 				Commit:     blocks[1].LastCommit.ToProto(),
-				PartSizes:  tc.sizes,
-				PartProofs: tc.proofs,
+				PartLayout: tc.layout,
 			}, "peer")
 			require.ErrorContains(t, err, tc.wantErr)
 		})
@@ -706,14 +724,70 @@ func TestBlockResponseSizeChargesPartMetadata(t *testing.T) {
 	blocks := statefactory.MakeBlocks(ctx, t, 2, &state, privVals, 1)
 	bz := blockBytes(t, blocks[0])
 	proof := crypto.Proof{Total: 2, LeafHash: make([]byte, tmcrypto.HashSize)}
+	layout := partLayout(t, []uint32{uint32(len(bz))}, []crypto.Proof{proof})
 	resp, err := BlockResponseFromProto(&bcproto.BlockResponse{
 		Block:      bz,
 		Commit:     blocks[1].LastCommit.ToProto(),
-		PartSizes:  []uint32{uint32(len(bz))},
-		PartProofs: []crypto.Proof{proof},
+		PartLayout: layout,
 	}, "peer")
 	require.NoError(t, err)
-	require.Equal(t, len(bz)+4+proof.Size(), resp.Size)
+	require.Equal(t, len(bz)+len(layout), resp.Size)
+}
+
+// TestPartLayoutIsOpaqueAtEnvelopeBoundary checks that part metadata costs no
+// per-entry allocation when a message is received, which happens before it is
+// matched to a request, nor when the layout is refused. A layout of empty
+// proofs is the smallest encoding of the most entries.
+func TestPartLayoutIsOpaqueAtEnvelopeBoundary(t *testing.T) {
+	const allowedAllocs = 32
+	layout := bytes.Repeat([]byte{2<<3 | 2, 0}, int(types.MaxBlockPartsCount)+1)
+	// block_response is field 9 of the envelope, part_layout field 3 of the response
+	raw := appendBytesField(nil, 9, appendBytesField(nil, 3, layout))
+
+	require.Less(t, testing.AllocsPerRun(10, func() {
+		var envelope p2pproto.Envelope
+		_ = proto.Unmarshal(raw, &envelope)
+	}), float64(allowedAllocs), "decoding the envelope must not allocate per layout entry")
+
+	var envelope p2pproto.Envelope
+	require.NoError(t, proto.Unmarshal(raw, &envelope))
+	msg, err := envelope.Unwrap()
+	require.NoError(t, err)
+	resp, ok := msg.(*bcproto.BlockResponse)
+	require.True(t, ok)
+	require.Equal(t, layout, resp.PartLayout)
+
+	resp.Block = []byte{1}
+	require.Less(t, testing.AllocsPerRun(10, func() {
+		_, _ = committedPartsFromProto(resp)
+	}), float64(allowedAllocs), "refusing the layout must not allocate per layout entry")
+	_, err = committedPartsFromProto(resp)
+	require.ErrorContains(t, err, "too many proofs")
+}
+
+// TestBlockResponseDoesNotRetainOverwrittenBlockField checks that a repeated
+// block field does not leave the allocation of an earlier, larger occurrence
+// held behind the small one that is decoded and charged to the backlog.
+func TestBlockResponseDoesNotRetainOverwrittenBlockField(t *testing.T) {
+	ctx := context.Background()
+	valSet, privVals := factory.MockValidatorSet()
+	state := fakeInitialState(valSet)
+	blocks := statefactory.MakeBlocks(ctx, t, 2, &state, privVals, 1)
+	bz := blockBytes(t, blocks[0])
+	commitBytes, err := proto.Marshal(blocks[1].LastCommit.ToProto())
+	require.NoError(t, err)
+	const overwritten = 1 << 20
+	raw := appendBytesField(appendBytesField(appendBytesField(nil, 1, make([]byte, overwritten)), 1, bz), 2, commitBytes)
+
+	var decoded bcproto.BlockResponse
+	require.NoError(t, proto.Unmarshal(raw, &decoded))
+	require.GreaterOrEqual(t, cap(decoded.Block), overwritten, "the decoder is expected to reuse the larger allocation")
+
+	resp, err := BlockResponseFromProto(&decoded, "peer")
+	require.NoError(t, err)
+	require.Equal(t, bz, resp.Parts.Bytes)
+	require.Equal(t, len(bz), resp.Size)
+	require.LessOrEqual(t, cap(resp.Parts.Bytes), 2*len(bz))
 }
 
 // TestBlockResponseFitsBlockSyncChannel checks that the largest block response
@@ -735,6 +809,9 @@ func TestBlockResponseFitsBlockSyncChannel(t *testing.T) {
 		PartSetHeader: tmproto.PartSetHeader{Total: uint32(parts), Hash: make([]byte, tmcrypto.HashSize)},
 		StateID:       make([]byte, tmcrypto.HashSize),
 	}
+	layout := partLayout(t, sizes, proofs)
+	require.LessOrEqual(t, len(layout), p2p.BlockPartLayoutMaxBytes)
+	require.NoError(t, checkPartLayoutBounds(layout))
 	envelope := &p2pproto.Envelope{Attributes: map[string]string{client.RequestIDAttribute: uuid.NewString()}}
 	require.NoError(t, envelope.Wrap(&bcproto.BlockResponse{
 		Block: make([]byte, types.MaxBlockSizeBytes),
@@ -750,8 +827,7 @@ func TestBlockResponseFitsBlockSyncChannel(t *testing.T) {
 				Signature: make([]byte, 96),
 			}},
 		},
-		PartSizes:  sizes,
-		PartProofs: proofs,
+		PartLayout: layout,
 	}))
 
 	descriptor := p2p.ChannelDescriptors(config.TestConfig())[p2p.BlockSyncChannel]

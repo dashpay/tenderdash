@@ -60,12 +60,13 @@ const (
 	// response: its key and length, the two int64 varints with their keys, and
 	// the leaf hash and aunts with their keys and lengths.
 	blockPartProofMaxBytes = 4 + 2*(1+10) + (merkle.MaxAunts+1)*(2+crypto.HashSize)
+	// BlockPartLayoutMaxBytes bounds a serialized BlockPartLayout: a size and a
+	// proof for the most parts a block can have, and the keys of the two fields.
+	BlockPartLayoutMaxBytes = int(types.MaxBlockPartsCount)*(blockPartSizeMaxBytes+blockPartProofMaxBytes) + 16
 	// blockSyncMaxOverheadBytes bounds what a block response carries besides
-	// the block: part metadata for the most parts a block can have, a commit,
-	// whose vote extensions came in one vote on a maxMsgSize channel, and the
-	// envelope with its attributes.
-	blockSyncMaxOverheadBytes = int(types.MaxBlockPartsCount)*(blockPartSizeMaxBytes+blockPartProofMaxBytes) +
-		maxMsgSize + 1024
+	// the block: its part layout, a commit, whose vote extensions came in one
+	// vote on a maxMsgSize channel, and the envelope with its attributes.
+	blockSyncMaxOverheadBytes = BlockPartLayoutMaxBytes + maxMsgSize + 1024
 
 	// BlockSyncMaxMsgSize is the maximum size of a block sync message
 	BlockSyncMaxMsgSize = types.MaxBlockSizeBytes +

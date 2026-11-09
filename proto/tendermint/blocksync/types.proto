@@ -28,15 +28,23 @@ message BlockResponse {
   // releases.
   bytes                   block  = 1;
   tendermint.types.Commit commit = 2;
-  // part_sizes is the size of each part the block was committed with, in
-  // order. It is empty when the block was cut into parts of 64kB, the last
-  // one shorter, the way honest proposers cut it.
-  repeated uint32 part_sizes = 3;
-  // part_proofs is the Merkle proof of each part the block was committed with,
-  // in order, alongside part_sizes. It is empty when the part set header can
-  // be computed from the parts, which it cannot when a proof's total differs
-  // from the header's.
-  repeated tendermint.crypto.Proof part_proofs = 4 [(gogoproto.nullable) = false];
+  // part_layout is a serialized BlockPartLayout. It is empty when the block was
+  // cut into parts of 64kB, the last one shorter, the way honest proposers cut
+  // it. It is opaque here because every received message is decoded before it
+  // is matched to a request: the layout is only decoded once it is known to be
+  // the response to one, and within bounds.
+  bytes part_layout = 3;
+}
+
+// BlockPartLayout describes the parts a block was committed with, when they
+// cannot be derived from the block's bytes.
+message BlockPartLayout {
+  // sizes is the size of each part, in order.
+  repeated uint32 sizes = 1;
+  // proofs is the Merkle proof of each part, in order. It is empty when the
+  // part set header can be computed from the parts, which it cannot when a
+  // proof's total differs from the header's.
+  repeated tendermint.crypto.Proof proofs = 2 [(gogoproto.nullable) = false];
 }
 
 // StatusRequest requests the status of a peer.

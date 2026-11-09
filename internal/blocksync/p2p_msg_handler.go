@@ -167,11 +167,14 @@ func (h *blockP2PMessageHandler) prepareBlockResponse(job blockResponseJob) (pro
 	if commit == nil {
 		return nil, false, fmt.Errorf("%w at height %d", errStoredBlockMissingCommit, msg.Height)
 	}
+	layout, err := parts.partLayout()
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to encode part layout: %w", err)
+	}
 	return &bcproto.BlockResponse{
 		Block:      parts.Bytes,
 		Commit:     commit.ToProto(),
-		PartSizes:  parts.Sizes,
-		PartProofs: parts.protoProofs(),
+		PartLayout: layout,
 	}, true, nil
 }
 
