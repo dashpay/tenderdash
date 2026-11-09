@@ -63,47 +63,21 @@ tree is not a new feature; a patch-equivalent backport may already be released.
 Explain cherry-picks, merges, existing release bumps, and partial reverts rather
 than counting them twice. Pure release metadata is not a new compatibility change.
 
-The software version (`TMVersionDefault`) is decided by four versioned contracts:
-
-| Versioned contract | Evidence and decision |
-| --- | --- |
-| RPC | Methods, parameters, responses and their semantics |
-| ABCI | Application methods, messages, return handling and app coordination; review `ABCISemVer` separately |
-| P2P and consensus | Message/channel formats, consensus rules, proposer selection, consensus versions, peer compatibility; review `P2PProtocol` |
-| Block format | Serialization, hashes, signing and validity of blocks, votes and commits; review `BlockProtocol` |
-
-- **Major:** any backward-incompatible change to a versioned contract. This
-  includes a new consensus version (e.g. `CONSENSUS_VERSION_3`) even when a chain
-  parameter activates it, any change after which older nodes cannot follow the
-  network, a removed or semantically changed RPC, and an `ABCISemVer` major.
-- **Minor:** a backward-compatible extension of a versioned contract (new optional
-  fields, RPC methods, or parameters that leave existing networks unchanged).
-- **Patch:** fixes that change no versioned contract. A security or consensus fix
-  is not automatically patch-safe; classify it from its actual contract effect.
-
-These do not affect the version, but the changelog must describe them with any
-operator action: exported Go APIs (not consumed as a library), configuration and
-CLI (including removed settings and tightened validation), tooling, CI and docs.
-Persisted data is not versioned either: storage changes must migrate
-automatically and invisibly to node operators. Data is largely recoverable by
-resync and rollback is an edge case, but a change that needs manual migration is
-a release blocker, not a version decision. Also record the Dash Platform
+Classify the version and each protocol counter (`ABCISemVer`, `P2PProtocol`,
+`BlockProtocol`) by the [versioning policy](../../../RELEASES.md#versioning-policy).
+Review each versioned contract explicitly (RPC, ABCI, P2P/consensus, block format)
+and explain whether each counter must change and why. Do not mechanically
+increment every counter or use a major to conceal an unhandled network
+compatibility change. List unversioned changes (Go API, configuration, CLI) with
+their operator action for the changelog, and record the Dash Platform
 integration: required Drive/ABCI/Dashmate updates, network activation,
 mixed-version operation and operator rollout. Internal-only work may need no
 release; do not manufacture a bump for an analysis request.
 
-Protocol counters and `ABCISemVer` are independent of `TMVersionDefault`: explain
-whether each must change, and why. `ABCISemVer` is the ABCI contract's own
-SemVer (Drive accepts `^major.minor`), `P2PProtocol` changes with P2P messages or
-behavior, and `BlockProtocol` changes only with the block format; nodes enforce it
-strictly, so its bump also implies a software major.
+**Stop and ask** before bumping `BlockProtocol` or preparing a release that
+changes it (full hard fork), even when the release was otherwise authorized, and
+when a storage change needs manual migration.
 
-A `BlockProtocol` change is a red flag: it is a full hard fork that invalidates
-existing chains for nodes on either side. Never bump it, or prepare a release that
-changes it, without the user's explicit confirmation of that specific change;
-stop and ask even when a release was otherwise authorized. Do not mechanically increment
-every counter, or use a software major to conceal an unhandled network
-compatibility change.
 If the diff contains unresolved compatibility questions, report them and defer
 publication until the Platform/release owner resolves them.
 
