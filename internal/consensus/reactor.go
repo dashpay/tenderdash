@@ -131,8 +131,10 @@ const (
 	// ceiling over the cheap state updates too would be one several identities
 	// could fill from inside their own legal allowances, and every honest peer's
 	// round-step and vote announcements would then be dropped indiscriminately —
-	// those are sent once, on a state change, and never repeated, so dropping
-	// them leaves our picture of a peer stale and the gossip we send it wrong.
+	// vote announcements are sent once, on a state change, and never repeated,
+	// and round steps are repeated only once per PeerQueryMaj23SleepDuration, so
+	// dropping them leaves our picture of a peer stale and the gossip we send it
+	// wrong.
 	// They cost a bit-set each and are already bounded per peer; the answer that
 	// costs a bit array over every validator is what needs bounding across peers.
 	maj23NodeRateLimit = 400

@@ -69,6 +69,10 @@ func newPeerGossipWorker(
 				queryMaj23GossipHandler(ps, &gossiper),
 				state.config.PeerQueryMaj23SleepDuration,
 			),
+			newGossipHandler(
+				roundStepGossipHandler(logger, msgSender),
+				state.config.PeerQueryMaj23SleepDuration,
+			),
 		},
 	}
 }

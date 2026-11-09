@@ -8,6 +8,21 @@ import (
 	"github.com/dashpay/tenderdash/libs/log"
 )
 
+// roundStepGossipHandler re-announces this node's height, round and step to
+// the peer. The announcement is otherwise sent once per step change and never
+// acknowledged, so one lost after the channel accepted it — to a full router
+// queue or the peer's state-channel allowance — would leave the peer gossiping
+// for the round it last heard of until the next step change, and the step this
+// node is in may be waiting on exactly the votes or proposal the peer is
+// holding back. A repeat is a no-op for a peer whose picture is current.
+func roundStepGossipHandler(logger log.Logger, msgSender *p2pMsgSender) gossipHandlerFunc {
+	return func(ctx context.Context, stateData StateData) {
+		if err := msgSender.send(ctx, stateData.RoundState.NewRoundStepMessage()); err != nil {
+			logger.Debug("refreshing round step for peer failed", "err", err)
+		}
+	}
+}
+
 func queryMaj23GossipHandler(ps *PeerState, gossiper Gossiper) gossipHandlerFunc {
 	return func(ctx context.Context, stateData StateData) {
 		// If peer is not a validator, we do nothing
