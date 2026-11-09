@@ -218,6 +218,26 @@ type Metrics struct {
 	// between blocks, which is block fetching holding the sync back.
 	//metrics:Time spent in each stage of applying a block during block sync, in milliseconds.
 	BlockSyncApplyStageDuration metrics.Histogram `metrics_labels:"stage" metrics_buckettype:"exprange" metrics_bucketsizes:"0.01, 1000, 12"`
+
+	// ProposerHeartbeatsSent is the number of heartbeats this node signed and
+	// broadcast while it was the proposer of a round that waits for transactions.
+	//metrics:Number of proposer heartbeats this node sent.
+	ProposerHeartbeatsSent metrics.Counter
+
+	// ProposerHeartbeatsReceived is the number of new, verified heartbeats this
+	// node accepted from the proposer of the round it waits in.
+	//metrics:Number of proposer heartbeats this node accepted.
+	ProposerHeartbeatsReceived metrics.Counter
+
+	// ProposerSilences is the number of rounds in which this validator stopped
+	// hearing from the proposer while waiting for transactions.
+	//metrics:Number of rounds in which the proposer went silent while this validator waited for transactions.
+	ProposerSilences metrics.Counter
+
+	// RoundSkips is the number of rounds this node moved past on a certificate
+	// that +2/3 of the validators voted to skip.
+	//metrics:Number of rounds skipped on a certificate from +2/3 of the validators.
+	RoundSkips metrics.Counter
 }
 
 // ObserveBlockSyncStage records the time a block spent in one stage of the
