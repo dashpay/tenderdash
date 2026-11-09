@@ -750,3 +750,28 @@ func TestAddVoteErrorMwReportsEachConflictOnce(t *testing.T) {
 	deliver(voteFor(2, "block B"))
 	assert.Equal(t, 3, pool.reports, "a new height starts afresh")
 }
+
+// rejectedVotes is fed by precommits a validator key holder can mint at will
+// for a stalled height, so it is bounded. Past the bound a new vote is not
+// remembered and every copy of it is reported, as before the memory existed,
+// rather than any report being dropped; votes remembered before stay
+// remembered, and a new height starts afresh.
+func TestRejectedVotesBounded(t *testing.T) {
+	var r rejectedVotes
+	voteFor := func(height int64, round int32) *types.Vote {
+		return &types.Vote{Type: tmproto.PrecommitType, Height: height, Round: round, ValidatorIndex: 0}
+	}
+	for round := range int32(rejectedVotesCap) {
+		require.True(t, r.remember(voteFor(1, round)))
+	}
+	require.False(t, r.remember(voteFor(1, 0)), "a remembered vote stays remembered")
+
+	overflow := voteFor(1, int32(rejectedVotesCap))
+	require.True(t, r.remember(overflow))
+	require.True(t, r.remember(overflow), "past the bound every copy is reported")
+	require.Len(t, r.seen, rejectedVotesCap)
+
+	require.True(t, r.remember(voteFor(2, 0)))
+	require.False(t, r.remember(voteFor(2, 0)))
+	require.Len(t, r.seen, 1, "a new height starts afresh")
+}

@@ -343,9 +343,11 @@ func (voteExtensionRejectingApp) VerifyVoteExtension(
 
 // A precommit the application refuses is never stored, so no HasVote answers it
 // and its sender re-offers it for the rest of the round (see
-// PeerState.ReofferUnackedVotes); any peer can also replay it for free. The
-// first copy is worth one Warn line to an operator; every further copy of it
-// logs at Debug, and none logs at Error.
+// PeerState.ReofferUnackedVotes); any peer can also replay it for free. A
+// refusal of a block this node has not processed is expected and logs at Debug
+// only, on every copy. Once the block is processed, the same refusal is a
+// disagreement over the extensions: its first copy is worth one Warn line to an
+// operator, every further copy logs at Debug, and none logs at Error.
 func TestRejectedVoteExtensionLogsOnceThenDebug(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
@@ -353,8 +355,16 @@ func TestRejectedVoteExtensionLogsOnceThenDebug(t *testing.T) {
 	inner, err := kvstore.NewMemoryApp()
 	require.NoError(t, err)
 	h := newFloodHarness(ctx, t, floodHarnessArgs{validators: 4, application: voteExtensionRejectingApp{inner}})
-	stateData := h.stateData()
-	vote := signPrecommitWithExtensions(ctx, t, h.vss[1], &stateData, 1)
+	ctx = h.runCtx(ctx)
+	sd := h.stateData()
+	_, block := decideProposal(ctx, t, h.cs, h.vss[0], sd.Height, 0)
+	parts, err := block.MakePartSet(types.BlockPartSizeBytes)
+	require.NoError(t, err)
+	blockID := block.BlockID(parts)
+	exts := testPrecommitVote(1).VoteExtensions
+	vote, err := h.vss[1].signVote(ctx, tmproto.PrecommitType, sd.state.ChainID, blockID,
+		sd.Validators.QuorumType, sd.Validators.QuorumHash, exts)
+	require.NoError(t, err)
 
 	var buf bytes.Buffer
 	logger, err := log.NewLogger("debug", &buf)
@@ -364,15 +374,26 @@ func TestRejectedVoteExtensionLogsOnceThenDebug(t *testing.T) {
 	})
 	deliver := func() string {
 		buf.Reset()
-		sd := h.stateData()
 		env := msgEnvelope{msgInfo: msgInfo{Msg: &VoteMessage{Vote: vote}, PeerID: "peer"}}
-		require.NoError(t, handler(h.runCtx(ctx), &sd, env))
+		require.NoError(t, handler(ctx, &sd, env))
+		require.Nil(t, storedVote(&sd, vote), "a rejected precommit is not stored")
 		return buf.String()
 	}
 
+	for range 2 {
+		unprocessed := deliver()
+		assert.NotContains(t, unprocessed, `"level":"error"`, "a rejected peer precommit must not log at Error")
+		assert.NotContains(t, unprocessed, `"level":"warn"`, "refusing a block not processed yet is expected:\n%s", unprocessed)
+		assert.Contains(t, unprocessed, `"level":"debug"`)
+	}
+
+	sd.ProposalBlock, sd.ProposalBlockParts = block, parts
+	require.NoError(t, h.cs.blockExecutor.ensureProcess(ctx, &sd.RoundState, sd.Round))
+	require.True(t, processedFor(&sd.RoundState, sd.Round))
+
 	first := deliver()
 	assert.NotContains(t, first, `"level":"error"`, "a rejected peer precommit must not log at Error")
-	assert.Equal(t, 1, strings.Count(first, `"level":"warn"`), "the first rejection is reported once:\n%s", first)
+	assert.Equal(t, 1, strings.Count(first, `"level":"warn"`), "the first refusal of a processed block is reported once:\n%s", first)
 
 	for range 3 {
 		again := deliver()
@@ -380,6 +401,4 @@ func TestRejectedVoteExtensionLogsOnceThenDebug(t *testing.T) {
 		assert.NotContains(t, again, `"level":"warn"`, "a redelivered rejected precommit is not news")
 		assert.Contains(t, again, `"level":"debug"`)
 	}
-	stateData = h.stateData()
-	require.Nil(t, storedVote(&stateData, vote), "a rejected precommit is not stored")
 }
