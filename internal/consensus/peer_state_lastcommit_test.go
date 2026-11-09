@@ -41,22 +41,30 @@ func TestSetHasVoteLastHeightPrecommitDoesNotMarkCurrentHeight(t *testing.T) {
 	require.EqualValues(t, 1, vote.ValidatorIndex)
 }
 
-// A VoteSetBits answer about the previous height's commit (sent while the peer
-// was still catching up, applied after it moved on) must not overwrite the
-// peer's current-height precommit bit array.
+// A VoteSetBits answer about the previous height's commit, applied after the
+// peer moved on, must not overwrite the peer's current-height precommit bit
+// array — whether this node has already left that height too (ourVotes nil)
+// or still holds its votes for it.
 func TestApplyVoteSetBitsLastHeightPrecommitsDoNotMarkCurrentHeight(t *testing.T) {
-	ps := lastCommitPeerState(t)
-
 	peerHas := bits.NewBitArray(3)
 	for i := 0; i < 3; i++ {
 		peerHas.SetIndex(i, true)
 	}
-	ps.ApplyVoteSetBitsMessage(&VoteSetBitsMessage{
-		Height: 1, Round: 0, Type: tmproto.PrecommitType, Votes: peerHas,
-	}, nil)
+	for name, ourVotes := range map[string]*bits.BitArray{
+		"we moved on too":              nil,
+		"we still hold height-1 votes": peerHas.Copy(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			ps := lastCommitPeerState(t)
 
-	require.Equal(t, bits.NewBitArray(3), ps.PRS.Precommits,
-		"height-1 commit bits must not be applied to the peer's height-2 precommits")
+			ps.ApplyVoteSetBitsMessage(&VoteSetBitsMessage{
+				Height: 1, Round: 0, Type: tmproto.PrecommitType, Votes: peerHas,
+			}, ourVotes)
+
+			require.Equal(t, bits.NewBitArray(3), ps.PRS.Precommits,
+				"height-1 commit bits must not be applied to the peer's height-2 precommits")
+		})
+	}
 }
 
 // NewRoundStep moving the peer to the next height still records the round of

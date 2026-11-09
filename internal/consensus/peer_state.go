@@ -635,12 +635,7 @@ func (ps *PeerState) ApplyNewRoundStepMessage(msg *NewRoundStepMessage) {
 	}
 
 	if psHeight != msg.Height {
-		// Shift Precommits to LastPrecommits.
-		if psHeight+1 == msg.Height && psRound == msg.LastCommitRound {
-			ps.PRS.LastCommitRound = msg.LastCommitRound
-		} else {
-			ps.PRS.LastCommitRound = msg.LastCommitRound
-		}
+		ps.PRS.LastCommitRound = msg.LastCommitRound
 
 		// we'll update the BitArray capacity later
 		ps.PRS.CatchupCommitRound = -1
