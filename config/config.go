@@ -1171,7 +1171,8 @@ type ConsensusConfig struct {
 	// PeerQueryMaj23SleepDuration also sets how often the node re-announces its
 	// round state to each peer, which bounds how long a peer's view of this
 	// node stays stale after a lost announcement. Either duration under 1ms is
-	// run at 1ms.
+	// run at 1ms, which only prevents a busy loop: well below the defaults,
+	// peers drop this node's state updates over their per-peer allowance.
 	PeerGossipSleepDuration     time.Duration `mapstructure:"peer-gossip-sleep-duration"`
 	PeerQueryMaj23SleepDuration time.Duration `mapstructure:"peer-query-maj23-sleep-duration"`
 
