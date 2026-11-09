@@ -74,6 +74,12 @@ integration: required Drive/ABCI/Dashmate updates, network activation,
 mixed-version operation and operator rollout. Internal-only work may need no
 release; do not manufacture a bump for an analysis request.
 
+When `ABCISemVer` changes, check it against the `check_version` caret rule
+(`^major.minor`) in `dashpay/rs-tenderdash-abci`: which existing apps still
+accept the new Tenderdash, and which Tenderdash versions apps built on the new
+crate reject. Prepare the matching rs-tenderdash-abci PR (proto default version)
+before tagging; its CI passes only once the tag and Docker image exist.
+
 **Stop and ask** before bumping `BlockProtocol` or preparing a release that
 changes it (full hard fork), even when the release was otherwise authorized, and
 when a storage change needs manual migration.
@@ -114,8 +120,11 @@ preparation or PR phase if no release publication was requested.
 ## Finalize an explicitly requested release
 
 Verify the release PR is merged, identify its exact merge SHA, and inspect the
-resulting tree/version/changelog against the reviewed candidate. Include any
-merge-time differences in validation. Do not use a moving `master`/`dev` tip as
+resulting tree/version/changelog against the reviewed candidate:
+`git diff REVIEWED_HEAD MERGE_SHA` should be empty. Include any merge-time
+differences in validation. Generate the release notes from the version's
+section of `CHANGELOG.md` in the merged tree, plus a note on release artifacts
+(Docker image, binaries or their absence, tag signing). Do not use a moving `master`/`dev` tip as
 the tag target. Recheck remote tags and release drafts before acting.
 
 For a new version, create the release tag explicitly at that reviewed merge SHA
@@ -125,7 +134,9 @@ compare its peeled commit to the reviewed SHA and reuse it only on an exact
 match; a mismatch stops the release. Never force-update or delete a release tag.
 Create a draft GitHub release with `gh release create TAG --verify-tag --draft
 --notes-file NOTES` (add `--prerelease` for `-dev.N`). Existing drafts must match
-the same tag/SHA; inspect and reuse rather than deleting/recreating them.
+the same tag/SHA; inspect and reuse rather than deleting/recreating them. Look
+drafts up by tag name: a draft's URL shows `untagged-…`, and its
+`targetCommitish` (the default branch) is irrelevant once the tag exists.
 
 When signed binaries are required, run from a checkout with that exact tag:
 
@@ -142,7 +153,11 @@ omitted in the release notes.
 
 Publishing the draft triggers `.github/workflows/docker.yml` (tag and alias rules
 in [RELEASES.md](../../../RELEASES.md#validation-and-artifacts)). Check that the
-Platform rollout and release request authorize this publication. After
+Platform rollout and release request authorize this publication. Before
+publishing, record the digests of the stable aliases (`latest`, `X`, `X.Y`) and
+the current stable version tag, e.g. with
+`docker buildx imagetools inspect dashpay/tenderdash:TAG --format '{{.Manifest.Digest}}'`,
+so you can compare them afterwards. After
 publication, verify the remote tag SHA, release assets, image tags, labels,
 digests and binary version, and that no stable alias moved unexpectedly. If asynchronous publishing fails, report the partial state and resume
 only the missing step; do not move tags or repeat a completed release blindly.
