@@ -314,7 +314,8 @@ func (e *ProposalCompletedEvent) GetType() EventType {
 }
 
 type ProposalCompletedAction struct {
-	logger log.Logger
+	logger    log.Logger
+	blockExec *blockExecutor
 }
 
 func (c *ProposalCompletedAction) Execute(ctx context.Context, stateEvent StateEvent) error {
@@ -384,5 +385,36 @@ func (c *ProposalCompletedAction) Execute(ctx context.Context, stateEvent StateE
 		// Transit to EnterPrecommit
 		return stateEvent.Ctrl.Dispatch(ctx, &TryFinalizeCommitEvent{Height: height}, stateData)
 	}
+	if hasTwoThirds && !blockID.IsNil() && !processedFor(&stateData.RoundState, stateData.Round) &&
+		stateData.ProposalBlock.BlockID(stateData.ProposalBlockParts).Equals(blockID) {
+		c.processPolkaBlock(ctx, stateData)
+	}
 	return nil
+}
+
+// processPolkaBlock has the application process the round's polka block, which
+// completed too late for the round to vote on it, so that it can verify the
+// extensions of the precommits for the block. An application keeping one
+// execution context per height, like Drive, verifies an extension only for the
+// block and round it processed last, and a precommit whose extension is
+// rejected is not stored: with the block unprocessed, the precommits of the
+// validators that had it never count towards the +2/3 of any kind that start
+// the precommit wait, and this node, with no timeout to fall back on, never
+// leaves the round.
+//
+// The block is processed, not voted on: the round's precommit is already nil,
+// or will be, since the proposal did not arrive in time. A failure is not
+// retried; the round's own path processes the block again should it vote on
+// it, and panics there on an ABCI error, as before.
+func (c *ProposalCompletedAction) processPolkaBlock(ctx context.Context, stateData *StateData) {
+	err := c.blockExec.ensureProcess(ctx, &stateData.RoundState, stateData.Round)
+	if err != nil {
+		c.logger.Error("cannot process the round's polka block that completed after prevote; precommits for it will be rejected",
+			"height", stateData.Height, "round", stateData.Round,
+			"hash", stateData.ProposalBlock.Hash(), "error", err)
+		return
+	}
+	c.logger.Debug("processed the round's polka block that completed after prevote so that precommits for it verify",
+		"height", stateData.Height, "round", stateData.Round, "step", stateData.Step,
+		"hash", stateData.ProposalBlock.Hash())
 }
