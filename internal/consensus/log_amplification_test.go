@@ -17,6 +17,7 @@ import (
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/dash"
 	sm "github.com/dashpay/tenderdash/internal/state"
+	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
 	tmcons "github.com/dashpay/tenderdash/proto/tendermint/consensus"
@@ -361,10 +362,17 @@ func TestRejectedVoteExtensionLogsOnceThenDebug(t *testing.T) {
 	parts, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
 	blockID := block.BlockID(parts)
-	exts := testPrecommitVote(1).VoteExtensions
-	vote, err := h.vss[1].signVote(ctx, tmproto.PrecommitType, sd.state.ChainID, blockID,
-		sd.Validators.QuorumType, sd.Validators.QuorumHash, exts)
-	require.NoError(t, err)
+	precommit := func(blockID types.BlockID) *types.Vote {
+		// Signing writes into the extensions, so each vote gets its own.
+		vote, err := h.vss[1].signVote(ctx, tmproto.PrecommitType, sd.state.ChainID, blockID,
+			sd.Validators.QuorumType, sd.Validators.QuorumHash, testPrecommitVote(1).VoteExtensions)
+		require.NoError(t, err)
+		return vote
+	}
+	vote := precommit(blockID)
+	otherBlock := precommit(factory.MakeBlockID())
+	incrementRound(h.vss[1])
+	laterRound := precommit(blockID)
 
 	var buf bytes.Buffer
 	logger, err := log.NewLogger("debug", &buf)
@@ -372,13 +380,14 @@ func TestRejectedVoteExtensionLogsOnceThenDebug(t *testing.T) {
 	handler := loggingMiddleware(logger)(func(ctx context.Context, sd *StateData, env msgEnvelope) error {
 		return h.cs.ctrl.Dispatch(ctx, &AddVoteEvent{Vote: env.Msg.(*VoteMessage).Vote, PeerID: env.PeerID}, sd)
 	})
-	deliver := func() string {
+	deliverVote := func(vote *types.Vote) string {
 		buf.Reset()
 		env := msgEnvelope{msgInfo: msgInfo{Msg: &VoteMessage{Vote: vote}, PeerID: "peer"}}
 		require.NoError(t, handler(ctx, &sd, env))
 		require.Nil(t, storedVote(&sd, vote), "a rejected precommit is not stored")
 		return buf.String()
 	}
+	deliver := func() string { return deliverVote(vote) }
 
 	for range 2 {
 		unprocessed := deliver()
@@ -400,5 +409,15 @@ func TestRejectedVoteExtensionLogsOnceThenDebug(t *testing.T) {
 		assert.NotContains(t, again, `"level":"error"`, "a redelivered rejected precommit must not log at Error")
 		assert.NotContains(t, again, `"level":"warn"`, "a redelivered rejected precommit is not news")
 		assert.Contains(t, again, `"level":"debug"`)
+	}
+
+	// Only the processed block, for the round it was processed for, is in
+	// context: a refusal of another block, or of the block for another round,
+	// is still the expected kind.
+	for name, vote := range map[string]*types.Vote{"another block": otherBlock, "another round": laterRound} {
+		out := deliverVote(vote)
+		assert.NotContains(t, out, `"level":"error"`, name)
+		assert.NotContains(t, out, `"level":"warn"`, "%s: refusing what is not processed is expected:\n%s", name, out)
+		assert.Contains(t, out, `"level":"debug"`, name)
 	}
 }
