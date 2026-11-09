@@ -103,5 +103,5 @@ func TestRoundStepGossipHandler(t *testing.T) {
 		Return(nil)
 	sender := &p2pMsgSender{logger: log.NewNopLogger(), ps: ps, chans: channelBundle{state: stateCh}}
 
-	roundStepGossipHandler(log.NewNopLogger(), sender)(ctx, stateData)
+	roundStepGossipHandler(log.NewNopLogger(), sender.send)(ctx, stateData)
 }

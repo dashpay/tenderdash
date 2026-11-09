@@ -3,6 +3,8 @@ package consensus
 import (
 	"context"
 
+	"github.com/cosmos/gogoproto/proto"
+
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/log"
@@ -15,9 +17,9 @@ import (
 // for the round it last heard of until the next step change, and the step this
 // node is in may be waiting on exactly the votes or proposal the peer is
 // holding back. A repeat is a no-op for a peer whose picture is current.
-func roundStepGossipHandler(logger log.Logger, msgSender *p2pMsgSender) gossipHandlerFunc {
+func roundStepGossipHandler(logger log.Logger, send func(context.Context, proto.Message) error) gossipHandlerFunc {
 	return func(ctx context.Context, stateData StateData) {
-		if err := msgSender.send(ctx, stateData.RoundState.NewRoundStepMessage()); err != nil {
+		if err := send(ctx, stateData.RoundState.NewRoundStepMessage()); err != nil {
 			logger.Debug("refreshing round step for peer failed", "err", err)
 		}
 	}

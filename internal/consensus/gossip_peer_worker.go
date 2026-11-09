@@ -70,7 +70,7 @@ func newPeerGossipWorker(
 				state.config.PeerQueryMaj23SleepDuration,
 			),
 			newGossipHandler(
-				roundStepGossipHandler(logger, msgSender),
+				roundStepGossipHandler(logger, msgSender.send),
 				state.config.PeerQueryMaj23SleepDuration,
 			),
 		},
