@@ -148,6 +148,8 @@ func committedPartsFromProto(resp *bcproto.BlockResponse) (CommittedParts, error
 const (
 	layoutSizesField   protowire.Number = 1
 	layoutProofsField  protowire.Number = 2
+	proofTotalField    protowire.Number = 1
+	proofIndexField    protowire.Number = 2
 	proofLeafHashField protowire.Number = 3
 	proofAuntsField    protowire.Number = 4
 )
@@ -156,6 +158,11 @@ const (
 // than a block can have, without decoding it. Decoding allocates tens of bytes
 // for every occurrence of a repeated field, and an occurrence can take two
 // bytes, so the limits have to hold before the layout is decoded.
+//
+// The limits only hold if this walk and the decoder split the bytes into the
+// same fields, so it accepts nothing but the fields of a layout, each of them
+// well formed. The generated decoder lets a varint in a packed field run past
+// the end of that field, and skips unknown fields by rules of its own.
 func checkPartLayoutBounds(layout []byte) error {
 	sizes, proofs := 0, 0
 	return walkFields(layout, func(number protowire.Number, wireType protowire.Type, value []byte) error {
@@ -163,17 +170,21 @@ func checkPartLayoutBounds(layout []byte) error {
 		case number == layoutSizesField && wireType == protowire.VarintType:
 			sizes++
 		case number == layoutSizesField && wireType == protowire.BytesType:
-			// a packed list has one varint per byte without the continuation bit
-			for _, b := range value {
-				if b < 0x80 {
-					sizes++
+			for len(value) > 0 {
+				_, n := protowire.ConsumeVarint(value)
+				if n < 0 {
+					return protowire.ParseError(n)
 				}
+				sizes++
+				value = value[n:]
 			}
 		case number == layoutProofsField && wireType == protowire.BytesType:
 			proofs++
 			if err := checkProofBounds(value); err != nil {
 				return fmt.Errorf("proof %d: %w", proofs-1, err)
 			}
+		default:
+			return fmt.Errorf("unexpected field %d of wire type %d", number, wireType)
 		}
 		if sizes > int(types.MaxBlockPartsCount) {
 			return fmt.Errorf("too many parts: more than %d", types.MaxBlockPartsCount)
@@ -189,8 +200,11 @@ func checkPartLayoutBounds(layout []byte) error {
 func checkProofBounds(proof []byte) error {
 	aunts := 0
 	return walkFields(proof, func(number protowire.Number, wireType protowire.Type, value []byte) error {
-		if wireType != protowire.BytesType || (number != proofLeafHashField && number != proofAuntsField) {
+		if wireType == protowire.VarintType && (number == proofTotalField || number == proofIndexField) {
 			return nil
+		}
+		if wireType != protowire.BytesType || (number != proofLeafHashField && number != proofAuntsField) {
+			return fmt.Errorf("unexpected field %d of wire type %d", number, wireType)
 		}
 		if len(value) > crypto.HashSize {
 			return fmt.Errorf("hash too long: %d bytes, max: %d", len(value), crypto.HashSize)

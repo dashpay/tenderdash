@@ -660,6 +660,25 @@ func partLayout(t *testing.T, sizes []uint32, proofs []crypto.Proof) []byte {
 	return bz
 }
 
+// hiddenProofsBehindPackedSize returns a layout that opens with a packed size
+// whose varint does not end inside its field. The generated decoder reads on
+// past the field, so a scan that took the field's length at face value would
+// see one unknown field where the decoder finds that many empty proofs.
+func hiddenProofsBehindPackedSize(proofs int) []byte {
+	return bytes.Join([][]byte{
+		{0x0a, 0x01, 0x80, 0x1a, 0x82, 0x80, 0x80, 0x01, 0x00, 0x18, 0x80, 0x00},
+		bytes.Repeat([]byte{2<<3 | 2, 0}, proofs+1),
+	}, nil)
+}
+
+// hiddenAuntsBehindPackedSize is hiddenProofsBehindPackedSize with chunks that
+// each hide a proof of seven empty aunts.
+func hiddenAuntsBehindPackedSize(chunks int) []byte {
+	chunk := append([]byte{0x0a, 0x01, 0x80, 0x1a, 0x12, 0x11, 0x08, 0x80, 0x01},
+		bytes.Repeat([]byte{4<<3 | 2, 0}, 7)...)
+	return bytes.Repeat(chunk, chunks+1)
+}
+
 // TestBlockResponseFromProtoRejectsMalformedParts checks that part metadata a
 // peer sent that cannot describe its block is refused while decoding the
 // response, before it can be held waiting for a lower height.
@@ -683,11 +702,24 @@ func TestBlockResponseFromProtoRejectsMalformedParts(t *testing.T) {
 		layout  []byte
 		wantErr string
 	}{
-		"layout too big":     {make([]byte, p2p.BlockPartLayoutMaxBytes+1), "part layout too big"},
-		"not a layout":       {[]byte{0x0a, 0x05}, "unexpected EOF"},
-		"too many parts":     {partLayout(t, make([]uint32, tooManyParts), nil), "too many parts"},
-		"unpacked parts":     {bytes.Repeat([]byte{1 << 3, 0}, tooManyParts), "too many parts"},
-		"too many proofs":    {bytes.Repeat([]byte{2<<3 | 2, 0}, tooManyParts), "too many proofs"},
+		"layout too big":  {make([]byte, p2p.BlockPartLayoutMaxBytes+1), "part layout too big"},
+		"not a layout":    {[]byte{0x0a, 0x05}, "unexpected EOF"},
+		"too many parts":  {partLayout(t, make([]uint32, tooManyParts), nil), "too many parts"},
+		"unpacked parts":  {bytes.Repeat([]byte{1 << 3, 0}, tooManyParts), "too many parts"},
+		"too many proofs": {bytes.Repeat([]byte{2<<3 | 2, 0}, tooManyParts), "too many proofs"},
+		"truncated packed size hiding proofs": {
+			hiddenProofsBehindPackedSize(int(types.MaxBlockPartsCount)), "unexpected EOF",
+		},
+		"truncated packed size hiding aunts": {
+			hiddenAuntsBehindPackedSize(int(types.MaxBlockPartsCount)), "unexpected EOF",
+		},
+		"unknown field":        {[]byte{3 << 3, 0}, "unexpected field 3"},
+		"group":                {[]byte{3<<3 | 3, 3<<3 | 4}, "unexpected field 3"},
+		"proofs of wrong type": {[]byte{2 << 3, 0}, "unexpected field 2"},
+		"unknown proof field":  {[]byte{2<<3 | 2, 2, 5 << 3, 0}, "unexpected field 5"},
+		"proof total of wrong type": {
+			[]byte{2<<3 | 2, 2, 1<<3 | 2, 0}, "unexpected field 1",
+		},
 		"too many aunts":     {partLayout(t, []uint32{size}, []crypto.Proof{tooManyAunts}), "too many aunts"},
 		"aunt too long":      {partLayout(t, []uint32{size}, []crypto.Proof{longAunt}), "hash too long"},
 		"part too big":       {partLayout(t, []uint32{types.BlockPartSizeBytes + 1}, nil), "too big"},
@@ -736,33 +768,48 @@ func TestBlockResponseSizeChargesPartMetadata(t *testing.T) {
 
 // TestPartLayoutIsOpaqueAtEnvelopeBoundary checks that part metadata costs no
 // per-entry allocation when a message is received, which happens before it is
-// matched to a request, nor when the layout is refused. A layout of empty
-// proofs is the smallest encoding of the most entries.
+// matched to a request, nor when the layout is refused. Empty proofs are the
+// smallest encoding of the most entries.
 func TestPartLayoutIsOpaqueAtEnvelopeBoundary(t *testing.T) {
-	const allowedAllocs = 32
-	layout := bytes.Repeat([]byte{2<<3 | 2, 0}, int(types.MaxBlockPartsCount)+1)
-	// block_response is field 9 of the envelope, part_layout field 3 of the response
-	raw := appendBytesField(nil, 9, appendBytesField(nil, 3, layout))
+	const (
+		allowedAllocs = 32
+		entries       = int(types.MaxBlockPartsCount)
+	)
+	testCases := map[string]struct {
+		layout  []byte
+		wantErr string
+	}{
+		"empty proofs":                {bytes.Repeat([]byte{2<<3 | 2, 0}, entries+1), "too many proofs"},
+		"proofs behind a packed size": {hiddenProofsBehindPackedSize(1 << 20), "unexpected EOF"},
+		"aunts behind a packed size":  {hiddenAuntsBehindPackedSize(entries), "unexpected EOF"},
+	}
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			require.LessOrEqual(t, len(tc.layout), p2p.BlockPartLayoutMaxBytes)
+			// block_response is field 9 of the envelope, part_layout field 3 of the response
+			raw := appendBytesField(nil, 9, appendBytesField(nil, 3, tc.layout))
 
-	require.Less(t, testing.AllocsPerRun(10, func() {
-		var envelope p2pproto.Envelope
-		_ = proto.Unmarshal(raw, &envelope)
-	}), float64(allowedAllocs), "decoding the envelope must not allocate per layout entry")
+			require.Less(t, testing.AllocsPerRun(10, func() {
+				var envelope p2pproto.Envelope
+				_ = proto.Unmarshal(raw, &envelope)
+			}), float64(allowedAllocs), "decoding the envelope must not allocate per layout entry")
 
-	var envelope p2pproto.Envelope
-	require.NoError(t, proto.Unmarshal(raw, &envelope))
-	msg, err := envelope.Unwrap()
-	require.NoError(t, err)
-	resp, ok := msg.(*bcproto.BlockResponse)
-	require.True(t, ok)
-	require.Equal(t, layout, resp.PartLayout)
+			var envelope p2pproto.Envelope
+			require.NoError(t, proto.Unmarshal(raw, &envelope))
+			msg, err := envelope.Unwrap()
+			require.NoError(t, err)
+			resp, ok := msg.(*bcproto.BlockResponse)
+			require.True(t, ok)
+			require.Equal(t, tc.layout, resp.PartLayout)
 
-	resp.Block = []byte{1}
-	require.Less(t, testing.AllocsPerRun(10, func() {
-		_, _ = committedPartsFromProto(resp)
-	}), float64(allowedAllocs), "refusing the layout must not allocate per layout entry")
-	_, err = committedPartsFromProto(resp)
-	require.ErrorContains(t, err, "too many proofs")
+			resp.Block = []byte{1}
+			require.Less(t, testing.AllocsPerRun(10, func() {
+				_, _ = committedPartsFromProto(resp)
+			}), float64(allowedAllocs), "refusing the layout must not allocate per layout entry")
+			_, err = committedPartsFromProto(resp)
+			require.ErrorContains(t, err, tc.wantErr)
+		})
+	}
 }
 
 // TestBlockResponseDoesNotRetainOverwrittenBlockField checks that a repeated
