@@ -103,16 +103,24 @@ func TestApplyHasVoteMessage(t *testing.T) {
 	// skip test cases like v & v3 in TestSetHasVote due to the same path
 }
 
+// newRedeliveryPeerState returns a PeerState re-offering unacknowledged votes
+// after interval on a fake clock, with its peer at height 1, round 1, and vote
+// bit arrays for n validators.
+func newRedeliveryPeerState(interval time.Duration, n int) (*PeerState, *clockwork.FakeClock) {
+	clock := clockwork.NewFakeClock()
+	ps := NewPeerState(log.NewNopLogger(), "testPeerState",
+		WithPeerStateClock(clock), WithVoteResendInterval(interval))
+	ps.PRS.Height, ps.PRS.Round = 1, 1
+	ps.ensureVoteBitArrays(1, n)
+	return ps, clock
+}
+
 // TestVoteRedeliveryWindows pins the cadence contract of vote redelivery: a vote
 // recorded as sent is unmarked no sooner than one interval after it went out
 // and no later than two, and any acknowledgement in between cancels it.
 func TestVoteRedeliveryWindows(t *testing.T) {
 	const interval = time.Second
-	clock := clockwork.NewFakeClock()
-	ps := NewPeerState(log.NewNopLogger(), "testPeerState",
-		WithPeerStateClock(clock), WithVoteResendInterval(interval))
-	ps.PRS.Height, ps.PRS.Round = 1, 1
-	ps.ensureVoteBitArrays(1, 3)
+	ps, clock := newRedeliveryPeerState(interval, 3)
 	vote := func(idx int32) *types.Vote {
 		return &types.Vote{Height: 1, Round: 1, Type: tmproto.PrevoteType, ValidatorIndex: idx}
 	}
@@ -171,11 +179,7 @@ func TestVoteRedeliveryWindows(t *testing.T) {
 // drops it before any HasVote is published.
 func TestVoteRedeliveryIgnoresAckBeforeSent(t *testing.T) {
 	const interval = time.Second
-	clock := clockwork.NewFakeClock()
-	ps := NewPeerState(log.NewNopLogger(), "testPeerState",
-		WithPeerStateClock(clock), WithVoteResendInterval(interval))
-	ps.PRS.Height, ps.PRS.Round = 1, 1
-	ps.ensureVoteBitArrays(1, 1)
+	ps, clock := newRedeliveryPeerState(interval, 1)
 	vote := &types.Vote{Height: 1, Round: 1, Type: tmproto.PrevoteType, ValidatorIndex: 0}
 
 	ps.ReofferUnackedVotes()
@@ -195,11 +199,7 @@ func TestVoteRedeliveryIgnoresAckBeforeSent(t *testing.T) {
 // rate that falls off instead of every interval.
 func TestVoteRedeliveryBacksOff(t *testing.T) {
 	const interval = time.Second
-	clock := clockwork.NewFakeClock()
-	ps := NewPeerState(log.NewNopLogger(), "testPeerState",
-		WithPeerStateClock(clock), WithVoteResendInterval(interval))
-	ps.PRS.Height, ps.PRS.Round = 1, 1
-	ps.ensureVoteBitArrays(1, 1)
+	ps, clock := newRedeliveryPeerState(interval, 1)
 	vote := &types.Vote{Height: 1, Round: 1, Type: tmproto.PrevoteType, ValidatorIndex: 0}
 
 	// rotationsUntilReoffer resends the vote, then counts the rotations (one
@@ -228,11 +228,7 @@ func TestVoteRedeliveryBacksOff(t *testing.T) {
 // as acknowledgement for the votes it covers and for those only.
 func TestVoteRedeliveryVoteSetBitsAck(t *testing.T) {
 	const interval = time.Second
-	clock := clockwork.NewFakeClock()
-	ps := NewPeerState(log.NewNopLogger(), "testPeerState",
-		WithPeerStateClock(clock), WithVoteResendInterval(interval))
-	ps.PRS.Height, ps.PRS.Round = 1, 1
-	ps.ensureVoteBitArrays(1, 2)
+	ps, clock := newRedeliveryPeerState(interval, 2)
 	blockID := types.BlockID{Hash: []byte("block")}
 
 	ps.ReofferUnackedVotes()
