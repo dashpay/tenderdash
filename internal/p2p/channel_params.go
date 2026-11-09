@@ -6,6 +6,8 @@ import (
 	"github.com/cosmos/gogoproto/proto"
 
 	"github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/crypto/merkle"
 	"github.com/dashpay/tenderdash/proto/tendermint/blocksync"
 	"github.com/dashpay/tenderdash/proto/tendermint/consensus"
 	"github.com/dashpay/tenderdash/proto/tendermint/mempool"
@@ -51,6 +53,25 @@ const (
 	// consensusMsgSize is the maximum size of a consensus message
 	maxMsgSize = 1048576 // 1MB; NOTE: keep in sync with types.PartSet sizes.
 
+	// blockPartSizeMaxBytes bounds one encoded part_sizes entry of a block
+	// response: a varint of at most types.BlockPartSizeBytes.
+	blockPartSizeMaxBytes = 3
+	// blockPartProofMaxBytes bounds one encoded part_proofs entry of a block
+	// response: its key and length, the two int64 varints with their keys, and
+	// the leaf hash and aunts with their keys and lengths.
+	blockPartProofMaxBytes = 4 + 2*(1+10) + (merkle.MaxAunts+1)*(2+crypto.HashSize)
+	// blockSyncMaxOverheadBytes bounds what a block response carries besides
+	// the block: part metadata for the most parts a block can have, a commit,
+	// whose vote extensions came in one vote on a maxMsgSize channel, and the
+	// envelope with its attributes.
+	blockSyncMaxOverheadBytes = int(types.MaxBlockPartsCount)*(blockPartSizeMaxBytes+blockPartProofMaxBytes) +
+		maxMsgSize + 1024
+
+	// BlockSyncMaxMsgSize is the maximum size of a block sync message
+	BlockSyncMaxMsgSize = types.MaxBlockSizeBytes +
+		p2pproto.BlockResponseMessagePrefixSize +
+		p2pproto.BlockResponseMessageFieldKeySize +
+		blockSyncMaxOverheadBytes
 )
 
 // ChannelDescriptors returns a map of all supported descriptors
@@ -64,14 +85,12 @@ func ChannelDescriptors(cfg *config.Config) map[ChannelID]*ChannelDescriptor {
 			Name:                "error",
 		},
 		BlockSyncChannel: {
-			ID:                 BlockSyncChannel,
-			Priority:           6,
-			SendQueueCapacity:  4,
-			RecvBufferCapacity: 1024,
-			RecvMessageCapacity: types.MaxBlockSizeBytes +
-				p2pproto.BlockResponseMessagePrefixSize +
-				p2pproto.BlockResponseMessageFieldKeySize,
-			Name: "blockSync",
+			ID:                  BlockSyncChannel,
+			Priority:            6,
+			SendQueueCapacity:   4,
+			RecvBufferCapacity:  1024,
+			RecvMessageCapacity: BlockSyncMaxMsgSize,
+			Name:                "blockSync",
 		},
 		MempoolChannel: {
 			ID:                  MempoolChannel,

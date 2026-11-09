@@ -640,7 +640,7 @@ func (s *Synchronizer) applyBlock(ctx context.Context) (BlockResponse, error) {
 		if !ok {
 			return BlockResponse{}, nil
 		}
-		err := s.applier.Apply(ctx, resp.Block, resp.BlockBytes, resp.PartSizes, resp.Commit)
+		err := s.applier.Apply(ctx, resp.Block, resp.Parts, resp.Commit)
 		if err != nil {
 			return resp, fmt.Errorf("cannot apply block: %w", err)
 		}
@@ -779,15 +779,12 @@ type BlockResponse struct {
 	// its failures are fenced to.
 	ConnID uint64
 	Block  *types.Block
-	// BlockBytes is Block as it was committed, the bytes of its parts in order,
-	// and PartSizes the size of each part, or nil for parts of
-	// types.BlockPartSizeBytes. Block is decoded from BlockBytes, and applied
-	// with the part set rebuilt from them: that is what the commit's block ID
-	// describes, and re-encoding Block need not give the same bytes.
-	BlockBytes []byte
-	PartSizes  []uint32
-	Commit     *types.Commit
-	// Size is the serialized size of Block in bytes, the length of BlockBytes.
+	// Parts is Block as it was committed. Block is decoded from Parts.Bytes, and
+	// applied with the part set rebuilt from Parts: that is what the commit's
+	// block ID describes, and re-encoding Block need not give the same bytes.
+	Parts  CommittedParts
+	Commit *types.Commit
+	// Size is the serialized size of Parts in bytes.
 	Size int
 }
 
@@ -814,6 +811,12 @@ func BlockResponseFromProto(resp *bcproto.BlockResponse, peerID types.NodeID) (*
 	if len(resp.Block) == 0 {
 		return nil, errors.New("block response without a block")
 	}
+	// Checked before anything is decoded or queued: the response can wait behind
+	// a missing lower height, and only its size is charged to the backlog.
+	parts, err := committedPartsFromProto(resp)
+	if err != nil {
+		return nil, fmt.Errorf("invalid block parts: %w", err)
+	}
 	pbb := new(tmproto.Block)
 	if err := proto.Unmarshal(resp.Block, pbb); err != nil {
 		return nil, fmt.Errorf("cannot decode block: %w", err)
@@ -830,11 +833,10 @@ func BlockResponseFromProto(resp *bcproto.BlockResponse, peerID types.NodeID) (*
 		}
 	}
 	return &BlockResponse{
-		PeerID:     peerID,
-		Block:      block,
-		BlockBytes: resp.Block,
-		PartSizes:  resp.PartSizes,
-		Commit:     commit,
-		Size:       len(resp.Block),
+		PeerID: peerID,
+		Block:  block,
+		Parts:  parts,
+		Commit: commit,
+		Size:   committedPartsSize(resp),
 	}, nil
 }

@@ -28,6 +28,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/test/metricspy"
 	tmrequire "github.com/dashpay/tenderdash/internal/test/require"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -48,7 +49,7 @@ func TestBlockApplierChecksAppResponseBeforeSave(t *testing.T) {
 	executor := sm.NewBlockExecutor(stateStore, client, nil, sm.EmptyEvidencePool{}, blockStore, nil)
 	applier := newBlockApplier(executor, blockStore, applierWithState(initialState))
 
-	require.Panics(t, func() { _ = applier.Apply(ctx, block, blockBytes(t, block), nil, commit) })
+	require.Panics(t, func() { _ = applier.Apply(ctx, block, standardParts(t, block), commit) })
 	require.Zero(t, blockStore.Height(), "an inconsistent app response must not advance the block store")
 	require.Equal(t, initialState.LastBlockHeight, applier.State().LastBlockHeight)
 	loaded, err := stateStore.Load()
@@ -175,7 +176,7 @@ func TestBlockApplierApply(t *testing.T) {
 				tc.mockFn()
 			}
 			fn := func() {
-				err := applier.Apply(ctx, tc.block, blockBytes(t, tc.block), nil, tc.commit)
+				err := applier.Apply(ctx, tc.block, standardParts(t, tc.block), tc.commit)
 				tmrequire.Error(t, tc.wantErr, err)
 			}
 			if tc.wantPanic {
@@ -268,7 +269,7 @@ func TestBlockApplierDoesNotSaveBlockRejectedByApp(t *testing.T) {
 		Return(sm.CurrentRoundState{}, errors.New("app rejected the block"))
 
 	applier := newBlockApplier(mockBlockExec, mockBlockStore, applierWithState(initialState))
-	require.Panics(t, func() { _ = applier.Apply(ctx, block, blockBytes(t, block), nil, commit) })
+	require.Panics(t, func() { _ = applier.Apply(ctx, block, standardParts(t, block), commit) })
 }
 
 // TestBlockApplierSavesBlockBeforeFinalize pins the order the handshake relies
@@ -314,7 +315,7 @@ func TestBlockApplierSavesBlockBeforeFinalize(t *testing.T) {
 		Return(state, nil, nil)
 
 	applier := newBlockApplier(mockBlockExec, mockBlockStore, applierWithState(initialState))
-	require.NoError(t, applier.Apply(ctx, block, blockBytes(t, block), nil, commit))
+	require.NoError(t, applier.Apply(ctx, block, standardParts(t, block), commit))
 	require.Equal(t, []string{"process", "verify", "save", "finalize"}, calls)
 }
 
@@ -350,7 +351,7 @@ func TestBlockApplierRecordsStageMetrics(t *testing.T) {
 	applier := newBlockApplier(mockBlockExec, mockBlockStore,
 		applierWithState(initialState), applierWithMetrics(m))
 
-	require.NoError(t, applier.Apply(ctx, blockH1, blockBytes(t, blockH1), nil, commitH1))
+	require.NoError(t, applier.Apply(ctx, blockH1, standardParts(t, blockH1), commitH1))
 
 	for _, stage := range []string{"partset", "verify_commit", "verify_block", "save", "exec"} {
 		require.Len(t, hist.Samples[stage], 1, "stage %q after the first apply", stage)
@@ -361,7 +362,7 @@ func TestBlockApplierRecordsStageMetrics(t *testing.T) {
 	// A failed attempt must advance the idle-time boundary as well, so a retry
 	// does not count the failed attempt's wait and verification time again.
 	failureStart := time.Now()
-	require.Error(t, applier.Apply(ctx, blockH1, blockBytes(t, blockH1), nil, new(types.Commit)))
+	require.Error(t, applier.Apply(ctx, blockH1, standardParts(t, blockH1), new(types.Commit)))
 	failureEnd := time.Now()
 	failureDone := applier.lastDone
 	require.False(t, failureDone.Before(failureStart), "failed apply must advance lastDone")
@@ -370,7 +371,7 @@ func TestBlockApplierRecordsStageMetrics(t *testing.T) {
 
 	// The retry measures only the idle time after the failed attempt.
 	retryStart := time.Now()
-	require.NoError(t, applier.Apply(ctx, blockH1, blockBytes(t, blockH1), nil, commitH1))
+	require.NoError(t, applier.Apply(ctx, blockH1, standardParts(t, blockH1), commitH1))
 	retryEnd := time.Now()
 	require.Len(t, hist.Samples["wait"], 2)
 	wait := hist.Samples["wait"][1]
@@ -401,7 +402,7 @@ func TestBlockApplierVerifyFailureTimesOnlyTheCheckThatRan(t *testing.T) {
 	// A rejected commit must stop before ValidateBlock is reached.
 	mockBlockExec.On("VerifyCommit", initialState, blockH1.BlockID(nil), blockH1.Height, new(types.Commit)).
 		Once().Return(types.VerifiedCommit{}, errors.New("bad signature"))
-	require.Error(t, applier.Apply(ctx, blockH1, blockBytes(t, blockH1), nil, new(types.Commit)))
+	require.Error(t, applier.Apply(ctx, blockH1, standardParts(t, blockH1), new(types.Commit)))
 
 	require.Len(t, hist.Samples["partset"], 1)
 	require.Len(t, hist.Samples["verify_commit"], 1)
@@ -445,7 +446,7 @@ func TestBlockApplierOffersTheVerifiedCommitForward(t *testing.T) {
 		blockExec.On("FinalizeBlock", mock.Anything, mock.Anything, mock.Anything, blockH1ID, blockH1, commitH1, none).
 			Once().Return(initialState, nil, nil)
 		applier := newBlockApplier(blockExec, blockStore, applierWithState(initialState))
-		require.NoError(t, applier.Apply(ctx, blockH1, blockBytes(t, blockH1), nil, commitH1))
+		require.NoError(t, applier.Apply(ctx, blockH1, standardParts(t, blockH1), commitH1))
 		return applier, blockExec
 	}
 	// expectH2 expects block 2 to be validated and applied offering lastCommit
@@ -461,7 +462,7 @@ func TestBlockApplierOffersTheVerifiedCommitForward(t *testing.T) {
 	t.Run("the next block is offered the previous commit's verification", func(t *testing.T) {
 		applier, blockExec := applyH1(t)
 		expectH2(blockExec, verifiedH1)
-		require.NoError(t, applier.Apply(ctx, blockH2, blockBytes(t, blockH2), nil, commitH2))
+		require.NoError(t, applier.Apply(ctx, blockH2, standardParts(t, blockH2), commitH2))
 	})
 
 	t.Run("a rejected commit does not replace the verification", func(t *testing.T) {
@@ -469,17 +470,17 @@ func TestBlockApplierOffersTheVerifiedCommitForward(t *testing.T) {
 		bad := new(types.Commit)
 		blockExec.On("VerifyCommit", mock.Anything, blockH2ID, blockH2.Height, bad).
 			Once().Return(none, errors.New("bad signature"))
-		require.Error(t, applier.Apply(ctx, blockH2, blockBytes(t, blockH2), nil, bad))
+		require.Error(t, applier.Apply(ctx, blockH2, standardParts(t, blockH2), bad))
 
 		expectH2(blockExec, verifiedH1)
-		require.NoError(t, applier.Apply(ctx, blockH2, blockBytes(t, blockH2), nil, commitH2))
+		require.NoError(t, applier.Apply(ctx, blockH2, standardParts(t, blockH2), commitH2))
 	})
 
 	t.Run("replacing the state discards the verification", func(t *testing.T) {
 		applier, blockExec := applyH1(t)
 		applier.UpdateState(initialState)
 		expectH2(blockExec, none)
-		require.NoError(t, applier.Apply(ctx, blockH2, blockBytes(t, blockH2), nil, commitH2))
+		require.NoError(t, applier.Apply(ctx, blockH2, standardParts(t, blockH2), commitH2))
 	})
 }
 
@@ -533,7 +534,7 @@ func TestBlockApplierSkipsTheLastCommitItVerified(t *testing.T) {
 		wantSkipped float64
 	}{{1, 0}, {2, 3}, {3, 6}} {
 		block, _, _, seenCommit := makeNextBlock(ctx, t, applier.State(), privVals[0], step.height, commit)
-		require.NoError(t, applier.Apply(ctx, block, blockBytes(t, block), nil, seenCommit))
+		require.NoError(t, applier.Apply(ctx, block, standardParts(t, block), seenCommit))
 		require.Equal(t, step.wantSkipped, skipped.Value(),
 			"LastCommit threshold verifications skipped after applying height %d", step.height)
 		commit = seenCommit
@@ -551,6 +552,13 @@ func blockBytes(t *testing.T, block *types.Block) []byte {
 	return bz
 }
 
+// standardParts returns block as its proposer commits it when it encodes and
+// cuts it the canonical way.
+func standardParts(t *testing.T, block *types.Block) CommittedParts {
+	t.Helper()
+	return CommittedParts{Bytes: blockBytes(t, block)}
+}
+
 // TestBlockApplierRejectsPartSizesNotCoveringTheBlock checks that part sizes a
 // peer sent that do not cut the block's bytes are refused before the block is
 // verified or saved.
@@ -563,6 +571,95 @@ func TestBlockApplierRejectsPartSizesNotCoveringTheBlock(t *testing.T) {
 	bz := blockBytes(t, block)
 	applier := newBlockApplier(mocks.NewExecutor(t), mocks.NewBlockStore(t), applierWithState(state))
 
-	err := applier.Apply(ctx, block, bz, []uint32{uint32(len(bz) - 1)}, commit)
+	err := applier.Apply(ctx, block, CommittedParts{Bytes: bz, Sizes: []uint32{uint32(len(bz) - 1)}}, commit)
 	require.ErrorContains(t, err, "part sizes cover")
+}
+
+// finalizeBlockIDApp records the block IDs FinalizeBlock is called with.
+type finalizeBlockIDApp struct {
+	abci.BaseApplication
+	blockIDs []*tmproto.BlockID
+}
+
+func (app *finalizeBlockIDApp) FinalizeBlock(
+	ctx context.Context,
+	req *abci.RequestFinalizeBlock,
+) (*abci.ResponseFinalizeBlock, error) {
+	app.blockIDs = append(app.blockIDs, req.BlockID)
+	return app.BaseApplication.FinalizeBlock(ctx, req)
+}
+
+// TestFinalizeBlockGetsCommittedBlockID checks that the application is given
+// the block ID that was committed, when applying a block and replaying it, for
+// blocks committed with parts that a re-encoding does not reproduce.
+func TestFinalizeBlockGetsCommittedBlockID(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	logger := log.NewNopLogger()
+	genDoc, privVals := factory.RandGenesisDoc(1, factory.ConsensusParams())
+	state, err := sm.MakeGenesisState(genDoc)
+	require.NoError(t, err)
+	stateStore := sm.NewStore(dbm.NewMemDB())
+	require.NoError(t, stateStore.Save(state))
+	blockStore := store.NewBlockStore(dbm.NewMemDB())
+
+	finalizeApp := &finalizeBlockIDApp{}
+	localClient := abciclient.NewLocalClient(logger, finalizeApp)
+	app := proxy.New(localClient, logger, proxy.NopMetrics())
+	require.NoError(t, app.Start(ctx))
+	eventBus := eventbus.NewDefault(logger)
+	require.NoError(t, eventBus.Start(ctx))
+	mp := &mpmocks.Mempool{}
+	mp.On("Lock").Return()
+	mp.On("Unlock").Return()
+	mp.On("FlushAppConn", mock.Anything).Return(nil)
+	mp.On("Update", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	blockExec := sm.NewBlockExecutor(stateStore, app, mp, sm.EmptyEvidencePool{}, blockStore, eventBus)
+	applier := newBlockApplier(blockExec, blockStore, applierWithState(state))
+
+	blockParts := func(t *testing.T, height int64, block *types.Block) *types.PartSet {
+		switch height {
+		case 1:
+			return types.NewPartSetFromData(withUnknownField(t, block), types.BlockPartSizeBytes)
+		case 2:
+			return types.NewPartSetFromData(blockBytes(t, block), 100)
+		case 3:
+			return withProofOfLargerTree(t, block)
+		}
+		return nil
+	}
+	commit := types.NewCommit(0, 0, types.BlockID{}, nil, nil)
+	for height := int64(1); height <= 3; height++ {
+		block, blockID, partSet, seenCommit := makeNextBlockWithParts(ctx, t, applier.State(), privVals[0], height,
+			commit, blockParts)
+		require.False(t, blockID.Equals(block.BlockID(nil)), "height %d must not be a block a re-encoding reproduces", height)
+		parts := committedPartsOf(t, partSet)
+		require.NoError(t, applier.Apply(ctx, block, parts, seenCommit))
+
+		want := seenCommit.BlockID.ToProto()
+		require.Equal(t, &want, finalizeApp.blockIDs[len(finalizeApp.blockIDs)-1], "applying height %d", height)
+
+		_, err := sm.ExecReplayedCommitBlock(ctx, localClient, block, seenCommit, logger)
+		require.NoError(t, err)
+		require.Equal(t, &want, finalizeApp.blockIDs[len(finalizeApp.blockIDs)-1], "replaying height %d", height)
+		commit = seenCommit
+	}
+}
+
+// committedPartsOf returns parts in the form a peer serves them, by storing them.
+func committedPartsOf(t *testing.T, partSet *types.PartSet) CommittedParts {
+	t.Helper()
+	total := int(partSet.Total())
+	blockStore := mocks.NewBlockStore(t)
+	blockStore.On("LoadBlockMeta", int64(1)).Return(&types.BlockMeta{
+		BlockID:   types.BlockID{PartSetHeader: partSet.Header()},
+		BlockSize: int(partSet.ByteSize()),
+	})
+	for i := range total {
+		blockStore.On("LoadBlockPart", int64(1), i).Return(partSet.GetPart(i))
+	}
+	parts := loadCommittedParts(blockStore, 1)
+	require.NotNil(t, parts)
+	return *parts
 }

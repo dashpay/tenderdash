@@ -70,14 +70,11 @@ func newBlockApplier(blockExec sm.Executor, store sm.BlockStore, opts ...applier
 }
 
 // Apply safely verifies, saves to the store and executes a block with commit.
-// blockBytes are the bytes block was decoded from, the parts it was committed
-// with in order, and partSizes the size of each part, or nil for parts of
-// types.BlockPartSizeBytes.
+// parts is the block as it was committed, whose bytes block was decoded from.
 func (e *blockApplier) Apply(
 	ctx context.Context,
 	block *types.Block,
-	blockBytes []byte,
-	partSizes []uint32,
+	parts CommittedParts,
 	commit *types.Commit,
 ) error {
 	e.mtx.Lock()
@@ -93,12 +90,12 @@ func (e *blockApplier) Apply(
 
 	// The part set is needed twice: to derive the block ID and to persist the
 	// block. Building it builds a Merkle tree over the parts, so build it once
-	// and pass it to both. It is rebuilt from the bytes the block was committed
+	// and pass it to both. It is rebuilt from the parts the block was committed
 	// with, not from block: the commit's part set header is computed over
 	// those, and a re-encoding of block drops unknown fields and non-canonical
 	// encoding.
 	start := time.Now()
-	blockParts, err := committedPartSet(blockBytes, partSizes)
+	blockParts, err := parts.partSet(commit.BlockID.PartSetHeader)
 	if err != nil {
 		return err
 	}
@@ -218,16 +215,6 @@ func (e *blockApplier) verify(
 		return types.VerifiedCommit{}, err
 	}
 	return verified, nil
-}
-
-// committedPartSet returns the part set a block was committed with, from its
-// bytes and the size of each part, or nil sizes for parts of
-// types.BlockPartSizeBytes.
-func committedPartSet(blockBytes []byte, partSizes []uint32) (*types.PartSet, error) {
-	if len(partSizes) == 0 {
-		return types.NewPartSetFromData(blockBytes, types.BlockPartSizeBytes), nil
-	}
-	return types.NewPartSetFromPartSizes(blockBytes, partSizes)
 }
 
 // observeSince records the time since start under stage and returns it, so the

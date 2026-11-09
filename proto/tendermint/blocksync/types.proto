@@ -3,6 +3,8 @@ package tendermint.blocksync;
 
 option go_package = "github.com/dashpay/tenderdash/proto/tendermint/blocksync";
 
+import "gogoproto/gogo.proto";
+import "tendermint/crypto/proof.proto";
 import "tendermint/types/types.proto";
 
 // BlockRequest requests a block for a specific height
@@ -30,6 +32,11 @@ message BlockResponse {
   // order. It is empty when the block was cut into parts of 64kB, the last
   // one shorter, the way honest proposers cut it.
   repeated uint32 part_sizes = 3;
+  // part_proofs is the Merkle proof of each part the block was committed with,
+  // in order, alongside part_sizes. It is empty when the part set header can
+  // be computed from the parts, which it cannot when a proof's total differs
+  // from the header's.
+  repeated tendermint.crypto.Proof part_proofs = 4 [(gogoproto.nullable) = false];
 }
 
 // StatusRequest requests the status of a peer.

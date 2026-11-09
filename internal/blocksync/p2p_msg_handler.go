@@ -14,7 +14,6 @@ import (
 	"github.com/dashpay/tenderdash/internal/p2p/client"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/log"
-	tmmath "github.com/dashpay/tenderdash/libs/math"
 	bcproto "github.com/dashpay/tenderdash/proto/tendermint/blocksync"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -156,11 +155,11 @@ func (h *blockP2PMessageHandler) Handle(ctx context.Context, p2pClient *client.C
 func (h *blockP2PMessageHandler) prepareBlockResponse(job blockResponseJob) (proto.Message, bool, error) {
 	envelope := &job.envelope
 	msg := envelope.Message.(*bcproto.BlockRequest)
-	blockBytes, partSizes := loadCommittedBlock(h.store, msg.Height)
+	parts := loadCommittedParts(h.store, msg.Height)
 	if !h.connectionIsCurrent(envelope.From, envelope.ConnID) {
 		return nil, false, nil
 	}
-	if blockBytes == nil {
+	if parts == nil {
 		h.logger.Debug("peer requesting a block we do not have", "peer", envelope.From, "height", msg.Height)
 		return &bcproto.NoBlockResponse{Height: msg.Height}, false, nil
 	}
@@ -169,64 +168,11 @@ func (h *blockP2PMessageHandler) prepareBlockResponse(job blockResponseJob) (pro
 		return nil, false, fmt.Errorf("%w at height %d", errStoredBlockMissingCommit, msg.Height)
 	}
 	return &bcproto.BlockResponse{
-		Block:     blockBytes,
-		Commit:    commit.ToProto(),
-		PartSizes: partSizes,
+		Block:      parts.Bytes,
+		Commit:     commit.ToProto(),
+		PartSizes:  parts.Sizes,
+		PartProofs: parts.protoProofs(),
 	}, true, nil
-}
-
-// loadCommittedBlock returns the block at height as it was committed: the
-// bytes of its stored parts, in order, and the size of each part, or nil sizes
-// when the parts are cut the way types.NewPartSetFromData cuts them. The
-// commit's part set header is computed over those parts, and the peer can only
-// rebuild it from them; a re-encoding of the decoded block drops unknown
-// fields and non-canonical encoding, and a proposer may cut a block into parts
-// of any size. It returns nil bytes when the store does not hold every part.
-func loadCommittedBlock(store sm.BlockStore, height int64) ([]byte, []uint32) {
-	meta := store.LoadBlockMeta(height)
-	if meta == nil {
-		return nil, nil
-	}
-	total := int(meta.BlockID.PartSetHeader.Total)
-	// BlockSize is -1 for a header saved without its block
-	blockBytes := make([]byte, 0, max(meta.BlockSize, 0))
-	partSizes := make([]uint32, total)
-	for i := range total {
-		part := store.LoadBlockPart(height, i)
-		// a header saved without its block, or parts pruned after the meta was
-		// loaded
-		if part == nil {
-			return nil, nil
-		}
-		blockBytes = append(blockBytes, part.Bytes...)
-		partSizes[i] = tmmath.MustConvertUint32(len(part.Bytes))
-	}
-	if len(blockBytes) == 0 {
-		return nil, nil
-	}
-	if standardPartSizes(partSizes, len(blockBytes)) {
-		partSizes = nil
-	}
-	return blockBytes, partSizes
-}
-
-// standardPartSizes reports whether parts of the given sizes are how
-// types.NewPartSetFromData cuts size bytes into parts of
-// types.BlockPartSizeBytes.
-func standardPartSizes(partSizes []uint32, size int) bool {
-	partSize := int(types.BlockPartSizeBytes)
-	total := (size + partSize - 1) / partSize
-	if total == 0 || len(partSizes) != total {
-		return false
-	}
-	// the last part takes what is left, and with total parts that is between 1
-	// and partSize bytes
-	for _, s := range partSizes[:total-1] {
-		if s != types.BlockPartSizeBytes {
-			return false
-		}
-	}
-	return true
 }
 
 func (h *blockP2PMessageHandler) enqueueBlockResponse(job blockResponseJob) {

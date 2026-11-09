@@ -107,6 +107,23 @@ func (suite *BlockFetchJobTestSuite) TestExecuteHeightMismatch() {
 	suite.requireError("peer sent block at height 6, requested height 5", res.Err)
 }
 
+// TestExecuteRejectsOversizedPartMetadata pins that a response with more part
+// sizes than a block can have fails its fetch, so it is never held waiting for
+// the lower heights still missing.
+func (suite *BlockFetchJobTestSuite) TestExecuteRejectsOversizedPartMetadata() {
+	ctx := context.Background()
+	const requested = int64(9)
+	oversized := *suite.responses[requested-1]
+	oversized.PartSizes = make([]uint32, types.MaxBlockPartsCount+1)
+	suite.client.
+		On("GetBlock", mock.Anything, requested, suite.peer.peerID).
+		Once().
+		Return(suite.getBlockReturnFunc(suite.promiseResolveResponse(&oversized)), nil)
+	res := blockFetchJobHandler(suite.client, suite.peer, requested)(ctx)
+	suite.requireError("too many parts", res.Err)
+	suite.Nil(res.Value)
+}
+
 // TestExecuteCarriesPeerConnection pins that a job's outcome stays attributed to the
 // connection generation the peer was reserved under, including a timeout, which has
 // no response envelope to take a generation from.

@@ -194,28 +194,41 @@ func NewPartSetFromData(data []byte, partSize uint32) *PartSet {
 // NewPartSetFromData would, so this rebuilds the part set a block was
 // committed with from its bytes and the sizes of its parts.
 func NewPartSetFromPartSizes(data []byte, sizes []uint32) (*PartSet, error) {
-	if len(sizes) == 0 {
-		return nil, errors.New("no part sizes")
-	}
-	if len(sizes) > int(MaxBlockPartsCount) {
-		return nil, fmt.Errorf("too many parts: %d, max: %d", len(sizes), MaxBlockPartsCount)
+	if err := ValidatePartSizes(len(data), sizes); err != nil {
+		return nil, err
 	}
 	partsBytes := make([][]byte, len(sizes))
 	offset := 0
 	for i, size := range sizes {
-		if size > BlockPartSizeBytes {
-			return nil, fmt.Errorf("part %d too big: %d bytes, max: %d", i, size, BlockPartSizeBytes)
-		}
-		if int(size) > len(data)-offset {
-			return nil, fmt.Errorf("part sizes exceed the %d bytes of data", len(data))
-		}
 		partsBytes[i] = data[offset : offset+int(size)]
 		offset += int(size)
 	}
-	if offset != len(data) {
-		return nil, fmt.Errorf("part sizes cover %d of the %d bytes of data", offset, len(data))
-	}
 	return newPartSetFromParts(partsBytes, len(data)), nil
+}
+
+// ValidatePartSizes checks that parts of the given sizes are valid block parts
+// that together cut exactly size bytes.
+func ValidatePartSizes(size int, sizes []uint32) error {
+	if len(sizes) == 0 {
+		return errors.New("no part sizes")
+	}
+	if len(sizes) > int(MaxBlockPartsCount) {
+		return fmt.Errorf("too many parts: %d, max: %d", len(sizes), MaxBlockPartsCount)
+	}
+	offset := 0
+	for i, partSize := range sizes {
+		if partSize > BlockPartSizeBytes {
+			return fmt.Errorf("part %d too big: %d bytes, max: %d", i, partSize, BlockPartSizeBytes)
+		}
+		if int(partSize) > size-offset {
+			return fmt.Errorf("part sizes exceed the %d bytes of data", size)
+		}
+		offset += int(partSize)
+	}
+	if offset != size {
+		return fmt.Errorf("part sizes cover %d of the %d bytes of data", offset, size)
+	}
+	return nil
 }
 
 // newPartSetFromParts returns a full PartSet of the given parts, which must be

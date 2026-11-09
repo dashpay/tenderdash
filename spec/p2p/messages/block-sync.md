@@ -41,10 +41,11 @@ BlockResponse contains the block requested and its commit.
 | Block      | bytes                                          | Requested [Block](../../core/data_structures.md#block), serialized as it was committed: the bytes of its parts, in order. On the wire this is the same as an embedded Block.                  | 1            |
 | Commit     | [Commit](../../core/data_structures.md#commit) | Commit for the requested block                                                                                                                                                                | 2            |
 | PartSizes  | repeated uint32                                | Size of each part the block was committed with, in order. Empty when the block was cut into parts of 64kB, the last one shorter                                                               | 3            |
+| PartProofs | repeated [Proof](../../core/data_structures.md#proof) | Merkle proof of each part the block was committed with, in order, alongside PartSizes. Empty when the part set header can be computed from the parts, which it cannot when a proof's total differs from the header's | 4            |
 
-The receiver rebuilds the block's part set from `Block` and `PartSizes`: the
-part set header in the commit's block ID is computed over the committed parts,
-and decoding and re-encoding the block can change its bytes.
+The receiver rebuilds the block's part set from `Block`, `PartSizes` and
+`PartProofs`: the part set header in the commit's block ID is computed over the
+committed parts, and decoding and re-encoding the block can change its bytes.
 
 ### StatusRequest
 

@@ -16,6 +16,7 @@ import (
 	abciclient "github.com/dashpay/tenderdash/abci/client"
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/crypto/merkle"
 	"github.com/dashpay/tenderdash/internal/consensus"
 	"github.com/dashpay/tenderdash/internal/eventbus"
 	mpmocks "github.com/dashpay/tenderdash/internal/mempool/mocks"
@@ -473,15 +474,19 @@ func TestReactor_SyncBlocksAsCommitted(t *testing.T) {
 
 	genDoc, privVals := factory.RandGenesisDoc(1, factory.ConsensusParams())
 	const (
-		maxBlockHeight = int64(10)
+		maxBlockHeight = int64(12)
 		// a field that tendermint.types.Block does not define, which decoding
 		// skips, appended to the block's bytes
 		unknownFieldHeight = int64(3)
 		// the block's bytes cut into parts shorter than types.BlockPartSizeBytes
 		smallPartsHeight = int64(5)
 		bothHeight       = int64(7)
+		// one part, whose proof is of a tree of more leaves than the header
+		// counts, so the header cannot be computed from the part
+		largerTreeHeight = int64(9)
 		smallPartSize    = 100
 	)
+	committedHeights := []int64{unknownFieldHeight, smallPartsHeight, bothHeight, largerTreeHeight}
 	blockParts := func(t *testing.T, height int64, block *types.Block) *types.PartSet {
 		switch height {
 		case unknownFieldHeight:
@@ -490,13 +495,15 @@ func TestReactor_SyncBlocksAsCommitted(t *testing.T) {
 			return types.NewPartSetFromData(blockBytes(t, block), smallPartSize)
 		case bothHeight:
 			return types.NewPartSetFromData(withUnknownField(t, block), smallPartSize)
+		case largerTreeHeight:
+			return withProofOfLargerTree(t, block)
 		}
 		return nil
 	}
 	rts := setupWithBlockParts(ctx, t, cfg, genDoc, privVals[0], []int64{maxBlockHeight, 0}, blockParts)
 	source, syncing := rts.reactors[rts.nodes[0]], rts.reactors[rts.nodes[1]]
 	require.Equal(t, maxBlockHeight, source.store.Height())
-	for _, height := range []int64{unknownFieldHeight, smallPartsHeight, bothHeight} {
+	for _, height := range committedHeights {
 		require.NotEqual(t,
 			source.store.LoadBlockMeta(height).BlockID.PartSetHeader,
 			source.store.LoadBlock(height).BlockID(nil).PartSetHeader,
@@ -506,17 +513,15 @@ func TestReactor_SyncBlocksAsCommitted(t *testing.T) {
 	rts.start(ctx, t)
 
 	require.Eventually(t,
-		func() bool { return syncing.store.Height() > bothHeight },
+		func() bool { return syncing.store.Height() > largerTreeHeight },
 		30*time.Second,
 		10*time.Millisecond,
 		"expected node to sync the blocks committed with other bytes")
-	for _, height := range []int64{unknownFieldHeight, smallPartsHeight, bothHeight} {
+	for _, height := range committedHeights {
 		require.Equal(t, source.store.LoadBlockMeta(height).BlockID, syncing.store.LoadBlockMeta(height).BlockID,
 			"block ID at height %d", height)
-		wantBytes, wantSizes := loadCommittedBlock(source.store, height)
-		gotBytes, gotSizes := loadCommittedBlock(syncing.store, height)
-		require.Equal(t, wantBytes, gotBytes, "stored block bytes at height %d", height)
-		require.Equal(t, wantSizes, gotSizes, "stored part sizes at height %d", height)
+		require.Equal(t, loadCommittedParts(source.store, height), loadCommittedParts(syncing.store, height),
+			"stored parts at height %d", height)
 	}
 }
 
@@ -525,6 +530,19 @@ func TestReactor_SyncBlocksAsCommitted(t *testing.T) {
 func withUnknownField(t *testing.T, block *types.Block) []byte {
 	// tag (15 << 3 | varint wire type), then the value 1
 	return append(blockBytes(t, block), 15<<3, 1)
+}
+
+// withProofOfLargerTree returns a part set of one part with the bytes of block,
+// whose root is that of a tree of two leaves. PartSet.AddPart checks a proof
+// against the root and not against the header's total, so consensus accepts it.
+func withProofOfLargerTree(t *testing.T, block *types.Block) *types.PartSet {
+	bz := blockBytes(t, block)
+	root, proofs := merkle.ProofsFromByteSlices([][]byte{bz, []byte("leaf the header does not count")})
+	partSet := types.NewPartSetFromHeader(types.PartSetHeader{Total: 1, Hash: root})
+	added, err := partSet.AddPart(&types.Part{Index: 0, Bytes: bz, Proof: *proofs[0]})
+	require.NoError(t, err)
+	require.True(t, added)
+	return partSet
 }
 
 func TestReactor_BadBlockStopsPeer(t *testing.T) {
