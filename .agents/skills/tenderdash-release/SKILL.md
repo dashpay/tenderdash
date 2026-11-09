@@ -18,21 +18,21 @@ or publish embargoed fixes without the coordinated disclosure authorization.
 ## Establish the release context
 
 Resolve the intended Dash Platform version/network and operation: next release,
-prerelease, or stable hotfix. Inspect live refs, published tags/releases, and open
-release PRs before selecting commits. Fetch the necessary refs/tags; do not trust
-stale local tracking refs or assume the GitHub default is the release source.
+prerelease, or stable hotfix; release sources are defined in
+[RELEASES.md](../../../RELEASES.md#branches-and-release-sources). Inspect live
+refs, published tags/releases, and open release PRs before selecting commits.
+Fetch the necessary refs/tags; do not trust stale local tracking refs or assume
+the GitHub default is the release source.
 
 - **Next release:** use `origin/dev` and record its exact SHA. Freeze that
   candidate; a later tip is a new candidate requiring review. The helper accepts
   that reviewed ancestor of the fetched integration tip without substituting
   newer commits. A temporary release branch can isolate a freeze.
 - **Current-stable hotfix:** start from `origin/master` and its latest published
-  tag. Isolate only required fixes in a feature branch; exclude next-version
-  development. Plan the forward-port to dev as part of completion.
-- **Another deployed Platform line:** require an explicit supported-deployment
-  decision and start from that line's last released tag, not master or dev.
-  This is an exceptional manual path: the helper intentionally validates only
-  next releases and current-stable hotfixes. Do not weaken it to admit another line.
+  tag in a feature branch. Plan the forward-port to dev as part of completion.
+- **Another deployed Platform line:** stop until the supported-deployment
+  decision is explicit. The helper validates only the two modes above; do not
+  weaken it to admit another line.
 
 Choose the latest **published stable tag reachable from the candidate** for the
 compatibility baseline. Verify its commit and GitHub release are the intended
@@ -105,13 +105,11 @@ anything not verified. Signed binary building does not prove consensus or upgrad
 compatibility. Fill every applicable repository PR-template section with the
 compatibility rationale and validation, including AI attribution.
 
-A prerelease preparation PR targets the integration branch; a full-release PR
-promotes the frozen candidate to master and preserves ancestry under the agreed
-release merge strategy. A stable patch PR targets master. Respect protections:
-master's current linear-history rule conflicts with the documented promotion
-merge, so publication must wait for maintainers to reconcile that policy; never
-use an automatic administrative bypass. Stop after the requested preparation or
-PR phase if no release publication was requested.
+A prerelease preparation PR targets `dev`, a full-release PR promotes the frozen
+candidate to `master`, and a stable patch PR targets `master`. Follow the
+promotion and branch-protection rules in [RELEASES.md](../../../RELEASES.md#branches-and-release-sources);
+report a protection conflict instead of bypassing it. Stop after the requested
+preparation or PR phase if no release publication was requested.
 
 ## Finalize an explicitly requested release
 
@@ -135,23 +133,18 @@ When signed binaries are required, run from a checkout with that exact tag:
 bash scripts/release/build-artifacts.sh REPO TAG REVIEWED_MERGE_SHA OUTPUT_DIRECTORY
 ```
 
-The helper builds Linux amd64/arm64, signs each binary with GPG (optional
-`GPG_KEY_ID`), verifies signatures, and produces tarballs, `SHA256SUMS`, and
-`SOURCE_COMMIT`. It clones the reviewed source, never changes the caller's branch,
-and never uploads. Use a fresh output directory under the user's artifact root.
-Retain provenance and verify checksums/signatures before uploading to the matching
-draft. Compare existing assets rather than overwriting them with `--clobber`.
-For unsigned/dev releases, state explicitly which binary artifacts are omitted;
-Docker publication remains separate.
+See [RELEASES.md](../../../RELEASES.md#validation-and-artifacts) for what it
+produces; set `GPG_KEY_ID` to choose the key. Use a fresh output directory under
+the user's artifact root, keep provenance, and verify checksums/signatures before
+uploading to the matching draft. Compare existing assets rather than overwriting
+them with `--clobber`. When no binaries are built, state which artifacts are
+omitted in the release notes.
 
-Publishing the draft triggers `.github/workflows/docker.yml`. Check that the
-Platform rollout and release request authorize this publication. Verify exact source
-SHA, binary version and image labels. Stable alias promotion is serialized and
-requires the current latest stable release with no higher stable tag. Prereleases,
-manual runs and older-line releases must not replace stable aliases. Historical
-source without explicit Docker VERSION support needs a separately reviewed path.
-After publication, verify the remote tag SHA, release assets, Docker image tags
-and digests. If asynchronous publishing fails, report the partial state and resume
+Publishing the draft triggers `.github/workflows/docker.yml` (tag and alias rules
+in [RELEASES.md](../../../RELEASES.md#validation-and-artifacts)). Check that the
+Platform rollout and release request authorize this publication. After
+publication, verify the remote tag SHA, release assets, image tags, labels,
+digests and binary version, and that no stable alias moved unexpectedly. If asynchronous publishing fails, report the partial state and resume
 only the missing step; do not move tags or repeat a completed release blindly.
 
 Forward-port stable fixes and release metadata to dev with a reviewed merge or
