@@ -487,7 +487,10 @@ namespace = "tendermint"
 `create-empty-blocks = false` makes round 0 wait for transactions above the
 initial height. A positive `create-empty-blocks-interval` starts a proposal after
 that interval even without transactions. Later rounds do not wait for
-transactions.
+transactions, except on a chain with consensus version 2, where a round entered
+because the validators skipped a silent proposer's waiting round waits too; its
+interval counts from the start of the height. See
+[Proposer liveness and round skipping](../../spec/consensus/consensus-proposer-liveness.md).
 
 The application can bypass that wait for the next height by setting
 `ResponseFinalizeBlock.propose_next_block_immediately`. The hint is local,

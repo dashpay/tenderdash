@@ -40,7 +40,9 @@ see [Recovery and synchronisation](../consensus/consensus-recovery.md).
 
 [Version](./data_structures.md#version) distinguishes block protocol version from
 application version. `ConsensusParams.Version.ConsensusVersion` additionally
-selects the [proposer-selection strategy](../consensus/proposer-selection.md).
+selects the [proposer-selection strategy](../consensus/proposer-selection.md)
+and, from version 2, enables
+[proposer liveness](../consensus/consensus-proposer-liveness.md).
 
 ## Block
 

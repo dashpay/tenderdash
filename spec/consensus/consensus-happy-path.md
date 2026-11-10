@@ -102,6 +102,9 @@ tock to `EnterNewRoundEvent{Height}`. `EnterNewRoundAction.Execute`
   [Empty blocks](./consensus-alternative-flows.md#mempool-and-empty-blocks).
   With the default configuration (`create-empty-blocks = true`,
   interval 0) it does not wait and dispatches `EnterProposeEvent{h, 0}`.
+  On `CONSENSUS_VERSION_2` chains the proposer of a waiting round sends
+  heartbeats while it waits. **⇢**
+  [Proposer liveness](./consensus-proposer-liveness.md).
 
 ### 3. Propose
 
