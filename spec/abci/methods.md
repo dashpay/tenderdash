@@ -15,9 +15,11 @@ title: Methods
     * `Message (string)`: The input string
 * **Usage**:
 * Echo a string to test an abci client/server implementation
-* From consensus version 2, the proposer of a round that waits for transactions sends `Echo`
-  to every backend that receives `PrepareProposal` before each heartbeat, and sends no
-  heartbeat unless they answer within the heartbeat interval. See
+* From consensus version 2, the proposer of a round that waits for transactions probes
+  the backends that receive `PrepareProposal` with `Echo` before each heartbeat, once it
+  is not held back after block sync. At most one probe is in flight; an unanswered probe
+  is reused by later heartbeats rather than repeated. A heartbeat is sent only if the
+  backends answer within the heartbeat interval. See
   [Proposer liveness](../consensus/consensus-proposer-liveness.md#heartbeats).
 
 ### Flush

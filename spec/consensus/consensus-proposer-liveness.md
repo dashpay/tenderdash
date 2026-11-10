@@ -43,9 +43,9 @@ when:
 - a proposal for the round is accepted (`proposalMessageHandler`,
   `internal/consensus/msg_handlers.go`); a round-0 proposal accepted before the
   round starts keeps the round from waiting at all;
-- a prevote is added while the node waits and the prevotes of its round hold
-  a polka, or the prevote is for the current round and `r > 0`
-  (`addVoteDispatchPrevoteMw`).
+- a prevote is added while the node waits and the added prevote's round (this
+  round or an earlier one) has a polka, or the prevote is for the current round
+  and `r > 0` (`addVoteDispatchPrevoteMw`).
 
 A proposal or polka shows that a block is under way; from then on the
 propose timeout, not the heartbeats, moves the round on.
@@ -228,8 +228,10 @@ Two gossip handlers run per peer at the `PeerQueryMaj23SleepDuration` cadence
 ## Recovery
 
 - Certificates are WAL `msgInfo` records; replay applies them again without
-  charging the verification budget, and `walIter` keeps them when skipping rounds
-  (`walMsgHeight`, `internal/consensus/wal_iter.go`).
+  charging the verification budget. Replay never skips rounds on a
+  `roundSkipping` chain (below); `walMsgHeight`
+  (`internal/consensus/wal_iter.go`) only recognises the certificate record, so
+  a round-skipping replay of an earlier-version height does not fail on it.
 - On a `roundSkipping` chain `WalSkipRoundsToLast` is ignored
   (`State.replaySkipsRounds`, `internal/consensus/replay.go`): whether a round
   after a certificate waits depends on polkas of earlier rounds.
@@ -251,12 +253,19 @@ Two gossip handlers run per peer at the `PeerQueryMaj23SleepDuration` cadence
   (`peerMessageCost`, `budgetedMessageCost` in
   `internal/consensus/message_cost.go`). One that cannot be afforded is dropped;
   it is sent again.
-- **Peer errors.** A malformed liveness message, a bad signature, a wrong
-  proposer or validator index, or a certificate for another quorum is a
-  floodable peer error, logged at Debug (`isPeerFloodableError`). A heartbeat,
-  skip vote or certificate whose signature fails against the key the node holds
-  is reported as a fatal peer error, which disconnects the sender
-  (`forgedLivenessMiddleware`); a certificate for another quorum is not.
+- **Peer errors.** All rejections below are logged at Debug
+  (`isPeerFloodableError`):
+    - a liveness message that does not decode or fails its basic checks
+      (`MsgFromProto`, `errMalformedLivenessMessage`) is reported as
+      `p2p.ErrInvalidData`, on which the router disconnects the sender;
+    - a heartbeat from the wrong proposer or a skip vote whose index and
+      pro-tx-hash disagree, found by the reactor's screening, is a non-fatal
+      peer error (`PeerStatusBad`);
+    - a heartbeat, skip vote or certificate whose signature fails against the
+      key the node holds is reported as a fatal peer error, which disconnects
+      the sender (`forgedLivenessMiddleware`);
+    - a certificate for another quorum (`ErrRoundSkipCertificateWrongQuorum`)
+      is only logged.
 - **Outboxes.** Liveness messages are sent from a reactor goroutine through a
   bounded outbox (`livenessOutboxSize = 256`), each send bounded by
   `voteSetResponseTimeout`; a message that finds the outbox full is dropped and
@@ -267,8 +276,10 @@ Two gossip handlers run per peer at the `PeerQueryMaj23SleepDuration` cadence
 
 ## Signers
 
-`FilePV` and `DashCoreSignerClient` sign heartbeats and skip votes
-(`SignProposerHeartbeat`, `SignRoundSkipVote` in `types/priv_validator.go`).
+`FilePV` (`privval/file.go`) and `DashCoreSignerClient`
+(`privval/dash_core_signer_client.go`) sign heartbeats and skip votes
+(`SignProposerHeartbeat`, `SignRoundSkipVote` of the `PrivValidator`
+interface, `types/priv_validator.go`).
 The socket and gRPC remote signers (`privval/signer_client.go`,
 `privval/grpc/client.go`) return `RemoteSignerError` code 501, which matches
 `types.ErrSigningNotSupported`. A validator behind such a signer sends no

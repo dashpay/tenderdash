@@ -488,8 +488,10 @@ namespace = "tendermint"
 initial height. A positive `create-empty-blocks-interval` starts a proposal after
 that interval even without transactions. Later rounds do not wait for
 transactions, except on a chain with consensus version 2, where a round entered
-because the validators skipped a silent proposer's waiting round waits too; its
-interval counts from the start of the height. See
+because the validators skipped a silent proposer's waiting round may wait too,
+unless the node holds a locked or valid block, the mempool has already reported
+transactions at this height, a polka exists at the height, or a prevote of that
+round was recorded; its interval counts from the start of the height. See
 [Proposer liveness and round skipping](../../spec/consensus/consensus-proposer-liveness.md).
 
 The application can bypass that wait for the next height by setting

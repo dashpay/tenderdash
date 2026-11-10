@@ -77,8 +77,10 @@ The receive routine handles the tock only if it still matches
        `ValidBlock` event so peers keep serving the committed block's parts.
     5. `waitForTxs = config.WaitForTxs() ∧ (R == 0 ∨ waitsAfterRoundSkip(R)) ∧ h ≠ InitialHeight ∧ ¬ProposeNextBlockImmediately ∧ ¬(roundSkipping ∧ Proposal ≠ nil)`
        where `WaitForTxs = ¬CreateEmptyBlocks ∨ CreateEmptyBlocksInterval > 0`
-       (`config/config.go`); `waitsAfterRoundSkip` and `roundSkipping` are
-       defined in [Proposer liveness](./consensus-proposer-liveness.md#the-round-after-a-skip).
+       (`config/config.go`); `roundSkipping` is defined in
+       [When it applies](./consensus-proposer-liveness.md#when-it-applies) and
+       `waitsAfterRoundSkip` in
+       [The round after a skip](./consensus-proposer-liveness.md#the-round-after-a-skip).
         - `waitForTxs ∧ R > 0 ∧ Commit == nil`: publish the `NewRound` step.
         - `waitForTxs ∧ CreateEmptyBlocksInterval > 0`: schedule tock
           `(h, R, NewRound)` after the interval (for `R > 0`, the interval
