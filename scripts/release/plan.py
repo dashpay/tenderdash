@@ -57,9 +57,9 @@ def release_plan(repo, mode, source, baseline):
         if version and tuple(map(int, version.groups())) > baseline_version:
             raise ValueError(f"newer reachable stable tag {tag}; review the baseline")
 
-    integration = (
-        "origin/dev" if exists(repo, "refs/remotes/origin/dev") else "origin/v1.8-dev"
-    )
+    integration = "origin/dev"
+    if not exists(repo, "refs/remotes/origin/dev"):
+        raise ValueError("origin/dev not found; fetch the integration branch")
     integration_sha = git(repo, "rev-parse", "--verify", f"{integration}^{{commit}}")
     stable_sha = git(repo, "rev-parse", "--verify", "origin/master^{commit}")
     if mode == "next":
@@ -67,7 +67,7 @@ def release_plan(repo, mode, source, baseline):
             raise ValueError(
                 "next release source must be on the fetched integration lineage"
             )
-        target = "dev" if integration == "origin/dev" else "v1.8-dev"
+        target = "dev"
     else:
         if not ancestor(repo, stable_sha, source_sha):
             raise ValueError("hotfix source must descend from origin/master")
