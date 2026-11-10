@@ -51,7 +51,7 @@ def rewrite_link(match, source, root, source_ref):
     return prefix + replacement
 
 
-def prepare(root=ROOT, source_ref="v1.8-dev"):
+def prepare(root=ROOT, source_ref="dev"):
     root = root.resolve()
     summary = (root / "book/SUMMARY.md").read_text()
     listed = set(re.findall(r"\]\(([^)]+\.md)\)", summary))
@@ -99,7 +99,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--source-ref",
-        default="v1.8-dev",
+        default="dev",
         help="Git ref for links to repository source files",
     )
     args = parser.parse_args()

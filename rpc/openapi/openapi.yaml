@@ -49,10 +49,10 @@ info:
 
         ws ws://localhost:26657/websocket
         > { "jsonrpc": "2.0", "method": "subscribe", "params": ["tm.event='NewBlock'"], "id": 1 }
-  version: "v1.8-dev"
+  version: "2.0.0-dev.1"
   license:
     name: Apache 2.0
-    url: https://github.com/dashpay/tenderdash/blob/v1.8-dev/LICENSE
+    url: https://github.com/dashpay/tenderdash/blob/master/LICENSE
 servers:
   - url: http://localhost:26657
     description: Interact with the Tenderdash RPC locally on your device
