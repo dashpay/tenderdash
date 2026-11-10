@@ -2,14 +2,18 @@
 name: Check Markdown links
 
 on:
-  # Temporarily disabled job on PRs. Re-enable when docs are fixed.
-  # pull_request:
-  #   paths:
-  #     - "**.md"
+  pull_request:
   push:
     branches:
       - master
       - dev
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Branch creation/rename events can refer to the deleted old branch.
 env:
@@ -41,4 +45,4 @@ jobs:
             echo "No changed Markdown files."
             exit 0
           fi
-          npx --yes markdown-link-check@3.14.2 --config .md-link-check.json --quiet "${files[@]}"
+          npx --yes markdown-link-check@3.14.2 --config .md-link-check.json --quiet -- "${files[@]}"
