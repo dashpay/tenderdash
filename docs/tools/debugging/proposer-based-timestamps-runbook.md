@@ -81,7 +81,7 @@ to make sure your local clock is properly synchronized to NTP.
 
 NTP configuration and tooling is very specific to the operating system and distribution
 that your validator node is running. This guide assumes you have `timedatectl` installed with
-[chrony](https://chrony.tuxfamily.org/), a popular tool for interacting with time
+[chrony](https://chrony-project.org/), a popular tool for interacting with time
 synchronization on Linux distributions. If you are using an operating system or
 distribution with a different time synchronization mechanism, please consult the
 documentation for your operating system to check the status and re-synchronize the daemon.

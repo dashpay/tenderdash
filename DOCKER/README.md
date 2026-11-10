@@ -6,7 +6,7 @@ DockerHub tags for official releases are [here](https://hub.docker.com/r/dashpay
 
 Official releases can be found [here](https://github.com/dashpay/tenderdash/releases).
 
-The Dockerfile used for all builds can be found [here](https://github.com/dashpay/tenderdash/blob/master/DOCKER/Dockerfile).
+The Dockerfile used for all builds can be found [here](Dockerfile).
 
 Respective versioned files can be found at `https://raw.githubusercontent.com/tendermint/tendermint/vX.XX.XX/DOCKER/Dockerfile` (replace the Xs with the version number).
 
