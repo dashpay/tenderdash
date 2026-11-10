@@ -71,14 +71,21 @@ increment every counter or use a major to conceal an unhandled network
 compatibility change. List unversioned changes (Go API, configuration, CLI) with
 their operator action for the changelog, and record the Dash Platform
 integration: required Drive/ABCI/Dashmate updates, network activation,
-mixed-version operation and operator rollout. Internal-only work may need no
-release; do not manufacture a bump for an analysis request.
+mixed-version operation and operator rollout. Check against the deployed
+Platform release: the ABCI range accepted by Drive's pinned `tenderdash-abci`
+tag, the Tenderdash image dashmate pins, and whether dashmate's default
+Tenderdash configuration passes any new configuration validation. Internal-only
+work may need no release; do not manufacture a bump for an analysis request.
 
 When `ABCISemVer` changes, check it against the `check_version` caret rule
 (`^major.minor`) in `dashpay/rs-tenderdash-abci`: which existing apps still
 accept the new Tenderdash, and which Tenderdash versions apps built on the new
-crate reject. Prepare the matching rs-tenderdash-abci PR (proto default version)
-before tagging; its CI passes only once the tag and Docker image exist.
+crate reject. Prepare the matching rs-tenderdash-abci PR before tagging. It
+carries the crate version, proto default version and changelog, so no separate
+version PR is needed. Its CI passes only once the Tenderdash tag and Docker
+image exist: after publication, rerun it, then tag the same version on the
+merge commit in `develop` and publish a GitHub release (a prerelease for
+`-dev.N`). Drive links the crate by that tag.
 
 **Stop and ask** before bumping `BlockProtocol` or preparing a release that
 changes it (full hard fork), even when the release was otherwise authorized, and
