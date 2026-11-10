@@ -88,7 +88,7 @@
 | round | [int32](#int32) |  |  |
 | quorum_hash | [bytes](#bytes) |  |  |
 | block_signature | [bytes](#bytes) |  |  |
-| threshold_vote_extensions | [tendermint.types.VoteExtension](#tendermint-types-VoteExtension) | repeated |  |
+| threshold_vote_extensions | [tendermint.types.VoteExtension](../../proto/tendermint/types/) | repeated |  |
 | beacon | [bytes](#bytes) |  | Random beacon of the committed block: the threshold signature recovered from the prevotes of the commit round. Set from consensus version 2; empty before. |
 | app_hash | [bytes](#bytes) |  | App hash after `ApplyBlockRandomness` for the committed block and round. The commit signs it through the state ID of its block ID, which Tenderdash checks before passing it on. Set from consensus version 2; empty before. |
 
@@ -162,7 +162,7 @@ Provides a vote extension for signing. `type` and `extension` fields are mandato
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| type | [tendermint.types.VoteExtensionType](#tendermint-types-VoteExtensionType) |  | Vote extension type can be either DEFAULT, THRESHOLD_RECOVER or THRESHOLD_RECOVER_RAW. The Tenderdash supports only THRESHOLD_RECOVER and THRESHOLD_RECOVER_RAW at this moment. |
+| type | [tendermint.types.VoteExtensionType](../../proto/tendermint/types/) |  | Vote extension type can be either DEFAULT, THRESHOLD_RECOVER or THRESHOLD_RECOVER_RAW. The Tenderdash supports only THRESHOLD_RECOVER and THRESHOLD_RECOVER_RAW at this moment. |
 | extension | [bytes](#bytes) |  | Deterministic or (Non-Deterministic) extension provided by the sending validator&#39;s Application.
 
 For THRESHOLD_RECOVER_RAW, it MUST be 32 bytes.
@@ -209,7 +209,7 @@ ExtendedVoteInfo
 | type | [MisbehaviorType](#tendermint-abci-MisbehaviorType) |  |  |
 | validator | [Validator](#tendermint-abci-Validator) |  | The offending validator |
 | height | [int64](#int64) |  | The height when the offense occurred |
-| time | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  | The corresponding time where the offense occurred |
+| time | [google.protobuf.Timestamp](https://protobuf.dev/reference/protobuf/google.protobuf/#timestamp) |  | The corresponding time where the offense occurred |
 | total_voting_power | [int64](#int64) |  | Total voting power of the validator set in case the ABCI application does not store historical validators. https://github.com/tendermint/tendermint/issues/4581 |
 
 
@@ -433,8 +433,8 @@ See the [FinalizeBlock contract](methods.md#finalizeblock) and
 | hash | [bytes](#bytes) |  | The block header&#39;s hash. Present for convenience (can be derived from the block header). |
 | height | [int64](#int64) |  | The height of the finalized block. |
 | round | [int32](#int32) |  | Round number for the block |
-| block | [tendermint.types.Block](#tendermint-types-Block) |  | The block that was finalized |
-| block_id | [tendermint.types.BlockID](#tendermint-types-BlockID) |  | The block ID that was finalized |
+| block | [tendermint.types.Block](../../proto/tendermint/types/) |  | The block that was finalized |
+| block_id | [tendermint.types.BlockID](../../proto/tendermint/types/) |  | The block ID that was finalized |
 
 
 
@@ -490,9 +490,9 @@ Called once upon genesis.
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| time | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  | Genesis time |
+| time | [google.protobuf.Timestamp](https://protobuf.dev/reference/protobuf/google.protobuf/#timestamp) |  | Genesis time |
 | chain_id | [string](#string) |  | ID of the blockchain. |
-| consensus_params | [tendermint.types.ConsensusParams](#tendermint-types-ConsensusParams) |  | Initial consensus-critical parameters. |
+| consensus_params | [tendermint.types.ConsensusParams](../../proto/tendermint/types/) |  | Initial consensus-critical parameters. |
 | validator_set | [ValidatorSetUpdate](#tendermint-abci-ValidatorSetUpdate) |  | Initial genesis validators, sorted by voting power. |
 | app_state_bytes | [bytes](#bytes) |  | Serialized initial application state. JSON bytes. |
 | initial_height | [int64](#int64) |  | Height of the initial block (typically `1`). |
@@ -577,13 +577,13 @@ constraints, response validation and the exact conditions for preparing a fresh 
 | local_last_commit | [CommitInfo](#tendermint-abci-CommitInfo) |  | Info about the last commit, obtained locally from Tenderdash&#39;s data structures. |
 | misbehavior | [Misbehavior](#tendermint-abci-Misbehavior) | repeated | List of information about validators that acted incorrectly. |
 | height | [int64](#int64) |  | The height of the block that will be proposed. |
-| time | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  | Timestamp of the block that that will be proposed. |
+| time | [google.protobuf.Timestamp](https://protobuf.dev/reference/protobuf/google.protobuf/#timestamp) |  | Timestamp of the block that that will be proposed. |
 | next_validators_hash | [bytes](#bytes) |  | Merkle root of the next validator set. |
 | round | [int32](#int32) |  | Round number for the block. |
 | core_chain_locked_height | [uint32](#uint32) |  | Core chain lock height to be used when signing this block. |
 | proposer_pro_tx_hash | [bytes](#bytes) |  | ProTxHash of the original proposer of the block. |
 | proposed_app_version | [uint64](#uint64) |  | Proposer&#39;s latest available app protocol version. |
-| version | [tendermint.version.Consensus](#tendermint-version-Consensus) |  | App and block version used to generate the block. App version included in the block can be modified by setting ResponsePrepareProposal.app_version. |
+| version | [tendermint.version.Consensus](../../proto/tendermint/version/) |  | App and block version used to generate the block. App version included in the block can be modified by setting ResponsePrepareProposal.app_version. |
 | quorum_hash | [bytes](#bytes) |  | quorum_hash contains hash of validator quorum that will sign the block |
 
 
@@ -610,13 +610,13 @@ See the [ProcessProposal contract](methods.md#processproposal) and
 | hash | [bytes](#bytes) |  | The block header&#39;s hash of the proposed block. It is computed as a Merkle tree from the header fields. |
 | height | [int64](#int64) |  | The height of the proposed block. |
 | round | [int32](#int32) |  | Round number for the block |
-| time | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  | Timestamp included in the proposed block. |
+| time | [google.protobuf.Timestamp](https://protobuf.dev/reference/protobuf/google.protobuf/#timestamp) |  | Timestamp included in the proposed block. |
 | next_validators_hash | [bytes](#bytes) |  | Merkle root of the next validator set. |
 | core_chain_locked_height | [uint32](#uint32) |  | Core chain lock height to be used when signing this block. |
-| core_chain_lock_update | [tendermint.types.CoreChainLock](#tendermint-types-CoreChainLock) |  | Next core-chain-lock-update for validation in ABCI. |
+| core_chain_lock_update | [tendermint.types.CoreChainLock](../../proto/tendermint/types/) |  | Next core-chain-lock-update for validation in ABCI. |
 | proposer_pro_tx_hash | [bytes](#bytes) |  | ProTxHash of the original proposer of the block. |
 | proposed_app_version | [uint64](#uint64) |  | Proposer&#39;s latest available app protocol version. |
-| version | [tendermint.version.Consensus](#tendermint-version-Consensus) |  | App and block version used to generate the block. App version MUST be verified by the app. |
+| version | [tendermint.version.Consensus](../../proto/tendermint/version/) |  | App and block version used to generate the block. App version MUST be verified by the app. |
 | quorum_hash | [bytes](#bytes) |  | quorum_hash contains hash of validator quorum that will sign the block |
 
 
@@ -871,7 +871,7 @@ nondeterministic
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | retain_height | [int64](#int64) |  | Blocks below this height may be removed. Defaults to `0` (retain all). |
-| propose_next_block_immediately | [bool](#bool) |  | When `true`, this node does not wait for transactions (`create-empty-blocks-interval`) before proposing round 0 of the next height: the application has block-driven work pending, for example withdrawal transactions to sign. A hint for the local node only, consumed once; a node that restarts in between falls back to the configured wait. Defaults to `false`. |
+| propose_next_block_immediately | [bool](#bool) |  | When `true`, this node does not wait for transactions (`create-empty-blocks-interval`) before proposing at the next height, in round 0 or, on consensus version 2, in a round entered after a silent proposer&#39;s round was skipped: the application has block-driven work pending, for example withdrawal transactions to sign. A hint for the local node only, consumed once; a node that restarts in between falls back to the configured wait. Defaults to `false`. |
 
 
 
@@ -915,12 +915,12 @@ nondeterministic
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| consensus_params | [tendermint.types.ConsensusParams](#tendermint-types-ConsensusParams) |  | Initial consensus-critical parameters (optional). |
+| consensus_params | [tendermint.types.ConsensusParams](../../proto/tendermint/types/) |  | Initial consensus-critical parameters (optional). |
 | app_hash | [bytes](#bytes) |  | Initial application hash. 32 bytes. |
 | validator_set_update | [ValidatorSetUpdate](#tendermint-abci-ValidatorSetUpdate) |  | Initial validator set (optional). |
-| next_core_chain_lock_update | [tendermint.types.CoreChainLock](#tendermint-types-CoreChainLock) |  | Initial core chain lock update. |
+| next_core_chain_lock_update | [tendermint.types.CoreChainLock](../../proto/tendermint/types/) |  | Initial core chain lock update. |
 | initial_core_height | [uint32](#uint32) |  | Initial height of core lock. |
-| genesis_time | [google.protobuf.Timestamp](#google-protobuf-Timestamp) | optional | Override genesis time with provided time. |
+| genesis_time | [google.protobuf.Timestamp](https://protobuf.dev/reference/protobuf/google.protobuf/#timestamp) | optional | Override genesis time with provided time. |
 
 
 
@@ -983,8 +983,8 @@ nondeterministic
 | tx_records | [TxRecord](#tendermint-abci-TxRecord) | repeated | Possibly modified list of transactions that have been picked as part of the proposed block. |
 | app_hash | [bytes](#bytes) |  | The Merkle root hash of the application state. 32 bytes. |
 | tx_results | [ExecTxResult](#tendermint-abci-ExecTxResult) | repeated | List of structures containing the data resulting from executing the transactions. |
-| consensus_param_updates | [tendermint.types.ConsensusParams](#tendermint-types-ConsensusParams) |  | Changes to consensus-critical gas, size, and other parameters that will be applied at next height. |
-| core_chain_lock_update | [tendermint.types.CoreChainLock](#tendermint-types-CoreChainLock) |  | Core chain lock that will be used for next block. |
+| consensus_param_updates | [tendermint.types.ConsensusParams](../../proto/tendermint/types/) |  | Changes to consensus-critical gas, size, and other parameters that will be applied at next height. |
+| core_chain_lock_update | [tendermint.types.CoreChainLock](../../proto/tendermint/types/) |  | Core chain lock that will be used for next block. |
 | validator_set_update | [ValidatorSetUpdate](#tendermint-abci-ValidatorSetUpdate) |  | Changes to validator set that will be applied at next height. |
 | app_version | [uint64](#uint64) |  | Application version that was used to create the current proposal. |
 
@@ -1004,7 +1004,7 @@ nondeterministic
 | status | [ResponseProcessProposal.ProposalStatus](#tendermint-abci-ResponseProcessProposal-ProposalStatus) |  | `enum` that signals if the application finds the proposal valid. |
 | app_hash | [bytes](#bytes) |  | The Merkle root hash of the application state. 32 bytes. |
 | tx_results | [ExecTxResult](#tendermint-abci-ExecTxResult) | repeated | List of structures containing the data resulting from executing the transactions. |
-| consensus_param_updates | [tendermint.types.ConsensusParams](#tendermint-types-ConsensusParams) |  | Changes to consensus-critical gas, size, and other parameters. |
+| consensus_param_updates | [tendermint.types.ConsensusParams](../../proto/tendermint/types/) |  | Changes to consensus-critical gas, size, and other parameters. |
 | validator_set_update | [ValidatorSetUpdate](#tendermint-abci-ValidatorSetUpdate) |  | Changes to validator set (set voting power to 0 to remove). |
 | events | [Event](#tendermint-abci-Event) | repeated | Type &amp; Key-Value events for indexing |
 
@@ -1027,7 +1027,7 @@ nondeterministic
 | index | [int64](#int64) |  | The index of the key in the tree. |
 | key | [bytes](#bytes) |  | The key of the matching data. |
 | value | [bytes](#bytes) |  | The value of the matching data. |
-| proof_ops | [tendermint.crypto.ProofOps](#tendermint-crypto-ProofOps) |  | Serialized proof for the value data, if requested, to be verified against the `app_hash` for the given Height. |
+| proof_ops | [tendermint.crypto.ProofOps](../../proto/tendermint/crypto/) |  | Serialized proof for the value data, if requested, to be verified against the `app_hash` for the given Height. |
 | height | [int64](#int64) |  | The block height from which data was derived. Note that this is the height of the block containing the application&#39;s Merkle root hash, which represents the state as it was after committing the block at Height-1. |
 | codespace | [string](#string) |  | Namespace for the `code`. |
 
@@ -1077,7 +1077,7 @@ nondeterministic
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| threshold_public_key | [tendermint.crypto.PublicKey](#tendermint-crypto-PublicKey) |  |  |
+| threshold_public_key | [tendermint.crypto.PublicKey](../../proto/tendermint/crypto/) |  |  |
 
 
 
@@ -1159,7 +1159,7 @@ the new validator set update.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | validator_updates | [ValidatorUpdate](#tendermint-abci-ValidatorUpdate) | repeated |  |
-| threshold_public_key | [tendermint.crypto.PublicKey](#tendermint-crypto-PublicKey) |  |  |
+| threshold_public_key | [tendermint.crypto.PublicKey](../../proto/tendermint/crypto/) |  |  |
 | quorum_hash | [bytes](#bytes) |  |  |
 
 
@@ -1175,7 +1175,7 @@ ValidatorUpdate
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| pub_key | [tendermint.crypto.PublicKey](#tendermint-crypto-PublicKey) |  |  |
+| pub_key | [tendermint.crypto.PublicKey](../../proto/tendermint/crypto/) |  |  |
 | power | [int64](#int64) |  |  |
 | pro_tx_hash | [bytes](#bytes) |  |  |
 | node_address | [string](#string) |  | node_address is an URI containing address of validator (`proto://node_id@ip_address:port`), for example: `tcp://f2dbd9b0a1f541a7c44d34a58674d0262f5feca5@12.34.5.6:1234` |

@@ -1,6 +1,8 @@
 # WAL
 
-Consensus module writes every message to the WAL (write-ahead log). Which
+Consensus module writes every message to the WAL (write-ahead log), except
+proposer heartbeats and round skip votes; round skip certificates are written
+once verified. Which
 records are written, with which durability, and how they are replayed is
 specified in [Recovery and synchronisation](./consensus-recovery.md).
 

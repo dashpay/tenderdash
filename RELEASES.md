@@ -36,14 +36,50 @@ A fix for another deployed line starts from its exact released tag and requires
 an explicit Platform support decision rather than automatic maintenance promises.
 
 Release tags remain `vX.Y.Z`; prereleases use `vX.Y.Z-dev.N`. The skill evaluates
-SemVer from compatibility, not branch names or `feat`/`fix` labels. It separately
-reviews `P2PProtocol`, `BlockProtocol`, and `ABCISemVer`; a software version bump
-does not update those contracts automatically.
+SemVer from compatibility, not branch names or `feat`/`fix` labels.
 
 Full-release promotion and stable-to-dev synchronization should preserve
 ancestry. Master currently has protection rules that must be reconciled with
 that merge strategy by maintainers before a release. The skill must report any
 block and must not bypass or modify branch protections.
+
+## Versioning policy
+
+The software version (`TMVersionDefault`) is decided only by these contracts:
+
+| Contract | Covers |
+| --- | --- |
+| RPC | Methods, parameters, responses and their semantics |
+| ABCI | Application methods, messages, return handling and app coordination |
+| P2P and consensus | Message/channel formats, consensus rules and versions, proposer selection, peer compatibility |
+| Block format | Serialization, hashes, signing and validity of blocks, votes and commits |
+
+- **Major:** a backward-incompatible change to any of them. A new consensus
+  version (for example `CONSENSUS_VERSION_3`) is a major even when a chain
+  parameter activates it, as are changes older nodes cannot follow, removed or
+  semantically changed RPC, and an `ABCISemVer` major.
+- **Minor:** a backward-compatible extension, such as new optional fields, RPC
+  methods or parameters that leave existing networks unchanged.
+- **Patch:** fixes that change none of these contracts. A security or consensus
+  fix is not automatically patch-safe; classify it by its contract effect.
+
+Exported Go APIs, configuration and CLI (including removed settings and tightened
+validation), tooling, CI and documentation do not affect the version; the
+changelog describes them and any operator action. Persisted data is not versioned:
+storage changes must migrate automatically and invisibly to operators, since most
+data can be rebuilt by resync and rollback is an edge case. A change that needs a
+manual migration blocks the release.
+
+Protocol counters are reviewed separately; a software version bump does not
+update them automatically:
+
+- `ABCISemVer` is the ABCI contract's own SemVer. Drive (rs-tenderdash-abci)
+  accepts `^major.minor` of its linked version.
+- `P2PProtocol` changes with P2P messages or behavior.
+- `BlockProtocol` changes only with the block format. Nodes enforce it strictly,
+  so its bump also requires a major. It is a full hard fork and a red flag: it
+  needs explicit confirmation from the release owner for that specific change,
+  even within an otherwise authorized release.
 
 ## Validation and artifacts
 

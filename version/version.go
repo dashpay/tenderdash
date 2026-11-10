@@ -9,7 +9,7 @@ var (
 const (
 	// TMVersionDefault is the used as the fallback version for Tenderdash
 	// when not using git describe. It is formatted with semantic versioning.
-	TMVersionDefault = "1.8.2"
+	TMVersionDefault = "2.0.0-dev.1"
 	// ABCISemVer is the semantic version of the ABCI library
 	ABCISemVer = "1.5.0"
 
@@ -19,7 +19,7 @@ const (
 var (
 	// P2PProtocol versions all p2p behavior and msgs.
 	// This includes proposer selection.
-	P2PProtocol uint64 = 10
+	P2PProtocol uint64 = 11
 
 	// BlockProtocol versions all block data structures and processing.
 	// This includes validity of blocks and state updates.

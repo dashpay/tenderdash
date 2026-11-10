@@ -73,19 +73,11 @@ func (q *simpleQueue) run(ctx context.Context) {
 				timestamp: time.Now().UTC(),
 			})
 
-			select {
-			case signal <- struct{}{}:
-			default:
-				if len(pq) > q.maxSize {
-					sort.Sort(pq)
-					for _, dropped := range pq[q.maxSize:] {
-						dropped.envelope.NotifyDelivery()
-					}
-					pq = pq[:q.maxSize]
-				}
-			}
-
-		case <-ticker.C:
+			// Trim on every push, so the heap never holds more than
+			// maxSize. Trimming only when the signal was already pending
+			// let every push that refilled it skip the trim, so with
+			// nobody draining, the heap ran past maxSize until the next
+			// tick.
 			if len(pq) > q.maxSize {
 				sort.Sort(pq)
 				for _, dropped := range pq[q.maxSize:] {
@@ -93,6 +85,13 @@ func (q *simpleQueue) run(ctx context.Context) {
 				}
 				pq = pq[:q.maxSize]
 			}
+
+			select {
+			case signal <- struct{}{}:
+			default:
+			}
+
+		case <-ticker.C:
 			if len(pq) > 0 {
 				select {
 				case signal <- struct{}{}:

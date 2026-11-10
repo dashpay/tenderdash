@@ -321,7 +321,7 @@ give you limited number of file descriptors.
 If you want to accept greater number of connections, you will need to increase
 these limits.
 
-[Sysctls to tune the system to be able to open more connections](https://github.com/satori-com/tcpkali/blob/master/doc/tcpkali.man.md#sysctls-to-tune-the-system-to-be-able-to-open-more-connections)
+[Sysctls to tune the system to be able to open more connections](https://web.archive.org/web/2022/https://github.com/satori-com/tcpkali/blob/master/doc/tcpkali.man.md#sysctls-to-tune-the-system-to-be-able-to-open-more-connections)
 
 The process file limits must also be increased, e.g. via `ulimit -n 8192`.
 

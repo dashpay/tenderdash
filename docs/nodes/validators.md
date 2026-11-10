@@ -92,7 +92,7 @@ The sentry nodes should be able to talk to the entire network hence why `pex=tru
 
 More Information can be found at these links:
 
-- <https://kb.certus.one/>
+- <https://web.archive.org/web/2021/https://kb.certus.one/>
 - <https://forum.cosmos.network/t/sentry-node-architecture-overview/454>
 
 ### Validator keys

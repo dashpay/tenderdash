@@ -1,3 +1,84 @@
+## [2.0.0-dev.1] - 2026-11-09
+
+### Breaking Changes
+
+- Consensus: new `CONSENSUS_VERSION_2` (proposer liveness and round skipping); once a chain enables it, only nodes running this version or later can follow it, so every node must upgrade before activation (#1572)
+- RPC: `broadcast_tx*` return the original `CheckTx` rejection, not "Tx already exists in cache", for resubmitted invalid transactions when `keep-invalid-txs-in-cache` is enabled (#1530)
+- RPC: `broadcast_evidence` returns `ErrEvidenceDisabled` while the committed `evidence.max_bytes` is zero (#1547)
+
+### Migration Notes
+
+- `types.PrivValidator` gains `SignProposerHeartbeat` and `SignRoundSkipVote`; signer implementations outside this repository must add them (#1572)
+- Exported database APIs use Tenderdash's own `libs/db` interfaces; custom providers must update imports and `Batch`/`Iterator` return types (#1551)
+- The PostgreSQL event sink and `tx-index.psql-conn` are removed; select `kv` or `null` indexing explicitly (#1553)
+- Invalid P2P configuration prevents startup; an explicit zero `incoming-connection-window` is rejected (#1550)
+- `ExtendVote` responses with `DEFAULT` vote extensions are rejected with a clear error; they previously crashed the signer or produced votes peers rejected (#1565)
+- The CLI waits up to `--shutdown-timeout` (default 30s) for cleanup after cancellation; supervisors need a longer termination grace period, and embedded `service` callers must `Stop` then `Wait` (#1513)
+- The Go module path stays `github.com/dashpay/tenderdash`, so Go tooling does not resolve `v2.x` tags; Go consumers pin commit pseudo-versions
+
+### Protocol Versions
+
+- ABCI 1.5.0: consensus params add `CONSENSUS_VERSION_2` and the `proposer_heartbeat`/`proposer_silence` timeouts (#1572)
+- P2P protocol 11: new `ProposerHeartbeat`, `RoundSkipVote` and `RoundSkipCertificate` state-channel messages, sent only on chains at consensus version 2 (#1572)
+- Block protocol stays 14
+
+### Features
+
+- Hand a silent proposer's idle round to the next proposer; activated by consensus version 2, which every node must support before a chain enables it (#1572)
+- Follow live chain evidence settings (#1547)
+
+### Bug Fixes
+
+- Validate a fresh block's proposer before prevoting (#1527)
+- Never extend a relock precommit without `ProcessProposal` for the round (#1523)
+- Propose a freshly built block without a POL round (#1564)
+- Verify commit vote extensions before a commit is taken (#1520)
+- Replay blocks with their historical quorum (#1567)
+- Enforce peer penalties and validate network settings (#1550)
+- Stop router dialing when the context deadline expires (#1588)
+- Trim the simple priority queue on every push (#1596)
+- Keep healthy block sync peers during slow local application (#1548)
+- Schedule block sync peers by active response service (#1549)
+
+### Refactor
+
+- Own GoLevelDB and memory database adapters (#1551)
+- Remove the PostgreSQL event sink (#1553)
+
+### Documentation
+
+- Add a source-derived consensus protocol specification (#1562)
+- Migrate generated documentation to mdBook (#1585)
+- Align consensus references and guides with current behavior (#1586)
+
+### Testing
+
+- Exercise block sync during slow local application (#1560)
+- Wait for goroutines before first-commit cleanup (#1507)
+
+### Build
+
+- Use supported Alpine 3.24 Docker bases (#1591)
+- Bump google.golang.org/grpc to 1.85.0 (#1580)
+- Bump github.com/fxamacker/cbor/v2 to 2.10.0 (#1539, #1579)
+- Bump github.com/prometheus/common to 0.73.1 (#1542, #1581)
+- Bump github.com/prometheus/client_golang to 1.25.0 (#1538)
+- Bump github.com/oasisprotocol/oasis-core/go to 0.2603.0 (#1531)
+- Bump github.com/bufbuild/buf to 1.75.0 (#1556, #1570)
+
+### Miscellaneous Tasks
+
+- Replace the release script and GoReleaser workflow with the Dash Platform release process (#1552)
+- Align dev checks and Docker release versions; manual Docker runs build only existing release tags (#1594)
+- Build and test on Ubuntu 26.04 (#1590)
+- Pin Docker workflow actions to commit SHAs and restrict token permissions (#1589)
+- Replace Janitor with native PR concurrency (#1592)
+- Migrate proto lint to buf-action (#1561)
+- Pin golangci-lint to v2.14.0 and migrate to gomodguard_v2 (#1524)
+- Run Claudius reviews after green tests, on push or label (#1512, #1516, #1525, #1526)
+- Align the PR template with the TL;DR / user story / scenario structure (#1529)
+- Update CI actions and PR Hygiene pins (#1505, #1508, #1510, #1511, #1514, #1522, #1528, #1533, #1557, #1571)
+
 ## [1.8.2] - 2026-10-30
 
 ### Bug Fixes
