@@ -20,7 +20,7 @@ The useful distinction is each branch's role:
 
 Target `dev` for ordinary integration PRs. Select another target explicitly for
 a release, hotfix or dependent change, following [RELEASES.md](RELEASES.md).
-Choose by the branch's role rather than sorting historical versioned names.
+Versioned `vX.Y-dev` branches (e.g. `v1.9-dev`) are retired; never target them.
 
 A PR that depends on another open PR can target its parent feature branch.
 Describe the dependency and keep its diff focused; after the parent lands,

@@ -97,11 +97,11 @@ class ReleaseTests(unittest.TestCase):
         self.git("tag", "v9.0.0")
         self.assertIn("ancestor", self.plan("--baseline", "v9.0.0", success=False))
 
-    def test_transition_uses_v18_not_highest_version(self):
+    def test_versioned_dev_branches_never_replace_missing_dev(self):
         self.git("update-ref", "-d", "refs/remotes/origin/dev")
         self.git("update-ref", "refs/remotes/origin/v1.8-dev", self.dev)
         self.git("update-ref", "refs/remotes/origin/v9.0-dev", "origin/master")
-        self.assertEqual(self.plan()["integration"], "origin/v1.8-dev")
+        self.assertIn("origin/dev", self.plan(success=False))
 
     def test_backport_evidence_identifies_patch_already_on_stable(self):
         self.git("checkout", "-q", "-b", "stable", "origin/master")
