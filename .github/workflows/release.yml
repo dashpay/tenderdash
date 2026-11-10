@@ -9,6 +9,8 @@ on:
       - 'scripts/tests/test_docker_metadata.py'
       - '.github/workflows/docker.yml'
       - 'DOCKER/Dockerfile'
+      - 'DOCKER/docker-entrypoint.sh'
+      - 'DOCKER/test-entrypoint.sh'
       - 'scripts/test-local-gates.sh'
       - 'Makefile'
       - '.github/workflows/release.yml'
@@ -23,6 +25,8 @@ on:
       - 'scripts/tests/test_docker_metadata.py'
       - '.github/workflows/docker.yml'
       - 'DOCKER/Dockerfile'
+      - 'DOCKER/docker-entrypoint.sh'
+      - 'DOCKER/test-entrypoint.sh'
       - 'scripts/test-local-gates.sh'
       - 'Makefile'
       - '.github/workflows/release.yml'
@@ -39,6 +43,8 @@ jobs:
         run: python3 -B -m unittest discover -s scripts/release -p test_release.py
       - name: Check Docker publication contract
         run: python3 -B -m unittest discover -s scripts/tests -p test_docker_metadata.py
+      - name: Check Docker entrypoint signal handling
+        run: bash DOCKER/test-entrypoint.sh
       - name: Check lint base selection
         run: sh scripts/test-local-gates.sh
       - name: Check shell syntax
