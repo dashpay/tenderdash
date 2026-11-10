@@ -54,9 +54,9 @@ func blockFetchJobHandler(blockClient client.BlockClient, peer PeerData, height 
 		if err != nil {
 			return errorResult(responder, height, err)
 		}
-		if resp.Block.Height != height {
+		if resp.Height != height {
 			return errorResult(responder, height,
-				fmt.Errorf("peer sent block at height %d, requested height %d", resp.Block.Height, height))
+				fmt.Errorf("peer sent block at height %d, requested height %d", resp.Height, height))
 		}
 		resp.ConnID = responder.connID
 		size = protoResp.Size()

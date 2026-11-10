@@ -80,15 +80,48 @@ func (e *blockApplier) Apply(
 ) error {
 	e.mtx.Lock()
 	defer e.mtx.Unlock()
+	e.observeWait()
+	defer func() { e.lastDone = time.Now() }()
+	return e.apply(ctx, block, blockBytes, commit, 0)
+}
+
+// ApplyBytes is Apply for a block held only as the bytes it was committed with:
+// it decodes the block from them first. Block sync keeps pending blocks in that
+// form, so that a response waiting for a lower height does not hold a decoded
+// copy beside its bytes.
+func (e *blockApplier) ApplyBytes(ctx context.Context, blockBytes []byte, commit *types.Commit) error {
+	e.mtx.Lock()
+	defer e.mtx.Unlock()
+	e.observeWait()
 	defer func() { e.lastDone = time.Now() }()
 
-	// Time between the end of the previous apply and the start of this one. With
-	// a fast application this is what the sync rate is actually limited by, and
-	// it is block fetching, not block execution.
+	start := time.Now()
+	block, err := decodeBlock(blockBytes)
+	decodeTime := e.observeSince("decode", start)
+	if err != nil {
+		return err
+	}
+	return e.apply(ctx, block, blockBytes, commit, decodeTime)
+}
+
+// observeWait records the time between the end of the previous apply and the
+// start of this one. With a fast application this is what the sync rate is
+// actually limited by, and it is block fetching, not block execution.
+func (e *blockApplier) observeWait() {
 	if !e.lastDone.IsZero() {
 		e.observeSince("wait", e.lastDone)
 	}
+}
 
+// apply is Apply with the lock held. decodeTime is how long decoding block
+// took, counted with building its part set in the per-block timings.
+func (e *blockApplier) apply(
+	ctx context.Context,
+	block *types.Block,
+	blockBytes []byte,
+	commit *types.Commit,
+	decodeTime time.Duration,
+) error {
 	// The part set is needed twice: to derive the block ID and to persist the
 	// block. Building it builds a Merkle tree over the parts, so build it once
 	// and pass it to both. It is cut from the bytes the block was committed
@@ -100,7 +133,7 @@ func (e *blockApplier) Apply(
 	start := time.Now()
 	blockParts := types.NewPartSetFromData(blockBytes, types.BlockPartSizeBytes)
 	blockID := block.BlockID(blockParts)
-	partSetTime := e.observeSince("partset", start)
+	partSetTime := decodeTime + e.observeSince("partset", start)
 
 	start = time.Now()
 	verified, err := e.verify(ctx, blockID, block, commit)
@@ -228,7 +261,8 @@ func (e *blockApplier) observeSince(stage string, start time.Time) time.Duration
 // applyTimings is the average time a single block spends in each stage of the
 // apply pipeline.
 type applyTimings struct {
-	// PartSet is the Merkle tree over the block's parts
+	// PartSet is decoding the block, when it is held as bytes, and the Merkle
+	// tree over its parts
 	PartSet time.Duration
 	// Verify is commit signature verification and block validation
 	Verify time.Duration

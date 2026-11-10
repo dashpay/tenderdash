@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"runtime"
+	"slices"
 	"testing"
 	"time"
 
@@ -580,7 +582,7 @@ func TestServeBlockAsCommitted(t *testing.T) {
 			resp, err := BlockResponseFromProto(msg, "peer")
 			require.NoError(t, err)
 			require.Equal(t, tc.bytes, resp.BlockBytes)
-			require.Equal(t, blocks[i].Hash(), resp.Block.Hash())
+			require.Equal(t, blocks[i].Height, resp.Height)
 			require.Equal(t, blocks[i+1].LastCommit.BlockID, resp.Commit.BlockID)
 			cut := types.NewPartSetFromData(resp.BlockBytes, types.BlockPartSizeBytes)
 			require.Equal(t, tc.standardCut, tc.parts.Header().Equals(cut.Header()))
@@ -616,8 +618,10 @@ func TestBlockResponseWireCompatible(t *testing.T) {
 	require.NoError(t, proto.Unmarshal(older, &decoded))
 	resp, err := BlockResponseFromProto(&decoded, "peer")
 	require.NoError(t, err)
-	require.Equal(t, block.Hash(), resp.Block.Hash())
 	require.Equal(t, embedded, resp.BlockBytes)
+	decodedBlock, err := decodeBlock(resp.BlockBytes)
+	require.NoError(t, err)
+	require.Equal(t, block.Hash(), decodedBlock.Hash())
 }
 
 // appendBytesField appends a length-delimited field to serialized protobuf.
@@ -650,4 +654,56 @@ func TestBlockResponseDoesNotRetainOverwrittenBlockField(t *testing.T) {
 	require.Equal(t, bz, resp.BlockBytes)
 	require.Equal(t, len(bz), resp.Size)
 	require.LessOrEqual(t, cap(resp.BlockBytes), 2*len(bz))
+}
+
+// TestBlockResponseRetainsOnlyItsBytes checks that a block response, as it
+// waits in the backlog for a lower height, holds its block only as the bytes it
+// is charged for there, and not also decoded. A block of many small
+// transactions costs more decoded than its bytes, so holding both would retain
+// more than twice the charge.
+func TestBlockResponseRetainsOnlyItsBytes(t *testing.T) {
+	const (
+		txs       = 1 << 14
+		txSize    = 64
+		responses = 16
+	)
+	blockTxs := make([]types.Tx, txs)
+	for i := range blockTxs {
+		blockTxs[i] = make(types.Tx, txSize)
+		binary.BigEndian.PutUint64(blockTxs[i], uint64(i))
+	}
+	valSet, privVals := factory.MockValidatorSet()
+	state := fakeInitialState(valSet)
+	block := statefactory.MakeBlocks(context.Background(), t, 1, &state, privVals, 1)[0]
+	block.Data = types.Data{Txs: blockTxs}
+	block.DataHash = block.Data.Hash()
+	bz := blockBytes(t, block)
+
+	heapAlloc := func() uint64 {
+		runtime.GC()
+		var stats runtime.MemStats
+		runtime.ReadMemStats(&stats)
+		return stats.HeapAlloc
+	}
+	inputs := make([][]byte, responses)
+	for i := range inputs {
+		inputs[i] = slices.Clone(bz)
+	}
+	before := heapAlloc()
+	held := make([]*BlockResponse, responses)
+	charged := 0
+	for i := range held {
+		resp, err := BlockResponseFromProto(&bcproto.BlockResponse{Block: inputs[i]}, "peer")
+		require.NoError(t, err)
+		held[i] = resp
+		charged += resp.Size
+	}
+	// the inputs, allocated before the first reading, are the bytes the
+	// responses hold, so what is retained here is only what they keep beyond
+	// those bytes
+	retained := int64(heapAlloc()) - int64(before)
+	runtime.KeepAlive(held)
+	t.Logf("charged %d bytes, retained %d more", charged, retained)
+	require.Less(t, retained, int64(charged)/2,
+		"a pending response must not keep a decoded copy of its block")
 }

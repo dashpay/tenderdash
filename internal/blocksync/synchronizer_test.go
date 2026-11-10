@@ -141,7 +141,7 @@ func (suite *SynchronizerTestSuite) assertHandoverWaitsForConsumer(beforeApply b
 	paused := make(chan struct{})
 	release := make(chan struct{})
 	if beforeApply {
-		pool.pendingToApply[resp.Block.Height] = *resp
+		pool.pendingToApply[resp.Height] = *resp
 		pool.logger = &handoverPauseLogger{Logger: log.NewNopLogger(), paused: paused, release: release}
 	}
 	suite.store.On("SaveBlock", mock.Anything, mock.Anything, mock.Anything).Once()
@@ -154,7 +154,7 @@ func (suite *SynchronizerTestSuite) assertHandoverWaitsForConsumer(beforeApply b
 	finalState := suite.initialState.Copy()
 	finalState.LastBlockHeight = 1
 	suite.blockExec.On("FinalizeBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		resp.Block, resp.Commit, mock.Anything).
+		sameBlock(suite.T(), resp), resp.Commit, mock.Anything).
 		Run(func(args mock.Arguments) {
 			finalizing <- args.Get(0).(context.Context)
 			if !beforeApply {
@@ -353,7 +353,7 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResult() {
 					Once().
 					Return(nil)
 				suite.blockExec.
-					On("ValidateBlock", mock.Anything, mock.Anything, respH1.Block, mock.Anything).
+					On("ValidateBlock", mock.Anything, mock.Anything, sameBlock(suite.T(), respH1), mock.Anything).
 					Once().
 					Return(nil)
 				suite.blockExec.
@@ -361,11 +361,11 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResult() {
 					Maybe().
 					Return(types.VerifiedCommit{}, nil)
 				suite.blockExec.
-					On("ProcessProposal", mock.Anything, respH1.Block, mock.Anything, mock.Anything, true, mock.Anything).
+					On("ProcessProposal", mock.Anything, sameBlock(suite.T(), respH1), mock.Anything, mock.Anything, true, mock.Anything).
 					Once().
 					Return(sm.CurrentRoundState{}, nil)
 				suite.blockExec.
-					On("FinalizeBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, respH1.Block, respH1.Commit, mock.Anything).
+					On("FinalizeBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, sameBlock(suite.T(), respH1), respH1.Commit, mock.Anything).
 					Once().
 					Return(sm.State{}, nil, nil)
 			},
@@ -399,11 +399,11 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResult() {
 			result:       workerpool.Result{Value: respH1},
 			wantPushBack: []int64{1, 2},
 			mockFn: func(pool *Synchronizer) {
-				pool.pendingToApply[2] = BlockResponse{PeerID: "peer 1", Block: respH2.Block}
+				pool.pendingToApply[2] = BlockResponse{PeerID: "peer 1", Height: respH2.Height, BlockBytes: respH2.BlockBytes}
 				// VerifyCommit is covered by the Maybe expectation the earlier case
 				// registered on this shared mock
 				suite.blockExec.
-					On("ValidateBlock", mock.Anything, mock.Anything, respH1.Block, mock.Anything).
+					On("ValidateBlock", mock.Anything, mock.Anything, sameBlock(suite.T(), respH1), mock.Anything).
 					Once().
 					Return(errors.New("invalid error"))
 				suite.client.
@@ -424,7 +424,7 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResult() {
 			// so a peer report fails this case.
 			result: workerpool.Result{Value: duplicateH2},
 			mockFn: func(pool *Synchronizer) {
-				pool.pendingToApply[respH2.Block.Height] = *respH2
+				pool.pendingToApply[respH2.Height] = *respH2
 			},
 		},
 	}
@@ -519,7 +519,7 @@ func (suite *SynchronizerTestSuite) TestRemovePeer() {
 				pool.AddPeer(peer)
 			}
 			for _, resp := range tc.responses {
-				pool.pendingToApply[resp.Block.Height] = *resp
+				pool.pendingToApply[resp.Height] = *resp
 			}
 			for _, height := range tc.initialPushBack {
 				pool.jobGen.pushBack(height)
@@ -566,11 +566,11 @@ func (suite *SynchronizerTestSuite) TestConsumeDuplicateThenDrain() {
 	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
 	pool := NewSynchronizer(1, suite.client, applier, WithWorkerPool(wp))
 	// height 2 is already in hand and waiting on height 1
-	pool.pendingToApply[respH2.Block.Height] = *respH2
+	pool.pendingToApply[respH2.Height] = *respH2
 
 	resultCh <- workerpool.Result{Value: duplicateH2}
 	suite.Require().NoError(pool.consumeJobResult(ctx, ctx))
-	suite.Require().Equal(peerID1, pool.pendingToApply[respH2.Block.Height].PeerID,
+	suite.Require().Equal(peerID1, pool.pendingToApply[respH2.Height].PeerID,
 		"the response already held must be kept")
 	suite.Require().Empty(pool.jobGen.pushedBack, "a duplicate must not re-queue the height")
 	suite.client.AssertNotCalled(suite.T(), "Send", mock.Anything, mock.Anything)
@@ -619,7 +619,7 @@ func (suite *SynchronizerTestSuite) TestDuplicateBlockIsVisibleAtDefaultLogLevel
 	// Start above the duplicated height so nothing is applied and the duplicate is
 	// all that is under test.
 	pool := NewSynchronizer(2, suite.client, applier, WithWorkerPool(wp), WithLogger(logger))
-	pool.pendingToApply[respH1.Block.Height] = *respH1
+	pool.pendingToApply[respH1.Height] = *respH1
 
 	resultCh <- workerpool.Result{Value: duplicateH1}
 	suite.Require().NoError(pool.consumeJobResult(ctx, ctx))
@@ -675,16 +675,16 @@ func (suite *SynchronizerTestSuite) TestPeerErrorsCarrySupplyingConnection() {
 		poisoned, err := BlockResponseFromProto(suite.responses[0], peerID)
 		suite.Require().NoError(err)
 		poisoned.ConnID = connID
-		pool.pendingToApply[poisoned.Block.Height] = *poisoned
+		pool.pendingToApply[poisoned.Height] = *poisoned
 		honest, err := BlockResponseFromProto(suite.responses[1], "honest peer")
 		suite.Require().NoError(err)
 
 		suite.blockExec.
-			On("VerifyCommit", mock.Anything, mock.Anything, poisoned.Block.Height, poisoned.Commit).
+			On("VerifyCommit", mock.Anything, mock.Anything, poisoned.Height, poisoned.Commit).
 			Once().
 			Return(types.VerifiedCommit{}, nil)
 		suite.blockExec.
-			On("ValidateBlock", mock.Anything, mock.Anything, poisoned.Block, mock.Anything).
+			On("ValidateBlock", mock.Anything, mock.Anything, sameBlock(suite.T(), poisoned), mock.Anything).
 			Once().
 			Return(errors.New("invalid block"))
 		expectReport()
@@ -956,14 +956,14 @@ func (suite *SynchronizerTestSuite) TestApplyFailurePunishesSupplyingPeer() {
 	pool := NewSynchronizer(1, suite.client, applier, WithWorkerPool(wp))
 	pool.AddPeer(newPeerData(poisonPeerID, 1, 100))
 	pool.AddPeer(newPeerData(honestPeerID, 1, 100))
-	pool.pendingToApply[poisonH1.Block.Height] = *poisonH1
+	pool.pendingToApply[poisonH1.Height] = *poisonH1
 
 	suite.blockExec.
-		On("VerifyCommit", mock.Anything, mock.Anything, poisonH1.Block.Height, poisonH1.Commit).
+		On("VerifyCommit", mock.Anything, mock.Anything, poisonH1.Height, poisonH1.Commit).
 		Once().
 		Return(types.VerifiedCommit{}, nil)
 	suite.blockExec.
-		On("ValidateBlock", mock.Anything, mock.Anything, poisonH1.Block, mock.Anything).
+		On("ValidateBlock", mock.Anything, mock.Anything, sameBlock(suite.T(), poisonH1), mock.Anything).
 		Once().
 		Return(errors.New("invalid block"))
 	suite.client.
@@ -978,13 +978,13 @@ func (suite *SynchronizerTestSuite) TestApplyFailurePunishesSupplyingPeer() {
 
 	// The poisoned height is dropped and re-requested from someone else, so the
 	// synchronizer can still advance.
-	suite.Require().Equal([]int64{poisonH1.Block.Height}, pool.jobGen.pushedBack)
-	suite.Require().NotContains(pool.pendingToApply, poisonH1.Block.Height)
+	suite.Require().Equal([]int64{poisonH1.Height}, pool.jobGen.pushedBack)
+	suite.Require().NotContains(pool.pendingToApply, poisonH1.Height)
 	_, found := pool.peerStore.Get(poisonPeerID)
 	suite.Require().False(found)
 
 	// The honest peer keeps both its response and its place in the peer store.
-	suite.Require().Contains(pool.pendingToApply, honestH2.Block.Height)
+	suite.Require().Contains(pool.pendingToApply, honestH2.Height)
 	_, found = pool.peerStore.Get(honestPeerID)
 	suite.Require().True(found)
 }
@@ -999,7 +999,7 @@ func (suite *SynchronizerTestSuite) TestAddBlockDropsAlreadyAppliedHeight() {
 	const currentHeight = int64(5)
 	peerID := types.NodeID("peer 1")
 	staleH1, _ := BlockResponseFromProto(suite.responses[0], peerID)
-	suite.Require().Less(staleH1.Block.Height, currentHeight)
+	suite.Require().Less(staleH1.Height, currentHeight)
 
 	resultCh := make(chan workerpool.Result, 1)
 	wp := workerpool.New(1, workerpool.WithResultCh(resultCh))
@@ -1024,7 +1024,7 @@ func (suite *SynchronizerTestSuite) TestRemovePeerReleasesLockBeforePushBack() {
 	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
 	pool := NewSynchronizer(1, suite.client, applier)
 	pool.AddPeer(newPeerData(peerID, 1, 100))
-	pool.pendingToApply[respH1.Block.Height] = *respH1
+	pool.pendingToApply[respH1.Height] = *respH1
 
 	// Block the job generator so the re-queue cannot complete.
 	pool.jobGen.mtx.Lock()
@@ -1053,7 +1053,7 @@ func (suite *SynchronizerTestSuite) TestRemovePeerReleasesLockBeforePushBack() {
 	case <-time.After(2 * time.Second):
 		suite.Require().Fail("RemovePeer did not finish after the job generator lock was released")
 	}
-	suite.Require().Equal([]int64{respH1.Block.Height}, pool.jobGen.pushedBack)
+	suite.Require().Equal([]int64{respH1.Height}, pool.jobGen.pushedBack)
 }
 
 func (suite *SynchronizerTestSuite) TestUpdateMonitor() {
@@ -1823,7 +1823,7 @@ func (h *backlogHarness) fillWindow(ctx context.Context, blocking int64) types.N
 		if resp == nil {
 			return blockingPeer
 		}
-		if resp.Block.Height == blocking {
+		if resp.Height == blocking {
 			blockingPeer = resp.PeerID
 			continue
 		}
@@ -1863,7 +1863,7 @@ func (suite *SynchronizerTestSuite) TestBacklogIsBoundedWhileTheBlockingHeightIs
 			continue
 		}
 		requested++
-		if resp.Block.Height == blocking {
+		if resp.Height == blocking {
 			continue
 		}
 		h.deliver(ctx, resp)
@@ -1901,7 +1901,7 @@ func (suite *SynchronizerTestSuite) TestBacklogIsBoundedByBytesWhenBlocksAreLarg
 			refused++
 			continue
 		}
-		if resp.Block.Height == blocking {
+		if resp.Height == blocking {
 			continue
 		}
 		h.deliverSized(ctx, resp, blockSize)
@@ -1936,7 +1936,7 @@ func (suite *SynchronizerTestSuite) TestBlockingHeightIsStillFetchableAtTheByteB
 		if resp == nil {
 			break
 		}
-		if resp.Block.Height == blocking {
+		if resp.Height == blocking {
 			blockingPeer = resp.PeerID
 			continue
 		}
@@ -1954,7 +1954,7 @@ func (suite *SynchronizerTestSuite) TestBlockingHeightIsStillFetchableAtTheByteB
 	resp := h.produce(ctx)
 	suite.Require().NotNil(resp,
 		"the byte budget is spent and the height it is waiting for can never be requested again")
-	suite.Require().EqualValues(blocking, resp.Block.Height)
+	suite.Require().EqualValues(blocking, resp.Height)
 
 	h.deliver(ctx, resp)
 
@@ -1984,7 +1984,7 @@ func (suite *SynchronizerTestSuite) TestBlockingHeightIsStillFetchableAtTheBound
 	resp := h.produce(ctx)
 	suite.Require().NotNil(resp,
 		"the window is full and the height it is waiting for can never be requested again")
-	suite.Require().EqualValues(blocking, resp.Block.Height,
+	suite.Require().EqualValues(blocking, resp.Height,
 		"the retry of the blocking height must be what goes out first")
 
 	h.deliver(ctx, resp)
@@ -2020,7 +2020,7 @@ func (suite *SynchronizerTestSuite) TestDroppingTheBlockingPeerLeavesTheHeightTo
 	for range requeued {
 		resp := h.produce(ctx)
 		suite.Require().NotNil(resp, "a re-queued height was starved by the window")
-		suite.Require().NotEqualValues(blocking, resp.Block.Height)
+		suite.Require().NotEqualValues(blocking, resp.Height)
 	}
 	suite.Require().Nil(h.produce(ctx), "the window must still refuse new heights")
 
@@ -2028,7 +2028,7 @@ func (suite *SynchronizerTestSuite) TestDroppingTheBlockingPeerLeavesTheHeightTo
 	h.timeout(ctx, blockingPeer, blocking)
 	resp := h.produce(ctx)
 	suite.Require().NotNil(resp, "the blocking height was stranded by dropping its peer")
-	suite.Require().EqualValues(blocking, resp.Block.Height)
+	suite.Require().EqualValues(blocking, resp.Height)
 }
 
 // TestInOrderSyncIsNotThrottledByTheBound checks that the window does not slow a
@@ -2090,7 +2090,7 @@ func (suite *SynchronizerTestSuite) TestRequeuedHeightsAreNotStarvedByTheBound()
 	for range requeued {
 		resp := h.produce(ctx)
 		suite.Require().NotNil(resp, "a re-queued height was starved by the window")
-		reissued = append(reissued, resp.Block.Height)
+		reissued = append(reissued, resp.Height)
 	}
 	suite.Require().Equal(requeued, reissued, "re-queued heights must go out lowest first")
 
@@ -2326,7 +2326,7 @@ func (suite *SynchronizerTestSuite) TestSmallBlocksAfterSlowApplyKeepPeersUsable
 	if found {
 		response := h.produce(ctx)
 		suite.Require().NotNil(response)
-		suite.Equal(height, response.Block.Height)
+		suite.Equal(height, response.Height)
 		h.deliver(ctx, response)
 		suite.Equal(height+1, h.pool.height)
 	}
@@ -2341,4 +2341,14 @@ func (suite *SynchronizerTestSuite) TestSmallBlocksAfterSlowApplyKeepPeersUsable
 		_, stopped := wait.result(2 * time.Second)
 		suite.True(stopped, "WaitForSync must still stop on cancellation")
 	}
+}
+
+// sameBlock matches the block resp holds, which is decoded again from its
+// bytes when it is applied.
+func sameBlock(t *testing.T, resp *BlockResponse) interface{} {
+	t.Helper()
+	block, err := decodeBlock(resp.BlockBytes)
+	require.NoError(t, err)
+	hash := block.Hash()
+	return mock.MatchedBy(func(b *types.Block) bool { return b.HashesTo(hash) })
 }

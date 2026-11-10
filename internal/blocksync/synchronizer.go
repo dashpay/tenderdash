@@ -46,12 +46,12 @@ const (
 	// costs once blocks are large, because a count of blocks says nothing about
 	// that when one block may be tens of megabytes.
 	//
-	// Serialized bytes understate the heap actually retained. The size covers the
-	// block alone, not the commit held alongside it, and a response holds the
-	// decoded block next to its wire form, the bytes it is applied from. A
-	// decoded block costs more than its wire form - several times more for
-	// blocks small enough that fixed per-response overhead dominates. Read this
-	// as a budget for block data, not as the memory the backlog occupies.
+	// A pending response holds its block only as those bytes, the form it is
+	// applied from, and not decoded as well: the block is decoded again when it
+	// is applied. The size still understates the heap retained, since it covers
+	// the block alone, not the commit held alongside it or the per-response
+	// overhead. Read this as a budget for block data, not as the memory the
+	// backlog occupies.
 	maxPendingApplyBytes = 256 << 20
 
 	// maxOutstandingHeights is how many heights may be requested and not yet
@@ -81,13 +81,6 @@ const (
 	// does not happen while a lower height is missing. The ceiling is therefore
 	// unconditional, about 6.98 GB, and configuring a chain for smaller blocks
 	// does not lower it.
-	//
-	// That figure, like the budget, is in serialized bytes, the size charged
-	// for each response. A response holds its block twice, as the bytes it was
-	// committed with and decoded, so the heap it occupies is at least twice
-	// what it is charged: about 14 GB at this ceiling. Charging both copies
-	// would only change the first term, since the second is in flight before
-	// the budget is consulted.
 	//
 	// Lowering maxOutstandingHeights does, in proportion, and it is the only
 	// lever on it here. 64 is the balance struck: holding that term to the
@@ -368,7 +361,7 @@ func (s *Synchronizer) consumeJobResult(ctx, applyCtx context.Context) error {
 	if err != nil {
 		if !errors.Is(err, errDuplicateBlock) {
 			s.logger.Error("cannot add a block to the pending list",
-				"height", resp.Block.Height,
+				"height", resp.Height,
 				"error", err.Error())
 			_ = s.client.Send(ctx, p2p.PeerError{NodeID: resp.PeerID, Err: err, ConnID: resp.ConnID})
 			return nil
@@ -377,7 +370,7 @@ func (s *Synchronizer) consumeJobResult(ctx, applyCtx context.Context) error {
 		// this height. Info level: a healthy sync produces none, so this is the only
 		// signal an operator gets that heights are being re-requested.
 		s.logger.Info("dropping duplicate block response",
-			"height", resp.Block.Height,
+			"height", resp.Height,
 			"peer", resp.PeerID,
 			"reason", err.Error())
 	}
@@ -391,7 +384,7 @@ func (s *Synchronizer) consumeJobResult(ctx, applyCtx context.Context) error {
 		// Charge the failure to the peer that supplied the failing block: removing it
 		// also drops its pending entry, so the height is fetched from someone else.
 		s.logger.Error("cannot apply a block",
-			"height", failed.Block.Height,
+			"height", failed.Height,
 			"peer", failed.PeerID,
 			"error", err.Error())
 		s.RemovePeer(failed.PeerID)
@@ -402,8 +395,7 @@ func (s *Synchronizer) consumeJobResult(ctx, applyCtx context.Context) error {
 
 // backlog reports what block sync is holding: the height it is waiting to
 // apply, which is the lowest height not applied yet, and the serialized size of
-// the responses held above it. That size is what the blocks measured on the
-// wire, which is less than what holding them decoded costs; see
+// the responses held above it, which hold their blocks as those bytes; see
 // maxPendingApplyBytes. Both are read under one lock, so the pair describes a
 // single state and a job cannot be admitted against a height from one moment
 // and a backlog from another.
@@ -648,7 +640,7 @@ func (s *Synchronizer) applyBlock(ctx context.Context) (BlockResponse, error) {
 		if !ok {
 			return BlockResponse{}, nil
 		}
-		err := s.applier.Apply(ctx, resp.Block, resp.BlockBytes, resp.Commit)
+		err := s.applier.ApplyBytes(ctx, resp.BlockBytes, resp.Commit)
 		if err != nil {
 			return resp, fmt.Errorf("cannot apply block: %w", err)
 		}
@@ -742,16 +734,15 @@ func (s *Synchronizer) addBlock(resp BlockResponse) error {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
-	block := resp.Block
-	if block.Height < s.height {
+	if resp.Height < s.height {
 		return fmt.Errorf("%w (peer: %s, block height: %d already applied)",
-			errDuplicateBlock, resp.PeerID, block.Height)
+			errDuplicateBlock, resp.PeerID, resp.Height)
 	}
-	_, ok := s.pendingToApply[block.Height]
+	_, ok := s.pendingToApply[resp.Height]
 	if ok {
-		return fmt.Errorf("%w (peer: %s, block height: %d)", errDuplicateBlock, resp.PeerID, block.Height)
+		return fmt.Errorf("%w (peer: %s, block height: %d)", errDuplicateBlock, resp.PeerID, resp.Height)
 	}
-	s.pendingToApply[block.Height] = resp
+	s.pendingToApply[resp.Height] = resp
 	return nil
 }
 
@@ -786,28 +777,32 @@ type BlockResponse struct {
 	// ConnID is the generation of the connection that delivered this response, which
 	// its failures are fenced to.
 	ConnID uint64
-	Block  *types.Block
-	// BlockBytes is Block as it was committed, the bytes Block is decoded from.
-	// Block is applied with the part set cut from these: that is what the
-	// commit's block ID describes, and re-encoding Block need not give the same
-	// bytes.
+	// Height is the height of the block in BlockBytes.
+	Height int64
+	// BlockBytes is the block as it was committed. It is applied with the part
+	// set cut from these bytes, which is what the commit's block ID describes:
+	// re-encoding the decoded block need not give the same bytes. A response
+	// holds the block only in this form. It is decoded when it arrives, to be
+	// checked, and again when it is applied, so a response waiting for a lower
+	// height holds one copy of its block, the one it is charged for.
 	BlockBytes []byte
 	Commit     *types.Commit
-	// Size is the serialized size of Block in bytes, the length of BlockBytes.
+	// Size is the length of BlockBytes, what the response is charged in the
+	// backlog.
 	Size int
 }
 
 func (r *BlockResponse) Validate() error {
-	if r.Block == nil {
+	if len(r.BlockBytes) == 0 {
 		return errors.New("block response without a block")
 	}
 	if r.Commit == nil {
 		// See https://github.com/tendermint/tendermint/pull/8433#discussion_r866790631
-		return fmt.Errorf("a block without a commit at height %d - possible node store corruption", r.Block.Height)
+		return fmt.Errorf("a block without a commit at height %d - possible node store corruption", r.Height)
 	}
-	if r.Block.Height != r.Commit.Height {
+	if r.Height != r.Commit.Height {
 		return fmt.Errorf("heights don't match, not adding block (block height: %d, commit height: %d)",
-			r.Block.Height,
+			r.Height,
 			r.Commit.Height)
 	}
 	return nil
@@ -826,11 +821,9 @@ func BlockResponseFromProto(resp *bcproto.BlockResponse, peerID types.NodeID) (*
 	if cap(blockBytes) > 2*len(blockBytes) {
 		blockBytes = slices.Clone(blockBytes)
 	}
-	pbb := new(tmproto.Block)
-	if err := proto.Unmarshal(blockBytes, pbb); err != nil {
-		return nil, fmt.Errorf("cannot decode block: %w", err)
-	}
-	block, err := types.BlockFromProto(pbb)
+	// Decoded here so that a block that does not decode is refused before it is
+	// queued, and then dropped: see BlockResponse.BlockBytes.
+	block, err := decodeBlock(blockBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -843,9 +836,18 @@ func BlockResponseFromProto(resp *bcproto.BlockResponse, peerID types.NodeID) (*
 	}
 	return &BlockResponse{
 		PeerID:     peerID,
-		Block:      block,
+		Height:     block.Height,
 		BlockBytes: blockBytes,
 		Commit:     commit,
 		Size:       len(blockBytes),
 	}, nil
+}
+
+// decodeBlock decodes a serialized tendermint.types.Block.
+func decodeBlock(blockBytes []byte) (*types.Block, error) {
+	pbb := new(tmproto.Block)
+	if err := proto.Unmarshal(blockBytes, pbb); err != nil {
+		return nil, fmt.Errorf("cannot decode block: %w", err)
+	}
+	return types.BlockFromProto(pbb)
 }
