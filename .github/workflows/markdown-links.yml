@@ -2,14 +2,18 @@
 name: Check Markdown links
 
 on:
-  # Temporarily disabled job on PRs. Re-enable when docs are fixed.
-  # pull_request:
-  #   paths:
-  #     - "**.md"
+  pull_request:
   push:
     branches:
       - master
       - dev
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Branch creation/rename events can refer to the deleted old branch.
 env:
@@ -23,10 +27,24 @@ jobs:
       - uses: technote-space/get-diff-action@v6
         if: github.event_name != 'push' || !github.event.created
         with:
+          # book/ links are relative to the staged mdBook tree; the docs
+          # build checks them.
           PATTERNS: |
             **/**.md
-      - uses: gaurav-nelson/github-action-markdown-link-check@v1
-        with:
-          check-modified-files-only: "yes"
-          config-file: ".md-link-check.json"
+            !book/**
+          FORMAT: json
+          # Also match .github/ and .agents/.
+          MINIMATCH_OPTION_DOT: true
+      - name: Check links in changed Markdown files
         if: env.GIT_DIFF
+        run: |
+          if [ "$GIT_DIFF" = all ]; then
+            mapfile -t files < <(git ls-files '*.md' ':!:book/**')
+          else
+            mapfile -t files < <(jq -r '.[]' <<<"$GIT_DIFF")
+          fi
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No changed Markdown files."
+            exit 0
+          fi
+          npx --yes markdown-link-check@3.14.2 --config .md-link-check.json --quiet -- "${files[@]}"
