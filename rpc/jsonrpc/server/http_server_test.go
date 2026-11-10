@@ -92,7 +92,7 @@ func TestMaxOpenConnections(t *testing.T) {
 }
 
 // A caller that closes its connection in the middle of a batch ends the batch: the call in
-// progress sees its context cancelled, and the calls after it do not run.
+// progress sees its context canceled, and the calls after it do not run.
 func TestServeStopsBatchWhenCallerDisconnects(t *testing.T) {
 	ln, err := net.Listen("tcp", "localhost:0")
 	require.NoError(t, err)
