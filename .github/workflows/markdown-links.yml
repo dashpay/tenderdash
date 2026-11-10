@@ -33,6 +33,8 @@ jobs:
             **/**.md
             !book/**
           FORMAT: json
+          # Also match .github/ and .agents/.
+          MINIMATCH_OPTION_DOT: true
       - name: Check links in changed Markdown files
         if: env.GIT_DIFF
         run: |
