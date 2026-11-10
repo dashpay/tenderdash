@@ -23,6 +23,7 @@ and the ABCI interface ([ABCI spec](../abci/README.md)).
 | [Primary flow of a height](./consensus-happy-path.md) | The happy path from `NewHeight` to the next `NewHeight`, with the ABCI calls it makes |
 | [Transitions and decision rules](./consensus-transitions.md) | Formal transition table: guards, actions and postconditions of every step action; timeout semantics; vote-driven dispatch; prevote, precommit and proposal-validity decision procedures |
 | [Alternative flows and edge cases](./consensus-alternative-flows.md) | Missing or invalid proposals, locking, valid-block bookkeeping, round skipping, nil rounds, equivocation, vote extensions, timestamps, empty blocks, non-validators, panics, DoS budgets |
+| [Proposer liveness and round skipping](./consensus-proposer-liveness.md) | From `CONSENSUS_VERSION_2`: proposer heartbeats while a round waits for transactions, skip votes, round skip certificates, the round after a skip, their parameters and budgets |
 | [Commit handling](./consensus-commit.md) | Commits built from local precommits and commits received from peers: verification, parking, candidates, application of a commit, gossip |
 | [Recovery and synchronisation](./consensus-recovery.md) | WAL, crash recovery, ABCI handshake replay, block-sync handover |
 | [Known issues and discrepancies](./consensus-known-issues.md) | Behaviour that looks like a bug or diverges from the intended algorithm |
@@ -48,7 +49,7 @@ and the complete DoS-defence design. For operational monitoring, see
 [DoS observability](../../docs/dos-observability/README.md).
 
 Source of truth: the code at the revision this document was written against
-(branch `v1.8-dev`). Citations use `path/file.go` and a function name; line
+(branch `dev`). Citations use `path/file.go` and a function name; line
 numbers are omitted because they drift.
 
 ## Terminology
@@ -72,6 +73,7 @@ numbers are omitted because they drift.
 | **Locked block / round** | The block the node precommitted most recently and the round it did so; `-1`/nil when none. | `RoundState.LockedRound/LockedBlock` |
 | **Valid block / round** | The most recent block (and round) for which the node saw a polka in a round `≥` any previous one. | `RoundState.ValidRound/ValidBlock` |
 | **CurrentRoundState** | The application's answer to the latest `PrepareProposal`/`ProcessProposal` for the block held in `ProposalBlock`, tagged with the round it was processed for. | `RoundState.CurrentRoundState`, `RoundState.ProcessedBlockID`; `processedFor` in `internal/consensus/block_executor.go` |
+| **Round skip certificate** | A quorum threshold signature recovered from the skip votes of validators holding `R`, proving that they stopped hearing from the proposer of `(h, r)` while waiting for transactions; moves a node to `r + 1`. `CONSENSUS_VERSION_2` only. | `types.RoundSkipCertificate` in `types/round_skip.go`; [Proposer liveness](./consensus-proposer-liveness.md) |
 | **Parked commit** | A verified commit for the current height whose block has not yet been assembled (`RoundState.Commit != nil`). | `StateData.adoptCommit` in `internal/consensus/state_data.go` |
 | **Timely** | A proposal whose receive time lies within `[ts − Precision, ts + MessageDelay·2^⌊round/10⌋ + Precision]` of its timestamp `ts`. | `checkTimely` in `types/validation.go` |
 
@@ -81,11 +83,13 @@ Throughout, `rs` denotes the node's `RoundState` and `state` the committed
 ## System model as enforced by the code
 
 - **Single writer.** `State.receiveRoutine` (`internal/consensus/state.go`) is
-  the only goroutine that mutates `RoundState`. It `select`s over three inputs:
+  the only goroutine that mutates `RoundState`. It `select`s over five inputs:
   transactions becoming available in the mempool (`txNotifier.TxsAvailable()`),
   messages (`msgInfoQueue.read()`: the node's own proposal/votes on an internal
-  queue, peers' messages on per-peer lanes), and timer expiries
-  (`timeoutTicker.Chan()`). Go's `select` picks randomly among ready cases, so
+  queue, peers' messages on per-peer lanes), timer expiries
+  (`timeoutTicker.Chan()`), proposer-silence reports
+  (`proposerLiveness.silent()`) and signed round skip votes
+  (`roundSkipSigner.signed()`). Go's `select` picks randomly among ready cases, so
   there is **no ordering guarantee** between a timeout and a message that are
   both ready.
 - **Actions and guards.** Every transition is an `ActionHandler` registered in
@@ -132,13 +136,15 @@ Throughout, `rs` denotes the node's `RoundState` and `state` the committed
 | `Votes` | `HeightVoteSet`: prevote and precommit `VoteSet`s for rounds `0..Round+1` plus up to two catch-up rounds per validator. |
 | `LastCommit` | The commit of height `h − 1`, included in the next proposed block. There is no `LastCommit` vote set: late precommits for `h − 1` are dropped. |
 | `TriggeredTimeoutPrecommit` | Whether the precommit-wait timeout was already scheduled for this round. |
+| `RoundSkip` | Round skip certificate for the highest skipped round of this height; kept for peers still in that round even after the node moved past it. |
+| `TxsReported` | Whether the mempool reported transactions at this height (it does so once per height). |
 | `ProposeNextBlockImmediately` | Hint from `ResponseFinalizeBlock.propose_next_block_immediately` of the previous height; consumed once, not persisted. |
 | `CurrentRoundState, ProcessedBlockID` | Latest application result for `ProposalBlock` (see Terminology). |
 
 `StateData.updateToState` re-initialises `Height`, `Validators`,
 `LastValidators`, `LastCommit`, `ProposerSelector` and `StartTime` for the
-new height and resets every proposal, lock, valid-block, commit, vote and
-flag field. `CurrentRoundState`/`ProcessedBlockID` are left untouched; they
+new height and resets every proposal, lock, valid-block, commit,
+round-skip, vote and flag field. `CurrentRoundState`/`ProcessedBlockID` are left untouched; they
 are compared against the new height's block by `processedFor`. Within a
 height `LockedRound/Block` and `ValidRound/Block` are never reset; `Commit`
 is cleared only when a parked commit is rejected (`selectParkedCommit`,
@@ -165,7 +171,7 @@ stateDiagram-v2
     [*] --> NewHeight : updateToState (height h, round 0)
     NewHeight --> NewRound : tock NewHeight / EnterNewRound(h,0)
     NewRound --> NewRound : proposer waits for clock > LastBlockTime (NewRound tock rescheduled)
-    NewRound --> Propose : EnterPropose (immediately, or after txs available / empty-block interval)
+    NewRound --> Propose : EnterPropose (immediately, or after txs available / empty-block interval / proposal or prevotes while waiting)
     Propose --> Prevote : proposal + block (+ POL) complete, or tock Propose
     Prevote --> PrevoteWait : prevotes reach +2/3 any without a usable majority
     Prevote --> Precommit : polka (block held or nil)
@@ -175,6 +181,7 @@ stateDiagram-v2
     Precommit --> ApplyCommit : +2/3 precommits for a block (threshold signature recovered)
     state "any step" as Any
     Any --> NewRound : +2/3 any prevotes or precommits at round r' > r (round skip)
+    Any --> NewRound : RoundSkipCertificate for round r' ≥ r, before ApplyCommit / EnterNewRound(h, r'+1)
     Any --> ApplyCommit : verified CommitMessage for height h
     ApplyCommit --> NewHeight : block applied (height h+1)
     ApplyCommit --> ApplyCommit : waiting for block parts, or application rejected own commit
@@ -279,6 +286,8 @@ proposed in block `h` apply from `h + 1`, `CurrentRoundState` in
 | `VoteDelta` | 500 ms | |
 | `Synchrony.Precision` | 505 ms | Timeliness window |
 | `Synchrony.MessageDelay` | 12 s | Timeliness window; doubled every 10 rounds |
+| `ProposerHeartbeat` | 1 s, derived when only `ProposerSilence` is set | Heartbeat interval of the proposer of a waiting round (`CONSENSUS_VERSION_2`) |
+| `ProposerSilence` | 5 s, derived when only `ProposerHeartbeat` is set | `ProposerSilenceTimeout(r) = ProposerSilence + ProposerHeartbeat·r`; see [Parameters](./consensus-proposer-liveness.md#parameters) |
 
 Per-node `Unsafe*TimeoutOverride` settings in `config.ConsensusConfig` replace
 the corresponding parameter locally (`StateData.proposeTimeout`,

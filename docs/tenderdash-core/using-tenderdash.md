@@ -209,7 +209,8 @@ Some fields from the config file can be overwritten with flags.
 ## No Empty Blocks
 
 Configure `create-empty-blocks` and `create-empty-blocks-interval` in
-`config.toml` to control waiting for transactions at round 0. The application
+`config.toml` to control waiting for transactions at round 0 (and, on consensus
+version 2, in a round entered after a silent proposer's round was skipped). The application
 can request an immediate next block through `ResponseFinalizeBlock`.
 An app hash change does not itself require an extra block: Tenderdash uses
 same-block execution.

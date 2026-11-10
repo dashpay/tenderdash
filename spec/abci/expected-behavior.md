@@ -62,7 +62,9 @@ ordinary voting rounds.
 
 `CheckTx` controls mempool admission separately from the block execution sequence.
 `Query`, `ListSnapshots` and `LoadSnapshotChunk` read application state or existing
-snapshots. `Echo` and `Flush` serve client/debugging purposes. `Info` can also serve
+snapshots. `Echo` and `Flush` serve client/debugging purposes; from consensus version 2 a
+waiting proposer also uses `Echo` as a readiness probe
+([Echo](./methods.md#echo)). `Info` can also serve
 RPC queries independently of startup. These methods are not bounded by the normal
 height's consensus callback count.
 

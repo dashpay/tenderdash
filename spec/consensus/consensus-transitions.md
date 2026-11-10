@@ -25,11 +25,15 @@ Notation: `h = rs.Height`, `r = rs.Round`, `step = rs.Step`;
 | Tock `(H, R, Propose)` | `State.handleTimeout` | publish `TimeoutPropose`; `EnterPrevote{H, R}` |
 | Tock `(H, R, PrevoteWait)` | `State.handleTimeout` | publish `TimeoutWait`; `EnterPrecommit{H, R}` |
 | Tock `(H, R, PrecommitWait)` | `State.handleTimeout` | publish `TimeoutWait`; `EnterPrecommit{H, R}`; `EnterNewRound{H, R + 1}` |
-| `TxsAvailable` | `State.handleTxsAvailable` | only at `r == 0`: at step `NewHeight` (and `h ≠ InitialHeight`) schedule tock `(h, 0, NewRound)` after `StartTime − now + 1 ms`; at step `NewRound` dispatch `EnterPropose{h, 0}` |
-| `ProposalMessage` | `proposalMessageHandler` → `Proposaler.Set` | see [Proposal acceptance](#proposal-acceptance-proposalerset) |
+| `TxsAvailable` | `State.handleTxsAvailable` | sets `TxsReported`; acts only at `r == 0` or in a round that may wait after a round skip (`mayWaitAfterRoundSkip`): at step `NewHeight` (and `h ≠ InitialHeight`) schedule tock `(h, 0, NewRound)` after `StartTime − now + 1 ms`; at step `NewRound` dispatch `EnterPropose{h, r}` |
+| `ProposalMessage` | `proposalMessageHandler` → `Proposaler.Set` | see [Proposal acceptance](#proposal-acceptance-proposalerset); if accepted while `waitingForTxs`, `EnterPropose{h, r}` |
 | `BlockPartMessage` | `blockPartMessageHandler` | `AddProposalBlockPart`; on completion `ProposalCompleted` or `AddCommit` |
 | `VoteMessage` | `voteMessageHandler` | `AddVote` → [vote-driven dispatch](#vote-driven-dispatch) |
 | `CommitMessage` | `commitMessageHandler` | `TryAddCommit` ([Commit handling](./consensus-commit.md)) |
+| `RoundSkipCertificateMessage` | `roundSkipCertificateMessageHandler` | [`AddRoundSkipCertificate`](#addroundskipcertificatecert) |
+| `ProposerHeartbeatMessage`, `RoundSkipVoteMessage` | `State.handleLivenessMessage` | none, or `AddRoundSkipCertificate` for a certificate the vote completed ([Proposer liveness](./consensus-proposer-liveness.md)) |
+| Proposer-silence report | `State.handleProposerSilence` | none; signs a round skip vote off the consensus goroutine |
+| Signed round skip vote | `State.handleSignedRoundSkipVote` | none, or `AddRoundSkipCertificate` for a certificate the vote completed |
 
 Every tock is written to the WAL before handling; `handleTimeout` drops a
 tock when `ti.Height ≠ h`, `ti.Round < r`, or `ti.Round == r && ti.Step < step`
@@ -71,11 +75,16 @@ The receive routine handles the tock only if it still matches
     3. `Votes.SetRound(R + 1)`; `TriggeredTimeoutPrecommit = false`; save.
     4. Publish `NewRound`; if a commit is parked also publish the step and a
        `ValidBlock` event so peers keep serving the committed block's parts.
-    5. `waitForTxs = config.WaitForTxs() ∧ R == 0 ∧ h ≠ InitialHeight ∧ ¬ProposeNextBlockImmediately`
+    5. `waitForTxs = config.WaitForTxs() ∧ (R == 0 ∨ waitsAfterRoundSkip(R)) ∧ h ≠ InitialHeight ∧ ¬ProposeNextBlockImmediately ∧ ¬(roundSkipping ∧ Proposal ≠ nil)`
        where `WaitForTxs = ¬CreateEmptyBlocks ∨ CreateEmptyBlocksInterval > 0`
-       (`config/config.go`).
+       (`config/config.go`); `roundSkipping` is defined in
+       [When it applies](./consensus-proposer-liveness.md#when-it-applies) and
+       `waitsAfterRoundSkip` in
+       [The round after a skip](./consensus-proposer-liveness.md#the-round-after-a-skip).
+        - `waitForTxs ∧ R > 0 ∧ Commit == nil`: publish the `NewRound` step.
         - `waitForTxs ∧ CreateEmptyBlocksInterval > 0`: schedule tock
-          `(h, R, NewRound)` after the interval; stay in `NewRound`.
+          `(h, R, NewRound)` after the interval (for `R > 0`, the interval
+          minus `now − StartTime`, at least 0); stay in `NewRound`.
         - `waitForTxs ∧ CreateEmptyBlocksInterval == 0`: stay in `NewRound`
           until `TxsAvailable`.
         - otherwise (unless the test-only `DontAutoPropose`): `Dispatch(EnterPropose{h, R})`.
@@ -240,6 +249,19 @@ Properties:
   `CommitTime = now`, publish step, `Dispatch(TryFinalizeCommit{h})`.
 - **Postcondition:** `step = ApplyCommit`, `CommitRound = CR`.
 
+### AddRoundSkipCertificate(cert)
+
+`AddRoundSkipCertificateAction.Execute` (`internal/consensus/state_add_round_skip.go`).
+
+- **Guard:** `roundSkipping ∧ cert.Height == h ∧ (RoundSkip == nil ∨ cert.Round > RoundSkip.Round) ∧ step < ApplyCommit`
+  (`roundSkipCertificateWanted`).
+- **Actions:** verify the certificate unless this node recovered it (budget,
+  quorum hash, threshold signature); write its message to the WAL (not on replay);
+  `RoundSkip = cert`; broadcast it; if `cert.Round ≥ r`,
+  `Dispatch(EnterNewRound{h, cert.Round + 1})`.
+- **Postcondition:** `RoundSkip = cert`; `r > cert.Round`, or `r` unchanged
+  when the certificate is for an earlier round.
+
 ### TryFinalizeCommit(H) / ApplyCommit(commit)
 
 See [Commit handling](./consensus-commit.md#applying-a-commit-built-from-local-precommits).
@@ -298,6 +320,7 @@ unless it is the node's own key.
 | `r == vote.Round ∧ step ≥ Prevote ∧ maj23(P) = B ∧ (complete() ∨ B = nil)` | `EnterPrecommit{h, r}` |
 | `r == vote.Round ∧ step ≥ Prevote ∧ any23(P)` (otherwise) | `EnterPrevoteWait{h, r}` |
 | `Proposal ≠ nil ∧ Proposal.POLRound == vote.Round ≥ 0 ∧ complete()` (and neither of the above) | `EnterPrevote{h, r}` (POL votes completed a proposal with `POLRound`) |
+| `waitingForTxs ∧ (maj23(P) exists ∨ (vote.Round == r ∧ r > 0))` (and none of the above) | `EnterPropose{h, r}` (ends a wait for transactions; `CONSENSUS_VERSION_2`) |
 
 ### After a precommit is added
 

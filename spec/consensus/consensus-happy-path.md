@@ -97,11 +97,16 @@ tock to `EnterNewRoundEvent{Height}`. `EnterNewRoundAction.Execute`
 - `Votes.SetRound(1)` so that round 1 votes are tracked for round skipping;
 - `TriggeredTimeoutPrecommit = false`;
 - decides whether to wait for transactions:
-  `waitForTxs = config.WaitForTxs() && round == 0 && Height != InitialHeight`,
-  overridden to `false` by `ProposeNextBlockImmediately`. **⇢**
+  `waitForTxs = config.WaitForTxs() && (round == 0 || waitsAfterRoundSkip(round)) && Height != InitialHeight`,
+  overridden to `false` by `ProposeNextBlockImmediately` and, on
+  `CONSENSUS_VERSION_2` chains, by a proposal already held for the round
+  (`roundSkipping && Proposal != nil`). **⇢**
   [Empty blocks](./consensus-alternative-flows.md#mempool-and-empty-blocks).
   With the default configuration (`create-empty-blocks = true`,
   interval 0) it does not wait and dispatches `EnterProposeEvent{h, 0}`.
+  On `CONSENSUS_VERSION_2` chains the proposer of a waiting round sends
+  heartbeats while it waits. **⇢**
+  [Proposer liveness](./consensus-proposer-liveness.md).
 
 ### 3. Propose
 
