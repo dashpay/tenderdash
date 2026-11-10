@@ -54,6 +54,12 @@ tenderdash "$@" 2>&1 &
 child=$!
 wait "$child"
 exit_code=$?
+# A trapped signal interrupts wait before tenderdash exits; keep waiting so its
+# graceful shutdown completes before this script (PID 1) exits.
+while kill -0 "$child" 2>/dev/null; do
+	wait "$child"
+	exit_code=$?
+done
 
 if [ $got_signal == false ] && [ $exit_code -ne 0 ] && [ "$1" == "start" ]; then
 	echo "Sleeping for 10 seconds as workaround for the busy port problem. See entrypoint code for details."
