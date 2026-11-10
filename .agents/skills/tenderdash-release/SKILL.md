@@ -104,9 +104,10 @@ Platform rollout, and required tests in the release plan.
 ## Prepare the reviewable release
 
 Work in an isolated feature/release checkout at the reviewed source SHA. Preserve
-unrelated work. Update `TMVersionDefault` in `version/version.go` to the chosen
-version, and only the protocol versions justified above. Prepare `CHANGELOG.md`
-from the reviewed changes, preserving existing release sections. Include the
+unrelated work. Update `TMVersionDefault` in `version/version.go` and
+`info.version` in `rpc/openapi/openapi.yaml` to the chosen version (a test in
+`version/` keeps them equal), and only the protocol versions justified above.
+Prepare `CHANGELOG.md` from the reviewed changes, preserving existing release sections. Include the
 version/date, meaningful user-facing changes, breaking behavior and migration;
 exclude already-released patches and reverted effects. Commit prefixes can help
 organize the notes but cannot replace diff review. Do not regenerate old history
