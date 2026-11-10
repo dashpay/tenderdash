@@ -70,11 +70,12 @@ func newBlockApplier(blockExec sm.Executor, store sm.BlockStore, opts ...applier
 }
 
 // Apply safely verifies, saves to the store and executes a block with commit.
-// parts is the block as it was committed, whose bytes block was decoded from.
+// blockBytes is the block as it was committed, the bytes block was decoded
+// from.
 func (e *blockApplier) Apply(
 	ctx context.Context,
 	block *types.Block,
-	parts CommittedParts,
+	blockBytes []byte,
 	commit *types.Commit,
 ) error {
 	e.mtx.Lock()
@@ -90,15 +91,12 @@ func (e *blockApplier) Apply(
 
 	// The part set is needed twice: to derive the block ID and to persist the
 	// block. Building it builds a Merkle tree over the parts, so build it once
-	// and pass it to both. It is rebuilt from the parts the block was committed
-	// with, not from block: the commit's part set header is computed over
-	// those, and a re-encoding of block drops unknown fields and non-canonical
-	// encoding.
+	// and pass it to both. It is cut from the bytes the block was committed
+	// with, the way the proposer cut them, not from block: the commit's part
+	// set header is computed over those bytes, and a re-encoding of block drops
+	// unknown fields and non-canonical encoding.
 	start := time.Now()
-	blockParts, err := parts.partSet(commit.BlockID.PartSetHeader)
-	if err != nil {
-		return err
-	}
+	blockParts := types.NewPartSetFromData(blockBytes, types.BlockPartSizeBytes)
 	blockID := block.BlockID(blockParts)
 	partSetTime := e.observeSince("partset", start)
 

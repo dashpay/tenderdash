@@ -1,9 +1,12 @@
 package blocksync
 
 import (
-	"github.com/dashpay/tenderdash/internal/p2p"
+	p2pproto "github.com/dashpay/tenderdash/proto/tendermint/p2p"
+	"github.com/dashpay/tenderdash/types"
 )
 
 const (
-	MaxMsgSize = p2p.BlockSyncMaxMsgSize
+	MaxMsgSize = types.MaxBlockSizeBytes +
+		p2pproto.BlockResponseMessagePrefixSize +
+		p2pproto.BlockResponseMessageFieldKeySize
 )

@@ -181,67 +181,16 @@ type PartSet struct {
 func NewPartSetFromData(data []byte, partSize uint32) *PartSet {
 	// divide data into 4kb parts.
 	total := (uint32(len(data)) + partSize - 1) / partSize
-	partsBytes := make([][]byte, total)
-	for i := uint32(0); i < total; i++ {
-		partsBytes[i] = data[i*partSize : tmmath.MinInt(len(data), int((i+1)*partSize))]
-	}
-	return newPartSetFromParts(partsBytes, len(data))
-}
-
-// NewPartSetFromPartSizes returns an immutable, full PartSet from the data
-// bytes, cut into consecutive parts of the given sizes. The part set header
-// depends on where the data is cut, and a proposer may cut a block other than
-// NewPartSetFromData would, so this rebuilds the part set a block was
-// committed with from its bytes and the sizes of its parts.
-func NewPartSetFromPartSizes(data []byte, sizes []uint32) (*PartSet, error) {
-	if err := ValidatePartSizes(len(data), sizes); err != nil {
-		return nil, err
-	}
-	partsBytes := make([][]byte, len(sizes))
-	offset := 0
-	for i, size := range sizes {
-		partsBytes[i] = data[offset : offset+int(size)]
-		offset += int(size)
-	}
-	return newPartSetFromParts(partsBytes, len(data)), nil
-}
-
-// ValidatePartSizes checks that parts of the given sizes are valid block parts
-// that together cut exactly size bytes.
-func ValidatePartSizes(size int, sizes []uint32) error {
-	if len(sizes) == 0 {
-		return errors.New("no part sizes")
-	}
-	if len(sizes) > int(MaxBlockPartsCount) {
-		return fmt.Errorf("too many parts: %d, max: %d", len(sizes), MaxBlockPartsCount)
-	}
-	offset := 0
-	for i, partSize := range sizes {
-		if partSize > BlockPartSizeBytes {
-			return fmt.Errorf("part %d too big: %d bytes, max: %d", i, partSize, BlockPartSizeBytes)
-		}
-		if int(partSize) > size-offset {
-			return fmt.Errorf("part sizes exceed the %d bytes of data", size)
-		}
-		offset += int(partSize)
-	}
-	if offset != size {
-		return fmt.Errorf("part sizes cover %d of the %d bytes of data", offset, size)
-	}
-	return nil
-}
-
-// newPartSetFromParts returns a full PartSet of the given parts, which must be
-// consecutive slices of data byteSize bytes long.
-func newPartSetFromParts(partsBytes [][]byte, byteSize int) *PartSet {
-	total := tmmath.MustConvertUint32(len(partsBytes))
 	parts := make([]*Part, total)
+	partsBytes := make([][]byte, total)
 	partsBitArray := bits.NewBitArray(int(total))
 	for i := uint32(0); i < total; i++ {
-		parts[i] = &Part{
+		part := &Part{
 			Index: i,
-			Bytes: partsBytes[i],
+			Bytes: data[i*partSize : tmmath.MinInt(len(data), int((i+1)*partSize))],
 		}
+		parts[i] = part
+		partsBytes[i] = part.Bytes
 		partsBitArray.SetIndex(int(i), true)
 	}
 	// Compute merkle proofs
@@ -255,7 +204,7 @@ func newPartSetFromParts(partsBytes [][]byte, byteSize int) *PartSet {
 		parts:         parts,
 		partsBitArray: partsBitArray,
 		count:         total,
-		byteSize:      int64(byteSize),
+		byteSize:      int64(len(data)),
 	}
 }
 

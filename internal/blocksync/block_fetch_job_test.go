@@ -16,7 +16,6 @@ import (
 	"github.com/dashpay/tenderdash/internal/p2p/client"
 	"github.com/dashpay/tenderdash/internal/p2p/client/mocks"
 	p2pmocks "github.com/dashpay/tenderdash/internal/p2p/mocks"
-	statemocks "github.com/dashpay/tenderdash/internal/state/mocks"
 	statefactory "github.com/dashpay/tenderdash/internal/state/test/factory"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	tmrequire "github.com/dashpay/tenderdash/internal/test/require"
@@ -106,58 +105,6 @@ func (suite *BlockFetchJobTestSuite) TestExecuteHeightMismatch() {
 	handler := blockFetchJobHandler(suite.client, suite.peer, requested)
 	res := handler(ctx)
 	suite.requireError("peer sent block at height 6, requested height 5", res.Err)
-}
-
-// TestExecuteRejectsOversizedPartMetadata pins that a response with more part
-// sizes than a block can have fails its fetch, so it is never held waiting for
-// the lower heights still missing.
-func (suite *BlockFetchJobTestSuite) TestExecuteRejectsOversizedPartMetadata() {
-	ctx := context.Background()
-	const requested = int64(9)
-	oversized := *suite.responses[requested-1]
-	oversized.PartLayout = partLayout(suite.T(), make([]uint32, types.MaxBlockPartsCount+1), nil)
-	suite.client.
-		On("GetBlock", mock.Anything, requested, suite.peer.peerID).
-		Once().
-		Return(suite.getBlockReturnFunc(suite.promiseResolveResponse(&oversized)), nil)
-	res := blockFetchJobHandler(suite.client, suite.peer, requested)(ctx)
-	suite.requireError("too many parts", res.Err)
-	suite.Nil(res.Value)
-}
-
-// TestOversizedPartMetadataIsNotHeldBehindMissingHeight pins the same through
-// the synchronizer: while a lower height is missing, a later response with too
-// many part sizes stays out of the backlog, where the same response without
-// them is held.
-func (suite *BlockFetchJobTestSuite) TestOversizedPartMetadataIsNotHeldBehindMissingHeight() {
-	ctx := context.Background()
-	const later = int64(9)
-	fetch := func(resp *bcproto.BlockResponse) workerpool.Result {
-		suite.client.
-			On("GetBlock", mock.Anything, later, suite.peer.peerID).
-			Once().
-			Return(suite.getBlockReturnFunc(suite.promiseResolveResponse(resp)), nil)
-		return blockFetchJobHandler(suite.client, suite.peer, later)(ctx)
-	}
-	resultCh := make(chan workerpool.Result, 1)
-	wp := workerpool.New(1, workerpool.WithResultCh(resultCh))
-	applier := newBlockApplier(statemocks.NewExecutor(suite.T()), statemocks.NewBlockStore(suite.T()))
-	pool := NewSynchronizer(1, suite.client, applier, WithWorkerPool(wp))
-	pool.AddPeer(suite.peer)
-
-	oversized := *suite.responses[later-1]
-	oversized.PartLayout = partLayout(suite.T(), make([]uint32, types.MaxBlockPartsCount+1), nil)
-	resultCh <- fetch(&oversized)
-	suite.Require().NoError(pool.consumeJobResult(ctx, ctx))
-	height, pendingBytes := pool.backlog()
-	suite.EqualValues(1, height, "the lower height must still be the one being waited for")
-	suite.Zero(pendingBytes)
-
-	resultCh <- fetch(suite.responses[later-1])
-	suite.Require().NoError(pool.consumeJobResult(ctx, ctx))
-	height, pendingBytes = pool.backlog()
-	suite.EqualValues(1, height, "the lower height must still be the one being waited for")
-	suite.Equal(len(suite.responses[later-1].Block), pendingBytes)
 }
 
 // TestExecuteCarriesPeerConnection pins that a job's outcome stays attributed to the

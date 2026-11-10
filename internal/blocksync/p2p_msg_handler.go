@@ -155,11 +155,11 @@ func (h *blockP2PMessageHandler) Handle(ctx context.Context, p2pClient *client.C
 func (h *blockP2PMessageHandler) prepareBlockResponse(job blockResponseJob) (proto.Message, bool, error) {
 	envelope := &job.envelope
 	msg := envelope.Message.(*bcproto.BlockRequest)
-	parts := loadCommittedParts(h.store, msg.Height)
+	blockBytes := loadBlockBytes(h.store, msg.Height)
 	if !h.connectionIsCurrent(envelope.From, envelope.ConnID) {
 		return nil, false, nil
 	}
-	if parts == nil {
+	if blockBytes == nil {
 		h.logger.Debug("peer requesting a block we do not have", "peer", envelope.From, "height", msg.Height)
 		return &bcproto.NoBlockResponse{Height: msg.Height}, false, nil
 	}
@@ -167,15 +167,37 @@ func (h *blockP2PMessageHandler) prepareBlockResponse(job blockResponseJob) (pro
 	if commit == nil {
 		return nil, false, fmt.Errorf("%w at height %d", errStoredBlockMissingCommit, msg.Height)
 	}
-	layout, err := parts.partLayout()
-	if err != nil {
-		return nil, false, fmt.Errorf("failed to encode part layout: %w", err)
-	}
 	return &bcproto.BlockResponse{
-		Block:      parts.Bytes,
-		Commit:     commit.ToProto(),
-		PartLayout: layout,
+		Block:  blockBytes,
+		Commit: commit.ToProto(),
 	}, true, nil
+}
+
+// loadBlockBytes returns the bytes of the stored parts of the block at height,
+// in order, or nil when the store does not hold every part of it. The commit's
+// part set header is computed over those bytes, and a re-encoding of the
+// decoded block need not reproduce them: it drops unknown fields and
+// non-canonical encoding.
+func loadBlockBytes(store sm.BlockStore, height int64) []byte {
+	meta := store.LoadBlockMeta(height)
+	if meta == nil {
+		return nil
+	}
+	// BlockSize is -1 for a header saved without its block
+	blockBytes := make([]byte, 0, max(meta.BlockSize, 0))
+	for i := range int(meta.BlockID.PartSetHeader.Total) {
+		part := store.LoadBlockPart(height, i)
+		// a header saved without its block, or parts pruned after the meta was
+		// loaded
+		if part == nil {
+			return nil
+		}
+		blockBytes = append(blockBytes, part.Bytes...)
+	}
+	if len(blockBytes) == 0 {
+		return nil
+	}
+	return blockBytes
 }
 
 func (h *blockP2PMessageHandler) enqueueBlockResponse(job blockResponseJob) {

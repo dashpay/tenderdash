@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -640,7 +641,7 @@ func (s *Synchronizer) applyBlock(ctx context.Context) (BlockResponse, error) {
 		if !ok {
 			return BlockResponse{}, nil
 		}
-		err := s.applier.Apply(ctx, resp.Block, resp.Parts, resp.Commit)
+		err := s.applier.Apply(ctx, resp.Block, resp.BlockBytes, resp.Commit)
 		if err != nil {
 			return resp, fmt.Errorf("cannot apply block: %w", err)
 		}
@@ -779,12 +780,13 @@ type BlockResponse struct {
 	// its failures are fenced to.
 	ConnID uint64
 	Block  *types.Block
-	// Parts is Block as it was committed. Block is decoded from Parts.Bytes, and
-	// applied with the part set rebuilt from Parts: that is what the commit's
-	// block ID describes, and re-encoding Block need not give the same bytes.
-	Parts  CommittedParts
-	Commit *types.Commit
-	// Size is the serialized size of Parts in bytes.
+	// BlockBytes is Block as it was committed, the bytes Block is decoded from.
+	// Block is applied with the part set cut from these: that is what the
+	// commit's block ID describes, and re-encoding Block need not give the same
+	// bytes.
+	BlockBytes []byte
+	Commit     *types.Commit
+	// Size is the serialized size of Block in bytes, the length of BlockBytes.
 	Size int
 }
 
@@ -811,14 +813,14 @@ func BlockResponseFromProto(resp *bcproto.BlockResponse, peerID types.NodeID) (*
 	if len(resp.Block) == 0 {
 		return nil, errors.New("block response without a block")
 	}
-	// Checked before anything is decoded or queued: the response can wait behind
-	// a missing lower height, and only its size is charged to the backlog.
-	parts, err := committedPartsFromProto(resp)
-	if err != nil {
-		return nil, fmt.Errorf("invalid block parts: %w", err)
+	blockBytes := resp.Block
+	// A repeated block field leaves the allocation of its longest occurrence
+	// behind the last one, and only the length is charged to the backlog.
+	if cap(blockBytes) > 2*len(blockBytes) {
+		blockBytes = slices.Clone(blockBytes)
 	}
 	pbb := new(tmproto.Block)
-	if err := proto.Unmarshal(resp.Block, pbb); err != nil {
+	if err := proto.Unmarshal(blockBytes, pbb); err != nil {
 		return nil, fmt.Errorf("cannot decode block: %w", err)
 	}
 	block, err := types.BlockFromProto(pbb)
@@ -833,10 +835,10 @@ func BlockResponseFromProto(resp *bcproto.BlockResponse, peerID types.NodeID) (*
 		}
 	}
 	return &BlockResponse{
-		PeerID: peerID,
-		Block:  block,
-		Parts:  parts,
-		Commit: commit,
-		Size:   len(resp.Block) + len(resp.PartLayout),
+		PeerID:     peerID,
+		Block:      block,
+		BlockBytes: blockBytes,
+		Commit:     commit,
+		Size:       len(blockBytes),
 	}, nil
 }
