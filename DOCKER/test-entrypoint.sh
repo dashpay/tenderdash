@@ -20,8 +20,11 @@ fake_tenderdash() {
 run_entrypoint() {
 	local pid status=0
 	rm -f "$work/cleaned"
+	# A wedged run fails instead of hanging CI. --foreground keeps timeout from
+	# signalling the fake tenderdash itself; --preserve-status passes on the
+	# entrypoint's status after timeout forwards our SIGTERM to it.
 	PATH="$work/bin:$PATH" TMHOME="$work/home" MARKER="$work/cleaned" \
-		bash "$entrypoint" "$1" >/dev/null 2>&1 &
+		timeout --foreground --preserve-status -k 5 60 bash "$entrypoint" "$1" >/dev/null 2>&1 &
 	pid=$!
 	sleep 0.3
 	for ((i = 0; i < $2; i++)); do
