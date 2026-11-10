@@ -229,9 +229,7 @@ Two gossip handlers run per peer at the `PeerQueryMaj23SleepDuration` cadence
 
 - Certificates are WAL `msgInfo` records; replay applies them again without
   charging the verification budget. Replay never skips rounds on a
-  `roundSkipping` chain (below); `walMsgHeight`
-  (`internal/consensus/wal_iter.go`) only recognises the certificate record, so
-  a round-skipping replay of an earlier-version height does not fail on it.
+  `roundSkipping` chain (below).
 - On a `roundSkipping` chain `WalSkipRoundsToLast` is ignored
   (`State.replaySkipsRounds`, `internal/consensus/replay.go`): whether a round
   after a certificate waits depends on polkas of earlier rounds.

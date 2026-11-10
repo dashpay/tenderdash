@@ -179,7 +179,9 @@ waits for transactions, and relayed once by validators that verify it
 
 RoundSkipVote is sent on the StateChannel by a validator that heard no
 heartbeat from the proposer of its waiting round for the silence timeout, and
-relayed once by validators that count it (`CONSENSUS_VERSION_2`).
+relayed by validators when they first count it and again on a later copy until
+the round is certified (`CONSENSUS_VERSION_2`; see
+[Collecting votes](../../consensus/consensus-proposer-liveness.md#collecting-votes-and-recovering-the-certificate)).
 
 | Name | Type                                     | Description           | Field Number |
 |------|------------------------------------------|-----------------------|--------------|
