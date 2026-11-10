@@ -225,6 +225,67 @@ func TestRPCNotificationInBatch(t *testing.T) {
 	}
 }
 
+// A batch whose caller has gone away stops before its next call.
+func TestRPCBatchStopsWhenCallerIsGone(t *testing.T) {
+	const batch = `[
+		{"jsonrpc": "2.0","method":"c","id":"1"},
+		{"jsonrpc": "2.0","method":"c","id":"2"},
+		{"jsonrpc": "2.0","method":"c","id":"3"}
+	]`
+	tests := []struct {
+		name string
+		// leavesDuring is the call during which the caller goes away, 0 for before the first.
+		leavesDuring int
+		expectCalls  int
+	}{
+		{"caller stays", -1, 3},
+		{"caller leaves before the first call", 0, 0},
+		{"caller leaves during the first call", 1, 1},
+		{"caller leaves during the second call", 2, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			calls := 0
+			funcMap := map[string]*RPCFunc{
+				"c": NewRPCFunc(func(context.Context) (string, error) {
+					calls++
+					if calls == tt.leavesDuring {
+						cancel()
+					}
+					return "foo", nil
+				}),
+			}
+			mux := http.NewServeMux()
+			RegisterRPCFuncs(mux, funcMap, log.NewNopLogger())
+			if tt.leavesDuring == 0 {
+				cancel()
+			}
+
+			req, err := http.NewRequestWithContext(ctx, "POST", "http://localhost/", strings.NewReader(batch))
+			require.NoError(t, err)
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+
+			require.Equal(t, tt.expectCalls, calls)
+
+			res := rec.Result()
+			blob, err := io.ReadAll(res.Body)
+			res.Body.Close()
+			require.NoError(t, err)
+			if tt.leavesDuring < 0 {
+				var responses []rpctypes.RPCResponse
+				require.NoError(t, json.Unmarshal(blob, &responses))
+				require.Len(t, responses, 3)
+			} else {
+				require.Empty(t, blob, "nobody is left to read an answer")
+			}
+		})
+	}
+}
+
 func TestUnknownRPCPath(t *testing.T) {
 	mux := testMux()
 	req, _ := http.NewRequest("GET", "http://localhost/unknownrpcpath", strings.NewReader(""))
