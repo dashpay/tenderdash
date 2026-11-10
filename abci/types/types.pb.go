@@ -3193,9 +3193,10 @@ type ResponseFinalizeBlock struct {
 	// Blocks below this height may be removed. Defaults to `0` (retain all).
 	RetainHeight int64 `protobuf:"varint,2,opt,name=retain_height,json=retainHeight,proto3" json:"retain_height,omitempty"`
 	// When `true`, this node does not wait for transactions (`create-empty-blocks-interval`)
-	// before proposing round 0 of the next height: the application has block-driven work
-	// pending, for example withdrawal transactions to sign. A hint for the local node only,
-	// consumed once; a node that restarts in between falls back to the configured wait.
+	// before proposing at the next height, in round 0 or, on consensus version 2, in a round
+	// entered after a silent proposer's round was skipped: the application has block-driven
+	// work pending, for example withdrawal transactions to sign. A hint for the local node
+	// only, consumed once; a node that restarts in between falls back to the configured wait.
 	// Defaults to `false`.
 	ProposeNextBlockImmediately bool `protobuf:"varint,3,opt,name=propose_next_block_immediately,json=proposeNextBlockImmediately,proto3" json:"propose_next_block_immediately,omitempty"`
 }

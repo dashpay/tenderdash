@@ -583,7 +583,8 @@ contract above and [Commit handling](../consensus/consensus-commit.md).
 * Set `ResponseFinalizeBlock.propose_next_block_immediately` when the Application has block-driven
   work pending that the next block would carry out, for example withdrawal transactions waiting to be
   signed. The node then does not wait for transactions (`create-empty-blocks-interval`) before
-  proposing round 0 of the next height. This is a hint to the local node, not part of consensus: it is
+  proposing at the next height, in round 0 or, on consensus version 2, in a round entered after a
+  silent proposer's round was skipped. This is a hint to the local node, not part of consensus: it is
   not compared between validators, it only matters on the node that proposes the next height, and it
   is consumed once; a node that restarts in between falls back to the configured wait.
 * Just as `ProcessProposal`, the implementation of `FinalizeBlock` MUST be deterministic, since it is

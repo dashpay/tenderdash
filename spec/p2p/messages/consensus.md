@@ -213,12 +213,12 @@ have not sent one for that round or a later one (`CONSENSUS_VERSION_2`).
 
 `tendermint.types.RoundSkipCertificate`:
 
-| Name                | Type  | Description                                                                            | Field Number |
-|---------------------|-------|----------------------------------------------------------------------------------------|--------------|
-| height              | int64 | Height of the skipped round.                                                           | 1            |
-| round               | int32 | Skipped round.                                                                         | 2            |
-| quorum_hash         | bytes | Quorum that signed.                                                                    | 3            |
-| threshold_signature | bytes | Quorum threshold signature recovered from the skip votes of +2/3 of the validator set. | 4            |
+| Name                | Type  | Description                                                                                                                                                         | Field Number |
+|---------------------|-------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------|
+| height              | int64 | Height of the skipped round.                                                                                                                                        | 1            |
+| round               | int32 | Skipped round.                                                                                                                                                      | 2            |
+| quorum_hash         | bytes | Quorum that signed.                                                                                                                                                 | 3            |
+| threshold_signature | bytes | Quorum threshold signature recovered from the skip votes of +2/3 of the validator set (the mainnet default; the quorum type and `VotingPowerThreshold` can change it). | 4            |
 
 ### Message
 

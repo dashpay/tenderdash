@@ -65,7 +65,7 @@ The following metrics are available:
 | consensus_proposer_heartbeats_sent      | Counter   |                 | Proposer heartbeats this node signed and broadcast while waiting for transactions as proposer (consensus version 2)                        |
 | consensus_proposer_heartbeats_received  | Counter   |                 | New, verified proposer heartbeats accepted for the round this node waits in                                                                |
 | consensus_proposer_silences             | Counter   |                 | Rounds in which the proposer went silent while this validator waited for transactions                                                      |
-| consensus_round_skips                   | Counter   |                 | Rounds this node moved past on a round skip certificate from +2/3 of the validators                                                        |
+| consensus_round_skips                   | Counter   |                 | Rounds this node moved past on a round skip certificate from +2/3 of the validators (by default; configuration can change the threshold) |
 | evidence_pool_num_evidence              | Gauge     |                 | Number of evidence in the evidence pool                                                                                                    |
 | evidence_pool_dropped_evidence              | Counter   | reason          | Inbound gossip evidence refused before verification, labeled by reason (structural, oversized, already_known, height_window, node_budget, peer_budget) |
 | p2p_peers                               | Gauge     |                 | Number of peers node's connected to                                                                                                        |

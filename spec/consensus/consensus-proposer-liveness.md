@@ -146,7 +146,9 @@ votes are not written to the WAL.
 
 Once the counted power reaches
 `RoundSkipThresholdPower = max(T, R)` (`types/round_skip.go`; equal to `R`
-whenever `roundSkipping` holds), `RecoverRoundSkipCertificate` recovers the
+whenever `roundSkipping` holds; +2/3 on mainnet, whose `LLMQ_100_67` quorums
+recover from 67 of 100 shares and set no `VotingPowerThreshold`),
+`RecoverRoundSkipCertificate` recovers the
 quorum threshold signature over the round's sign bytes from the shares and
 verifies it against `ValidatorSet.ThresholdPublicKey`. A failed recovery is
 retried at once with any votes counted meanwhile, otherwise with the next vote.
