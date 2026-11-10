@@ -23,10 +23,22 @@ jobs:
       - uses: technote-space/get-diff-action@v6
         if: github.event_name != 'push' || !github.event.created
         with:
+          # book/ links are relative to the staged mdBook tree; the docs
+          # build checks them.
           PATTERNS: |
             **/**.md
-      - uses: gaurav-nelson/github-action-markdown-link-check@v1
-        with:
-          check-modified-files-only: "yes"
-          config-file: ".md-link-check.json"
+            !book/**
+          FORMAT: json
+      - name: Check links in changed Markdown files
         if: env.GIT_DIFF
+        run: |
+          if [ "$GIT_DIFF" = all ]; then
+            mapfile -t files < <(git ls-files '*.md' ':!:book/**')
+          else
+            mapfile -t files < <(jq -r '.[]' <<<"$GIT_DIFF")
+          fi
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No changed Markdown files."
+            exit 0
+          fi
+          npx --yes markdown-link-check@3.14.2 --config .md-link-check.json --quiet "${files[@]}"
