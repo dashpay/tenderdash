@@ -165,7 +165,8 @@ work. Mark it ready for review when the change and its explanation are ready.
 Use [Conventional Commits](https://www.conventionalcommits.org/) for commit and PR
 titles, for example `fix(consensus): validate the proposal before voting`.
 Use `!` and explain migration requirements for an incompatible change. These
-summaries help readers; the actual compatibility review determines release scope.
+summaries help readers; the actual compatibility review determines release scope
+(see the [versioning policy](RELEASES.md#versioning-policy)).
 A normal development PR does not update the release version or `CHANGELOG.md`.
 
 Read the final diff, address verified findings and update the tests and PR

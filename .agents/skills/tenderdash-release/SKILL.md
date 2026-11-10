@@ -18,21 +18,21 @@ or publish embargoed fixes without the coordinated disclosure authorization.
 ## Establish the release context
 
 Resolve the intended Dash Platform version/network and operation: next release,
-prerelease, or stable hotfix. Inspect live refs, published tags/releases, and open
-release PRs before selecting commits. Fetch the necessary refs/tags; do not trust
-stale local tracking refs or assume the GitHub default is the release source.
+prerelease, or stable hotfix; release sources are defined in
+[RELEASES.md](../../../RELEASES.md#branches-and-release-sources). Inspect live
+refs, published tags/releases, and open release PRs before selecting commits.
+Fetch the necessary refs/tags; do not trust stale local tracking refs or assume
+the GitHub default is the release source.
 
 - **Next release:** use `origin/dev` and record its exact SHA. Freeze that
   candidate; a later tip is a new candidate requiring review. The helper accepts
   that reviewed ancestor of the fetched integration tip without substituting
   newer commits. A temporary release branch can isolate a freeze.
 - **Current-stable hotfix:** start from `origin/master` and its latest published
-  tag. Isolate only required fixes in a feature branch; exclude next-version
-  development. Plan the forward-port to dev as part of completion.
-- **Another deployed Platform line:** require an explicit supported-deployment
-  decision and start from that line's last released tag, not master or dev.
-  This is an exceptional manual path: the helper intentionally validates only
-  next releases and current-stable hotfixes. Do not weaken it to admit another line.
+  tag in a feature branch. Plan the forward-port to dev as part of completion.
+- **Another deployed Platform line:** stop until the supported-deployment
+  decision is explicit. The helper validates only the two modes above; do not
+  weaken it to admit another line.
 
 Choose the latest **published stable tag reachable from the candidate** for the
 compatibility baseline. Verify its commit and GitHub release are the intended
@@ -63,27 +63,34 @@ tree is not a new feature; a patch-equivalent backport may already be released.
 Explain cherry-picks, merges, existing release bumps, and partial reverts rather
 than counting them twice. Pure release metadata is not a new compatibility change.
 
-Assess these contracts explicitly:
+Classify the version and each protocol counter (`ABCISemVer`, `P2PProtocol`,
+`BlockProtocol`) by the [versioning policy](../../../RELEASES.md#versioning-policy).
+Review each versioned contract explicitly (RPC, ABCI, P2P/consensus, block format)
+and explain whether each counter must change and why. Do not mechanically
+increment every counter or use a major to conceal an unhandled network
+compatibility change. List unversioned changes (Go API, configuration, CLI) with
+their operator action for the changelog, and record the Dash Platform
+integration: required Drive/ABCI/Dashmate updates, network activation,
+mixed-version operation and operator rollout. Check against the deployed
+Platform release: the ABCI range accepted by Drive's pinned `tenderdash-abci`
+tag, the Tenderdash image dashmate pins, and whether dashmate's default
+Tenderdash configuration passes any new configuration validation. Internal-only
+work may need no release; do not manufacture a bump for an analysis request.
 
-| Contract | Evidence and decision |
-| --- | --- |
-| Exported non-internal Go API and RPC | Removed/changed types, methods, fields, response semantics, caller migration |
-| ABCI | Application methods, messages, return handling and app coordination; review `ABCISemVer` separately |
-| P2P and consensus | Message/channel formats, proposer selection, peer compatibility; review `P2PProtocol` |
-| Blocks, votes, commits, state validity | Serialization/hash/signing/validity changes and persisted data; review `BlockProtocol` |
-| Configuration, CLI, storage | Previously supported settings or workflows rejected, defaults changed, database migration/rollback |
-| Dash Platform integration | Required Drive/ABCI/Dashmate updates, network activation, mixed-version operation, operator rollout |
+When `ABCISemVer` changes, check it against the `check_version` caret rule
+(`^major.minor`) in `dashpay/rs-tenderdash-abci`: which existing apps still
+accept the new Tenderdash, and which Tenderdash versions apps built on the new
+crate reject. Prepare the matching rs-tenderdash-abci PR before tagging. It
+carries the crate version, proto default version and changelog, so no separate
+version PR is needed. Its CI passes only once the Tenderdash tag and Docker
+image exist: after publication, rerun it, then tag the same version on the
+merge commit in `develop` and publish a GitHub release (a prerelease for
+`-dev.N`). Drive links the crate by that tag.
 
-For the current 1.x-and-later software contract: incompatible supported behavior
-requires a major; compatible new functionality requires a minor; compatible fixes
-require a patch. A security or consensus fix is not automatically patch-safe.
-Tightened validation that breaks supported configuration or application behavior
-must be called out and classified from the actual contract. Internal-only work
-may need no release; do not manufacture a bump for an analysis request.
+**Stop and ask** before bumping `BlockProtocol` or preparing a release that
+changes it (full hard fork), even when the release was otherwise authorized, and
+when a storage change needs manual migration.
 
-Protocol counters and `ABCISemVer` are independent of `TMVersionDefault`: explain
-whether each must change, and why. Do not mechanically increment every counter,
-or use a software major to conceal an unhandled network compatibility change.
 If the diff contains unresolved compatibility questions, report them and defer
 publication until the Platform/release owner resolves them.
 
@@ -111,19 +118,20 @@ anything not verified. Signed binary building does not prove consensus or upgrad
 compatibility. Fill every applicable repository PR-template section with the
 compatibility rationale and validation, including AI attribution.
 
-A prerelease preparation PR targets the integration branch; a full-release PR
-promotes the frozen candidate to master and preserves ancestry under the agreed
-release merge strategy. A stable patch PR targets master. Respect protections:
-master's current linear-history rule conflicts with the documented promotion
-merge, so publication must wait for maintainers to reconcile that policy; never
-use an automatic administrative bypass. Stop after the requested preparation or
-PR phase if no release publication was requested.
+A prerelease preparation PR targets `dev`, a full-release PR promotes the frozen
+candidate to `master`, and a stable patch PR targets `master`. Follow the
+promotion and branch-protection rules in [RELEASES.md](../../../RELEASES.md#branches-and-release-sources);
+report a protection conflict instead of bypassing it. Stop after the requested
+preparation or PR phase if no release publication was requested.
 
 ## Finalize an explicitly requested release
 
 Verify the release PR is merged, identify its exact merge SHA, and inspect the
-resulting tree/version/changelog against the reviewed candidate. Include any
-merge-time differences in validation. Do not use a moving `master`/`dev` tip as
+resulting tree/version/changelog against the reviewed candidate:
+`git diff REVIEWED_HEAD MERGE_SHA` should be empty. Include any merge-time
+differences in validation. Generate the release notes from the version's
+section of `CHANGELOG.md` in the merged tree, plus a note on release artifacts
+(Docker image, binaries or their absence, tag signing). Do not use a moving `master`/`dev` tip as
 the tag target. Recheck remote tags and release drafts before acting.
 
 For a new version, create the release tag explicitly at that reviewed merge SHA
@@ -133,7 +141,9 @@ compare its peeled commit to the reviewed SHA and reuse it only on an exact
 match; a mismatch stops the release. Never force-update or delete a release tag.
 Create a draft GitHub release with `gh release create TAG --verify-tag --draft
 --notes-file NOTES` (add `--prerelease` for `-dev.N`). Existing drafts must match
-the same tag/SHA; inspect and reuse rather than deleting/recreating them.
+the same tag/SHA; inspect and reuse rather than deleting/recreating them. Look
+drafts up by tag name: a draft's URL shows `untagged-…`, and its
+`targetCommitish` (the default branch) is irrelevant once the tag exists.
 
 When signed binaries are required, run from a checkout with that exact tag:
 
@@ -141,23 +151,22 @@ When signed binaries are required, run from a checkout with that exact tag:
 bash scripts/release/build-artifacts.sh REPO TAG REVIEWED_MERGE_SHA OUTPUT_DIRECTORY
 ```
 
-The helper builds Linux amd64/arm64, signs each binary with GPG (optional
-`GPG_KEY_ID`), verifies signatures, and produces tarballs, `SHA256SUMS`, and
-`SOURCE_COMMIT`. It clones the reviewed source, never changes the caller's branch,
-and never uploads. Use a fresh output directory under the user's artifact root.
-Retain provenance and verify checksums/signatures before uploading to the matching
-draft. Compare existing assets rather than overwriting them with `--clobber`.
-For unsigned/dev releases, state explicitly which binary artifacts are omitted;
-Docker publication remains separate.
+See [RELEASES.md](../../../RELEASES.md#validation-and-artifacts) for what it
+produces; set `GPG_KEY_ID` to choose the key. Use a fresh output directory under
+the user's artifact root, keep provenance, and verify checksums/signatures before
+uploading to the matching draft. Compare existing assets rather than overwriting
+them with `--clobber`. When no binaries are built, state which artifacts are
+omitted in the release notes.
 
-Publishing the draft triggers `.github/workflows/docker.yml`. Check that the
-Platform rollout and release request authorize this publication. Verify exact source
-SHA, binary version and image labels. Stable alias promotion is serialized and
-requires the current latest stable release with no higher stable tag. Prereleases,
-manual runs and older-line releases must not replace stable aliases. Historical
-source without explicit Docker VERSION support needs a separately reviewed path.
-After publication, verify the remote tag SHA, release assets, Docker image tags
-and digests. If asynchronous publishing fails, report the partial state and resume
+Publishing the draft triggers `.github/workflows/docker.yml` (tag and alias rules
+in [RELEASES.md](../../../RELEASES.md#validation-and-artifacts)). Check that the
+Platform rollout and release request authorize this publication. Before
+publishing, record the digests of the stable aliases (`latest`, `X`, `X.Y`) and
+the current stable version tag, e.g. with
+`docker buildx imagetools inspect dashpay/tenderdash:TAG --format '{{.Manifest.Digest}}'`,
+so you can compare them afterwards. After
+publication, verify the remote tag SHA, release assets, image tags, labels,
+digests and binary version, and that no stable alias moved unexpectedly. If asynchronous publishing fails, report the partial state and resume
 only the missing step; do not move tags or repeat a completed release blindly.
 
 Forward-port stable fixes and release metadata to dev with a reviewed merge or
