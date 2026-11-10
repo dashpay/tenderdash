@@ -92,9 +92,11 @@ func (e *blockApplier) Apply(
 	// The part set is needed twice: to derive the block ID and to persist the
 	// block. Building it builds a Merkle tree over the parts, so build it once
 	// and pass it to both. It is cut from the bytes the block was committed
-	// with, the way the proposer cut them, not from block: the commit's part
-	// set header is computed over those bytes, and a re-encoding of block drops
-	// unknown fields and non-canonical encoding.
+	// with, not from block: the commit's part set header is computed over those
+	// bytes, and a re-encoding of block drops unknown fields and non-canonical
+	// encoding. Only the standard cut is rebuilt, the one honest proposers use.
+	// Consensus does not require it yet, and a block committed with another cut
+	// fails the commit check whichever peer serves it.
 	start := time.Now()
 	blockParts := types.NewPartSetFromData(blockBytes, types.BlockPartSizeBytes)
 	blockID := block.BlockID(blockParts)
@@ -144,8 +146,8 @@ func (e *blockApplier) Apply(
 	e.metrics.ObserveBlockSyncStage("exec", execTime)
 
 	e.stats.add(partSetTime, verifyTime, saveTime, execTime)
-	// ByteSize is the size of the serialized block we just built, so the metric
-	// costs nothing extra here
+	// ByteSize is the length of the bytes the part set was cut from, so the
+	// metric costs nothing extra here
 	e.metrics.RecordConsMetrics(block, blockParts.ByteSize())
 	return nil
 }
@@ -238,8 +240,8 @@ type applyTimings struct {
 
 // applyStats accumulates per-stage timings of the block apply pipeline. Block
 // sync applies blocks one at a time, so this is where a slow sync shows up; the
-// breakdown attributes it to serialization, signature verification, disk or the
-// ABCI application without needing a profiler.
+// breakdown attributes it to building the part set, signature verification,
+// disk or the ABCI application without needing a profiler.
 type applyStats struct {
 	mtx     sync.Mutex
 	blocks  int64

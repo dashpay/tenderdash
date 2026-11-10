@@ -82,6 +82,13 @@ const (
 	// unconditional, about 6.98 GB, and configuring a chain for smaller blocks
 	// does not lower it.
 	//
+	// That figure, like the budget, is in serialized bytes, the size charged
+	// for each response. A response holds its block twice, as the bytes it was
+	// committed with and decoded, so the heap it occupies is at least twice
+	// what it is charged: about 14 GB at this ceiling. Charging both copies
+	// would only change the first term, since the second is in flight before
+	// the budget is consulted.
+	//
 	// Lowering maxOutstandingHeights does, in proportion, and it is the only
 	// lever on it here. 64 is the balance struck: holding that term to the
 	// budget itself would mean a window of two, and even a 1 GiB allowance for
@@ -679,8 +686,8 @@ func (s *Synchronizer) updateMonitor() {
 		"blocks/s", syncRate,
 	}
 	// blocks are applied one at a time, so the per-stage averages say whether the
-	// rate above is limited by serialization, signature verification, disk or the
-	// ABCI application
+	// rate above is limited by building the part set, signature verification,
+	// disk or the ABCI application
 	if timings, measured := s.applier.Timings(); measured {
 		// logged as durations rather than whole milliseconds: part set building
 		// and commit verification are often sub-millisecond, and truncating them

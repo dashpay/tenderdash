@@ -118,11 +118,15 @@ func (m *NoBlockResponse) GetHeight() int64 {
 type BlockResponse struct {
 	// block is a serialized tendermint.types.Block: the bytes of the parts it
 	// was committed with, in order. The receiver cuts them into parts of 64kB,
-	// as the proposer did, and checks the part set header it computes against
+	// the last one shorter, and checks the part set header it computes against
 	// the commit's. Decoding and re-encoding the block can change its bytes
-	// (unknown fields, non-canonical encoding), so it is served as stored. On
-	// the wire this is the same as an embedded tendermint.types.Block, the type
-	// of this field in older releases.
+	// (unknown fields, non-canonical encoding), so it is served as stored. Only
+	// that standard cut, the one honest proposers use, is rebuilt. Consensus
+	// does not require it yet: it accepts parts of other sizes and proofs of a
+	// tree larger than the header counts, and a block committed that way fails
+	// the commit check whichever peer serves it. On the wire this is the same
+	// as an embedded tendermint.types.Block, the type of this field in older
+	// releases.
 	Block  []byte        `protobuf:"bytes,1,opt,name=block,proto3" json:"block,omitempty"`
 	Commit *types.Commit `protobuf:"bytes,2,opt,name=commit,proto3" json:"commit,omitempty"`
 }
