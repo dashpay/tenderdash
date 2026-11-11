@@ -96,7 +96,7 @@ func (c *blockExecutor) ensureProcess(ctx context.Context, rs *cstypes.RoundStat
 		if err != nil {
 			rs.CurrentRoundState = sm.CurrentRoundState{}
 			rs.ProcessedBlockID = types.BlockID{}
-			return fmt.Errorf("ProcessProposal abci method: %w", err)
+			return fmt.Errorf("process proposal: %w", err)
 		}
 		rs.CurrentRoundState = uncommittedState
 		rs.ProcessedBlockID = block.BlockID(rs.ProposalBlockParts).Copy()

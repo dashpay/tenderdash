@@ -3453,7 +3453,7 @@ func TestStateTryAddCommitPanicsOnClientError(t *testing.T) {
 		ReceiveTime: time.Time{},
 	})
 	assert.PanicsWithError(t,
-		"ABCI client stopped, Tenderdash needs to be restarted: ProcessProposal abci method: client has stopped",
+		"ABCI client stopped, Tenderdash needs to be restarted: process proposal: ProcessProposal abci method: client has stopped",
 		func() {
 			_ = consensusState.ctrl.Dispatch(ctx, &TryAddCommitEvent{Commit: commit, PeerID: peerID}, &stateData)
 		})

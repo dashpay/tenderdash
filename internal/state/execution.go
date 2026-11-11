@@ -375,7 +375,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 	// state, and consensus treats such a failure as fatal.
 	if verify {
 		if err := blockExec.ValidateBlock(ctx, state, block, lastCommit); err != nil {
-			return CurrentRoundState{}, ErrInvalidBlock{err}
+			return CurrentRoundState{}, ErrInvalidBlock{fmt.Errorf("validate block before ProcessProposal: %w", err)}
 		}
 		stages.done("process_proposal_prevalidate")
 	}
@@ -399,7 +399,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		QuorumHash:            state.Validators.QuorumHash,
 	})
 	if err != nil {
-		return CurrentRoundState{}, err
+		return CurrentRoundState{}, fmt.Errorf("ProcessProposal abci method: %w", err)
 	}
 	if resp.IsStatusUnknown() {
 		return CurrentRoundState{}, fmt.Errorf("ProcessProposal responded with status %s", resp.Status.String())
