@@ -35,10 +35,13 @@ const (
 	// hand over to consensus after this duration of inactivity, even when peers
 	// still report higher blocks, so that a wedged synchronizer cannot keep the
 	// node out of consensus forever - but only within maxCatchupGap of the tip
+	// as stallVerdictFor measures it
 	maxSyncStall = 10 * time.Minute
 
-	// maxCatchupGap is how far behind the highest height any peer claims the node
-	// may be and still hand over to consensus on the stall backstop above.
+	// maxCatchupGap is how far behind the node may be and still hand over to
+	// consensus on the stall backstop above: behind the highest claim of a peer
+	// that supplied a block, or of any peer once the last block is older than
+	// staleBlockAge. It also bounds the claims a node at the tip targets.
 	//
 	// What is left after the handover is covered by consensus catch-up, which
 	// moves about one block per gossip cycle: it closes a gap of a few blocks in
@@ -55,7 +58,7 @@ const (
 
 	// tipLag is how far behind the network block sync runs at the tip: a status
 	// round to learn of a new block and a request timeout to fetch it.
-	tipLag = statusUpdateIntervalSeconds*time.Second + syncTimeout
+	tipLag = statusUpdateIntervalSeconds*time.Second + client.RequestTimeout
 
 	// tipGrace is how long the node must stay at the tip before higher height
 	// claims stop keeping it in block sync.

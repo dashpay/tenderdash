@@ -698,11 +698,12 @@ const (
 // the backstop buys nothing and costs what dashpay/tenderdash#1413 describes, so
 // block sync keeps retrying and says so every interval.
 //
-// Advertising costs nothing, so behindBy counts only the claims of peers that
-// backed them by supplying a block we applied since they last failed a request;
-// with no such peer the node is not known to be behind at all. A stall of
-// maxSyncStall means every peer asked for the block meanwhile failed, so only
-// one never asked keeps that credit, and a new peer has none.
+// Advertising costs nothing, so near the tip behindBy counts only the claims of
+// peers that backed them by supplying a block we applied since they last failed
+// a request; with no such peer the node is not known to be behind at all. A
+// stall of maxSyncStall means every peer asked for the block meanwhile failed,
+// so only one never asked keeps that credit, and a new peer has none. With a
+// last block older than staleBlockAge every claim counts.
 //
 // atTipFor is how long the node has been at the tip by the time of its last
 // block. Unlike stalledFor it is not reset by applying blocks, so a node

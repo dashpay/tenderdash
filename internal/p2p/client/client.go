@@ -32,6 +32,9 @@ const (
 	ResponseIDAttribute = "ResponseID"
 )
 
+// RequestTimeout is how long a request waits for the peer's response.
+const RequestTimeout = peerTimeout
+
 const (
 	// peerTimeout leaves ample room for bounded stall detection and cleanup.
 	peerTimeout            = 60 * time.Second
