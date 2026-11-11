@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/types"
@@ -314,4 +316,50 @@ func TestAddFailureClearsPending(t *testing.T) {
 	require.True(t, found)
 	require.EqualValues(t, 0, peer.numPending)
 	require.EqualValues(t, 2, peer.numFailures)
+}
+
+// TestUnservedRecord checks what discounts a peer's claim and what makes it count
+// again, and that records of peers that stop failing are forgotten.
+func TestUnservedRecord(t *testing.T) {
+	clock := clockwork.NewFakeClock()
+	peers := NewInMemPeerStore()
+	peers.clock = clock
+	from := func(peerID types.NodeID) (int64, bool) {
+		height, ok := peers.unservedFrom([]PeerData{{peerID: peerID}})[peerID]
+		return height, ok
+	}
+
+	peers.RecordUnserved("peer", 100)
+	peers.RecordUnserved("peer", 90)
+	height, ok := from("peer")
+	require.True(t, ok)
+	require.EqualValues(t, 90, height, "the lowest failed height is the one discounted from")
+
+	peers.RecordServed("peer", 89)
+	_, ok = from("peer")
+	require.True(t, ok, "a block below the failed height does not restore the claim")
+	peers.RecordServed("peer", 90)
+	_, ok = from("peer")
+	require.False(t, ok, "an applied block at the failed height restores the claim")
+
+	peers.RecordUnserved("gone", 5)
+	clock.Advance(unservedRecordTTL + time.Second)
+	peers.RecordUnserved("fresh", 7)
+	_, ok = from("gone")
+	require.False(t, ok, "a record not refreshed within unservedRecordTTL is dropped")
+	_, ok = from("fresh")
+	require.True(t, ok)
+}
+
+// TestUnservedRecordExpiresWithoutAnotherFailure checks the documented expiry: a
+// record is forgotten unservedRecordTTL after the peer's last failure, whether or
+// not some other peer fails in the meantime.
+func TestUnservedRecordExpiresWithoutAnotherFailure(t *testing.T) {
+	clock := clockwork.NewFakeClock()
+	peers := NewInMemPeerStore()
+	peers.clock = clock
+	peers.RecordUnserved("peer", 5)
+	clock.Advance(unservedRecordTTL + time.Second)
+	_, ok := peers.unservedFrom([]PeerData{{peerID: "peer"}})["peer"]
+	require.False(t, ok, "the record outlived unservedRecordTTL")
 }

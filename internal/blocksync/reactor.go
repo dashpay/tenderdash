@@ -47,6 +47,22 @@ const (
 	// up on it puts a validator at heights the network committed long ago
 	// (dashpay/tenderdash#1413).
 	maxCatchupGap int64 = 10
+
+	// tipRecency is how recent the last applied block must be for the node to
+	// count as at the tip. It covers the three-minute empty-block interval Dash
+	// Platform runs with, the default synchrony bounds (12 s message delay, 505 ms
+	// precision) and a margin for extra rounds and clock skew.
+	tipRecency = 5 * time.Minute
+
+	// unservedClaimGrace is how long the node must have been at the tip before
+	// claims that went unserved stop keeping it in block sync. It leaves a slow
+	// peer that timed out a cooldown and a full probe to serve again.
+	unservedClaimGrace = 2 * syncTimeout
+
+	// unservedRecordTTL is how long a peer's claim stays discounted after its
+	// last failure. A peer still asked for blocks it cannot serve keeps failing
+	// well within it, so this only forgets peers that went away.
+	unservedRecordTTL = maxSyncStall
 )
 
 type ReactorOption func(*Reactor)

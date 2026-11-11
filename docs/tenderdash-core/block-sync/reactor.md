@@ -53,6 +53,62 @@ and hard failure policy are unchanged. The 60-second request deadline can still
 reject a large response on a slow connection even if its eventual service rate
 would meet the scheduling allowance.
 
+Block sync hands over to consensus when it reaches the highest height any peer
+claims; when no peer advertises the next height and no block has been applied
+for 60 seconds; or when no block has been applied for 10 minutes while the node
+is within 10 blocks of the highest claim that covers the next height.
+
+Peer height claims are unverified, so a claim stops counting toward that
+decision once its peer fails a request: a timeout or other failure, a
+`NoBlockResponse`, or a block that fails to apply. The claim is discounted from
+the failed height up until a block that peer supplied at or above it is
+applied. Unlike service history, this record survives dropping and re-adding the
+peer; it is forgotten 10 minutes after the peer's last failure.
+
+Whether the node is at the tip is judged from the time of its last applied
+block, which the validators commit to and a peer cannot change: a node behind
+the network applies old blocks. Once that time has stayed no more than five
+minutes behind the local clock, and no further ahead of it than the synchrony
+bounds allow, for two minutes, and no peer whose claim still counts advertises
+the next height, block sync hands over even though blocks keep arriving. Five
+minutes covers the three-minute empty-block interval Dash
+Platform runs with, the default synchrony bounds and a margin for extra rounds
+and clock skew. If the last block is older than that, because the chain has
+stopped producing blocks or does not produce empty ones, block sync hands over
+once no block has been applied for 10 minutes and no counted claim covers the
+next height.
+
+A peer that claims a far height and does not serve it therefore delays the
+handover until two minutes after the node applies a block less than five
+minutes old, or until its first request to that peer times out 60 seconds
+later, whichever comes last. On a chain whose last block is older than five
+minutes it takes 10 minutes. On this handover the consensus catch-up target leaves out discounted
+claims, so they do not delay the node's own proposals. A claim whose range
+starts above the node's height is never requested and stays in the target, so
+consensus may withhold proposals for up to 10 minutes while it is above the node.
+
+Some cases remain open:
+
+- A peer that answers every block request within the 60-second request timeout
+  never fails, so its claim is never discounted and keeps the node in block sync
+  while it claims the next height.
+- A node whose clock runs more than about two minutes ahead of the validators'
+  sees even the newest blocks as old, so on a live chain it does not hand over
+  past an unserved claim.
+- A block time further ahead of the local clock than the synchrony bounds
+  (precision plus message delay) allow does not count as recent, since the
+  node's clock is then behind the validators' and cannot tell how old the
+  block is. Such a node, too, hands over past an unserved claim only once no
+  block has been applied for 10 minutes.
+- Within five minutes of chain time of the tip, if the only peers that advertise
+  the next height have failed a request and serve nothing at or above it for two
+  minutes, block sync hands over even though those peers may be slow rather
+  than wrong. On a chain that commits many blocks a minute this can leave the
+  node more blocks behind than consensus catches up quickly.
+- A node any distance behind whose only peers that advertise the next height
+  fail every request for 10 minutes hands over, as it would if none advertised
+  it.
+
 The historical Blocksync reactor is organised as a set of concurrent tasks:
 
 - Receive routine of Blocksync Reactor
