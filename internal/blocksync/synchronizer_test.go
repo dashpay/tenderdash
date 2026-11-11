@@ -2424,6 +2424,82 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncAtTipHandoverTargetsNearClaim
 	suite.Require().Equal(applied-1, h.target, "a claim out of reach of the tip must not become the catch-up target")
 }
 
+// TestWaitForSyncHandoverTargetAtTheTip checks that whichever way a node at the
+// tip hands over, the consensus catch-up target holds the claims within reach
+// of the tip that were seen while waiting, including those of peers gone since,
+// and leaves out claims beyond it.
+func (suite *SynchronizerTestSuite) TestWaitForSyncHandoverTargetAtTheTip() {
+	const (
+		height    = int64(100)
+		tipPeer   = types.NodeID("tip peer")
+		claimant  = types.NodeID("claimant")
+		nearPeer  = types.NodeID("near peer")
+		nearClaim = height + 3
+	)
+	testCases := []struct {
+		name  string
+		peers []PeerData
+		setup func(h *waitForSyncHarness)
+		step  func(h *waitForSyncHarness, elapsed time.Duration)
+		want  int64
+		// caughtUp is set where no claim above the node remains
+		caughtUp bool
+	}{
+		{
+			name:  "the far claimant has no block for the next height",
+			peers: []PeerData{newPeerData(tipPeer, 1, height-1), newPeerData(claimant, 1, maxPlausiblePeerHeight)},
+			setup: func(h *waitForSyncHarness) {
+				h.fail(claimant, height, &client.ErrBlockNotFound{Height: height})
+			},
+			want: height - 1,
+		},
+		{
+			name:  "the far claimant is removed for failing",
+			peers: []PeerData{newPeerData(tipPeer, 1, height-1), newPeerData(claimant, 1, maxPlausiblePeerHeight)},
+			step: func(h *waitForSyncHarness, elapsed time.Duration) {
+				if elapsed == 5*time.Second {
+					for i := int64(0); i < int64(maxConsecutiveFailures); i++ {
+						h.fail(claimant, height+i, client.ErrPeerNotResponded)
+					}
+				}
+			},
+			want:     height - 1,
+			caughtUp: true,
+		},
+		{
+			name: "a near peer leaves without failing",
+			peers: []PeerData{
+				newPeerData(nearPeer, 1, nearClaim),
+				newPeerData(claimant, 1, maxPlausiblePeerHeight),
+			},
+			step: func(h *waitForSyncHarness, elapsed time.Duration) {
+				if elapsed == 5*time.Second {
+					h.sync.RemovePeer(nearPeer)
+				}
+			},
+			want: nearClaim,
+		},
+	}
+	for _, tc := range testCases {
+		suite.Run(tc.name, func() {
+			suite.client.On("Send", mock.Anything, mock.AnythingOfType("p2p.PeerError")).Maybe().Return(nil)
+			h := suite.newWaitForSyncHarness(height, tc.peers...)
+			defer h.cancel()
+			if tc.setup != nil {
+				tc.setup(h)
+			}
+			_, caughtUp, ended := h.run(tipGrace+time.Minute, func(elapsed time.Duration) {
+				if tc.step != nil {
+					tc.step(h, elapsed)
+				}
+			})
+			suite.Require().True(ended)
+			suite.Require().Equal(tc.caughtUp, caughtUp)
+			suite.Require().Equal(tc.want, h.target)
+		})
+	}
+}
+
 // newPeerEveryMinute returns a step for run that, every minute, drops the peer
 // claiming a far height and connects a new one making the same claim. Node IDs
 // cost nothing, so no new peer has a history to judge it by.

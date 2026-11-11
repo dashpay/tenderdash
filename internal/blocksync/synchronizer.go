@@ -444,7 +444,8 @@ func (s *Synchronizer) IsCaughtUp() bool {
 }
 
 // WaitForSync blocks until block sync is finished, and reports whether the node
-// actually caught up and the highest peer target observed while waiting.
+// actually caught up and the highest peer target observed while waiting; for a
+// node at the tip, the highest within maxCatchupGap of it.
 //
 // A stall on its own is not a reason to stop. Handing over to consensus is a
 // one-way door - only the state sync path ever switches back to block sync - and
@@ -467,6 +468,8 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHe
 	ticker := s.clock.NewTicker(switchToConsensusIntervalSeconds * time.Second)
 	defer ticker.Stop()
 	atTipSince := s.clock.Now()
+	// nearTarget is the highest claim seen within maxCatchupGap of the node.
+	var nearTarget int64
 	for {
 		select {
 		case <-ctx.Done():
@@ -475,12 +478,18 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHe
 		case <-ticker.Chan():
 			st := s.stallSnapshot()
 			targetHeight = max(targetHeight, st.maxPeerHeight)
-			if st.hasPeers && st.height >= st.maxPeerHeight {
-				return true, targetHeight
-			}
+			nearTarget = max(nearTarget, st.maxNearHeight)
 			now := s.clock.Now()
-			if !atTip(st.lastBlockTime, st.tipWindow, st.precision, now) {
+			// At the tip, claims out of reach of it must not hold back our own
+			// proposals, whichever way block sync ends.
+			target := targetHeight
+			if atTip(st.lastBlockTime, st.tipWindow, st.precision, now) {
+				target = nearTarget
+			} else {
 				atTipSince = now
+			}
+			if st.hasPeers && st.height >= st.maxPeerHeight {
+				return true, target
 			}
 			verdict := stallVerdictFor(st.servable, st.maxSuppliedHeight-st.height, st.stalledFor,
 				now.Sub(atTipSince))
@@ -492,8 +501,7 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHe
 					"max_peer_height", st.maxPeerHeight,
 					"last_block_time", st.lastBlockTime,
 				)
-				// Claims out of reach of the tip must not hold back our own proposals.
-				return false, st.maxNearHeight
+				return false, target
 			case stopNothingToFetch:
 				if st.maxPeerHeight > st.height {
 					// Peers claim to be ahead yet none of them holds the block we
@@ -506,7 +514,7 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHe
 						"stalled_for", st.stalledFor,
 					)
 				}
-				return false, targetHeight
+				return false, target
 			case stopStalledTooLong:
 				s.logger.Error(
 					"block sync stalled for too long, handing over to consensus while still behind",
@@ -516,7 +524,7 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHe
 					"max_backed_height", st.maxSuppliedHeight,
 					"stalled_for", st.stalledFor,
 				)
-				return false, targetHeight
+				return false, target
 			}
 			if st.stalledFor > syncTimeout {
 				s.logger.Error(
