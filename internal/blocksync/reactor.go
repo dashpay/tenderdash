@@ -57,8 +57,9 @@ const (
 	tipRecency = 5 * time.Minute
 
 	// tipLag is how far behind the network block sync runs at the tip: a status
-	// round to learn of a new block and a request timeout to fetch it.
-	tipLag = statusUpdateIntervalSeconds*time.Second + client.RequestTimeout
+	// round to learn of a new block, serviceGrace before every peer that has it
+	// is asked for it, and serviceGrace each for an answer and a margin.
+	tipLag = statusUpdateIntervalSeconds*time.Second + 3*serviceGrace
 
 	// tipGrace is how long the node must stay at the tip before higher height
 	// claims stop keeping it in block sync.
