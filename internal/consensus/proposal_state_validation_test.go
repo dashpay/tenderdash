@@ -10,11 +10,13 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	abci "github.com/dashpay/tenderdash/abci/types"
 	abcimocks "github.com/dashpay/tenderdash/abci/types/mocks"
 	"github.com/dashpay/tenderdash/dash"
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/test/factory"
+	"github.com/dashpay/tenderdash/libs/log"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
@@ -69,7 +71,11 @@ func proposalOfMutatedBlock(
 	proTxHash, err := proposer.GetProTxHash(ctx)
 	require.NoError(t, err)
 
-	block := sd.state.MakeBlock(sd.Height, nil, types.NewCommit(0, 0, types.BlockID{}, nil, nil), nil, proTxHash, 1)
+	lastCommit := sd.LastCommit
+	if lastCommit == nil {
+		lastCommit = types.NewCommit(0, 0, types.BlockID{}, nil, nil)
+	}
+	block := sd.state.MakeBlock(sd.Height, nil, lastCommit, nil, proTxHash, 1)
 	block.CoreChainLockedHeight = sd.state.LastCoreChainLockedBlockHeight
 	mutate(block)
 	parts, err := block.MakePartSet(types.BlockPartSizeBytes)
@@ -124,11 +130,10 @@ func TestReplayOfBlockNotFollowingStatePrevotesNil(t *testing.T) {
 	}
 }
 
-// TestReplayOfUntimelyProposalPrevotesNil checks that replaying the WAL of a
-// node that received an untimely proposal prevotes nil without asking the
-// application, as the node did when it received it, and dates the proposal by
-// its WAL entry.
-func TestReplayOfUntimelyProposalPrevotesNil(t *testing.T) {
+// TestReplayOfFirstBlockWithoutGenesisTimePrevotesNil checks that replaying the
+// WAL of a node that received a first block not dated at genesis time prevotes
+// nil without asking the application, as the node did when it received it.
+func TestReplayOfFirstBlockWithoutGenesisTimePrevotesNil(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -136,12 +141,63 @@ func TestReplayOfUntimelyProposalPrevotesNil(t *testing.T) {
 	proposal, parts := proposalOfMutatedBlock(ctx, t, cs, proposer, func(b *types.Block) {
 		b.Time = b.Time.AddDate(100, 0, 0)
 	})
-	walTime := tmtime.Now()
-	replayProposal(ctx, t, cs, proposal, parts, walTime)
+	replayProposal(ctx, t, cs, proposal, parts, tmtime.Now())
 
 	requireOwnNilPrevote(ctx, t, cs)
-	assert.True(t, walTime.Equal(cs.GetStateData().ProposalReceiveTime), "the WAL time dates the proposal")
 	app.AssertNotCalled(t, "ProcessProposal", mock.Anything, mock.Anything)
+}
+
+// TestReplayJudgesProposalTimelinessByWALTime checks, above the first height,
+// that replay judges a proposal by the time of its WAL entry: one written too
+// early for the proposal's timestamp gets a nil prevote without an application
+// call, as the node gave it when it received it, and a timely one reaches the
+// application.
+func TestReplayJudgesProposalTimelinessByWALTime(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		walDelay   time.Duration
+		reachesApp bool
+	}{
+		{"received too early", -time.Hour, false},
+		{"received in time", 0, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			live := newRoundSkipTest(ctx, t, "consensus_replay_proposal_timeliness_test", nil)
+			config, err := ResetConfig(t, "consensus_replay_proposal_timeliness_test")
+			require.NoError(t, err)
+			config.Consensus.CreateEmptyBlocks = false
+			app := abcimocks.NewApplication(t)
+			app.On("ProcessProposal", mock.Anything, mock.Anything).
+				Return(&abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_REJECT}, nil).Maybe()
+			cs := newStateWithConfigAndBlockStore(ctx, t, log.NewNopLogger(), config, live.cs.GetStateData().state,
+				live.cs.privValidator.PrivValidator, app, live.cs.blockStore)
+
+			sd := cs.GetStateData()
+			require.Equal(t, sd.state.InitialHeight+1, sd.Height)
+			proposer, err := sd.ProposerSelector.GetProposer(sd.Height, 0)
+			require.NoError(t, err)
+			var proposerKey types.PrivValidator
+			for _, vs := range live.vss {
+				if proTxHash, _ := vs.GetProTxHash(ctx); proposer.ProTxHash.Equal(proTxHash) {
+					proposerKey = vs.PrivValidator
+				}
+			}
+			require.NotNil(t, proposerKey)
+
+			proposal, parts := proposalOfMutatedBlock(ctx, t, cs, proposerKey, func(*types.Block) {})
+			replayProposal(ctx, t, cs, proposal, parts, proposal.Timestamp.Add(tc.walDelay))
+
+			requireOwnNilPrevote(ctx, t, cs)
+			if tc.reachesApp {
+				app.AssertNumberOfCalls(t, "ProcessProposal", 1)
+			} else {
+				app.AssertNotCalled(t, "ProcessProposal", mock.Anything, mock.Anything)
+			}
+		})
+	}
 }
 
 // requireOwnNilPrevote checks that cs, not running, is at the prevote step and
