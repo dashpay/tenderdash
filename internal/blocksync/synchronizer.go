@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 
 	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/internal/p2p/client"
+	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/libs/service"
 	"github.com/dashpay/tenderdash/libs/workerpool"
@@ -252,7 +254,7 @@ func (s *Synchronizer) OnStart(ctx context.Context) error {
 	s.lastMonitorUpdate = s.lastAdvance
 	if s.applier != nil {
 		state := s.applier.State()
-		s.blockTimes = []time.Time{state.LastBlockTime}
+		s.blockTimes = storedBlockTimes(s.applier.store, state.LastBlockHeight, state.LastBlockTime)
 		s.precision = state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults().Precision
 	}
 	s.ctx, s.cancel = context.WithCancel(ctx)
@@ -271,6 +273,22 @@ func (s *Synchronizer) OnStart(ctx context.Context) error {
 		})
 	}()
 	return nil
+}
+
+// storedBlockTimes returns the times of the blocks the store holds right below
+// height, up to maxCatchupGap of them and oldest first, followed by lastTime,
+// the time of the block at height.
+func storedBlockTimes(store sm.BlockStore, height int64, lastTime time.Time) []time.Time {
+	times := []time.Time{lastTime}
+	for h := height - 1; store != nil && h >= 1 && h >= height-maxCatchupGap; h-- {
+		meta := store.LoadBlockMeta(h)
+		if meta == nil {
+			break
+		}
+		times = append(times, meta.Header.Time)
+	}
+	slices.Reverse(times)
+	return times
 }
 
 func (s *Synchronizer) OnStop() {

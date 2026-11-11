@@ -1367,6 +1367,45 @@ func (suite *SynchronizerTestSuite) TestStartSeedsTheLastBlockTime() {
 	suite.Equal(2*time.Second, st.precision)
 }
 
+// TestStartLearnsTheChainsPaceFromTheStore checks that block sync starts out
+// knowing how fast the chain commits blocks from the blocks the store holds, so
+// a node restarting minutes behind a fast chain is not taken for one at the
+// tip. Only an unbroken run of stored blocks counts.
+func (suite *SynchronizerTestSuite) TestStartLearnsTheChainsPaceFromTheStore() {
+	const lastHeight = int64(50)
+	lastTime := time.Unix(1_700_000_000, 0)
+	for _, tc := range []struct {
+		name    string
+		missing int64
+		want    time.Duration
+	}{
+		{name: "a fast chain", want: tipLag},
+		{name: "the block before the last is not stored", missing: lastHeight - 1, want: tipRecency},
+	} {
+		suite.Run(tc.name, func() {
+			store := mocks.NewBlockStore(suite.T())
+			store.On("LoadBlockMeta", mock.Anything).Maybe().Return(func(height int64) *types.BlockMeta {
+				if height == tc.missing {
+					return nil
+				}
+				return &types.BlockMeta{Header: types.Header{
+					Height: height,
+					Time:   lastTime.Add(-time.Duration(lastHeight-height) * time.Second),
+				}}
+			})
+			state := suite.initialState.Copy()
+			state.LastBlockHeight, state.LastBlockTime = lastHeight, lastTime
+			applier := newBlockApplier(suite.blockExec, store, applierWithState(state))
+			pool := NewSynchronizer(lastHeight+1, suite.client, applier, WithWorkerPool(workerpool.New(0)))
+			suite.Require().NoError(pool.Start(context.Background()))
+			defer pool.Stop()
+			st := pool.stallSnapshot()
+			suite.Equal(lastTime, st.lastBlockTime)
+			suite.Equal(tc.want, st.tipWindow)
+		})
+	}
+}
+
 // TestApplyingABlockTakesThePrecisionOfTheNewState checks that the synchrony
 // precision follows the chain's parameters as blocks are applied, not those it
 // had when block sync started.
