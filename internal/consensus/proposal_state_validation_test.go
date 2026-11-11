@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -14,6 +15,7 @@ import (
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/test/factory"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -52,9 +54,9 @@ func newNodeNotProposing(ctx context.Context, t *testing.T) (*State, types.PrivV
 	return cs, privVals[1], app
 }
 
-// proposalNotFollowingState returns round 0's proposal, signed by proposer, of a
-// block that mutate makes not follow the node's committed state.
-func proposalNotFollowingState(
+// proposalOfMutatedBlock returns round 0's proposal, signed by proposer, of the
+// block the node expects, altered by mutate.
+func proposalOfMutatedBlock(
 	ctx context.Context,
 	t *testing.T,
 	cs *State,
@@ -90,7 +92,7 @@ func TestStatePrevotesNilOnBlockNotFollowingState(t *testing.T) {
 			defer cancel()
 
 			cs, proposer, app := newNodeNotProposing(ctx, t)
-			proposal, parts := proposalNotFollowingState(ctx, t, cs, proposer, tc.mutate)
+			proposal, parts := proposalOfMutatedBlock(ctx, t, cs, proposer, tc.mutate)
 			voteCh := subscribeToVoter(ctx, t, cs, cs.privValidator.ProTxHash)
 
 			require.NoError(t, cs.SetProposalAndBlock(ctx, proposal, parts, "peer"))
@@ -112,26 +114,61 @@ func TestReplayOfBlockNotFollowingStatePrevotesNil(t *testing.T) {
 			defer cancel()
 
 			cs, proposer, app := newNodeNotProposing(ctx, t)
-			proposal, parts := proposalNotFollowingState(ctx, t, cs, proposer, tc.mutate)
-			wal := []msgInfo{{Msg: &ProposalMessage{Proposal: proposal}, PeerID: "peer"}}
-			for i := 0; i < int(parts.Total()); i++ {
-				wal = append(wal, msgInfo{
-					Msg:    &BlockPartMessage{Height: proposal.Height, Round: 0, Part: parts.GetPart(i)},
-					PeerID: "peer",
-				})
-			}
-
-			cs.emitter.Emit(setReplayModeEventName, true)
-			ctx = dash.ContextWithProTxHash(ctx, cs.privValidator.ProTxHash)
-			require.NotPanics(t, func() {
-				for _, msg := range wal {
-					assert.NoError(t, cs.readReplayMessage(ctx, &TimedWALMessage{Msg: msg}, nil))
-				}
-			})
+			proposal, parts := proposalOfMutatedBlock(ctx, t, cs, proposer, tc.mutate)
+			replayProposal(ctx, t, cs, proposal, parts, tmtime.Now())
 
 			sd := cs.GetStateData()
 			assert.Equal(t, cstypes.RoundStepPrevote, sd.Step)
 			app.AssertNotCalled(t, "ProcessProposal", mock.Anything, mock.Anything)
 		})
 	}
+}
+
+// TestReplayOfUntimelyProposalPrevotesNil checks that replaying the WAL of a
+// node that received an untimely proposal prevotes nil without asking the
+// application, as the node did when it received it, and dates the proposal by
+// its WAL entry.
+func TestReplayOfUntimelyProposalPrevotesNil(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cs, proposer, app := newNodeNotProposing(ctx, t)
+	proposal, parts := proposalOfMutatedBlock(ctx, t, cs, proposer, func(b *types.Block) {
+		b.Time = b.Time.AddDate(100, 0, 0)
+	})
+	walTime := tmtime.Now()
+	replayProposal(ctx, t, cs, proposal, parts, walTime)
+
+	sd := cs.GetStateData()
+	assert.Equal(t, cstypes.RoundStepPrevote, sd.Step)
+	assert.True(t, walTime.Equal(sd.ProposalReceiveTime), "the WAL time dates the proposal")
+	app.AssertNotCalled(t, "ProcessProposal", mock.Anything, mock.Anything)
+}
+
+// replayProposal replays, in replay mode, the WAL entries of proposal and its
+// parts as written at walTime by a node that received them from a peer.
+func replayProposal(
+	ctx context.Context,
+	t *testing.T,
+	cs *State,
+	proposal *types.Proposal,
+	parts *types.PartSet,
+	walTime time.Time,
+) {
+	t.Helper()
+	wal := []msgInfo{{Msg: &ProposalMessage{Proposal: proposal}, PeerID: "peer"}}
+	for i := 0; i < int(parts.Total()); i++ {
+		wal = append(wal, msgInfo{
+			Msg:    &BlockPartMessage{Height: proposal.Height, Round: 0, Part: parts.GetPart(i)},
+			PeerID: "peer",
+		})
+	}
+
+	cs.emitter.Emit(setReplayModeEventName, true)
+	ctx = dash.ContextWithProTxHash(ctx, cs.privValidator.ProTxHash)
+	require.NotPanics(t, func() {
+		for _, msg := range wal {
+			assert.NoError(t, cs.readReplayMessage(ctx, &TimedWALMessage{Time: walTime, Msg: msg}, nil))
+		}
+	})
 }

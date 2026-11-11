@@ -27,9 +27,10 @@ func TestIsValidForPrevote(t *testing.T) {
 		Validators: valSet,
 	}
 	testCases := []struct {
-		state   sm.State
-		rs      cstypes.RoundState
-		wantErr string
+		state      sm.State
+		rs         cstypes.RoundState
+		replayMode bool
+		wantErr    string
 	}{
 		{
 			// invalid proposal-block
@@ -100,12 +101,42 @@ func TestIsValidForPrevote(t *testing.T) {
 			},
 			wantErr: "",
 		},
+		{
+			// in replay, the WAL time shows the proposal was received too early
+			state: sm.State{InitialHeight: 1},
+			rs: cstypes.RoundState{
+				Height:              1000,
+				ProposalBlock:       &types.Block{Header: types.Header{Time: now.Add(time.Hour)}},
+				Proposal:            &types.Proposal{Timestamp: now.Add(time.Hour), POLRound: -1},
+				ProposalReceiveTime: now,
+				LockedRound:         -1,
+				Validators:          valSet,
+			},
+			replayMode: true,
+			wantErr:    "proposal is not timely",
+		},
+		{
+			// in replay, a WAL time later than the window is no proof of a late
+			// receipt: the WAL dates a message by when it was handled
+			state: sm.State{InitialHeight: 1},
+			rs: cstypes.RoundState{
+				Height:              1000,
+				ProposalBlock:       &types.Block{Header: types.Header{Time: now}},
+				Proposal:            &types.Proposal{Timestamp: now, POLRound: -1},
+				ProposalReceiveTime: now.Add(time.Hour),
+				LockedRound:         -1,
+				Validators:          valSet,
+			},
+			replayMode: true,
+			wantErr:    "",
+		},
 	}
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("test-case #%d", i), func(t *testing.T) {
 			stateData := StateData{
 				state:      tc.state,
 				RoundState: tc.rs,
+				replayMode: tc.replayMode,
 			}
 			selector, err := selectproposer.NewHeightRoundProposerSelector(valSet.Copy(), tc.rs.Height, tc.rs.Round, nil, nil)
 			require.NoError(t, err)
