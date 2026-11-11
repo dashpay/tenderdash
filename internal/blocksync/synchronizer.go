@@ -751,7 +751,7 @@ func (s *Synchronizer) applyBlock(ctx context.Context) (BlockResponse, error) {
 			return resp, fmt.Errorf("cannot apply block: %w", err)
 		}
 		state := s.applier.State()
-		s.advance(state.LastBlockTime, state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults().Precision)
+		s.advance(resp.PeerID, state.LastBlockTime, state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults().Precision)
 		s.updateMonitor()
 	}
 }
@@ -764,14 +764,14 @@ func (s *Synchronizer) getPendingResponse() (BlockResponse, bool) {
 }
 
 // advance moves past the block just applied, which carries blockTime and left
-// the chain with synchrony precision, and credits the peer that supplied it.
-func (s *Synchronizer) advance(blockTime time.Time, precision time.Duration) {
+// the chain with synchrony precision, and credits supplier, the peer that sent
+// it. The pending response may be gone by now: the peer can be removed while
+// its block is applied.
+func (s *Synchronizer) advance(supplier types.NodeID, blockTime time.Time, precision time.Duration) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 	s.precision = precision
-	if resp, ok := s.pendingToApply[s.height]; ok {
-		s.peerStore.Update(resp.PeerID, func(_ types.NodeID, peer *PeerData) { peer.supplied = true })
-	}
+	s.peerStore.Update(supplier, func(_ types.NodeID, peer *PeerData) { peer.supplied = true })
 	s.blockTimes = append(s.blockTimes, blockTime)
 	if len(s.blockTimes) > int(maxCatchupGap)+1 {
 		s.blockTimes = s.blockTimes[1:]

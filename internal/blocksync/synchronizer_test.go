@@ -1336,7 +1336,7 @@ func (suite *SynchronizerTestSuite) TestAdvanceCreditsTheSupplier() {
 	pool.AddPeer(newPeerData("bystander", 1, 200))
 	blockTime := time.Unix(1_700_000_000, 0)
 	pool.pendingToApply[100] = BlockResponse{PeerID: peerID}
-	pool.advance(blockTime, defaultPrecision)
+	pool.advance(peerID, blockTime, defaultPrecision)
 	supplier, _ := pool.peerStore.Get(peerID)
 	suite.True(supplier.supplied)
 	bystander, _ := pool.peerStore.Get("bystander")
@@ -1398,6 +1398,45 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncDoesNotWaitForABlockBeingAppl
 	h.cancel()
 	_, ended := h.result(time.Second)
 	suite.Require().True(ended, "the handover loop waited for the block being applied")
+}
+
+// TestApplyCreditsASupplierRemovedMeanwhile checks that a peer whose block is
+// applied is credited for it, and the block's time recorded, even when the peer
+// is removed and its pending response dropped while the block is being applied.
+func (suite *SynchronizerTestSuite) TestApplyCreditsASupplierRemovedMeanwhile() {
+	const supplier = types.NodeID("supplier")
+	decoded, err := BlockResponseFromProto(suite.responses[0], supplier)
+	suite.Require().NoError(err)
+	resp := *decoded
+	state := suite.initialState.Copy()
+	state.LastBlockTime = resp.Block.Time
+	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(state))
+	pool := NewSynchronizer(1, suite.client, applier)
+	pool.AddPeer(newPeerData(supplier, 1, 100))
+	suite.blockExec.
+		On("ValidateBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(nil)
+	suite.blockExec.
+		On("VerifyCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(types.VerifiedCommit{}, nil)
+	expectApply(suite.blockExec, func(call *mock.Call) { call.Once() })
+	suite.store.
+		On("SaveBlock", mock.Anything, mock.Anything, mock.Anything).
+		Run(func(mock.Arguments) {
+			// the peer is dropped, and reports its status again, mid-apply
+			pool.RemovePeer(supplier)
+			pool.AddPeer(newPeerData(supplier, 1, 100))
+		}).
+		Once()
+	suite.Require().NoError(pool.addBlock(resp))
+
+	_, err = pool.applyBlock(context.Background())
+	suite.Require().NoError(err)
+	peer, _ := pool.peerStore.Get(supplier)
+	suite.True(peer.supplied, "the peer whose block was applied must be credited")
+	st := pool.stallSnapshot()
+	suite.EqualValues(2, st.height)
+	suite.Equal(resp.Block.Time, st.lastBlockTime)
 }
 
 // TestStatusRefreshUpdatesAdvertisedRange checks that a status response still does
@@ -1805,7 +1844,7 @@ func TestStallSnapshotTipWindow(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			sync := NewSynchronizer(1, nil, nil)
 			for i := 0; i < tc.blocks; i++ {
-				sync.advance(start.Add(time.Duration(i)*tc.interval), defaultPrecision)
+				sync.advance("", start.Add(time.Duration(i)*tc.interval), defaultPrecision)
 			}
 			require.Equal(t, tc.want, sync.stallSnapshot().tipWindow)
 		})
@@ -1832,7 +1871,7 @@ func (suite *SynchronizerTestSuite) TestStallSnapshotIsOneObservation() {
 		applied := make(chan struct{})
 		go func() {
 			<-ready
-			sync.advance(time.Time{}, defaultPrecision)
+			sync.advance("", time.Time{}, defaultPrecision)
 			close(applied)
 		}()
 		runtime.Gosched()
@@ -1920,7 +1959,7 @@ func (h *waitForSyncHarness) tipBlocks(tipPeer types.NodeID, interval time.Durat
 			PeerID: tipPeer,
 			Block:  &types.Block{Header: types.Header{Height: height}},
 		}))
-		h.sync.advance(h.clock.Now(), defaultPrecision)
+		h.sync.advance(tipPeer, h.clock.Now(), defaultPrecision)
 	}
 }
 
@@ -2176,7 +2215,7 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverPastAnUnservedClaimO
 			h.sync.AddPeer(newPeerData(tip, 1, next-1+perRound))
 		case 2 * time.Second:
 			for i := int64(0); i < perRound; i++ {
-				h.sync.advance(h.clock.Now(), defaultPrecision)
+				h.sync.advance("", h.clock.Now(), defaultPrecision)
 			}
 		}
 	})
@@ -2241,7 +2280,7 @@ func (h *waitForSyncHarness) flakySource(source types.NodeID, deliverEvery, fail
 				Block:  &types.Block{Header: types.Header{Height: next}},
 			}))
 			// a block the network committed long ago
-			h.sync.advance(time.Time{}, defaultPrecision)
+			h.sync.advance(source, time.Time{}, defaultPrecision)
 			h.sync.peerStore.Update(source, ResetFailures())
 		}
 	}
@@ -2467,7 +2506,7 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverPastAFarClaimFromAPe
 			PeerID: relay,
 			Block:  &types.Block{Header: types.Header{Height: next}},
 		}))
-		h.sync.advance(h.clock.Now(), defaultPrecision)
+		h.sync.advance(relay, h.clock.Now(), defaultPrecision)
 		h.sync.peerStore.Update(relay, ResetFailures())
 	})
 	suite.Require().True(ended, "block sync kept following the tip behind a claim of a peer supplying the tip")
@@ -2532,7 +2571,7 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncKeepsSyncingOnAFastChainWhile
 					PeerID: source,
 					Block:  &types.Block{Header: types.Header{Height: next}},
 				}))
-				h.sync.advance(last.Add(time.Duration(next-height+1)*interval), defaultPrecision)
+				h.sync.advance(source, last.Add(time.Duration(next-height+1)*interval), defaultPrecision)
 			}
 			elapsed, _, ended := h.run(maxSyncStall/2, func(elapsed time.Duration) {
 				if tc.supplyEvery < time.Second {
