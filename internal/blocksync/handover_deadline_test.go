@@ -235,12 +235,7 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverBehindAPeerAnswering
 // far height and answers every request that it has no such block; it is the
 // only peer advertising the next height until the others report it, so it is
 // asked for it first. Its answer must not have every block fetched from all
-// five peers.
-//
-// This holds only as long as the retry is taken before the height becomes the
-// one to apply: the generator then does not ask the other peers (see
-// TestRetryOfTheHeightToApplyAsksEveryPeerWhileTheProducerWaits). The first
-// block, retried while it is the one to apply, is fetched five times.
+// five peers: a "no such block" answer has the block asked of one other peer.
 func (suite *SynchronizerTestSuite) TestWaitForSyncFetchesEachBlockAtTheTipFromOnePeer() {
 	const (
 		height   = int64(100)

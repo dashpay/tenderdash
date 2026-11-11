@@ -450,7 +450,6 @@ func (s *Synchronizer) backlog() (applyHeight int64, pendingBytes int) {
 	return s.height, pendingBytes
 }
 
-// GetStatus returns synchronizer's height, count of in progress requests
 // applyState reports the height block sync waits to apply and whether its block
 // has arrived.
 func (s *Synchronizer) applyState() (int64, bool) {
@@ -460,6 +459,7 @@ func (s *Synchronizer) applyState() (int64, bool) {
 	return s.height, received
 }
 
+// GetStatus returns synchronizer's height, count of in progress requests
 func (s *Synchronizer) GetStatus() (int64, int32) {
 	cnt := s.jobProgressCounter.Load()
 	s.mtx.RLock()
