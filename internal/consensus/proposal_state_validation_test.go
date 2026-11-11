@@ -16,6 +16,7 @@ import (
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -117,8 +118,7 @@ func TestReplayOfBlockNotFollowingStatePrevotesNil(t *testing.T) {
 			proposal, parts := proposalOfMutatedBlock(ctx, t, cs, proposer, tc.mutate)
 			replayProposal(ctx, t, cs, proposal, parts, tmtime.Now())
 
-			sd := cs.GetStateData()
-			assert.Equal(t, cstypes.RoundStepPrevote, sd.Step)
+			requireOwnNilPrevote(ctx, t, cs)
 			app.AssertNotCalled(t, "ProcessProposal", mock.Anything, mock.Anything)
 		})
 	}
@@ -139,10 +139,26 @@ func TestReplayOfUntimelyProposalPrevotesNil(t *testing.T) {
 	walTime := tmtime.Now()
 	replayProposal(ctx, t, cs, proposal, parts, walTime)
 
-	sd := cs.GetStateData()
-	assert.Equal(t, cstypes.RoundStepPrevote, sd.Step)
-	assert.True(t, walTime.Equal(sd.ProposalReceiveTime), "the WAL time dates the proposal")
+	requireOwnNilPrevote(ctx, t, cs)
+	assert.True(t, walTime.Equal(cs.GetStateData().ProposalReceiveTime), "the WAL time dates the proposal")
 	app.AssertNotCalled(t, "ProcessProposal", mock.Anything, mock.Anything)
+}
+
+// requireOwnNilPrevote checks that cs, not running, is at the prevote step and
+// has queued its own prevote, for nil.
+func requireOwnNilPrevote(ctx context.Context, t *testing.T, cs *State) {
+	t.Helper()
+	require.Equal(t, cstypes.RoundStepPrevote, cs.GetStateData().Step)
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	for {
+		mi, ok := cs.msgInfoQueue.sender.internalQueue.recv(ctx)
+		require.True(t, ok, "the node cast no prevote")
+		if msg, isVote := mi.Msg.(*VoteMessage); isVote && msg.Vote.Type == tmproto.PrevoteType {
+			assert.True(t, msg.Vote.BlockID.IsNil(), "the node prevoted for block %v", msg.Vote.BlockID)
+			return
+		}
+	}
 }
 
 // replayProposal replays, in replay mode, the WAL entries of proposal and its
