@@ -65,7 +65,9 @@ block, which the validators commit to and a peer cannot change: a node behind
 the network applies old blocks. The node is at the tip while that block is no
 older than the chain took to commit its last 10 blocks, or than 70 seconds (a
 status round and a request timeout) where that is longer, and in any case no
-older than five minutes. Five minutes covers the three-minute empty-block
+older than five minutes. Until the node has applied 10 blocks since it started,
+the pace of those it has applied stands in for that; before the first, only
+the five-minute limit applies. Five minutes covers the three-minute empty-block
 interval Dash Platform runs with and a margin for extra rounds and clock skew. A
 block time further ahead of the local clock than the synchrony precision does
 not count, since the clock is then behind the validators' and cannot tell how
@@ -99,6 +101,10 @@ Some cases remain open:
   behind, and so in block sync, for as long as it does so. Such a node can also
   hand over at the tip up to 70 seconds of blocks behind, which consensus
   catch-up then closes.
+- A node that restarts with a last block less than five minutes old and then
+  applies no block for two minutes hands over at the tip; on a chain that
+  commits more than 10 blocks in 70 seconds it may then be up to five minutes
+  of blocks behind.
 - A node any distance behind whose peers that advertise the next height fail
   every request for 10 minutes hands over, as it would if none advertised it.
 - After a handover on a stall, the catch-up target includes every claim, so

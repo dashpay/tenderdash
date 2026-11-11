@@ -587,7 +587,8 @@ type stallState struct {
 //
 // The node is at the tip when its last block is no older than the chain took
 // to commit the last maxCatchupGap blocks, or than tipLag where that is longer,
-// and in any case no older than tipRecency.
+// and in any case no older than tipRecency. Until the node has seen that many
+// blocks, the pace of those it has seen stands in; with none, tipRecency alone.
 //
 // They are read under one lock because advance() stamps the height, the advance
 // time, the block time and the supplier's credit together under that same lock.
@@ -610,8 +611,10 @@ func (s *Synchronizer) stallSnapshot() stallState {
 	}
 	if last := len(s.blockTimes) - 1; last >= 0 {
 		st.lastBlockTime = s.blockTimes[last]
-		if last == int(maxCatchupGap) {
-			st.tipWindow = min(tipRecency, max(tipLag, s.blockTimes[last].Sub(s.blockTimes[0])))
+		if last > 0 {
+			// Fewer than maxCatchupGap intervals since start are scaled up to it.
+			span := s.blockTimes[last].Sub(s.blockTimes[0]) / time.Duration(last) * time.Duration(maxCatchupGap)
+			st.tipWindow = min(tipRecency, max(tipLag, span))
 		}
 	}
 	hasHeight := heightBetweenPeerHeightRange(s.height)
