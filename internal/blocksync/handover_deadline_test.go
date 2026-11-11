@@ -277,7 +277,7 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncFetchesEachBlockAtTheTipFromO
 
 // TestWaitForSyncHandsOverPastAFarClaimFromNewPeersOnAChainHaltedForLong checks
 // that a far claim made by a new peer every minute does not keep a node in block
-// sync on a chain that stopped producing blocks, however long ago it stopped.
+// sync on a chain that stopped producing blocks, up to staleBlockAge ago.
 // Validators restarted to bring such a chain back reach consensus only through
 // this handover.
 func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverPastAFarClaimFromNewPeersOnAChainHaltedForLong() {
@@ -290,9 +290,10 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverPastAFarClaimFromNew
 		// haltedFor is the age of the last block when the node starts
 		haltedFor time.Duration
 	}{
-		{name: "half an hour", haltedFor: staleBlockAge / 2},
-		{name: "55 minutes", haltedFor: staleBlockAge - maxSyncStall/2},
-		{name: "two hours", haltedFor: 2 * staleBlockAge},
+		{name: "half an hour", haltedFor: 30 * time.Minute},
+		{name: "55 minutes", haltedFor: 55 * time.Minute},
+		{name: "two hours", haltedFor: 2 * time.Hour},
+		{name: "just under the stale age", haltedFor: staleBlockAge - time.Minute},
 	} {
 		suite.Run(tc.name, func() {
 			suite.client.On("Send", mock.Anything, mock.AnythingOfType("p2p.PeerError")).Maybe().Return(nil)
