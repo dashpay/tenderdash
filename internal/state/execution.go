@@ -483,17 +483,19 @@ func (blockExec *BlockExecutor) ValidateBlock(
 }
 
 // validationCacheKey identifies the block content ValidateBlock checks: the
-// header, by the block hash, and in full the last commit and the chain lock,
-// which the header covers only by the commit's threshold signature.
+// block hash, which covers the data and evidence, and in full the header, the
+// last commit and the chain lock, which the hash covers only in part.
 func validationCacheKey(block *types.Block) (string, error) {
+	hash := block.Hash() // fills the header's data, evidence and commit hashes
 	uncovered, err := (&tmproto.Block{
+		Header:        *block.Header.ToProto(),
 		LastCommit:    block.LastCommit.ToProto(),
 		CoreChainLock: block.CoreChainLock.ToProto(),
 	}).Marshal()
 	if err != nil {
 		return "", fmt.Errorf("encode block for validation cache: %w", err)
 	}
-	return block.Hash().String() + hex.EncodeToString(crypto.Checksum(uncovered)), nil
+	return hash.String() + hex.EncodeToString(crypto.Checksum(uncovered)), nil
 }
 
 // VerifyCommit verifies commit against state.Validators as the commit for the
