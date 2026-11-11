@@ -1,0 +1,63 @@
+name: Milestone on merge
+# Assigns a merged pull request to the milestone of the release line it was
+# merged into. The line is read from version/version.go at the merge commit,
+# so `dev` (e.g. 2.0.0-dev.1) maps to v2.0 while a stable branch keeps mapping
+# to its own line, and no milestone list needs maintaining here.
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  milestone:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      # No checkout: the version file is read through the API at the merge
+      # commit, which is already part of the base branch.
+      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd  # v8.0.0
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const { owner, repo } = context.repo;
+            const path = 'version/version.go';
+
+            const { data } = await github.rest.repos.getContent({
+              owner, repo, path, ref: pr.merge_commit_sha,
+            });
+            const source = Buffer.from(data.content, 'base64').toString('utf8');
+            const match = source.match(/TMVersionDefault\s*=\s*"(v?(\d+)\.(\d+)\.(\d+)[^"]*)"/);
+            if (!match) {
+              core.warning(`TMVersionDefault not found in ${path} at ${pr.merge_commit_sha}; milestone of #${pr.number} left unchanged.`);
+              return;
+            }
+            const [, version, major, minor, patch] = match;
+
+            // Release lines use vX.Y milestones; vX.Y.Z covers a patch-specific one.
+            const titles = [`v${major}.${minor}`, `v${major}.${minor}.${patch}`];
+            const open = await github.paginate(github.rest.issues.listMilestones, {
+              owner, repo, state: 'open', per_page: 100,
+            });
+            const milestone = titles
+              .map((title) => open.find((m) => m.title === title))
+              .find(Boolean);
+            if (!milestone) {
+              core.warning(`No open milestone ${titles.join(' or ')} for ${version} on ${pr.base.ref}; milestone of #${pr.number} left unchanged.`);
+              return;
+            }
+            if (pr.milestone?.number === milestone.number) {
+              core.info(`#${pr.number} is already in ${milestone.title}.`);
+              return;
+            }
+            if (pr.milestone) {
+              core.notice(`#${pr.number} moves from ${pr.milestone.title} to ${milestone.title}, the line it was merged into.`);
+            }
+            await github.rest.issues.update({
+              owner, repo, issue_number: pr.number, milestone: milestone.number,
+            });
+            core.info(`#${pr.number} (${pr.base.ref}, ${version}) assigned to ${milestone.title}.`);

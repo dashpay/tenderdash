@@ -38,6 +38,12 @@ an explicit Platform support decision rather than automatic maintenance promises
 Release tags remain `vX.Y.Z`; prereleases use `vX.Y.Z-dev.N`. The skill evaluates
 SemVer from compatibility, not branch names or `feat`/`fix` labels.
 
+A merged pull request is assigned to the open `vX.Y` milestone that matches
+`TMVersionDefault` at its merge commit (`.github/workflows/milestone.yml`), so a
+merge into `dev` at `2.0.0-dev.N` lands in `v2.0` and one into `master` at
+`1.8.N` in `v1.8`. Keep a line's milestone open while it receives changes; with
+no open match the pull request's milestone is left unchanged.
+
 Full-release promotion and stable-to-dev synchronization should preserve
 ancestry. Master currently has protection rules that must be reconciled with
 that merge strategy by maintainers before a release. The skill must report any
