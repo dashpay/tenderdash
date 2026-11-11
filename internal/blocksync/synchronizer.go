@@ -455,10 +455,12 @@ func (s *Synchronizer) askEveryPeer(ctx context.Context) error {
 }
 
 // reserveNextBlockPeers returns the height block sync waits to apply and, once
-// its block is serviceGrace overdue, every peer to ask for it: each peer that
-// advertises it, once. Blocks are applied in order, so whichever peers hold the
-// requests made for that height so far must not decide how long the others,
-// which may serve it at once, go unasked.
+// block sync has stalled on it for syncTimeout, every peer to ask for it: each
+// peer that advertises it, once. Blocks are applied in order, so whichever peers
+// hold the requests made for that height so far must not decide how long the
+// others, which may serve it at once, go unasked. The wait is as long as a
+// request may take, so a link that carries blocks slowly but within their
+// request deadline does not have each of them fetched from every peer.
 //
 // A peer is asked on the second call that finds it advertising the height, so
 // the request the job producer sends when a peer first reports a new block gets
@@ -466,7 +468,7 @@ func (s *Synchronizer) askEveryPeer(ctx context.Context) error {
 func (s *Synchronizer) reserveNextBlockPeers() (int64, []PeerData) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
-	if _, received := s.pendingToApply[s.height]; received || s.clock.Since(s.lastAdvance) <= serviceGrace {
+	if _, received := s.pendingToApply[s.height]; received || s.clock.Since(s.lastAdvance) <= syncTimeout {
 		return s.height, nil
 	}
 	var peers []PeerData
@@ -526,12 +528,15 @@ func (s *Synchronizer) IsCaughtUp() bool {
 // applied block is: the validators commit to it, and a node far behind applies
 // old blocks. Once that time has been within tipRecency of the local clock for
 // tipGrace, the node hands over whatever peers report, even though blocks
-// arriving meanwhile keep it from stalling. A stall of maxSyncStall that began
+// arriving meanwhile keep it from stalling. The wait starts over each time the
+// last block has got tipGain younger: the node is still closing the gap. A stall of maxSyncStall that began
 // on a block less than staleBlockAge old ends block sync the same way.
 func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHeight int64) {
 	ticker := s.clock.NewTicker(switchToConsensusIntervalSeconds * time.Second)
 	defer ticker.Stop()
+	// tipAge is the age of the last block at atTipSince.
 	atTipSince := s.clock.Now()
+	tipAge := atTipSince.Sub(s.stallSnapshot().lastBlockTime)
 	// nearTarget is the highest claim seen within maxCatchupGap of the node.
 	var nearTarget int64
 	for {
@@ -547,10 +552,12 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHe
 			// At the tip, claims out of reach of it must not hold back our own
 			// proposals, whichever way block sync ends.
 			target := targetHeight
-			if isRecent(st.lastBlockTime, tipRecency, st.precision, now) {
+			recent := isRecent(st.lastBlockTime, tipRecency, st.precision, now)
+			if recent {
 				target = nearTarget
-			} else {
-				atTipSince = now
+			}
+			if age := now.Sub(st.lastBlockTime); !recent || tipAge-age > tipGain {
+				atTipSince, tipAge = now, age
 			}
 			if st.hasPeers && st.height >= st.maxPeerHeight {
 				return true, target

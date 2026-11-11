@@ -27,7 +27,7 @@ func reservedIDs(peers []PeerData) []types.NodeID {
 }
 
 // TestReserveNextBlockPeers checks who is asked for the height block sync waits
-// to apply, and when: nobody until its block is serviceGrace overdue, then every
+// to apply, and when: nobody until its block is syncTimeout overdue, then every
 // peer that advertises it, each once and a second after it is first seen
 // advertising it, until the block arrives or the height is applied.
 func TestReserveNextBlockPeers(t *testing.T) {
@@ -49,7 +49,7 @@ func TestReserveNextBlockPeers(t *testing.T) {
 		return reservedIDs(peers)
 	}
 
-	clock.Advance(serviceGrace - 2*time.Second)
+	clock.Advance(syncTimeout - 2*time.Second)
 	require.Empty(t, next(), "the block is not overdue yet")
 	require.Empty(t, next(), "the block is not overdue yet")
 	require.Empty(t, next(), "peers advertising the height are given a second first")
@@ -84,7 +84,7 @@ func TestReserveNextBlockPeers(t *testing.T) {
 
 	// the next height starts over
 	sync.advance(clock.Now(), defaultPrecision)
-	clock.Advance(serviceGrace - time.Second)
+	clock.Advance(syncTimeout - time.Second)
 	require.Empty(t, next(), "the next block is not overdue yet")
 	require.Empty(t, next())
 	require.ElementsMatch(t, []types.NodeID{"second", "above"}, next())

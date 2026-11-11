@@ -18,11 +18,18 @@ import (
 // With downlink set, the node receives at most that many blocks a second over
 // all its connections, shared between the peers in turn, each peer sending at
 // most one a second, and a request not answered within the request deadline
-// fails as it does in the block client.
+// fails as it does in the block client. With every set, the downlink carries
+// one block every that long instead.
+//
+// Once a second, before the link moves, the peers reserveNextBlockPeers returns
+// are asked for the height to apply, as askEveryPeer does.
 type linkRun struct {
 	*tipRun
 	perBlock time.Duration
 	downlink int
+	every    time.Duration
+	// asked counts the requests made as askEveryPeer makes them.
+	asked int
 	// busyUntil is when a peer finishes sending what it was asked for so far.
 	busyUntil map[types.NodeID]time.Time
 	scheduled map[*tipRequest]bool
@@ -41,12 +48,23 @@ type linkRun struct {
 // never is when a response waiting for the downlink is due.
 var never = time.Unix(1<<40, 0)
 
-func (l *linkRun) step(time.Duration) {
-	if l.downlink > 0 {
+func (l *linkRun) step(elapsed time.Duration) {
+	now := l.h.clock.Now()
+	height, peers := l.h.sync.reserveNextBlockPeers()
+	for _, peer := range peers {
+		l.asked++
+		l.request(peer, height, now)
+	}
+	if l.every > 0 {
+		l.downlink = 0
+		if elapsed%l.every == 0 {
+			l.downlink = 1
+		}
+	}
+	if l.downlink > 0 || l.every > 0 {
 		l.sharedStep()
 		return
 	}
-	now := l.h.clock.Now()
 	for {
 		consumed := l.consume(now)
 		produced := l.produce(now)
@@ -224,4 +242,138 @@ func (suite *SynchronizerTestSuite) TestBlockSyncFarBehindOnASharedDownlink() {
 		l.applied, elapsed, l.blocksSent, l.timeouts, h.sync.peerStore.Len(), peers)
 	suite.Require().LessOrEqual(l.blocksSent, 2*l.applied,
 		"%d blocks applied in %s, %d block responses downloaded from %d peers", l.applied, elapsed, l.blocksSent, peers)
+}
+
+// TestBlockSyncFarBehindOnASlowDownlink checks a node behind the network by
+// hours over a downlink that carries one block in 12 or 20 seconds.
+// Twelve peers hold every block and never fail a request on their own. The node
+// must reach the tip and fetch each block about once: a block that takes its
+// time within the request deadline is not a reason to ask every peer for it.
+func (suite *SynchronizerTestSuite) TestBlockSyncFarBehindOnASlowDownlink() {
+	const (
+		height = int64(100)
+		blocks = int64(200)
+		peers  = 12
+	)
+	for _, tc := range []struct {
+		name  string
+		every time.Duration
+		// reconnect has every peer report its range every status round, so a
+		// dropped peer comes back as a reconnecting one would.
+		reconnect bool
+	}{
+		{name: "a block every 12s", every: 12 * time.Second},
+		{name: "a block every 20s", every: 20 * time.Second},
+		{name: "a block every 12s, dropped peers reconnect", every: 12 * time.Second, reconnect: true},
+	} {
+		suite.Run(tc.name, func() {
+			suite.client.On("Send", mock.Anything, mock.AnythingOfType("p2p.PeerError")).Maybe().Return(nil)
+			h := suite.newWaitForSyncHarness(height)
+			defer h.cancel()
+			blockTime := h.clock.Now().Add(-staleBlockAge / 2)
+			h.setLastBlockTime(blockTime)
+			l := &linkRun{
+				tipRun: &tipRun{
+					h:          h,
+					blockTimes: map[int64]time.Time{},
+					suppliedBy: map[types.NodeID]int{},
+				},
+				every:   tc.every,
+				queues:  map[types.NodeID][]*tipRequest{},
+				askedAt: map[*tipRequest]time.Time{},
+			}
+			top := height + blocks - 1
+			for i := 0; i < peers; i++ {
+				l.peers = append(l.peers, types.NodeID(fmt.Sprintf("peer %d", i)))
+			}
+			for applying := height; applying <= top; applying++ {
+				l.blockTimes[applying] = blockTime
+			}
+			report := func() {
+				for _, id := range l.peers {
+					h.sync.AddPeer(newPeerData(id, 1, top))
+				}
+			}
+			report()
+
+			elapsed, caughtUp, ended := h.run(6*time.Hour, func(elapsed time.Duration) {
+				if tc.reconnect && elapsed%(statusUpdateIntervalSeconds*time.Second) == 0 {
+					report()
+				}
+				l.step(elapsed)
+			})
+			summary := fmt.Sprintf("caught up %v after %s: %d of %d blocks applied, %d responses downloaded, "+
+				"%d asked of every peer, %d requests timed out, %d of %d peers left",
+				caughtUp, elapsed, l.applied, blocks, l.blocksSent, l.asked, l.timeouts, h.sync.peerStore.Len(), peers)
+			suite.T().Log(summary)
+			suite.Require().True(ended, summary)
+			suite.Require().True(caughtUp, "handed over behind: "+summary)
+			suite.Require().LessOrEqual(l.blocksSent, 2*l.applied, summary)
+		})
+	}
+}
+
+// TestWaitForSyncGoesOnToTheTipBehindPeersFasterThanTheChain checks the at-tip
+// rule on a chain committing a block every second, with every peer serving what
+// it reports. The node restarts ten minutes behind and its peers together
+// deliver more blocks a second than the chain commits, so block sync closes the
+// gap. The node must not hand over on its way: by the time it does, its last
+// block is within tipGain of the chain's.
+func (suite *SynchronizerTestSuite) TestWaitForSyncGoesOnToTheTipBehindPeersFasterThanTheChain() {
+	const (
+		height = int64(1000)
+		behind = int64(600)
+		peers  = 5
+	)
+	for _, downlink := range []int{2, 3, 4} {
+		suite.Run(fmt.Sprintf("peers deliver %d blocks a second", downlink), func() {
+			suite.client.On("Send", mock.Anything, mock.AnythingOfType("p2p.PeerError")).Maybe().Return(nil)
+			h := suite.newWaitForSyncHarness(height)
+			defer h.cancel()
+			start := h.clock.Now()
+			l := &linkRun{
+				tipRun: &tipRun{
+					h:          h,
+					interval:   time.Second,
+					blockTimes: map[int64]time.Time{},
+					suppliedBy: map[types.NodeID]int{},
+					tip:        height - 1 + behind,
+					nextCommit: start.Add(time.Second),
+				},
+				downlink: downlink,
+				queues:   map[types.NodeID][]*tipRequest{},
+				askedAt:  map[*tipRequest]time.Time{},
+			}
+			for i := 0; i < peers; i++ {
+				l.peers = append(l.peers, types.NodeID(fmt.Sprintf("peer %d", i)))
+			}
+			for committed := int64(1); committed <= l.tip; committed++ {
+				l.blockTimes[committed] = start.Add(-time.Duration(l.tip-committed) * time.Second)
+			}
+			h.setLastBlockTime(l.blockTimes[height-1])
+
+			elapsed, caughtUp, ended := h.run(time.Hour, func(elapsed time.Duration) {
+				now := h.clock.Now()
+				for !now.Before(l.nextCommit) {
+					l.tip++
+					l.blockTimes[l.tip] = l.nextCommit
+					l.nextCommit = l.nextCommit.Add(l.interval)
+				}
+				if elapsed%(statusUpdateIntervalSeconds*time.Second) == 0 {
+					for _, id := range l.peers {
+						h.sync.AddPeer(newPeerData(id, 1, l.tip))
+					}
+				}
+				l.step(elapsed)
+			})
+			applying, _ := h.sync.GetStatus()
+			summary := fmt.Sprintf("caught up %v after %s: applying %d, chain tip %d, %d responses, %d timeouts",
+				caughtUp, elapsed, applying, l.tip, l.blocksSent, l.timeouts)
+			suite.T().Log(summary)
+			suite.Require().True(ended, summary)
+			suite.Require().LessOrEqual(l.tip-applying+1, int64(tipGain/time.Second),
+				"handed over %d blocks behind peers delivering %d blocks a second on a chain committing one: %s",
+				l.tip-applying+1, downlink, summary)
+		})
+	}
 }

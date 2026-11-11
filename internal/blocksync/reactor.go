@@ -57,9 +57,14 @@ const (
 	tipRecency = 5 * time.Minute
 
 	// tipGrace is how long the node must stay at the tip before higher height
-	// claims stop keeping it in block sync. A node still fetching blocks reaches
-	// the highest claim in that time when its peers serve them.
+	// claims stop keeping it in block sync.
 	tipGrace = 2 * syncTimeout
+
+	// tipGain is how much younger the last applied block must get while the
+	// node counts as at the tip for tipGrace to start over: the node is still
+	// closing the gap, as it does when it applies blocks a quarter faster than
+	// the chain commits them. One block of a slow chain does that too, once.
+	tipGain = 30 * time.Second
 
 	// staleBlockAge is how old the last applied block must be, when a stall
 	// begins, for peer height claims to count in the stall backstop. It is
