@@ -128,14 +128,20 @@ func (p *InMemPeerStore) Query(spec store.QueryFunc[types.NodeID, PeerData], lim
 	return p.store.Query(spec, limit)
 }
 
-// FindPeer prefers ordinary service except when a bounded recovery probe is due.
+// FindPeer prefers a peer that supplied a block we applied since it last failed
+// a request, then a due recovery probe, then ordinary service.
 func (p *InMemPeerStore) FindPeer(height int64) (PeerData, bool) {
 	peers := p.Query(store.AndX(peerNumPendingCond(maxPendingRequestsPerPeer, "<"),
 		heightBetweenPeerHeightRange(height)), 0)
 	var selected PeerData
 	priority := 0
 	for _, peer := range peers {
-		if next := peer.service.priority(peer.numPending, false); next > priority {
+		next := peer.service.priority(peer.numPending, false)
+		if next > 0 && peer.supplied {
+			// A peer that has backed its claim goes before any that has not.
+			next += 2
+		}
+		if next > priority {
 			selected, priority = peer, next
 		}
 	}

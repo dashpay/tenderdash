@@ -234,3 +234,33 @@ func TestServiceSavedCreditCannotHideNewSlowService(t *testing.T) {
 	require.True(t, found)
 	require.Equal(t, types.NodeID("second"), selected.peerID)
 }
+
+// TestFindPeerPrefersBackedPeers checks that a peer that supplied a block we
+// applied since it last failed a request is asked before peers that did not,
+// a due recovery probe included. Otherwise new peers, which come with no
+// history, could take turns holding the height block sync waits for.
+func TestFindPeerPrefersBackedPeers(t *testing.T) {
+	back := func(peers *InMemPeerStore, peerID types.NodeID) {
+		peers.Update(peerID, func(_ types.NodeID, peer *PeerData) { peer.supplied = true })
+	}
+	t.Run("over an ordinary peer listed first", func(t *testing.T) {
+		peers, _ := servicePeers()
+		back(peers, "second")
+		selected, found := peers.FindPeer(2)
+		require.True(t, found)
+		require.Equal(t, types.NodeID("second"), selected.peerID)
+	})
+	t.Run("over a due probe", func(t *testing.T) {
+		peers, clock := servicePeers()
+		peer, request := beginServiceRequest(t, peers, 1)
+		clock.Advance(59 * time.Second)
+		endServiceRequest(peers, peer, request, 100)
+		clock.Advance(30 * time.Second)
+		selected, _ := peers.FindPeer(2)
+		require.Equal(t, peer.peerID, selected.peerID, "a due probe goes first among peers with no record")
+		back(peers, "second")
+		selected, found := peers.FindPeer(2)
+		require.True(t, found)
+		require.Equal(t, types.NodeID("second"), selected.peerID)
+	})
+}
