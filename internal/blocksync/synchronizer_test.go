@@ -2612,6 +2612,9 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncKeepsSyncingOnAFastChainWhile
 		quietBefore time.Duration
 		// supplyEvery is how often the source supplies the next block
 		supplyEvery time.Duration
+		// failEvery, when set, is how often the source, then the only peer,
+		// fails a request
+		failEvery time.Duration
 	}{
 		{name: "applying at the chain's pace", behind: 100 * time.Second, supplyEvery: interval},
 		{name: "a slow source after a restart", behind: 100 * time.Second, supplyEvery: 15 * time.Second},
@@ -2621,12 +2624,20 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncKeepsSyncingOnAFastChainWhile
 			quietBefore: 3 * time.Minute,
 			supplyEvery: interval,
 		},
+		{
+			name:        "a sole source that fails now and then",
+			behind:      3 * time.Minute,
+			supplyEvery: interval,
+			failEvery:   50 * time.Second,
+		},
 	}
 	for _, tc := range testCases {
 		suite.Run(tc.name, func() {
-			h := suite.newWaitForSyncHarness(height,
-				newPeerData(source, 1, height+10000),
-				newPeerData("claimant", 1, maxPlausiblePeerHeight))
+			peers := []PeerData{newPeerData(source, 1, height+10000)}
+			if tc.failEvery == 0 {
+				peers = append(peers, newPeerData("claimant", 1, maxPlausiblePeerHeight))
+			}
+			h := suite.newWaitForSyncHarness(height, peers...)
 			defer h.cancel()
 			start := h.clock.Now()
 			last := start.Add(-tc.behind)
@@ -2648,8 +2659,14 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncKeepsSyncingOnAFastChainWhile
 					Block:  &types.Block{Header: types.Header{Height: next}},
 				}))
 				h.sync.advance(source, last.Add(time.Duration(next-height+1)*interval), defaultPrecision)
+				h.sync.peerStore.Update(source, ResetFailures())
 			}
 			elapsed, _, ended := h.run(maxSyncStall/2, func(elapsed time.Duration) {
+				if tc.failEvery > 0 && elapsed > 0 && elapsed%tc.failEvery == 0 {
+					next, _ := h.sync.GetStatus()
+					h.fail(source, next, client.ErrPeerNotResponded)
+					return
+				}
 				if tc.supplyEvery < time.Second {
 					for i := 0; i < int(time.Second/tc.supplyEvery); i++ {
 						supply()
