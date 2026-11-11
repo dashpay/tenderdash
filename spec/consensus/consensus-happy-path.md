@@ -32,6 +32,7 @@ sequenceDiagram
     P-->>V: ProposalMessage, BlockPartMessages (gossip)
     V->>V: Proposaler.Set (verify proposer signature), AddProposalBlockPart
     V->>V: ProposalCompleted → EnterPrevote(h,0)
+    V->>V: ValidateBlock against committed state
     V->>A: ProcessProposal(block, round=0)
     A-->>V: ACCEPT + AppHash/TxResults/...
     V->>V: ValidateBlockWithRoundState, sign PREVOTE(B)
@@ -202,8 +203,9 @@ POL round's prevotes already have a majority) → `EnterPrevote(h, Round)`.
 → `prevoter.Do` (`internal/consensus/state_prevoter.go`):
 
 1. `StateData.isValidForPrevote`: block and proposal held; proposal timestamp
-   equals block time; the proposal is timely (unless replaying or the block is
-   already `ValidBlock`); the core chain lock is consistent
+   equals block time; the proposal is timely (unless the block is already
+   `ValidBlock`; in replay, only a proposal received too early fails); the
+   core chain lock is consistent
    (`sm.ValidateBlockChainLock`); for `POLRound == -1` the block's
    `ProposerProTxHash` is this round's proposer.
 2. `blockExecutor.ensureProcess(rs, Round)` → `ValidateBlock` against the
@@ -220,10 +222,10 @@ POL round's prevotes already have a majority) → `EnterPrevote(h, Round)`.
    `checkProposalBlock` is true → `voteSigner.signAddVote(PrevoteType, BlockID)`.
 
 Step `Prevote` is set on return. A failure in step 1, or `ErrBlockRejected`
-(application `REJECT`) or `ErrInvalidBlock` (`ValidateBlockWithRoundState`) in
-step 2, yields a **nil prevote** instead. Any other step-2 error — transport
-failure, `UNKNOWN` status or a malformed response — **panics** the node
-(`prevoter.handleError`). **⇢** [Prevote rule](./consensus-transitions.md#prevote-decision-prevoterdo).
+(application `REJECT`) or `ErrInvalidBlock` (`ValidateBlock` before the call,
+`ValidateBlockWithRoundState` after it) in step 2, yields a **nil prevote**
+instead. Any other step-2 error — transport failure, `UNKNOWN` status or a
+malformed response — **panics** the node (`prevoter.handleError`). **⇢** [Prevote rule](./consensus-transitions.md#prevote-decision-prevoterdo).
 
 ### 6. Collecting prevotes
 

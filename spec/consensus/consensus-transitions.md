@@ -349,16 +349,18 @@ flowchart TD
     B -- no --> NIL
     B -- yes --> C{Proposal.Timestamp == block.Time?}
     C -- no --> NIL
-    C -- yes --> D{replay mode or block == ValidBlock?}
+    C -- yes --> D{block == ValidBlock?}
     D -- yes --> F
-    D -- no --> E{timely? InitialHeight: timestamp == genesis time; else receive time within window for round r}
+    D -- no --> E{timely? InitialHeight: timestamp == genesis time; else receive time within window for round r, in replay only too early fails}
     E -- no --> NIL
     E -- yes --> F{ValidateBlockChainLock ok?}
     F -- no --> NIL
     F -- yes --> G{POLRound == -1 implies block.ProposerProTxHash == proposer h,r?}
     G -- no --> NIL
-    G -- yes --> H[ensureProcess: ABCI ProcessProposal for round r unless already processed]
-    H --> I{ACCEPT and header matches app result?}
+    G -- yes --> H[ensureProcess for round r unless already processed]
+    H --> V{ValidateBlock against committed state ok?}
+    V -- no --> NIL
+    V -- yes --> I{ABCI ProcessProposal: ACCEPT and header matches app result?}
     I -- REJECT or mismatch --> NIL
     I -- other error --> PANIC[panic]
     I -- yes --> J[mustValidate]
@@ -379,12 +381,14 @@ Rules, in evaluation order:
    (`errPrevoteProposalBlockNil`, `errPrevoteProposalNil`). This is the path
    taken on `timeoutPropose`. No ABCI call is made.
 2. **P-Timestamp.** `Proposal.Timestamp ≠ ProposalBlock.Time` → nil.
-3. **P-Timely.** Skipped in replay mode and when the block is already
-   `ValidBlock`. At `InitialHeight` the timestamp must equal the genesis time;
+3. **P-Timely.** Skipped when the block is already `ValidBlock`. At
+   `InitialHeight` the timestamp must equal the genesis time;
    otherwise `Proposal.CheckTimely(ProposalReceiveTime, SynchronyParams, r)`
    must be 0 (`checkTimely` in `types/validation.go`):
    `ts − Precision ≤ recv ≤ ts + MessageDelay·2^⌊r/10⌋ + Precision`
-   (the shift is capped to avoid overflow).
+   (the shift is capped to avoid overflow). In replay mode `recv` is the time
+   of the proposal's WAL entry, which can lag its receipt, so only
+   `recv < ts − Precision` (too early) fails.
 4. **P-ChainLock.** `sm.ValidateBlockChainLock(state, block)`
    (`internal/state/validation.go`): with a `CoreChainLock` in the block,
    `Header.CoreChainLockedHeight == CoreChainLock.CoreBlockHeight` and
@@ -494,7 +498,7 @@ that checks each is given.
 | Proposal `BlockID` hash and part-set header equal the assembled block's | `AddProposalBlockPartAction.addProposalBlockPart` |
 | Parts' Merkle proofs valid; total size `≤ Block.MaxBytes` | `PartSet.AddPart`, `addProposalBlockPart` |
 | `Proposal.Timestamp == Header.Time` | `isValidForPrevote`, `EnterPrecommitAction.Execute` |
-| Timely (PBTS window), unless `ValidBlock` or replay | `StateData.proposalIsTimely` |
+| Timely (PBTS window; in replay, not too early), unless `ValidBlock` | `StateData.proposalIsTimely` |
 | Core chain lock consistent with state | `sm.ValidateBlockChainLock` |
 | `Header.ProposerProTxHash == proposer(h, r)` when `POLRound == -1` | `isValidForPrevote` |
 | `Block.ValidateBasic`; version, chain id, height, `LastBlockID`, `ConsensusHash`, `ValidatorsHash`, `LastCommit` threshold signature, proposer is a validator, `Time > LastBlockTime` (`≥ genesis` at initial height), evidence size | `validateBlock` in `internal/state/validation.go` |

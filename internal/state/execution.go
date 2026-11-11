@@ -520,11 +520,11 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 		)
 	}
 
-	// ValidateBlock above normally verifies block.LastCommit, but it short-circuits
-	// on its per-height cache, which is keyed on the block hash alone and so says
-	// nothing about the state the earlier validation ran against. That is why this
-	// second verification exists. lastCommit's proof is safe to skip on instead:
-	// it names the verified data itself, not a block hash.
+	// ValidateBlock above normally verifies block.LastCommit, but a hit on its
+	// cache, keyed on the block hash, re-checks only the block's position against
+	// state (validateBlockPosition), not its LastCommit. That is why this second
+	// verification exists. lastCommit's proof is safe to skip on instead: it names
+	// the verified data itself, not a block hash.
 	if block.Height > state.InitialHeight {
 		if err := verifyLastCommit(state, block, lastCommit, blockExec.metrics); err != nil {
 			return err

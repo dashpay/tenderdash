@@ -289,9 +289,10 @@ and `addVoteErrorMw` (`internal/consensus/state_add_vote.go`).
 - Timeliness is checked **only at prevote time**, against the proposal's
   receive time (`ProposalReceiveTime` = enqueue time of the
   `ProposalMessage`, `chanMsgSender.send`), with the window of
-  `checkTimely` (rule P-Timely). It is skipped in replay mode and for a
-  block that is the node's `ValidBlock`, so re-proposals of an already
-  polka'd block are not re-judged.
+  `checkTimely` (rule P-Timely). It is skipped for a block that is the
+  node's `ValidBlock`, so re-proposals of an already polka'd block are not
+  re-judged. In replay mode the receive time is the time of the proposal's
+  WAL entry, and only a proposal received too early fails.
 - Timeliness governs re-proposal (`Proposaler.checkValidBlock`).
 - Metric `ProposalTimestampDifference{is_timely}` is recorded for proposals
   with `POLRound = -1` (`Proposaler.proposalTimestampDifferenceMetric`).
