@@ -515,3 +515,16 @@ func TestRetryOfTheHeightToApplyAsksEveryPeer(t *testing.T) {
 		require.Equal(t, 1, asked[peerID], "%s asked for the height %d times", peerID, asked[peerID])
 	}
 }
+
+// TestAskingEveryPeerEndsWithinTheWindow checks that once every peer has been
+// asked for the height to apply, that is no reason to request another height:
+// the request would be a new one beyond the outstanding window.
+func TestAskingEveryPeerEndsWithinTheWindow(t *testing.T) {
+	const height = int64(100)
+	store := NewInMemPeerStore(newPeerData("only peer", 1, height+1000))
+	gen := newJobGenerator(height+maxOutstandingHeights, log.NewNopLogger(), nil, store)
+	require.False(t, gen.shouldJobBeGenerated(height, 0), "the window is full")
+
+	gen.markRetried(height, "only peer")
+	require.False(t, gen.shouldJobBeGenerated(height, 0), "no peer is left to ask")
+}

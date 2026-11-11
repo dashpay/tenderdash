@@ -12,7 +12,8 @@ import (
 
 // lateSupplyRun drives a node that restarted a few blocks behind a chain
 // committing a block every three minutes. Requests for the height the node waits
-// for are handed out by the peer store, as the job generator does. The peers
+// for are handed out as the job generator does: the first by the peer store,
+// further ones by the generator once one fails or goes unanswered. The peers
 // named late answer a request only once the block is lateBy old, or answer just
 // inside the request deadline that they have no such block when that is further
 // off; the peer named prompt answers at once. Every peer reports each block as soon as it is committed, and one more
@@ -26,8 +27,10 @@ type lateSupplyRun struct {
 	blockTimes map[int64]time.Time
 	tip        int64
 	nextCommit time.Time
-	// outstanding is the request for the height the node waits for, if any.
-	outstanding *lateRequest
+	// outstanding are the requests for the height the node waits for.
+	outstanding []*lateRequest
+	// failed records the heights a request failed for.
+	failed map[int64]bool
 	// servedByPrompt counts the blocks the prompt peer was asked for.
 	servedByPrompt int
 	served         int
@@ -64,6 +67,9 @@ func (r *lateSupplyRun) apply(peer PeerData, request *serviceRequest, height int
 	request.Finished()
 	request.complete(1000)
 	sync.peerStore.Update(peer.peerID, AddNumPending(-1), ResetFailures())
+	if applied, _ := sync.GetStatus(); height < applied {
+		return
+	}
 	r.h.suite.Require().NoError(sync.addBlock(BlockResponse{
 		PeerID: peer.peerID,
 		Block:  &types.Block{Header: types.Header{Height: height}},
@@ -79,45 +85,67 @@ func (r *lateSupplyRun) step(time.Duration) {
 		r.commit(r.nextCommit)
 		r.nextCommit = r.nextCommit.Add(r.interval)
 	}
-	if out := r.outstanding; out != nil && !now.Before(out.endAt) {
-		r.outstanding = nil
-		if out.deliver {
+	var waiting []*lateRequest
+	for _, out := range r.outstanding {
+		switch {
+		case now.Before(out.endAt):
+			waiting = append(waiting, out)
+		case out.deliver:
 			r.apply(out.peer, out.request, out.height)
-		} else {
+		default:
 			out.request.Finished()
 			out.request.complete(0)
+			r.failed[out.height] = true
 			r.h.fail(out.peer.peerID, out.height, &client.ErrBlockNotFound{Height: out.height})
 		}
 	}
-	for r.outstanding == nil {
+	r.outstanding = waiting
+	for {
 		height, _ := sync.GetStatus()
 		if height > r.tip {
 			return
 		}
-		peer, found := sync.peerStore.reservePeer(height)
-		if !found {
+		sync.jobGen.shouldJobBeGenerated(height, 0)
+		peer, spreadHeight, found := sync.jobGen.nextSpread()
+		if found && spreadHeight != height {
 			return
 		}
-		request := peer.service.request()
-		request.Started()
-		if peer.peerID == r.prompt {
-			r.servedByPrompt++
-			r.apply(peer, request, height)
-			continue
+		if !found {
+			if len(r.outstanding) > 0 {
+				return
+			}
+			if peer, found = sync.peerStore.reservePeer(height); !found {
+				return
+			}
+			if r.failed[height] {
+				sync.jobGen.markRetried(height, peer.peerID)
+			}
 		}
-		deliverAt := r.blockTimes[height].Add(r.lateBy)
-		if !deliverAt.After(now) {
-			r.apply(peer, request, height)
-			continue
-		}
-		out := &lateRequest{peer: peer, request: request, height: height}
-		if deliverAt.Sub(now) < syncTimeout {
-			out.endAt, out.deliver = deliverAt, true
-		} else {
-			out.endAt = now.Add(syncTimeout - time.Second)
-		}
-		r.outstanding = out
+		r.ask(peer, height, now)
 	}
+}
+
+// ask has peer answer a request for height as its kind does.
+func (r *lateSupplyRun) ask(peer PeerData, height int64, now time.Time) {
+	request := peer.service.request()
+	request.Started()
+	if peer.peerID == r.prompt {
+		r.servedByPrompt++
+		r.apply(peer, request, height)
+		return
+	}
+	deliverAt := r.blockTimes[height].Add(r.lateBy)
+	if !deliverAt.After(now) {
+		r.apply(peer, request, height)
+		return
+	}
+	out := &lateRequest{peer: peer, request: request, height: height}
+	if deliverAt.Sub(now) < syncTimeout {
+		out.endAt, out.deliver = deliverAt, true
+	} else {
+		out.endAt = now.Add(syncTimeout - time.Second)
+	}
+	r.outstanding = append(r.outstanding, out)
 }
 
 // TestWaitForSyncHandsOverBehindPeersSupplyingEachBlockLate checks the handover
@@ -162,6 +190,7 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverBehindPeersSupplying
 				lateBy:     lateBy,
 				interval:   interval,
 				blockTimes: map[int64]time.Time{},
+				failed:     map[int64]bool{},
 				tip:        height - 1,
 			}
 			if tc.promptFirst {
