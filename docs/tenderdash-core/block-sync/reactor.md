@@ -59,7 +59,8 @@ Block sync hands over to consensus when one of these holds:
 - no peer reports the next height and no block has been applied for 60
   seconds;
 - the node's last applied block has been recent, at most five minutes old by
-  the local clock, for two minutes without a break;
+  the local clock, for two minutes without a break and without getting more
+  than 30 seconds younger meanwhile;
 - no block has been applied for 10 minutes, and either that wait began on a
   block less than a day old, or the node is within 10 blocks of every peer
   that reports the next height.
@@ -68,8 +69,11 @@ The heights peers report are not verified, so the last two rules rest on the
 time of the last applied block instead, which the validators commit to: a node
 far behind the network applies old blocks. Five minutes covers the three-minute
 empty-block interval Dash Platform runs with and a margin for extra rounds and
-clock skew; the two minutes let a node that is still fetching blocks finish. A
-block time further ahead of the local clock than the synchrony precision does
+clock skew. A last block that keeps getting younger means the node is still
+closing the gap, so the two minutes start over each time it has gained 30
+seconds: a node applying blocks at least a quarter faster than the chain
+commits them goes on until its last block is within 30 seconds of the chain's.
+A block time further ahead of the local clock than the synchrony precision does
 not count as recent. When a node with a recent last block hands over, the
 consensus catch-up target is the highest height reported within 10 blocks of
 it. Only a node whose last block was more than a day old when it stopped
@@ -78,18 +82,18 @@ and a height more than 10 blocks above the node, and resumes as soon as a peer
 serves again.
 
 Blocks are applied in order, so the next block is the one that matters. When
-it has not arrived 10 seconds after the previous one was applied, it is
-requested from every peer that reports it, once each, starting a second after
-the peer first reports it. A block that a peer serves promptly is therefore
-fetched once; a block that takes longer is fetched from each peer that reports
-it, which on a node whose peers all need more than 10 seconds per block
-multiplies the download by the number of those peers.
+no block has been applied for 60 seconds and the next one has not arrived, it
+is requested from every peer that reports it, once each, starting a second
+after the peer first reports it. Sixty seconds is also how long a request may
+take, so a block that arrives within its request deadline is fetched once,
+however slow the link.
 
 What operators can expect:
 
-- A node that has caught up hands over within about two minutes, whatever
+- A node that has caught up hands over within two to four minutes, whatever
   heights its peers report, provided a connected peer serves each new block
-  when asked.
+  when asked. Peers that delay blocks can stretch this to about 20 minutes,
+  and a single block by about a minute.
 - On a chain that has stopped producing blocks, a restarted node hands over
   after 10 minutes without a block. If the chain had been stopped for more
   than a day when the node started waiting, the node keeps waiting while a peer
@@ -98,7 +102,8 @@ What operators can expect:
   one or two blocks on a chain committing every three minutes, a few hundred on
   one committing every second. Consensus catch-up closes the rest. On a chain
   that keeps committing a block every second or two this can take long, and it
-  happens only when no peer served blocks faster than the chain produced them.
+  happens only when the node received blocks less than a quarter faster than
+  the chain produced them.
 - A node less than a day behind the network whose peers all fail to deliver
   the next block for 10 minutes hands over where it is. Restart it once its
   peers serve blocks again if consensus catch-up does not close the gap.
@@ -106,8 +111,9 @@ What operators can expect:
   behind them by more than the synchrony precision, does not see its last
   block as recent and leaves block sync only by the other rules. Keep the
   clock synchronised.
-- After a handover on a 10-minute wait, the node may hold back its own
-  proposals for up to 10 minutes while consensus catches up.
+- After a handover below a height a peer reported, the node may hold back its
+  own proposals for up to 10 minutes while consensus catches up. With a recent
+  last block only heights reported within 10 blocks of the node count.
 - A node that stays in block sync while its blocks are recent, or hands over
   far behind, is worth reporting with its logs: a handover below the highest
   height a peer reports is logged at warning or error level with its reason.
