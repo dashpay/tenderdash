@@ -110,7 +110,8 @@ type jobGenerator struct {
 }
 
 type heightRequests struct {
-	// since is when the height was first requested.
+	// since is when the height was last requested, or became the one to apply
+	// if that was later.
 	since  time.Time
 	asked  map[types.NodeID]struct{}
 	failed bool
@@ -182,6 +183,7 @@ func (p *jobGenerator) markRequested(height int64, peerID types.NodeID) {
 	defer p.mtx.Unlock()
 	if rec := p.requestsFor(height); rec != nil {
 		rec.asked[peerID] = struct{}{}
+		rec.since = p.peerStore.clock.Now()
 	}
 }
 
@@ -204,9 +206,10 @@ func (p *jobGenerator) requestsFor(height int64) *heightRequests {
 
 // observe takes note of the height to apply and whether its block has arrived,
 // and decides whether to ask every peer that advertises it: once a request for
-// it failed or has gone unanswered for serviceGrace. One peer after another,
-// peers ranked first could each hold it until it times out. The caller holds
-// p.mtx.
+// it failed, every peer asked for it is on probation, or serviceGrace passed
+// since it was last requested or became the one to apply, whichever is later,
+// without its block. One peer after another, peers ranked first could each
+// hold it until it times out. The caller holds p.mtx.
 func (p *jobGenerator) observe(applyHeight int64, received bool) {
 	if applyHeight > p.applyHeight {
 		p.applyHeight = applyHeight
@@ -215,13 +218,35 @@ func (p *jobGenerator) observe(applyHeight int64, received bool) {
 				delete(p.requests, height)
 			}
 		}
+		// A height requested ahead waits behind others in a peer's queue.
+		if rec := p.requests[applyHeight]; rec != nil {
+			rec.since = p.peerStore.clock.Now()
+		}
 	}
 	rec := p.requests[p.applyHeight]
 	p.spreading = false
-	if rec == nil || received || !rec.failed && p.peerStore.clock.Since(rec.since) <= serviceGrace {
+	if rec == nil || received ||
+		!rec.failed && p.peerStore.clock.Since(rec.since) <= serviceGrace && !p.allSlow(rec.asked) {
 		return
 	}
 	_, p.spreading = p.peerStore.findPeer(p.applyHeight, rec.asked)
+}
+
+// allSlow reports whether every peer in asked that is still connected, and at
+// least one, is on probation.
+func (p *jobGenerator) allSlow(asked map[types.NodeID]struct{}) bool {
+	slow := false
+	for peerID := range asked {
+		peer, found := p.peerStore.Get(peerID)
+		if !found {
+			continue
+		}
+		if !peer.service.slow() {
+			return false
+		}
+		slow = true
+	}
+	return slow
 }
 
 // nextSpread reserves one more peer, not asked yet, for the height block sync

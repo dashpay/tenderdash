@@ -79,6 +79,14 @@ func (s *peerService) priority(pending int32, reserve bool) int {
 	return 2
 }
 
+// slow reports whether the peer is on probation for holding requests too long.
+func (s *peerService) slow() bool {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+	s.classify(s.advance())
+	return s.probation
+}
+
 func (s *peerService) request() *serviceRequest {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()

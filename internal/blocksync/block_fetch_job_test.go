@@ -534,3 +534,32 @@ func TestAskingEveryPeerEndsWithinTheWindow(t *testing.T) {
 	clock.Advance(serviceGrace + time.Second)
 	require.False(t, gen.shouldJobBeGenerated(height, 0), "no peer is left to ask")
 }
+
+// TestHeightToApplyHeldBySlowPeersIsAskedOfOthersAtOnce checks that the height
+// block sync waits to apply is asked of every other peer that advertises it as
+// soon as it becomes the one to apply, without the usual wait, when the only
+// peer asked for it is on probation for holding requests too long.
+func TestHeightToApplyHeldBySlowPeersIsAskedOfOthersAtOnce(t *testing.T) {
+	const height = int64(100)
+	clock := clockwork.NewFakeClock()
+	slow, prompt := newPeerData("slow", 1, height+10), newPeerData("prompt", 1, height+10)
+	store := NewInMemPeerStore()
+	store.clock = clock
+	store.Put(slow.peerID, slow)
+	store.Put(prompt.peerID, prompt)
+	gen := newJobGenerator(height+2, log.NewNopLogger(), nil, store)
+	gen.shouldJobBeGenerated(height, 0)
+
+	// height+1 was requested of the slow peer, which holds its requests
+	gen.markRequested(height+1, slow.peerID)
+	slow.service.request().Started()
+	clock.Advance(serviceGrace + time.Second)
+	require.True(t, slow.service.slow())
+
+	// height is applied from another peer, and height+1 becomes the one to apply
+	require.True(t, gen.shouldJobBeGenerated(height+1, 0), "the prompt peer is not asked")
+	peer, spreadHeight, found := gen.nextSpread()
+	require.True(t, found)
+	require.Equal(t, height+1, spreadHeight)
+	require.Equal(t, prompt.peerID, peer.peerID)
+}
