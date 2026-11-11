@@ -294,7 +294,12 @@ and `addVoteErrorMw` (`internal/consensus/state_add_vote.go`).
   `checkTimely` (rule P-Timely). It is skipped for a block that is the
   node's `ValidBlock`, so re-proposals of an already polka'd block are not
   re-judged. In replay mode the receive time is the time of the proposal's
-  WAL entry, and only a proposal received too early fails.
+  WAL entry, and only a proposal received too early fails. The entry is never
+  earlier than the receipt, so replay refuses only what the node refused when
+  it received the proposal, not always all of it. That time also becomes
+  `ValidBlockRecvTime` for a block made valid during replay, which decides
+  whether the node re-proposes it after a restart
+  (`Proposaler.checkValidBlock`), and feeds `ProposalTimestampDifference`.
 - Timeliness governs re-proposal (`Proposaler.checkValidBlock`).
 - Metric `ProposalTimestampDifference{is_timely}` is recorded for proposals
   with `POLRound = -1` (`Proposaler.proposalTimestampDifferenceMetric`).

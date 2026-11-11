@@ -149,8 +149,8 @@ func TestReplayOfFirstBlockWithoutGenesisTimePrevotesNil(t *testing.T) {
 
 // TestReplayJudgesProposalTimelinessByWALTime checks, above the first height,
 // that replay judges a proposal by the time of its WAL entry: one written too
-// early for the proposal's timestamp gets a nil prevote without an application
-// call, as the node gave it when it received it, and a timely one reaches the
+// early for the proposal's timestamp, and so received too early, gets a nil
+// prevote without an application call, and a timely one reaches the
 // application.
 func TestReplayJudgesProposalTimelinessByWALTime(t *testing.T) {
 	for _, tc := range []struct {
