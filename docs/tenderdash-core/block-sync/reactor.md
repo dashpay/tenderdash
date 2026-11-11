@@ -56,9 +56,9 @@ would meet the scheduling allowance.
 Block sync hands over to consensus when it reaches the highest height any peer
 claims; when no peer advertises the next height and no block has been applied
 for 60 seconds; when the node has been at the tip of the chain for two minutes;
-or when no block has been applied for 10 minutes and either the node is within
-10 blocks of the highest claim that covers the next height, or no peer that
-advertises the next height has backed its claim.
+or when no block has been applied for 10 minutes and the node is within 10
+blocks of every claim that covers the next height and comes from a peer that
+has backed it.
 
 Whether the node is at the tip is judged from the time of its last applied
 block, which the validators commit to and a peer cannot change: a node behind
@@ -78,16 +78,20 @@ so they do not delay its own proposals.
 
 A peer backs its claim by supplying a block the node applies, and loses that
 credit when it fails a request (a timeout or other failure, or a
-`NoBlockResponse`) or is dropped; a newly connected peer has none. Within a
-10-minute stall every peer asked for the next block has failed it, so only a
-peer not asked since it last supplied a block can hold the node in block sync.
+`NoBlockResponse`) or is dropped; a newly connected peer has none. Block
+requests go to peers that have backed their claims before any other, and a
+height that has to be fetched again is requested before the node waits for a
+peer to take a higher one. Within a 10-minute stall every peer asked for the
+next block has failed it, so only a peer not asked since it last supplied a
+block can hold the node in block sync.
 
-A peer that claims a far height therefore cannot keep a node at the tip in block
-sync for more than two minutes after its last block becomes recent, however it
-answers requests and whatever node IDs it uses. On a chain whose last block is
-not recent, for instance one that has stopped producing blocks, the handover
-takes 10 minutes, or until each peer that backed its claim earlier has been
-asked for the next block and failed it, whichever is later.
+Once the node has reached the tip, a peer that claims a far height therefore
+cannot keep it in block sync for more than two minutes, whatever node IDs it
+uses, as long as the next block keeps reaching the node within its at-tip
+window. On a chain whose last block is not recent, for instance one that has
+stopped producing blocks, the handover takes 10 minutes, or until each peer
+that backed its claim earlier has been asked for the next block and failed it,
+whichever is later.
 
 Some cases remain open:
 
@@ -96,15 +100,22 @@ Some cases remain open:
   minutes, less on a faster one), or behind them by more than the synchrony
   precision, does not see itself at the tip; while blocks keep arriving, a far
   claim keeps it in block sync.
-- On a chain that commits more than 10 blocks in 70 seconds, a peer that answers
-  each request just before it times out holds the node more than 70 seconds
-  behind, and so in block sync, for as long as it does so. Such a node can also
-  hand over at the tip up to 70 seconds of blocks behind, which consensus
-  catch-up then closes.
+- A peer that delays the next block beyond the node's at-tip window keeps the
+  node from reaching the tip, and so in block sync, for as long as it does so.
+  The block is first asked of a peer that advertises it, which before other
+  peers report it may be only the one claiming a far height; that costs up to
+  a request timeout, enough on a chain that commits more than 10 blocks in 70
+  seconds. Several node IDs can each take a request for it in turn while no
+  peer that has backed its claim advertises the block - after a restart, or
+  while every such peer is busy - which is enough on slower chains too.
+- On a chain that commits more than 10 blocks in 70 seconds, the node can hand
+  over at the tip up to 70 seconds of blocks behind, which consensus catch-up
+  then closes.
 - A node that restarts with a last block less than five minutes old and then
   applies no block for two minutes hands over at the tip; on a chain that
   commits more than 10 blocks in 70 seconds it may then be up to five minutes
-  of blocks behind.
+  of blocks behind. Besides a lack of peers, this can follow from peers that
+  report their status first and then hold the first requests.
 - A node any distance behind whose peers that advertise the next height fail
   every request for 10 minutes hands over, as it would if none advertised it.
 - After a handover on a stall, the catch-up target includes every claim, so
