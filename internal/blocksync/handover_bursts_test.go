@@ -50,14 +50,6 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverAtTheTipOfAChainComm
 			for i := 0; i < 3; i++ {
 				r.reporting = append(r.reporting, types.NodeID(fmt.Sprintf("holder %d", i)))
 			}
-			// the block store holds the blocks the node applied before it stopped
-			var stored []time.Time
-			for i := maxCatchupGap; i >= 0; i-- {
-				stored = append(stored, start.Add(-time.Duration(i+1)*interval))
-			}
-			h.sync.mtx.Lock()
-			h.sync.blockTimes = stored
-			h.sync.mtx.Unlock()
 			h.sync.AddPeer(newPeerData("far range", 1_000_000_000, maxPlausiblePeerHeight))
 
 			breaks := 0
@@ -69,7 +61,7 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverAtTheTipOfAChainComm
 				}
 				r.step(elapsed)
 				st := h.sync.stallSnapshot()
-				if !atTip(st.lastBlockTime, st.tipWindow, st.precision, h.clock.Now().Add(time.Second)) {
+				if !isRecent(st.lastBlockTime, tipRecency, st.precision, h.clock.Now().Add(time.Second)) {
 					breaks++
 				}
 			})

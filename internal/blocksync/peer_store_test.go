@@ -315,27 +315,3 @@ func TestAddFailureClearsPending(t *testing.T) {
 	require.EqualValues(t, 0, peer.numPending)
 	require.EqualValues(t, 2, peer.numFailures)
 }
-
-// TestFailureEndsSuppliedCredit checks that a failed request or an answer that
-// the block is missing ends the credit a peer earned by supplying blocks, and
-// that a fresh status for the peer does not.
-func TestFailureEndsSuppliedCredit(t *testing.T) {
-	peerID := types.NodeID("peer1")
-	for name, fail := range map[string]func(*InMemPeerStore){
-		"failed request": func(p *InMemPeerStore) { p.AddFailure(peerID, 10) },
-		"missing block":  func(p *InMemPeerStore) { p.RecordMissingBlock(peerID, 5) },
-	} {
-		t.Run(name, func(t *testing.T) {
-			supplier := newPeerData(peerID, 1, 100)
-			supplier.supplied = true
-			inmem := NewInMemPeerStore(supplier)
-			inmem.Upsert(newPeerData(peerID, 1, 200))
-			peer, _ := inmem.Get(peerID)
-			require.True(t, peer.supplied, "a status update keeps the credit")
-
-			fail(inmem)
-			peer, _ = inmem.Get(peerID)
-			require.False(t, peer.supplied)
-		})
-	}
-}

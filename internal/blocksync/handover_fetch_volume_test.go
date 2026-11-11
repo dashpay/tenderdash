@@ -130,7 +130,7 @@ func (l *linkRun) sharedStep() {
 	for _, peerID := range l.peers {
 		var kept []*tipRequest
 		for _, req := range l.queues[peerID] {
-			if now.Sub(l.askedAt[req]) < client.RequestTimeout {
+			if now.Sub(l.askedAt[req]) < requestDeadline {
 				kept = append(kept, req)
 				continue
 			}

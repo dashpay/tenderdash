@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"sync/atomic"
 	"time"
 
@@ -13,7 +12,6 @@ import (
 
 	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/internal/p2p/client"
-	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/libs/service"
 	"github.com/dashpay/tenderdash/libs/workerpool"
@@ -133,11 +131,13 @@ type (
 		logger log.Logger
 
 		lastAdvance time.Time
-		// blockTimes holds the times of the last maxCatchupGap+1 applied blocks,
-		// oldest first, and precision the synchrony precision of the state they
-		// left. Guarded by mtx.
-		blockTimes []time.Time
-		precision  time.Duration
+		// lastBlockTime is the time of the last applied block and precision the
+		// synchrony precision of the state it left. Guarded by mtx.
+		lastBlockTime time.Time
+		precision     time.Duration
+		// asked holds, for the height to apply, the peers askEveryPeer has seen
+		// advertise it, and whether it asked them for it yet. Guarded by mtx.
+		asked map[types.NodeID]bool
 
 		mtx sync.RWMutex
 
@@ -214,12 +214,12 @@ func NewSynchronizer(start int64, client client.BlockClient, blockExec *blockApp
 		workerPool:      workerpool.New(poolWorkerSize, workerpool.WithLogger(logger)),
 		pendingToApply:  map[int64]BlockResponse{},
 		precision:       types.DefaultSynchronyParams().Precision,
+		asked:           map[types.NodeID]bool{},
 	}
 	for _, opt := range opts {
 		opt(bp)
 	}
 	bp.peerStore.clock = bp.clock
-	bp.jobGen.applyState = bp.applyState
 	bp.BaseService = *service.NewBaseService(logger, "Synchronizer", bp)
 	return bp
 }
@@ -255,7 +255,7 @@ func (s *Synchronizer) OnStart(ctx context.Context) error {
 	s.lastMonitorUpdate = s.lastAdvance
 	if s.applier != nil {
 		state := s.applier.State()
-		s.blockTimes = storedBlockTimes(s.applier.store, state.LastBlockHeight, state.LastBlockTime)
+		s.lastBlockTime = state.LastBlockTime
 		s.precision = state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults().Precision
 	}
 	s.ctx, s.cancel = context.WithCancel(ctx)
@@ -266,6 +266,7 @@ func (s *Synchronizer) OnStart(ctx context.Context) error {
 	s.consumerDone = make(chan struct{})
 	s.workerPool.Run(s.ctx)
 	go s.runHandler(s.ctx, s.produceJob)
+	go s.runHandler(s.ctx, s.askEveryPeer)
 	go func() {
 		defer close(s.consumerDone)
 		s.runHandler(s.ctx, func(handlerCtx context.Context) error {
@@ -274,22 +275,6 @@ func (s *Synchronizer) OnStart(ctx context.Context) error {
 		})
 	}()
 	return nil
-}
-
-// storedBlockTimes returns the times of the blocks the store holds right below
-// height, up to maxCatchupGap of them and oldest first, followed by lastTime,
-// the time of the block at height.
-func storedBlockTimes(store sm.BlockStore, height int64, lastTime time.Time) []time.Time {
-	times := []time.Time{lastTime}
-	for h := height - 1; store != nil && h >= 1 && h >= height-maxCatchupGap; h-- {
-		meta := store.LoadBlockMeta(h)
-		if meta == nil {
-			break
-		}
-		times = append(times, meta.Header.Time)
-	}
-	slices.Reverse(times)
-	return times
 }
 
 func (s *Synchronizer) OnStop() {
@@ -362,7 +347,7 @@ func (s *Synchronizer) consumeJobResult(ctx, applyCtx context.Context) error {
 		if errors.As(bfErr.err, &missing) && missing.Height == bfErr.height {
 			s.peerStore.RecordMissingBlock(bfErr.peerID, bfErr.height)
 			if pending {
-				s.jobGen.requeue(bfErr.height)
+				s.jobGen.pushBack(bfErr.height)
 			}
 			return nil
 		}
@@ -450,13 +435,56 @@ func (s *Synchronizer) backlog() (applyHeight int64, pendingBytes int) {
 	return s.height, pendingBytes
 }
 
-// applyState reports the height block sync waits to apply and whether its block
-// has arrived.
-func (s *Synchronizer) applyState() (int64, bool) {
-	s.mtx.RLock()
-	defer s.mtx.RUnlock()
-	_, received := s.pendingToApply[s.height]
-	return s.height, received
+// askEveryPeer asks, once a second, every peer reserveNextBlockPeers returns for
+// the height block sync waits to apply.
+func (s *Synchronizer) askEveryPeer(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-s.clock.After(time.Second):
+	}
+	height, peers := s.reserveNextBlockPeers()
+	for _, peer := range peers {
+		s.jobProgressCounter.Add(1)
+		if err := s.workerPool.Send(ctx, workerpool.NewJob(blockFetchJobHandler(s.client, peer, height))); err != nil {
+			s.jobProgressCounter.Add(-1)
+			return err
+		}
+	}
+	return nil
+}
+
+// reserveNextBlockPeers returns the height block sync waits to apply and, once
+// its block is serviceGrace overdue, every peer to ask for it: each peer that
+// advertises it, once. Blocks are applied in order, so whichever peers hold the
+// requests made for that height so far must not decide how long the others,
+// which may serve it at once, go unasked.
+//
+// A peer is asked on the second call that finds it advertising the height, so
+// the request the job producer sends when a peer first reports a new block gets
+// a second to bring it, and a block served promptly is fetched once.
+func (s *Synchronizer) reserveNextBlockPeers() (int64, []PeerData) {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+	if _, received := s.pendingToApply[s.height]; received || s.clock.Since(s.lastAdvance) <= serviceGrace {
+		return s.height, nil
+	}
+	var peers []PeerData
+	for _, peer := range s.peerStore.Query(heightBetweenPeerHeightRange(s.height), 0) {
+		asked, seen := s.asked[peer.peerID]
+		if !seen {
+			s.asked[peer.peerID] = false
+			continue
+		}
+		if asked {
+			continue
+		}
+		if reserved, ok := s.peerStore.reserve(peer, s.height); ok {
+			s.asked[peer.peerID] = true
+			peers = append(peers, reserved)
+		}
+	}
+	return s.height, peers
 }
 
 // GetStatus returns synchronizer's height, count of in progress requests
@@ -490,16 +518,16 @@ func (s *Synchronizer) IsCaughtUp() bool {
 // peer holds the block we are waiting for there is something to retry, so keep
 // going and say so loudly. Give up on the stall only once no peer can serve that
 // block, or once the stall has outlasted maxSyncStall within maxCatchupGap of
-// the highest claim a peer holding the block has backed, so that a wedged
-// synchronizer can still hand over rather than blocking forever without handing
-// over a node consensus cannot catch up.
+// the tip, so that a wedged synchronizer can still hand over rather than
+// blocking forever without handing over a node consensus cannot catch up.
 //
-// A height claim costs a peer nothing, and a node ID costs nothing either, so
-// what a peer claims cannot keep the node in block sync once it is at the tip.
-// The time of the last applied block tells it so: the validators commit to it,
-// and a node far behind applies old blocks. Once the node has stayed at the tip
-// by that time for tipGrace, it hands over whatever peers claim, even though
-// blocks arriving meanwhile keep it from stalling.
+// What peers report about themselves is not verified, so it cannot be what
+// keeps the node in block sync once it has caught up. The time of the last
+// applied block is: the validators commit to it, and a node far behind applies
+// old blocks. Once that time has been within tipRecency of the local clock for
+// tipGrace, the node hands over whatever peers report, even though blocks
+// arriving meanwhile keep it from stalling. A stall of maxSyncStall that began
+// on a block less than staleBlockAge old ends block sync the same way.
 func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHeight int64) {
 	ticker := s.clock.NewTicker(switchToConsensusIntervalSeconds * time.Second)
 	defer ticker.Stop()
@@ -519,7 +547,7 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHe
 			// At the tip, claims out of reach of it must not hold back our own
 			// proposals, whichever way block sync ends.
 			target := targetHeight
-			if atTip(st.lastBlockTime, st.tipWindow, st.precision, now) {
+			if isRecent(st.lastBlockTime, tipRecency, st.precision, now) {
 				target = nearTarget
 			} else {
 				atTipSince = now
@@ -527,11 +555,12 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHe
 			if st.hasPeers && st.height >= st.maxPeerHeight {
 				return true, target
 			}
-			// Far back in the chain's history any claim counts. The age is taken
-			// when the stall began, so a stall does not age a stopped chain into it.
-			behindBy := st.maxSuppliedHeight - st.height
-			if now.Add(-st.stalledFor).Sub(st.lastBlockTime) > staleBlockAge {
-				behindBy = st.maxServableHeight - st.height
+			// Only far back in the chain's history does the distance to what peers
+			// report keep a stalled node in block sync. The age is taken when the
+			// stall began, so a stall does not age a stopped chain into it.
+			behindBy := st.maxServableHeight - st.height
+			if isRecent(st.lastBlockTime, staleBlockAge, st.precision, now.Add(-st.stalledFor)) {
+				behindBy = 0
 			}
 			verdict := stallVerdictFor(st.servable, behindBy, st.stalledFor, now.Sub(atTipSince))
 			switch verdict {
@@ -562,7 +591,7 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHe
 					"height", st.height,
 					"max_peer_height", st.maxPeerHeight,
 					"max_servable_height", st.maxServableHeight,
-					"max_backed_height", st.maxSuppliedHeight,
+					"last_block_time", st.lastBlockTime,
 					"stalled_for", st.stalledFor,
 				)
 				return false, target
@@ -588,11 +617,11 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHe
 	}
 }
 
-// atTip reports whether a last applied block with blockTime puts the node at
-// the tip: it is at most window old, and no further ahead of the local clock
-// than precision, the bound validators hold block times to. Further ahead, the
-// local clock is behind the validators' and cannot tell how old the block is.
-func atTip(blockTime time.Time, window, precision time.Duration, now time.Time) bool {
+// isRecent reports whether blockTime, the time of the last applied block, is
+// at most window old at now, and no further ahead of it than precision, the
+// bound validators hold block times to. Further ahead, the local clock is behind
+// the validators' and cannot tell how old the block is.
+func isRecent(blockTime time.Time, window, precision time.Duration, now time.Time) bool {
 	age := now.Sub(blockTime)
 	return age <= window && age >= -precision
 }
@@ -608,17 +637,12 @@ type stallState struct {
 	servable          bool
 	maxServableHeight int64
 	maxPeerHeight     int64
-	// maxSuppliedHeight is the highest claim of a peer advertising height that
-	// has supplied a block we applied since it last failed a request; 0 if none.
-	maxSuppliedHeight int64
 	// maxNearHeight is the highest claim within maxCatchupGap of the last
 	// applied block.
 	maxNearHeight int64
-	// lastBlockTime is the time of the last applied block; within tipWindow of
-	// the local clock, and no further than precision ahead of it, the node is at
-	// the tip.
+	// lastBlockTime is the time of the last applied block and precision the
+	// synchrony precision of the state it left.
 	lastBlockTime time.Time
-	tipWindow     time.Duration
 	precision     time.Duration
 }
 
@@ -633,17 +657,12 @@ type stallState struct {
 // claims to be. Only servable peers determine the stall gap; the overall maximum
 // remains the handover target so pruning cannot erase evidence of a higher tip.
 //
-// The node is at the tip when its last block is no older than the chain took
-// to commit the last maxCatchupGap blocks, or than tipLag where that is longer,
-// and in any case no older than tipRecency. Until the node has seen that many
-// blocks, the pace of those it has seen stands in; with none, tipRecency alone.
-//
 // They are read under one lock because advance() stamps the height, the advance
-// time, the block time and the supplier's credit together under that same lock.
-// A block applied concurrently therefore lands either wholly inside the snapshot
-// or wholly outside it, and the verdict can never pair a height with a staleness
-// or a servability measured against a different one. Read separately, it could:
-// a height read before an advance, checked for servability after one, reports
+// time and the block time together under that same lock. A block applied
+// concurrently therefore lands either wholly inside the snapshot or wholly
+// outside it, and the verdict can never pair a height with a staleness or a
+// servability measured against a different one. Read separately, it could: a
+// height read before an advance, checked for servability after one, reports
 // nothing to fetch while the height we had by then moved on to is served. Ending
 // block sync is a one-way door, so a stop assembled from two inconsistent
 // readings leaves the node in consensus catch-up it cannot leave.
@@ -652,19 +671,11 @@ func (s *Synchronizer) stallSnapshot() stallState {
 	defer s.mtx.RUnlock()
 	peers := s.peerStore.All()
 	st := stallState{
-		height:     s.height,
-		stalledFor: s.clock.Since(s.lastAdvance),
-		hasPeers:   len(peers) > 0,
-		tipWindow:  tipRecency,
-		precision:  s.precision,
-	}
-	if last := len(s.blockTimes) - 1; last >= 0 {
-		st.lastBlockTime = s.blockTimes[last]
-		if last > 0 {
-			// Fewer than maxCatchupGap intervals since start are scaled up to it.
-			span := s.blockTimes[last].Sub(s.blockTimes[0]) / time.Duration(last) * time.Duration(maxCatchupGap)
-			st.tipWindow = min(tipRecency, max(tipLag, span))
-		}
+		height:        s.height,
+		stalledFor:    s.clock.Since(s.lastAdvance),
+		hasPeers:      len(peers) > 0,
+		lastBlockTime: s.lastBlockTime,
+		precision:     s.precision,
 	}
 	hasHeight := heightBetweenPeerHeightRange(s.height)
 	for _, peer := range peers {
@@ -675,9 +686,6 @@ func (s *Synchronizer) stallSnapshot() stallState {
 		if hasHeight(peer.peerID, peer) {
 			st.servable = true
 			st.maxServableHeight = max(st.maxServableHeight, peer.height)
-			if peer.supplied {
-				st.maxSuppliedHeight = max(st.maxSuppliedHeight, peer.height)
-			}
 		}
 	}
 	return st
@@ -693,14 +701,13 @@ const (
 	stopNothingToFetch
 	// stopStalledTooLong means a peer still holds it but we have to hand over anyway
 	stopStalledTooLong
-	// stopAtTip means the node has stayed at the tip for tipGrace
+	// stopAtTip means the last applied block has stayed recent for tipGrace
 	stopAtTip
 )
 
 // stallVerdictFor decides what to do when block sync has made no progress for
 // stalledFor, given whether any peer holds the block we are waiting for and how
-// many blocks behind the highest height a servable peer that backed its claim
-// says we are.
+// many blocks behind the highest height a servable peer claims we are.
 //
 // Waiting on a block someone has is a reason to keep retrying, not to stop:
 // handing over to consensus is effectively irreversible, so stopping while
@@ -716,16 +723,13 @@ const (
 // the backstop buys nothing and costs what dashpay/tenderdash#1413 describes, so
 // block sync keeps retrying and says so every interval.
 //
-// Advertising costs nothing, so near the tip behindBy counts only the claims of
-// peers that backed them by supplying a block we applied since they last failed
-// a request; with no such peer the node is not known to be behind at all. A
-// stall of maxSyncStall means every peer asked for the block meanwhile failed,
-// so only one never asked keeps that credit, and a new peer has none. With a
-// last block older than staleBlockAge every claim counts.
+// The caller passes no distance for a stall that began on a recent block, so
+// such a stall ends at maxSyncStall whatever peers report: askEveryPeer has by
+// then asked every peer advertising the block for it.
 //
-// atTipFor is how long the node has been at the tip by the time of its last
-// block. Unlike stalledFor it is not reset by applying blocks, so a node
-// following the network is not kept in block sync by a claim nobody can reach.
+// atTipFor is how long the last applied block has been recent. Unlike
+// stalledFor it is not reset by applying blocks, so a node following the
+// network is not kept in block sync by a height nobody serves.
 func stallVerdictFor(servable bool, behindBy int64, stalledFor, atTipFor time.Duration) stallVerdict {
 	switch {
 	case atTipFor > tipGrace:
@@ -784,6 +788,7 @@ func (s *Synchronizer) dropPeer(peerID types.NodeID) []int64 {
 		}
 	}
 	s.peerStore.Delete(peerID)
+	delete(s.asked, peerID)
 	return heights
 }
 
@@ -801,7 +806,7 @@ func (s *Synchronizer) applyBlock(ctx context.Context) (BlockResponse, error) {
 			return resp, fmt.Errorf("cannot apply block: %w", err)
 		}
 		state := s.applier.State()
-		s.advance(resp.PeerID, state.LastBlockTime, state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults().Precision)
+		s.advance(state.LastBlockTime, state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults().Precision)
 		s.updateMonitor()
 	}
 }
@@ -814,18 +819,13 @@ func (s *Synchronizer) getPendingResponse() (BlockResponse, bool) {
 }
 
 // advance moves past the block just applied, which carries blockTime and left
-// the chain with synchrony precision, and credits supplier, the peer that sent
-// it. The pending response may be gone by now: the peer can be removed while
-// its block is applied.
-func (s *Synchronizer) advance(supplier types.NodeID, blockTime time.Time, precision time.Duration) {
+// the chain with synchrony precision.
+func (s *Synchronizer) advance(blockTime time.Time, precision time.Duration) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
+	s.lastBlockTime = blockTime
 	s.precision = precision
-	s.peerStore.Update(supplier, func(_ types.NodeID, peer *PeerData) { peer.supplied = true })
-	s.blockTimes = append(s.blockTimes, blockTime)
-	if len(s.blockTimes) > int(maxCatchupGap)+1 {
-		s.blockTimes = s.blockTimes[1:]
-	}
+	clear(s.asked)
 	delete(s.pendingToApply, s.height)
 	s.height++
 	s.lastAdvance = s.clock.Now()

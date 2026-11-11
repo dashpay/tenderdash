@@ -12,12 +12,13 @@ import (
 
 // lateSupplyRun drives a node that restarted a few blocks behind a chain
 // committing a block every three minutes. Requests for the height the node waits
-// for are handed out as the job generator does: the first by the peer store,
-// further ones by the generator once one fails or goes unanswered. The peers
-// named late answer a request only once the block is lateBy old, or answer just
+// for are handed out as block sync does: one at a time by the peer store, and
+// once a second to the peers reserveNextBlockPeers returns. The peers named
+// late answer a request only once the block is lateBy old, or answer just
 // inside the request deadline that they have no such block when that is further
-// off; the peer named prompt answers at once. Every peer reports each block as soon as it is committed, and one more
-// peer reports a far range it is never asked for.
+// off; the peer named prompt answers at once. Every peer reports each block as
+// soon as it is committed, and one more peer reports a far range it is never
+// asked for.
 type lateSupplyRun struct {
 	h        *waitForSyncHarness
 	prompt   types.NodeID
@@ -72,7 +73,7 @@ func (r *lateSupplyRun) apply(peer PeerData, request *serviceRequest, height int
 		PeerID: peer.peerID,
 		Block:  &types.Block{Header: types.Header{Height: height}},
 	}))
-	sync.advance(peer.peerID, r.blockTimes[height], defaultPrecision)
+	sync.advance(r.blockTimes[height], defaultPrecision)
 	r.served++
 }
 
@@ -97,24 +98,20 @@ func (r *lateSupplyRun) step(time.Duration) {
 		}
 	}
 	r.outstanding = waiting
-	for {
+	for len(r.outstanding) == 0 {
 		height, _ := sync.GetStatus()
-		if height > r.tip {
-			return
+		peer, found := sync.peerStore.reservePeer(height)
+		if height > r.tip || !found {
+			break
 		}
-		sync.jobGen.shouldJobBeGenerated(height, 0)
-		peer, spreadHeight, found := sync.jobGen.nextSpread()
-		if found && spreadHeight != height {
-			return
-		}
-		if !found {
-			if len(r.outstanding) > 0 {
-				return
-			}
-			if peer, found = sync.peerStore.reservePeer(height); !found {
-				return
-			}
-			sync.jobGen.markRequested(height, peer.peerID)
+		r.ask(peer, height, now)
+	}
+	height, peers := sync.reserveNextBlockPeers()
+	for _, peer := range peers {
+		if applying, _ := sync.GetStatus(); applying != height {
+			// applied meanwhile; the request would bring a duplicate
+			sync.peerStore.Update(peer.peerID, AddNumPending(-1))
+			continue
 		}
 		r.ask(peer, height, now)
 	}
@@ -150,11 +147,8 @@ func (r *lateSupplyRun) ask(peer PeerData, height int64, now time.Time) {
 //
 // When the prompt peer reports first it supplies every block and the node hands
 // over two minutes after reaching the tip. When a few peers that supply each
-// block about three minutes late report first, they are asked for every block:
-// before any block is applied no peer has backed its claim, a due recovery probe
-// goes before a peer with no record, and each block then credits the late peer
-// that supplied it. The prompt peer is never asked, and the node must still
-// hand over.
+// block about three minutes late report first, they are asked for every block
+// first. The prompt peer must be asked as well, and the node must hand over.
 func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverBehindPeersSupplyingEachBlockLate() {
 	const (
 		height   = int64(100)
@@ -224,8 +218,6 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncKeepsSyncingFarBehindPeersTha
 	var peers []PeerData
 	for i := 0; i < 5; i++ {
 		peer := newPeerData(types.NodeID(fmt.Sprintf("peer %d", i)), 1, 300_000)
-		// each supplied blocks the node applied before the stall
-		peer.supplied = true
 		peers = append(peers, peer)
 	}
 	h := suite.newWaitForSyncHarness(height, peers...)

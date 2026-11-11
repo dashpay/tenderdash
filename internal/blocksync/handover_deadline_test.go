@@ -11,15 +11,20 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
+// requestDeadline is how long the block client waits for a peer's response.
+const requestDeadline = 60 * time.Second
+
 // tipRun drives the producer and the consumer of a node following a chain that
 // commits a block every interval. Jobs are handed out as produceJob and nextJob
-// do: shouldJobBeGenerated admits them, nextSpread or next picks the height, and
-// reservePeer picks the peer; a height no peer advertises yet is held until one
-// does, as getPeer holds it. Responses are queued and applied in height order as
-// consumeJobResult and applyBlock do. A peer listed in declining answers at
-// once that it has no such block; any other answers with the block, a peer
-// listed in hold that long after it is asked and the rest at once. The peers in
-// reporting report the chain's height every status round.
+// do: shouldJobBeGenerated admits them, nextHeight picks the height and
+// reservePeer the peer; a height no peer advertises yet is held until one does,
+// as getPeer holds it. Once a second, as askEveryPeer does, the peers
+// reserveNextBlockPeers returns are asked for the height to apply. Responses are
+// queued and applied in height order as consumeJobResult and applyBlock do. A
+// peer listed in declining answers at once that it has no such block; any other
+// answers with the block, a peer listed in hold that long after it is asked and
+// the rest at once. The peers in reporting report the chain's height every
+// status round.
 type tipRun struct {
 	h         *waitForSyncHarness
 	interval  time.Duration
@@ -34,8 +39,7 @@ type tipRun struct {
 	nextCommit time.Time
 	inFlight   []*tipRequest
 	// waiting is the height the producer holds until a peer advertises it.
-	waiting      int64
-	waitingRetry bool
+	waiting int64
 
 	applied    int
 	suppliedBy map[types.NodeID]int
@@ -63,6 +67,12 @@ func (r *tipRun) step(elapsed time.Duration) {
 		for _, id := range r.reporting {
 			r.h.sync.AddPeer(newPeerData(id, 1, r.tip))
 		}
+	}
+	for r.consume(now) || r.produce(now) {
+	}
+	height, peers := r.h.sync.reserveNextBlockPeers()
+	for _, peer := range peers {
+		r.request(peer, height, now)
 	}
 	for r.consume(now) || r.produce(now) {
 	}
@@ -99,7 +109,7 @@ func (r *tipRun) consume(now time.Time) bool {
 			if !ok {
 				break
 			}
-			sync.advance(resp.PeerID, r.blockTimes[resp.Block.Height], defaultPrecision)
+			sync.advance(r.blockTimes[resp.Block.Height], defaultPrecision)
 			r.applied++
 			r.suppliedBy[resp.PeerID]++
 		}
@@ -113,57 +123,47 @@ func (r *tipRun) produce(now time.Time) bool {
 	gen := r.h.sync.jobGen
 	produced := false
 	for {
-		var (
-			peer   PeerData
-			height int64
-			found  bool
-			retry  bool
-		)
-		if r.waiting != 0 {
-			height, retry, r.waiting = r.waiting, r.waitingRetry, 0
-		} else {
+		height := r.waiting
+		if height == 0 {
 			if !gen.shouldJobBeGenerated(r.h.sync.backlog()) {
 				return produced
 			}
-			if peer, height, found = gen.nextSpread(); !found {
-				height, retry = gen.next()
-			}
+			height = gen.nextHeight()
 		}
+		peer, found := r.h.sync.peerStore.reservePeer(height)
 		if !found {
-			if peer, found = r.h.sync.peerStore.reservePeer(height); !found {
-				if gen.lowerQueued(height) {
-					gen.giveBack(height, retry)
-					continue
-				}
-				r.waiting, r.waitingRetry = height, retry
-				return produced
-			}
-			gen.markRequested(height, peer.peerID)
+			r.waiting = height
+			return produced
 		}
-		request := peer.service.request()
-		request.Started()
+		r.waiting = 0
+		r.request(peer, height, now)
 		produced = true
-		if r.declining[peer.peerID] {
-			request.Finished()
-			request.complete(0)
-			r.h.fail(peer.peerID, height, &client.ErrBlockNotFound{Height: height})
-			continue
-		}
-		r.inFlight = append(r.inFlight, &tipRequest{
-			peer:    peer,
-			request: request,
-			height:  height,
-			endAt:   now.Add(r.hold[peer.peerID]),
-		})
 	}
+}
+
+// request has peer answer a request for height as its kind does.
+func (r *tipRun) request(peer PeerData, height int64, now time.Time) {
+	request := peer.service.request()
+	request.Started()
+	if r.declining[peer.peerID] {
+		request.Finished()
+		request.complete(0)
+		r.h.fail(peer.peerID, height, &client.ErrBlockNotFound{Height: height})
+		return
+	}
+	r.inFlight = append(r.inFlight, &tipRequest{
+		peer:    peer,
+		request: request,
+		height:  height,
+		endAt:   now.Add(r.hold[peer.peerID]),
+	})
 }
 
 // TestWaitForSyncHandsOverBehindAPeerAnsweringJustInsideTheDeadline checks the
 // handover of a node that restarts three blocks behind the network, with a
 // prompt peer connected, while a far range is reported by a peer nobody asks.
 // One more peer answers every request with the block, one second inside the
-// request deadline. It never fails a request, so no block is asked of every
-// peer at once, and each block it supplies renews its credit.
+// request deadline, and never fails one.
 //
 // On a chain committing a block every three minutes the node hands over within
 // minutes whichever peer reports first. On one committing a block every few
@@ -196,7 +196,7 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverBehindAPeerAnswering
 			r := &tipRun{
 				h:          h,
 				interval:   tc.interval,
-				hold:       map[types.NodeID]time.Duration{slow: client.RequestTimeout - time.Second},
+				hold:       map[types.NodeID]time.Duration{slow: requestDeadline - time.Second},
 				reporting:  tc.reporting,
 				blockTimes: map[int64]time.Time{},
 				suppliedBy: map[types.NodeID]int{},
@@ -207,24 +207,15 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverBehindAPeerAnswering
 				r.blockTimes[r.tip-i] = start.Add(-2*time.Second - time.Duration(i)*tc.interval)
 			}
 			r.nextCommit = r.blockTimes[r.tip].Add(tc.interval)
-			// the block store holds the blocks the node applied before it stopped
-			var stored []time.Time
-			for i := maxCatchupGap; i >= 0; i-- {
-				stored = append(stored, r.blockTimes[height].Add(-time.Duration(i+1)*tc.interval))
-			}
-			h.sync.mtx.Lock()
-			h.sync.blockTimes = stored
-			h.sync.mtx.Unlock()
 			h.sync.AddPeer(newPeerData("far range", 1_000_000_000, maxPlausiblePeerHeight))
 
 			elapsed, caughtUp, ended := h.run(limit, r.step)
-			st := h.sync.stallSnapshot()
 			suite.Require().True(ended,
-				"still in block sync after %s: %d blocks applied (%s), the last applied block never older than %s, at-tip window %s",
-				elapsed, r.applied, fmt.Sprint(r.suppliedBy), r.oldest, st.tipWindow)
+				"still in block sync after %s: %d blocks applied (%s), the last applied block never older than %s",
+				elapsed, r.applied, fmt.Sprint(r.suppliedBy), r.oldest)
 			suite.Require().False(caughtUp)
-			suite.T().Logf("handed over after %s: %d blocks applied (%s), the last applied block never older than %s, at-tip window %s",
-				elapsed, r.applied, fmt.Sprint(r.suppliedBy), r.oldest, st.tipWindow)
+			suite.T().Logf("handed over after %s: %d blocks applied (%s), the last applied block never older than %s",
+				elapsed, r.applied, fmt.Sprint(r.suppliedBy), r.oldest)
 		})
 	}
 }
@@ -235,7 +226,8 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverBehindAPeerAnswering
 // far height and answers every request that it has no such block; it is the
 // only peer advertising the next height until the others report it, so it is
 // asked for it first. Its answer must not have every block fetched from all
-// five peers: a "no such block" answer has the block asked of one other peer.
+// five peers: the request the producer sends once a peer reports the block
+// brings it before the others are asked.
 func (suite *SynchronizerTestSuite) TestWaitForSyncFetchesEachBlockAtTheTipFromOnePeer() {
 	const (
 		height   = int64(100)

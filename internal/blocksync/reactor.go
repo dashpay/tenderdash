@@ -34,14 +34,14 @@ const (
 
 	// hand over to consensus after this duration of inactivity, even when peers
 	// still report higher blocks, so that a wedged synchronizer cannot keep the
-	// node out of consensus forever - but only within maxCatchupGap of the tip
-	// as stallVerdictFor measures it
+	// node out of consensus forever - but only within maxCatchupGap of the tip,
+	// or when the inactivity began on a block less than staleBlockAge old
 	maxSyncStall = 10 * time.Minute
 
-	// maxCatchupGap is how far behind the node may be and still hand over to
-	// consensus on the stall backstop above: behind the highest claim of a peer
-	// that supplied a block, or of any peer once the last block is older than
-	// staleBlockAge. It also bounds the claims a node at the tip targets.
+	// maxCatchupGap is how far behind the highest height any peer claims the node
+	// may be and still hand over to consensus on the stall backstop above when
+	// its last block is older than staleBlockAge. It also bounds the claims a
+	// node with a recent last block passes on as the consensus catch-up target.
 	//
 	// What is left after the handover is covered by consensus catch-up, which
 	// moves about one block per gossip cycle: it closes a gap of a few blocks in
@@ -56,18 +56,14 @@ const (
 	// Platform runs with and a margin for extra rounds and clock skew.
 	tipRecency = 5 * time.Minute
 
-	// tipLag is the shortest at-tip window: the stall after which a node with
-	// nothing to fetch hands over, and a status round to learn there is nothing.
-	// A pause in block production then ends block sync by one rule or the other.
-	tipLag = syncTimeout + statusUpdateIntervalSeconds*time.Second
-
 	// tipGrace is how long the node must stay at the tip before higher height
-	// claims stop keeping it in block sync.
+	// claims stop keeping it in block sync. A node still fetching blocks reaches
+	// the highest claim in that time when its peers serve them.
 	tipGrace = 2 * syncTimeout
 
 	// staleBlockAge is how old the last applied block must be, when a stall
-	// begins, for every claim, backed or not, to count in the stall backstop.
-	// It is longer than any halt a restarted node is expected to help end.
+	// begins, for peer height claims to count in the stall backstop. It is
+	// longer than any halt a restarted node is expected to help end.
 	staleBlockAge = 24 * time.Hour
 )
 

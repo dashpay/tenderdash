@@ -34,9 +34,6 @@ type (
 		// status on. Requests go out by node ID, so a reservation's copy of it is
 		// the only generation known for a request that never gets an answer.
 		connID uint64
-		// supplied says a block this peer sent has been applied since it last
-		// failed a request. A new peer has supplied nothing.
-		supplied bool
 	}
 )
 
@@ -128,25 +125,14 @@ func (p *InMemPeerStore) Query(spec store.QueryFunc[types.NodeID, PeerData], lim
 	return p.store.Query(spec, limit)
 }
 
-// FindPeer prefers a peer that supplied a block we applied since it last failed
-// a request, then a due recovery probe, then ordinary service.
+// FindPeer prefers ordinary service except when a bounded recovery probe is due.
 func (p *InMemPeerStore) FindPeer(height int64) (PeerData, bool) {
-	return p.findPeer(height, nil)
-}
-
-// findPeer is FindPeer among peers not in except.
-func (p *InMemPeerStore) findPeer(height int64, except map[types.NodeID]struct{}) (PeerData, bool) {
 	peers := p.Query(store.AndX(peerNumPendingCond(maxPendingRequestsPerPeer, "<"),
-		heightBetweenPeerHeightRange(height), notIn(except)), 0)
+		heightBetweenPeerHeightRange(height)), 0)
 	var selected PeerData
 	priority := 0
 	for _, peer := range peers {
-		next := peer.service.priority(peer.numPending, false)
-		if next > 0 && peer.supplied {
-			// A peer that has backed its claim goes before any that has not.
-			next += 2
-		}
-		if next > priority {
+		if next := peer.service.priority(peer.numPending, false); next > priority {
 			selected, priority = peer, next
 		}
 	}
@@ -156,15 +142,15 @@ func (p *InMemPeerStore) findPeer(height int64, except map[types.NodeID]struct{}
 // reservePeer checks and reserves both pending capacity and the single probe
 // under the store lock. Concurrent producers cannot reserve the same probe.
 func (p *InMemPeerStore) reservePeer(height int64) (PeerData, bool) {
-	return p.reservePeerExcept(height, nil)
-}
-
-// reservePeerExcept is reservePeer among peers not in except.
-func (p *InMemPeerStore) reservePeerExcept(height int64, except map[types.NodeID]struct{}) (PeerData, bool) {
-	peer, found := p.findPeer(height, except)
+	peer, found := p.FindPeer(height)
 	if !found {
 		return PeerData{}, false
 	}
+	return p.reserve(peer, height)
+}
+
+// reserve is reservePeer for a peer the caller selected.
+func (p *InMemPeerStore) reserve(peer PeerData, height int64) (PeerData, bool) {
 	reserved := false
 	p.store.Update(peer.peerID, func(_ types.NodeID, current *PeerData) {
 		if current.service != peer.service || current.numPending >= maxPendingRequestsPerPeer ||
@@ -197,7 +183,6 @@ func (p *InMemPeerStore) AddFailure(peerID types.NodeID, maxFailures int32) bool
 	p.store.Update(peerID, func(_ types.NodeID, peer *PeerData) {
 		peer.addPending(-1)
 		peer.numFailures++
-		peer.supplied = false
 		tooMany = peer.numFailures >= maxFailures
 	})
 	return tooMany
@@ -208,7 +193,6 @@ func (p *InMemPeerStore) RecordMissingBlock(peerID types.NodeID, height int64) {
 	p.store.Update(peerID, func(_ types.NodeID, peer *PeerData) {
 		peer.addPending(-1)
 		peer.missingThrough = max(peer.missingThrough, height)
-		peer.supplied = false
 	})
 }
 
@@ -237,13 +221,6 @@ func peerNumPendingCond(val int32, op string) store.QueryFunc[types.NodeID, Peer
 			return peer.numPending > val
 		}
 		panic("unsupported operation")
-	}
-}
-
-func notIn(except map[types.NodeID]struct{}) store.QueryFunc[types.NodeID, PeerData] {
-	return func(peerID types.NodeID, _ PeerData) bool {
-		_, found := except[peerID]
-		return !found
 	}
 }
 
