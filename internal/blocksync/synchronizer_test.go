@@ -1336,7 +1336,7 @@ func (suite *SynchronizerTestSuite) TestAdvanceCreditsTheSupplier() {
 	pool.AddPeer(newPeerData("bystander", 1, 200))
 	blockTime := time.Unix(1_700_000_000, 0)
 	pool.pendingToApply[100] = BlockResponse{PeerID: peerID}
-	pool.advance(blockTime)
+	pool.advance(blockTime, defaultPrecision)
 	supplier, _ := pool.peerStore.Get(peerID)
 	suite.True(supplier.supplied)
 	bystander, _ := pool.peerStore.Get("bystander")
@@ -1347,29 +1347,57 @@ func (suite *SynchronizerTestSuite) TestAdvanceCreditsTheSupplier() {
 	suite.EqualValues(200, st.maxSuppliedHeight)
 }
 
+// defaultPrecision is the synchrony precision of a chain on default parameters.
+var defaultPrecision = types.DefaultSynchronyParams().Precision
+
 // TestStartSeedsTheLastBlockTime checks that block sync judges the tip from the
-// last block the node already has until it applies another, so a node restarting
-// after long downtime is not taken for one at the tip.
+// last block the node already has, and the synchrony precision of its stored
+// state, until it applies another block, so a node restarting after long
+// downtime is not taken for one at the tip.
 func (suite *SynchronizerTestSuite) TestStartSeedsTheLastBlockTime() {
 	state := suite.initialState.Copy()
 	state.LastBlockTime = time.Unix(1_700_000_000, 0)
+	state.ConsensusParams.Synchrony.Precision = 2 * time.Second
 	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(state))
 	pool := NewSynchronizer(1, suite.client, applier, WithWorkerPool(workerpool.New(0)))
 	suite.Require().NoError(pool.Start(context.Background()))
 	defer pool.Stop()
-	suite.Equal(state.LastBlockTime, pool.stallSnapshot().lastBlockTime)
+	st := pool.stallSnapshot()
+	suite.Equal(state.LastBlockTime, st.lastBlockTime)
+	suite.Equal(2*time.Second, st.precision)
 }
 
-// TestPrecisionFollowsTheCurrentState checks that the synchrony precision is read
-// from the chain's current parameters, not those it had when block sync started.
-func (suite *SynchronizerTestSuite) TestPrecisionFollowsTheCurrentState() {
-	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
-	pool := NewSynchronizer(1, suite.client, applier)
-	suite.Equal(types.DefaultSynchronyParams().Precision, pool.precision())
+// TestApplyingABlockTakesThePrecisionOfTheNewState checks that the synchrony
+// precision follows the chain's parameters as blocks are applied, not those it
+// had when block sync started.
+func (suite *SynchronizerTestSuite) TestApplyingABlockTakesThePrecisionOfTheNewState() {
+	ctx := context.Background()
+	b := suite.newBacklogHarness()
+	suite.Equal(defaultPrecision, b.pool.stallSnapshot().precision)
 	state := suite.initialState.Copy()
-	state.ConsensusParams.Synchrony.Precision = 2 * time.Second
-	applier.UpdateState(state)
-	suite.Equal(2*time.Second, pool.precision())
+	state.ConsensusParams.Synchrony.Precision = 3 * time.Second
+	b.pool.applier.UpdateState(state)
+	resp := b.produce(ctx)
+	suite.Require().NotNil(resp)
+	b.deliver(ctx, resp)
+	st := b.pool.stallSnapshot()
+	suite.EqualValues(2, st.height)
+	suite.Equal(3*time.Second, st.precision)
+}
+
+// TestWaitForSyncDoesNotWaitForABlockBeingApplied checks that the handover
+// loop does not wait on the applier, which is held for the whole time a block
+// is executed, so it notices cancellation while a slow block is applied.
+func (suite *SynchronizerTestSuite) TestWaitForSyncDoesNotWaitForABlockBeingApplied() {
+	const height = int64(100)
+	h := suite.newWaitForSyncHarness(height, newPeerData("peer", 1, height+1000))
+	h.sync.applier.mtx.Lock()
+	defer h.sync.applier.mtx.Unlock()
+	h.clock.Advance(time.Second)
+	time.Sleep(10 * time.Millisecond)
+	h.cancel()
+	_, ended := h.result(time.Second)
+	suite.Require().True(ended, "the handover loop waited for the block being applied")
 }
 
 // TestStatusRefreshUpdatesAdvertisedRange checks that a status response still does
@@ -1777,7 +1805,7 @@ func TestStallSnapshotTipWindow(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			sync := NewSynchronizer(1, nil, nil)
 			for i := 0; i < tc.blocks; i++ {
-				sync.advance(start.Add(time.Duration(i) * tc.interval))
+				sync.advance(start.Add(time.Duration(i)*tc.interval), defaultPrecision)
 			}
 			require.Equal(t, tc.want, sync.stallSnapshot().tipWindow)
 		})
@@ -1804,7 +1832,7 @@ func (suite *SynchronizerTestSuite) TestStallSnapshotIsOneObservation() {
 		applied := make(chan struct{})
 		go func() {
 			<-ready
-			sync.advance(time.Time{})
+			sync.advance(time.Time{}, defaultPrecision)
 			close(applied)
 		}()
 		runtime.Gosched()
@@ -1892,7 +1920,7 @@ func (h *waitForSyncHarness) tipBlocks(tipPeer types.NodeID, interval time.Durat
 			PeerID: tipPeer,
 			Block:  &types.Block{Header: types.Header{Height: height}},
 		}))
-		h.sync.advance(h.clock.Now())
+		h.sync.advance(h.clock.Now(), defaultPrecision)
 	}
 }
 
@@ -2148,7 +2176,7 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverPastAnUnservedClaimO
 			h.sync.AddPeer(newPeerData(tip, 1, next-1+perRound))
 		case 2 * time.Second:
 			for i := int64(0); i < perRound; i++ {
-				h.sync.advance(h.clock.Now())
+				h.sync.advance(h.clock.Now(), defaultPrecision)
 			}
 		}
 	})
@@ -2213,7 +2241,7 @@ func (h *waitForSyncHarness) flakySource(source types.NodeID, deliverEvery, fail
 				Block:  &types.Block{Header: types.Header{Height: next}},
 			}))
 			// a block the network committed long ago
-			h.sync.advance(time.Time{})
+			h.sync.advance(time.Time{}, defaultPrecision)
 			h.sync.peerStore.Update(source, ResetFailures())
 		}
 	}
@@ -2439,7 +2467,7 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverPastAFarClaimFromAPe
 			PeerID: relay,
 			Block:  &types.Block{Header: types.Header{Height: next}},
 		}))
-		h.sync.advance(h.clock.Now())
+		h.sync.advance(h.clock.Now(), defaultPrecision)
 		h.sync.peerStore.Update(relay, ResetFailures())
 	})
 	suite.Require().True(ended, "block sync kept following the tip behind a claim of a peer supplying the tip")
@@ -2504,7 +2532,7 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncKeepsSyncingOnAFastChainWhile
 					PeerID: source,
 					Block:  &types.Block{Header: types.Header{Height: next}},
 				}))
-				h.sync.advance(last.Add(time.Duration(next-height+1) * interval))
+				h.sync.advance(last.Add(time.Duration(next-height+1)*interval), defaultPrecision)
 			}
 			elapsed, _, ended := h.run(maxSyncStall/2, func(elapsed time.Duration) {
 				if tc.supplyEvery < time.Second {

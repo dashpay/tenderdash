@@ -132,8 +132,10 @@ type (
 
 		lastAdvance time.Time
 		// blockTimes holds the times of the last maxCatchupGap+1 applied blocks,
-		// oldest first. Guarded by mtx.
+		// oldest first, and precision the synchrony precision of the state they
+		// left. Guarded by mtx.
 		blockTimes []time.Time
+		precision  time.Duration
 
 		mtx sync.RWMutex
 
@@ -209,6 +211,7 @@ func NewSynchronizer(start int64, client client.BlockClient, blockExec *blockApp
 		monitorInterval: defaultSyncRateIntervalBlocks,
 		workerPool:      workerpool.New(poolWorkerSize, workerpool.WithLogger(logger)),
 		pendingToApply:  map[int64]BlockResponse{},
+		precision:       types.DefaultSynchronyParams().Precision,
 	}
 	for _, opt := range opts {
 		opt(bp)
@@ -248,7 +251,9 @@ func (s *Synchronizer) OnStart(ctx context.Context) error {
 	s.lastAdvance = s.clock.Now()
 	s.lastMonitorUpdate = s.lastAdvance
 	if s.applier != nil {
-		s.blockTimes = []time.Time{s.applier.State().LastBlockTime}
+		state := s.applier.State()
+		s.blockTimes = []time.Time{state.LastBlockTime}
+		s.precision = state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults().Precision
 	}
 	s.ctx, s.cancel = context.WithCancel(ctx)
 	applicationCtx, ok := ctx.Value(applicationContextKey{}).(context.Context)
@@ -474,7 +479,7 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHe
 				return true, targetHeight
 			}
 			now := s.clock.Now()
-			if !atTip(st.lastBlockTime, st.tipWindow, s.precision(), now) {
+			if !atTip(st.lastBlockTime, st.tipWindow, st.precision, now) {
 				atTipSince = now
 			}
 			verdict := stallVerdictFor(st.servable, st.maxSuppliedHeight-st.height, st.stalledFor,
@@ -543,15 +548,6 @@ func atTip(blockTime time.Time, window, precision time.Duration, now time.Time) 
 	return age <= window && age >= -precision
 }
 
-// precision is the synchrony precision of the chain's current parameters.
-func (s *Synchronizer) precision() time.Duration {
-	var params types.SynchronyParams
-	if s.applier != nil {
-		params = s.applier.State().ConsensusParams.Synchrony
-	}
-	return params.SynchronyParamsOrDefaults().Precision
-}
-
 // stallState is one observation of what the stall verdict is formed from.
 type stallState struct {
 	// height is the next height to apply, waiting for stalledFor.
@@ -570,9 +566,11 @@ type stallState struct {
 	// applied block.
 	maxNearHeight int64
 	// lastBlockTime is the time of the last applied block; within tipWindow of
-	// the local clock the node is at the tip.
+	// the local clock, and no further than precision ahead of it, the node is at
+	// the tip.
 	lastBlockTime time.Time
 	tipWindow     time.Duration
+	precision     time.Duration
 }
 
 // stallSnapshot reads everything the stall verdict is formed from as one
@@ -609,6 +607,7 @@ func (s *Synchronizer) stallSnapshot() stallState {
 		stalledFor: s.clock.Since(s.lastAdvance),
 		hasPeers:   len(peers) > 0,
 		tipWindow:  tipRecency,
+		precision:  s.precision,
 	}
 	if last := len(s.blockTimes) - 1; last >= 0 {
 		st.lastBlockTime = s.blockTimes[last]
@@ -751,7 +750,8 @@ func (s *Synchronizer) applyBlock(ctx context.Context) (BlockResponse, error) {
 		if err != nil {
 			return resp, fmt.Errorf("cannot apply block: %w", err)
 		}
-		s.advance(s.applier.State().LastBlockTime)
+		state := s.applier.State()
+		s.advance(state.LastBlockTime, state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults().Precision)
 		s.updateMonitor()
 	}
 }
@@ -763,11 +763,12 @@ func (s *Synchronizer) getPendingResponse() (BlockResponse, bool) {
 	return resp, ok
 }
 
-// advance moves past the block just applied, which carries blockTime, and
-// credits the peer that supplied it.
-func (s *Synchronizer) advance(blockTime time.Time) {
+// advance moves past the block just applied, which carries blockTime and left
+// the chain with synchrony precision, and credits the peer that supplied it.
+func (s *Synchronizer) advance(blockTime time.Time, precision time.Duration) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
+	s.precision = precision
 	if resp, ok := s.pendingToApply[s.height]; ok {
 		s.peerStore.Update(resp.PeerID, func(_ types.NodeID, peer *PeerData) { peer.supplied = true })
 	}
