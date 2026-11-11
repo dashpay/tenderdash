@@ -29,8 +29,6 @@ type lateSupplyRun struct {
 	nextCommit time.Time
 	// outstanding are the requests for the height the node waits for.
 	outstanding []*lateRequest
-	// failed records the heights a request failed for.
-	failed map[int64]bool
 	// servedByPrompt counts the blocks the prompt peer was asked for.
 	servedByPrompt int
 	served         int
@@ -95,7 +93,6 @@ func (r *lateSupplyRun) step(time.Duration) {
 		default:
 			out.request.Finished()
 			out.request.complete(0)
-			r.failed[out.height] = true
 			r.h.fail(out.peer.peerID, out.height, &client.ErrBlockNotFound{Height: out.height})
 		}
 	}
@@ -117,9 +114,7 @@ func (r *lateSupplyRun) step(time.Duration) {
 			if peer, found = sync.peerStore.reservePeer(height); !found {
 				return
 			}
-			if r.failed[height] {
-				sync.jobGen.markRetried(height, peer.peerID)
-			}
+			sync.jobGen.markRequested(height, peer.peerID)
 		}
 		r.ask(peer, height, now)
 	}
@@ -190,7 +185,6 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverBehindPeersSupplying
 				lateBy:     lateBy,
 				interval:   interval,
 				blockTimes: map[int64]time.Time{},
-				failed:     map[int64]bool{},
 				tip:        height - 1,
 			}
 			if tc.promptFirst {

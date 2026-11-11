@@ -98,11 +98,22 @@ type jobGenerator struct {
 	height     int64
 	pushedBack []int64
 	// applyHeight is the height block sync waits to apply. Once a request for it
-	// fails, every peer that advertises it is asked for it; asked holds the
-	// peers asked since, and spreading says some may remain.
+	// fails, or goes unanswered for serviceGrace, every peer that advertises it
+	// is asked for it; spreading says some peer is left to ask. requests holds
+	// what was asked of whom for each height from applyHeight up.
 	applyHeight int64
-	asked       map[types.NodeID]struct{}
 	spreading   bool
+	requests    map[int64]*heightRequests
+	// applyState, when set, reports the height to apply and whether its block
+	// has arrived, so that a wait for a peer inside nextJob sees them.
+	applyState func() (height int64, received bool)
+}
+
+type heightRequests struct {
+	// since is when the height was first requested.
+	since  time.Time
+	asked  map[types.NodeID]struct{}
+	failed bool
 }
 
 func newJobGenerator(height int64, logger log.Logger, client client.BlockClient, peerStore *InMemPeerStore) *jobGenerator {
@@ -135,56 +146,100 @@ func (p *jobGenerator) next() (int64, bool) {
 }
 
 func (p *jobGenerator) nextJob(ctx context.Context) (*workerpool.Job, error) {
-	if peer, height, found := p.nextSpread(); found {
-		return workerpool.NewJob(blockFetchJobHandler(p.client, peer, height)), nil
-	}
 	for {
+		if peer, height, found := p.nextSpread(); found {
+			return workerpool.NewJob(blockFetchJobHandler(p.client, peer, height)), nil
+		}
 		height, retry := p.next()
 		peer, err := p.getPeer(ctx, height)
 		if errors.Is(err, errLowerHeightQueued) {
-			p.pushBack(height)
+			p.giveBack(height, retry)
 			continue
 		}
 		if err != nil {
 			return nil, err
 		}
-		if retry {
-			p.markRetried(height, peer.peerID)
-		}
+		p.markRequested(height, peer.peerID)
 		return workerpool.NewJob(blockFetchJobHandler(p.client, peer, height)), nil
 	}
 }
 
-// markRetried records that the height block sync waits to apply was asked of
-// peerID again, and has it asked of every other peer that advertises it. One
-// peer after another, peers listed first could each hold it until it times out.
-func (p *jobGenerator) markRetried(height int64, peerID types.NodeID) {
+// giveBack returns a height taken by next and not requested, as a retry if it
+// was one and otherwise as the next new height.
+func (p *jobGenerator) giveBack(height int64, retry bool) {
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
-	if height != p.applyHeight {
+	if !retry && p.height == height+1 {
+		p.height = height
 		return
 	}
-	if p.asked == nil {
-		p.asked = map[types.NodeID]struct{}{}
+	p.queue(height)
+}
+
+// markRequested records that height was asked of peerID.
+func (p *jobGenerator) markRequested(height int64, peerID types.NodeID) {
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+	if rec := p.requestsFor(height); rec != nil {
+		rec.asked[peerID] = struct{}{}
 	}
-	p.asked[peerID] = struct{}{}
-	p.spreading = true
+}
+
+// requestsFor returns the record of requests for height, created if missing,
+// or nil for a height below the one to apply. The caller holds p.mtx.
+func (p *jobGenerator) requestsFor(height int64) *heightRequests {
+	if height < p.applyHeight {
+		return nil
+	}
+	rec, found := p.requests[height]
+	if !found {
+		if p.requests == nil {
+			p.requests = map[int64]*heightRequests{}
+		}
+		rec = &heightRequests{since: p.peerStore.clock.Now(), asked: map[types.NodeID]struct{}{}}
+		p.requests[height] = rec
+	}
+	return rec
+}
+
+// observe takes note of the height to apply and whether its block has arrived,
+// and decides whether to ask every peer that advertises it: once a request for
+// it failed or has gone unanswered for serviceGrace. One peer after another,
+// peers ranked first could each hold it until it times out. The caller holds
+// p.mtx.
+func (p *jobGenerator) observe(applyHeight int64, received bool) {
+	if applyHeight > p.applyHeight {
+		p.applyHeight = applyHeight
+		for height := range p.requests {
+			if height < applyHeight {
+				delete(p.requests, height)
+			}
+		}
+	}
+	rec := p.requests[p.applyHeight]
+	p.spreading = false
+	if rec == nil || received || !rec.failed && p.peerStore.clock.Since(rec.since) <= serviceGrace {
+		return
+	}
+	_, p.spreading = p.peerStore.findPeer(p.applyHeight, rec.asked)
 }
 
 // nextSpread reserves one more peer, not asked yet, for the height block sync
-// waits to apply, and reports false once there is none.
+// waits to apply, and reports false once there is none. A retry of that height
+// queued after a failure goes first.
 func (p *jobGenerator) nextSpread() (PeerData, int64, bool) {
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
-	if !p.spreading {
+	if !p.spreading || len(p.pushedBack) > 0 && p.pushedBack[0] == p.applyHeight {
 		return PeerData{}, 0, false
 	}
-	peer, found := p.peerStore.reservePeerExcept(p.applyHeight, p.asked)
+	rec := p.requestsFor(p.applyHeight)
+	peer, found := p.peerStore.reservePeerExcept(p.applyHeight, rec.asked)
 	if !found {
 		p.spreading = false
 		return PeerData{}, 0, false
 	}
-	p.asked[peer.peerID] = struct{}{}
+	rec.asked[peer.peerID] = struct{}{}
 	return peer, p.applyHeight, true
 }
 
@@ -192,9 +247,10 @@ func (p *jobGenerator) nextSpread() (PeerData, int64, bool) {
 // was queued for a retry meanwhile.
 var errLowerHeightQueued = errors.New("a lower height is queued")
 
-// pushBack schedules heights to be fetched again, skipping those already queued so
-// a queued height is not fetched twice. Heights already handed to a worker are not
-// tracked here, so an in-flight height can still be queued and fetched again.
+// pushBack schedules heights whose requests failed to be fetched again, skipping
+// those already queued so a queued height is not fetched twice. Heights already
+// handed to a worker are not tracked here, so an in-flight height can still be
+// queued and fetched again.
 //
 // The queue is kept sorted because nextHeight pops from the front and callers hand
 // us heights in arbitrary order - dropPeer collects them by ranging a map. Only the
@@ -209,7 +265,24 @@ func (p *jobGenerator) pushBack(heights ...int64) {
 	}
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
+	for _, height := range heights {
+		if rec := p.requestsFor(height); rec != nil {
+			rec.failed = true
+		}
+	}
+	p.queue(heights...)
+}
 
+// requeue schedules height to be fetched again after a peer answered that it
+// has no such block. Another peer is asked; that alone is no reason to ask all.
+func (p *jobGenerator) requeue(height int64) {
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+	p.queue(height)
+}
+
+// queue adds heights to the retry queue. The caller holds p.mtx.
+func (p *jobGenerator) queue(heights ...int64) {
 	queued := make(map[int64]struct{}, len(p.pushedBack)+len(heights))
 	for _, height := range p.pushedBack {
 		queued[height] = struct{}{}
@@ -225,10 +298,23 @@ func (p *jobGenerator) pushBack(heights ...int64) {
 	slices.Sort(p.pushedBack)
 }
 
+// lowerQueued reports whether a height below height is due to be requested: a
+// retry, or the height to apply to be asked of more peers.
 func (p *jobGenerator) lowerQueued(height int64) bool {
-	p.mtx.RLock()
-	defer p.mtx.RUnlock()
-	return len(p.pushedBack) > 0 && p.pushedBack[0] < height
+	var (
+		applyHeight int64
+		received    bool
+	)
+	if p.applyState != nil {
+		applyHeight, received = p.applyState()
+	}
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+	if p.applyState != nil {
+		p.observe(applyHeight, received)
+	}
+	return len(p.pushedBack) > 0 && p.pushedBack[0] < height ||
+		p.spreading && p.applyHeight < height
 }
 
 func (p *jobGenerator) getPeer(ctx context.Context, height int64) (PeerData, error) {
@@ -254,7 +340,7 @@ func (p *jobGenerator) getPeer(ctx context.Context, height int64) (PeerData, err
 
 // shouldJobBeGenerated reports whether another height may be requested now.
 // applyHeight is the height block sync is waiting to apply and pendingBytes is
-// the size of the responses already held above it.
+// the size of the responses already held.
 //
 // Blocks are applied strictly in order, so a response that arrives before the
 // height below it has been applied is held until that one does, and nothing
@@ -278,18 +364,18 @@ func (p *jobGenerator) getPeer(ctx context.Context, height int64) (PeerData, err
 // typically the very height everything else is waiting for, so holding those
 // back is what would turn a bound into a permanent stall.
 func (p *jobGenerator) shouldJobBeGenerated(applyHeight int64, pendingBytes int) bool {
+	received := false
+	if p.applyState != nil {
+		if height, arrived := p.applyState(); height == applyHeight {
+			received = arrived
+		}
+	}
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
-	if applyHeight != p.applyHeight {
-		p.applyHeight, p.asked, p.spreading = applyHeight, nil, false
-	}
 	// Asking one more peer is a job only while one is left to ask; otherwise
 	// nextJob would take a new height past the limits below.
-	if p.spreading {
-		if _, found := p.peerStore.findPeer(applyHeight, p.asked); found {
-			return true
-		}
-		p.spreading = false
+	if p.observe(applyHeight, received); p.spreading {
+		return true
 	}
 	if len(p.pushedBack) > 0 {
 		return true

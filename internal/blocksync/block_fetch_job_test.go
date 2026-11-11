@@ -507,6 +507,9 @@ func TestRetryOfTheHeightToApplyAsksEveryPeer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	for range 2 * len(peerIDs) {
+		if !gen.shouldJobBeGenerated(height, 0) {
+			break
+		}
 		job, err := gen.nextJob(ctx)
 		require.NoError(t, err)
 		job.Execute(ctx)
@@ -522,9 +525,12 @@ func TestRetryOfTheHeightToApplyAsksEveryPeer(t *testing.T) {
 func TestAskingEveryPeerEndsWithinTheWindow(t *testing.T) {
 	const height = int64(100)
 	store := NewInMemPeerStore(newPeerData("only peer", 1, height+1000))
+	clock := clockwork.NewFakeClock()
+	store.clock = clock
 	gen := newJobGenerator(height+maxOutstandingHeights, log.NewNopLogger(), nil, store)
 	require.False(t, gen.shouldJobBeGenerated(height, 0), "the window is full")
 
-	gen.markRetried(height, "only peer")
+	gen.markRequested(height, "only peer")
+	clock.Advance(serviceGrace + time.Second)
 	require.False(t, gen.shouldJobBeGenerated(height, 0), "no peer is left to ask")
 }

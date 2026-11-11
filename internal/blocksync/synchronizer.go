@@ -219,6 +219,7 @@ func NewSynchronizer(start int64, client client.BlockClient, blockExec *blockApp
 		opt(bp)
 	}
 	bp.peerStore.clock = bp.clock
+	bp.jobGen.applyState = bp.applyState
 	bp.BaseService = *service.NewBaseService(logger, "Synchronizer", bp)
 	return bp
 }
@@ -353,13 +354,21 @@ func (s *Synchronizer) consumeJobResult(ctx, applyCtx context.Context) error {
 		if !errors.As(res.Err, &bfErr) {
 			return nil
 		}
+		// A block applied meanwhile, typically from another peer asked for it
+		// as well, is not fetched again.
+		applyHeight, _ := s.GetStatus()
+		pending := bfErr.height >= applyHeight
 		var missing *client.ErrBlockNotFound
 		if errors.As(bfErr.err, &missing) && missing.Height == bfErr.height {
 			s.peerStore.RecordMissingBlock(bfErr.peerID, bfErr.height)
-			s.jobGen.pushBack(bfErr.height)
+			if pending {
+				s.jobGen.requeue(bfErr.height)
+			}
 			return nil
 		}
-		s.jobGen.pushBack(bfErr.height)
+		if pending {
+			s.jobGen.pushBack(bfErr.height)
+		}
 		// One failed request is usually a timeout under load, not a bad peer.
 		// Dropping the peer also fails its other in-flight requests, each of
 		// which drops another peer in turn, so react only to a sustained run of
@@ -442,6 +451,15 @@ func (s *Synchronizer) backlog() (applyHeight int64, pendingBytes int) {
 }
 
 // GetStatus returns synchronizer's height, count of in progress requests
+// applyState reports the height block sync waits to apply and whether its block
+// has arrived.
+func (s *Synchronizer) applyState() (int64, bool) {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+	_, received := s.pendingToApply[s.height]
+	return s.height, received
+}
+
 func (s *Synchronizer) GetStatus() (int64, int32) {
 	cnt := s.jobProgressCounter.Load()
 	s.mtx.RLock()

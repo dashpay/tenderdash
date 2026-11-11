@@ -132,15 +132,13 @@ func (r *tipRun) produce(now time.Time) bool {
 		if !found {
 			if peer, found = r.h.sync.peerStore.reservePeer(height); !found {
 				if gen.lowerQueued(height) {
-					gen.pushBack(height)
+					gen.giveBack(height, retry)
 					continue
 				}
 				r.waiting, r.waitingRetry = height, retry
 				return produced
 			}
-			if retry {
-				gen.markRetried(height, peer.peerID)
-			}
+			gen.markRequested(height, peer.peerID)
 		}
 		request := peer.service.request()
 		request.Started()
@@ -165,10 +163,10 @@ func (r *tipRun) produce(now time.Time) bool {
 // prompt peer connected, while a far range is reported by a peer nobody asks.
 // One more peer answers every request with the block, one second inside the
 // request deadline. It never fails a request, so no block is asked of every
-// peer, and each block it supplies renews its credit.
+// peer at once, and each block it supplies renews its credit.
 //
 // On a chain committing a block every three minutes the node hands over within
-// minutes whichever peer reports first. On one committing a block every five
+// minutes whichever peer reports first. On one committing a block every few
 // seconds it must as well.
 func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverBehindAPeerAnsweringJustInsideTheDeadline() {
 	const (
@@ -187,6 +185,8 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverBehindAPeerAnswering
 		{name: "a block every 3m, the other peer reports first", interval: 3 * time.Minute, reporting: []types.NodeID{slow, prompt}},
 		{name: "a block every 5s, the prompt peer reports first", interval: 5 * time.Second, reporting: []types.NodeID{prompt, slow}},
 		{name: "a block every 5s, the other peer reports first", interval: 5 * time.Second, reporting: []types.NodeID{slow, prompt}},
+		{name: "a block every 2s, the other peer reports first", interval: 2 * time.Second, reporting: []types.NodeID{slow, prompt}},
+		{name: "a block every second, the other peer reports first", interval: time.Second, reporting: []types.NodeID{slow, prompt}},
 	} {
 		suite.Run(tc.name, func() {
 			suite.client.On("Send", mock.Anything, mock.AnythingOfType("p2p.PeerError")).Maybe().Return(nil)
@@ -209,7 +209,7 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverBehindAPeerAnswering
 			r.nextCommit = r.blockTimes[r.tip].Add(tc.interval)
 			// the block store holds the blocks the node applied before it stopped
 			var stored []time.Time
-			for i := int64(maxCatchupGap); i >= 0; i-- {
+			for i := maxCatchupGap; i >= 0; i-- {
 				stored = append(stored, r.blockTimes[height].Add(-time.Duration(i+1)*tc.interval))
 			}
 			h.sync.mtx.Lock()
