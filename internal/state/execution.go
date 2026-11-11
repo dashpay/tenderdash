@@ -458,9 +458,11 @@ func (blockExec *BlockExecutor) ValidateBlock(
 	lastCommit types.VerifiedCommit,
 ) error {
 	hash := block.Hash()
-	// The cache is keyed on the block hash alone, so a hit counts only for a
-	// block that still continues state.
-	if _, ok := blockExec.cache[hash.String()]; ok && validateBlockPosition(state, block) == nil {
+	// The cache is keyed on the header hash alone, which covers neither state nor
+	// the block's chain lock, so a hit counts only for a block that still
+	// continues state with a chain lock that fits it.
+	if _, ok := blockExec.cache[hash.String()]; ok && validateBlockPosition(state, block) == nil &&
+		validateCoreChainLock(block, state) == nil {
 		return nil
 	}
 
@@ -521,8 +523,8 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 	}
 
 	// ValidateBlock above normally verifies block.LastCommit, but a hit on its
-	// cache, keyed on the block hash, re-checks only the block's position against
-	// state (validateBlockPosition), not its LastCommit. That is why this second
+	// cache, keyed on the block hash, re-checks only the block's position and
+	// chain lock against state, not its LastCommit. That is why this second
 	// verification exists. lastCommit's proof is safe to skip on instead: it names
 	// the verified data itself, not a block hash.
 	if block.Height > state.InitialHeight {
@@ -542,7 +544,7 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 			uncommittedState.NextConsensusParams.HashConsensusParams(), block.NextConsensusHash,
 		)
 	}
-	return validateCoreChainLock(block, state)
+	return nil
 }
 
 // FinalizeBlock validates the block against the state, fires the relevant events,

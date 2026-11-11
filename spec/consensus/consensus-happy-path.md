@@ -209,13 +209,14 @@ POL round's prevotes already have a majority) → `EnterPrevote(h, Round)`.
    (`sm.ValidateBlockChainLock`); for `POLRound == -1` the block's
    `ProposerProTxHash` is this round's proposer.
 2. `blockExecutor.ensureProcess(rs, Round)` → `ValidateBlock` against the
-   committed state, then ABCI `ProcessProposal` (`verify = true`); a block
+   committed state, core chain lock included, then ABCI `ProcessProposal`
+   (`verify = true`); a block
    failing `ValidateBlock` never reaches the application. The response must be
    `ACCEPT`, well-formed, and
    `ValidateBlockWithRoundState` must pass — header fields `AppHash`,
    `ResultsHash`, `NextValidatorsHash`, `NextConsensusHash` must equal the
-   application's answer, `LastCommit` must verify against `LastValidators`,
-   and the core chain lock must validate. The result becomes
+   application's answer, and `LastCommit` must verify against
+   `LastValidators`. The result becomes
    `CurrentRoundState` tagged with round 0.
 3. `blockExecutor.mustValidate` (panics on failure, cannot fail after step 2).
 4. `prevoter.signVote`: with no lock and `POLRound == -1`,

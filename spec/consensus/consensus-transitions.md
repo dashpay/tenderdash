@@ -401,11 +401,11 @@ Rules, in evaluation order:
    `ProcessProposal` for round `r` unless `CurrentRoundState` already is the
    result for this block and round. The block is first validated against the
    committed state (`BlockExecutor.ValidateBlock`: version, chain ID, height,
-   `LastBlockID`, `LastCommit`, proposer, evidence, …); a block that fails is
+   `LastBlockID`, core chain lock, `LastCommit`, proposer, evidence, …); a block that fails is
    never sent to the application and yields `ErrInvalidBlock`.
    `ErrBlockRejected` (application `REJECT`) or `ErrInvalidBlock` (also a
    well-formed `ACCEPT` whose contents disagree with the block: header fields
-   differ from the application's answer, `LastCommit` invalid, chain lock invalid —
+   differ from the application's answer, `LastCommit` invalid —
    `ValidateBlockWithRoundState`) → nil prevote; any other error →
    **panic** (`prevoter.handleError`). A malformed application response is
    in the panic class, not the nil-prevote class: `UNKNOWN` status, an
@@ -499,7 +499,7 @@ that checks each is given.
 | Parts' Merkle proofs valid; total size `≤ Block.MaxBytes` | `PartSet.AddPart`, `addProposalBlockPart` |
 | `Proposal.Timestamp == Header.Time` | `isValidForPrevote`, `EnterPrecommitAction.Execute` |
 | Timely (PBTS window; in replay, not too early), unless `ValidBlock` | `StateData.proposalIsTimely` |
-| Core chain lock consistent with state | `sm.ValidateBlockChainLock` |
+| Core chain lock consistent with state | `sm.ValidateBlockChainLock`, `validateBlock` |
 | `Header.ProposerProTxHash == proposer(h, r)` when `POLRound == -1` | `isValidForPrevote` |
 | `Block.ValidateBasic`; version, chain id, height, `LastBlockID`, `ConsensusHash`, `ValidatorsHash`, `LastCommit` threshold signature, proposer is a validator, `Time > LastBlockTime` (`≥ genesis` at initial height), evidence size | `validateBlock` in `internal/state/validation.go` |
 | ABCI `ProcessProposal` = `ACCEPT`; `AppHash`, `ResultsHash`, `NextValidatorsHash`, `NextConsensusHash` equal the application's; app hash size | `BlockExecutor.ProcessProposal`, `ValidateBlockWithRoundState` |

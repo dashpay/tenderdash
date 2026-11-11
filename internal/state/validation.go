@@ -32,6 +32,9 @@ func validateBlock(state State, block *types.Block, lastCommit types.VerifiedCom
 	if err := validateBlockPosition(state, block); err != nil {
 		return err
 	}
+	if err := validateCoreChainLock(block, state); err != nil {
+		return err
+	}
 
 	// Validate app info
 	hashCP := state.ConsensusParams.HashConsensusParams()

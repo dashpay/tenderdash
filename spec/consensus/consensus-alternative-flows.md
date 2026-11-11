@@ -108,8 +108,8 @@ silently once it is exhausted (`internal/consensus/block_part_budget.go`).
 committed state (`ValidateBlock`); a block that fails is never sent to the
 application. That failure (`sm.ErrInvalidBlock`), the application returning
 `REJECT` (`sm.ErrBlockRejected`), or a well-formed `ACCEPT` whose contents
-disagree with the block — header mismatch / invalid `LastCommit` / invalid
-chain lock (`sm.ErrInvalidBlock`) — → nil prevote (`prevoter.handleError`). A failed `ProcessProposal` clears
+disagree with the block — header mismatch / invalid `LastCommit`
+(`sm.ErrInvalidBlock`) — → nil prevote (`prevoter.handleError`). A failed `ProcessProposal` clears
 `CurrentRoundState`, so no round counts as processed until a later call
 succeeds (`blockExecutor.ensureProcess`). Any **other** error **panics**
 the node: transport failure, `UNKNOWN` status, or a malformed response — an
@@ -348,7 +348,7 @@ counts from `StartTime`. Other rounds `≥ 1` never wait. On
 - Header fields: `CoreChainLockedHeight`; optional `CoreChainLock` in the
   block (and `CoreChainLockUpdate` in the proposal, not signed).
 - `ValidateBlockChainLock` (prevote) and `validateCoreChainLock`
-  (`ValidateBlockWithRoundState`): with a lock, the header height equals the
+  (`validateBlock`, before the application call): with a lock, the header height equals the
   lock's and exceeds `state.LastCoreChainLockedBlockHeight`; without one, it
   equals it.
 - `Proposaler.Set` rejects `proposal.CoreChainLockedHeight` below the
