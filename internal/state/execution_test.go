@@ -1858,3 +1858,36 @@ func TestAppReadyProbesTheProposalBackends(t *testing.T) {
 	assert.NoError(t, ready(backend(true), backend(false)),
 		"a stalled default backend does not hold back a healthy proposal backend")
 }
+
+// TestProcessProposalValidatesChainLockHeightBeforeApp checks that a block whose
+// header core chain locked height does not follow the committed state, a check
+// that needs nothing from the application, is refused as invalid without
+// reaching the application. Consensus checks this before prevoting
+// (ValidateBlockChainLock); the other callers that verify rely on
+// ProcessProposal.
+func TestProcessProposalValidatesChainLockHeightBeforeApp(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	state, stateDB, _ := makeState(t, 1, 1)
+	app := abcimocks.NewApplication(t)
+	app.On("ProcessProposal", mock.Anything, mock.Anything).
+		Return(nil, errors.New("application cannot process this block")).Maybe()
+	logger := log.NewNopLogger()
+	proxyApp := proxy.New(abciclient.NewLocalClient(logger, app), logger, proxy.NopMetrics())
+	require.NoError(t, proxyApp.Start(ctx))
+	eventBus := eventbus.NewDefault(logger)
+	require.NoError(t, eventBus.Start(ctx))
+	blockExec := sm.NewBlockExecutor(sm.NewStore(stateDB), proxyApp, new(mpmocks.Mempool),
+		sm.EmptyEvidencePool{}, store.NewBlockStore(dbm.NewMemDB()), eventBus)
+
+	block, err := sf.MakeBlock(state, state.InitialHeight, new(types.Commit), 1)
+	require.NoError(t, err)
+	// no chain lock in the block, yet the header moves the locked height
+	require.Nil(t, block.CoreChainLock)
+	block.CoreChainLockedHeight = state.LastCoreChainLockedBlockHeight + 1000
+
+	_, err = blockExec.ProcessProposal(ctx, block, 0, state, true, types.VerifiedCommit{})
+	require.ErrorAs(t, err, &sm.ErrInvalidBlock{})
+	app.AssertNotCalled(t, "ProcessProposal", mock.Anything, mock.Anything)
+}
