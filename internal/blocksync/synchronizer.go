@@ -448,9 +448,9 @@ func (s *Synchronizer) IsCaughtUp() bool {
 // peer holds the block we are waiting for there is something to retry, so keep
 // going and say so loudly. Give up on the stall only once no peer can serve that
 // block, or once the stall has outlasted maxSyncStall within maxCatchupGap of
-// the tip or with no peer holding the block that has backed its claim, so that
-// a wedged synchronizer can still hand over rather than blocking forever
-// without handing over a node consensus cannot catch up.
+// the highest claim a peer holding the block has backed, so that a wedged
+// synchronizer can still hand over rather than blocking forever without handing
+// over a node consensus cannot catch up.
 //
 // A height claim costs a peer nothing, and a node ID costs nothing either, so
 // what a peer claims cannot keep the node in block sync once it is at the tip.
@@ -477,8 +477,8 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHe
 			if !atTip(st.lastBlockTime, st.tipWindow, s.precision(), now) {
 				atTipSince = now
 			}
-			verdict := stallVerdictFor(st.servable, st.maxServableHeight-st.height, st.stalledFor,
-				st.suppliedServable, now.Sub(atTipSince))
+			verdict := stallVerdictFor(st.servable, st.maxSuppliedHeight-st.height, st.stalledFor,
+				now.Sub(atTipSince))
 			switch verdict {
 			case stopAtTip:
 				s.logger.Warn(
@@ -508,6 +508,7 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHe
 					"height", st.height,
 					"max_peer_height", st.maxPeerHeight,
 					"max_servable_height", st.maxServableHeight,
+					"max_backed_height", st.maxSuppliedHeight,
 					"stalled_for", st.stalledFor,
 				)
 				return false, targetHeight
@@ -562,9 +563,9 @@ type stallState struct {
 	servable          bool
 	maxServableHeight int64
 	maxPeerHeight     int64
-	// suppliedServable says a peer advertising height has supplied a block we
-	// applied since it last failed a request.
-	suppliedServable bool
+	// maxSuppliedHeight is the highest claim of a peer advertising height that
+	// has supplied a block we applied since it last failed a request; 0 if none.
+	maxSuppliedHeight int64
 	// maxNearHeight is the highest claim within maxCatchupGap of the last
 	// applied block.
 	maxNearHeight int64
@@ -626,7 +627,9 @@ func (s *Synchronizer) stallSnapshot() stallState {
 		if hasHeight(peer.peerID, peer) {
 			st.servable = true
 			st.maxServableHeight = max(st.maxServableHeight, peer.height)
-			st.suppliedServable = st.suppliedServable || peer.supplied
+			if peer.supplied {
+				st.maxSuppliedHeight = max(st.maxSuppliedHeight, peer.height)
+			}
 		}
 	}
 	return st
@@ -648,7 +651,8 @@ const (
 
 // stallVerdictFor decides what to do when block sync has made no progress for
 // stalledFor, given whether any peer holds the block we are waiting for and how
-// many blocks behind the highest height a servable peer claims we are.
+// many blocks behind the highest height a servable peer that backed its claim
+// says we are.
 //
 // Waiting on a block someone has is a reason to keep retrying, not to stop:
 // handing over to consensus is effectively irreversible, so stopping while
@@ -664,18 +668,16 @@ const (
 // the backstop buys nothing and costs what dashpay/tenderdash#1413 describes, so
 // block sync keeps retrying and says so every interval.
 //
-// Advertising costs nothing, so far behind the backstop counts only a peer that
-// has backed its claim: suppliedServable says a peer holding the block supplied
-// one we applied since it last failed a request. A stall of maxSyncStall means
-// every peer asked for the block meanwhile failed, so only one never asked keeps
-// that credit, and a new peer has none.
+// Advertising costs nothing, so behindBy counts only the claims of peers that
+// backed them by supplying a block we applied since they last failed a request;
+// with no such peer the node is not known to be behind at all. A stall of
+// maxSyncStall means every peer asked for the block meanwhile failed, so only
+// one never asked keeps that credit, and a new peer has none.
 //
 // atTipFor is how long the node has been at the tip by the time of its last
 // block. Unlike stalledFor it is not reset by applying blocks, so a node
 // following the network is not kept in block sync by a claim nobody can reach.
-func stallVerdictFor(
-	servable bool, behindBy int64, stalledFor time.Duration, suppliedServable bool, atTipFor time.Duration,
-) stallVerdict {
+func stallVerdictFor(servable bool, behindBy int64, stalledFor, atTipFor time.Duration) stallVerdict {
 	switch {
 	case atTipFor > tipGrace:
 		return stopAtTip
@@ -683,7 +685,7 @@ func stallVerdictFor(
 		return keepSyncing
 	case !servable:
 		return stopNothingToFetch
-	case stalledFor > maxSyncStall && (behindBy <= maxCatchupGap || !suppliedServable):
+	case stalledFor > maxSyncStall && behindBy <= maxCatchupGap:
 		return stopStalledTooLong
 	default:
 		return keepSyncing

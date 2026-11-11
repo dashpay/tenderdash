@@ -1344,7 +1344,7 @@ func (suite *SynchronizerTestSuite) TestAdvanceCreditsTheSupplier() {
 	st := pool.stallSnapshot()
 	suite.EqualValues(101, st.height)
 	suite.Equal(blockTime, st.lastBlockTime)
-	suite.True(st.suppliedServable)
+	suite.EqualValues(200, st.maxSuppliedHeight)
 }
 
 // TestStartSeedsTheLastBlockTime checks that block sync judges the tip from the
@@ -1451,20 +1451,18 @@ func makePeers(numPeers int, minHeight, maxHeight int64) map[types.NodeID]PeerDa
 // is so far behind that consensus catch-up could never close the gap.
 func TestStallVerdictFor(t *testing.T) {
 	testCases := []struct {
-		name             string
-		servable         bool
-		behindBy         int64
-		stalledFor       time.Duration
-		suppliedServable bool
-		atTipFor         time.Duration
-		want             stallVerdict
+		name       string
+		servable   bool
+		behindBy   int64
+		stalledFor time.Duration
+		atTipFor   time.Duration
+		want       stallVerdict
 	}{
 		{
-			name:             "progressing with the block available",
-			servable:         true,
-			stalledFor:       syncTimeout / 2,
-			suppliedServable: true,
-			want:             keepSyncing,
+			name:       "progressing with the block available",
+			servable:   true,
+			stalledFor: syncTimeout / 2,
+			want:       keepSyncing,
 		},
 		{
 			name:       "progressing with nobody holding the block",
@@ -1479,34 +1477,30 @@ func TestStallVerdictFor(t *testing.T) {
 			want:       stopNothingToFetch,
 		},
 		{
-			name:             "stalled but a peer still holds the block",
-			servable:         true,
-			stalledFor:       syncTimeout + time.Second,
-			suppliedServable: true,
-			want:             keepSyncing,
+			name:       "stalled but a peer still holds the block",
+			servable:   true,
+			stalledFor: syncTimeout + time.Second,
+			want:       keepSyncing,
 		},
 		{
-			name:             "stalled just short of the wedge limit",
-			servable:         true,
-			stalledFor:       maxSyncStall,
-			suppliedServable: true,
-			want:             keepSyncing,
+			name:       "stalled just short of the wedge limit",
+			servable:   true,
+			stalledFor: maxSyncStall,
+			want:       keepSyncing,
 		},
 		{
-			name:             "stalled past the wedge limit within reach of the tip",
-			servable:         true,
-			behindBy:         maxCatchupGap,
-			stalledFor:       maxSyncStall + time.Second,
-			suppliedServable: true,
-			want:             stopStalledTooLong,
+			name:       "stalled past the wedge limit within reach of the tip",
+			servable:   true,
+			behindBy:   maxCatchupGap,
+			stalledFor: maxSyncStall + time.Second,
+			want:       stopStalledTooLong,
 		},
 		{
-			name:             "stalled past the wedge limit while far behind",
-			servable:         true,
-			behindBy:         maxCatchupGap + 1,
-			stalledFor:       maxSyncStall + time.Second,
-			suppliedServable: true,
-			want:             keepSyncing,
+			name:       "stalled past the wedge limit while far behind",
+			servable:   true,
+			behindBy:   maxCatchupGap + 1,
+			stalledFor: maxSyncStall + time.Second,
+			want:       keepSyncing,
 		},
 		{
 			name:       "the wedge limit does not override nothing to fetch",
@@ -1515,19 +1509,18 @@ func TestStallVerdictFor(t *testing.T) {
 			want:       stopNothingToFetch,
 		},
 		{
-			name:       "far behind a claim no peer has backed, stalled past the wedge limit",
+			name:       "stalled past the wedge limit with no claim backed",
 			servable:   true,
-			behindBy:   maxCatchupGap + 1,
+			behindBy:   -100,
 			stalledFor: maxSyncStall + time.Second,
 			want:       stopStalledTooLong,
 		},
 		{
-			name:             "at the tip past the grace, behind a backed claim",
-			servable:         true,
-			behindBy:         maxCatchupGap + 1,
-			suppliedServable: true,
-			atTipFor:         tipGrace + time.Second,
-			want:             stopAtTip,
+			name:     "at the tip past the grace, behind a backed claim",
+			servable: true,
+			behindBy: maxCatchupGap + 1,
+			atTipFor: tipGrace + time.Second,
+			want:     stopAtTip,
 		},
 		{
 			name:     "at the tip within the grace",
@@ -1540,7 +1533,7 @@ func TestStallVerdictFor(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			require.Equal(t, tc.want,
-				stallVerdictFor(tc.servable, tc.behindBy, tc.stalledFor, tc.suppliedServable, tc.atTipFor))
+				stallVerdictFor(tc.servable, tc.behindBy, tc.stalledFor, tc.atTipFor))
 		})
 	}
 }
@@ -1690,12 +1683,12 @@ func (suite *SynchronizerTestSuite) TestStallSnapshotServableHeight() {
 		return peer
 	}
 	testCases := []struct {
-		name         string
-		peers        []PeerData
-		wantMax      int64
-		wantUsable   int64
-		wantSupplied bool
-		wantNear     int64
+		name       string
+		peers      []PeerData
+		wantMax    int64
+		wantUsable int64
+		wantBacked int64
+		wantNear   int64
 	}{
 		{name: "no peers"},
 		{
@@ -1730,11 +1723,11 @@ func (suite *SynchronizerTestSuite) TestStallSnapshotServableHeight() {
 			wantNear:   height + maxCatchupGap - 1,
 		},
 		{
-			name:         "a servable peer has supplied a block",
-			peers:        []PeerData{newPeerData("archive", 1, 20), supplied(newPeerData("recent", 5, 30))},
-			wantMax:      30,
-			wantUsable:   30,
-			wantSupplied: true,
+			name:       "a servable peer has supplied a block",
+			peers:      []PeerData{newPeerData("archive", 1, 20), supplied(newPeerData("recent", 5, 30))},
+			wantMax:    30,
+			wantUsable: 30,
+			wantBacked: 30,
 		},
 		{
 			name:       "only a peer that cannot serve the height has supplied a block",
@@ -1755,7 +1748,7 @@ func (suite *SynchronizerTestSuite) TestStallSnapshotServableHeight() {
 			suite.Require().Equal(tc.wantMax, st.maxPeerHeight)
 			suite.Require().Equal(tc.wantUsable, st.maxServableHeight)
 			suite.Require().Equal(tc.wantUsable > 0, st.servable)
-			suite.Require().Equal(tc.wantSupplied, st.suppliedServable)
+			suite.Require().Equal(tc.wantBacked, st.maxSuppliedHeight)
 			suite.Require().Equal(tc.wantNear, st.maxNearHeight)
 			suite.Require().Equal(len(tc.peers) > 0, st.hasPeers)
 		})
@@ -3155,7 +3148,7 @@ func (suite *SynchronizerTestSuite) TestSmallBlocksAfterSlowApplyKeepPeersUsable
 	st := h.pool.stallSnapshot()
 	height := st.height
 	suite.Equal(keepSyncing,
-		stallVerdictFor(st.servable, st.maxServableHeight-height, st.stalledFor, st.suppliedServable, 0),
+		stallVerdictFor(st.servable, st.maxSuppliedHeight-height, st.stalledFor, 0),
 		"healthy peers must not trigger consensus handoff at height %d below tip %d", height, st.maxPeerHeight)
 	_, found := h.pool.peerStore.FindPeer(height)
 	suite.True(found, "healthy peers must accept the next block request after the batch drains")
