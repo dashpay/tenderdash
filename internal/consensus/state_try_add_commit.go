@@ -335,7 +335,7 @@ func verifyProcessedCommit(ctx context.Context, blockExec *blockExecutor, stateD
 			// this is a non-recoverable error in current architecture
 			panic(fmt.Errorf("ABCI client stopped, Tenderdash needs to be restarted: %w", err))
 		}
-		return fmt.Errorf("unable to process proposal: %w", err)
+		return err
 	}
 	if err := blockExec.validate(ctx, stateData); err != nil {
 		return fmt.Errorf("+2/3 committed an invalid block: %w", err)
