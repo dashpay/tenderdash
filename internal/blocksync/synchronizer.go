@@ -491,8 +491,13 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHe
 			if st.hasPeers && st.height >= st.maxPeerHeight {
 				return true, target
 			}
-			verdict := stallVerdictFor(st.servable, st.maxSuppliedHeight-st.height, st.stalledFor,
-				now.Sub(atTipSince))
+			// Far back in the chain's history any claim counts, as nothing then
+			// suggests a chain that stopped at the node's height.
+			behindBy := st.maxSuppliedHeight - st.height
+			if now.Sub(st.lastBlockTime) > staleBlockAge {
+				behindBy = st.maxServableHeight - st.height
+			}
+			verdict := stallVerdictFor(st.servable, behindBy, st.stalledFor, now.Sub(atTipSince))
 			switch verdict {
 			case stopAtTip:
 				s.logger.Warn(

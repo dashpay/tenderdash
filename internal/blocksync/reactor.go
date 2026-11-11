@@ -60,6 +60,11 @@ const (
 	// tipGrace is how long the node must stay at the tip before higher height
 	// claims stop keeping it in block sync.
 	tipGrace = 2 * syncTimeout
+
+	// staleBlockAge is how old the last applied block must be for every claim,
+	// backed or not, to count in the stall backstop. A node restarted while its
+	// chain is stopped, as during an upgrade, sees a younger one.
+	staleBlockAge = time.Hour
 )
 
 type ReactorOption func(*Reactor)

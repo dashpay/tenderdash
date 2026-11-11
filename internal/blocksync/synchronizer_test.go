@@ -2548,7 +2548,7 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverPastAFarClaimFromNew
 	)
 	h := suite.newWaitForSyncHarness(height, newPeerData(tipPeer, 1, height-1))
 	defer h.cancel()
-	h.setLastBlockTime(h.clock.Now().Add(-time.Hour))
+	h.setLastBlockTime(h.clock.Now().Add(-staleBlockAge / 2))
 
 	elapsed, caughtUp, ended := h.run(maxSyncStall+time.Minute, h.newPeerEveryMinute())
 	suite.Require().True(ended, "block sync kept waiting on a halted chain behind a claim moved to a new peer every minute")

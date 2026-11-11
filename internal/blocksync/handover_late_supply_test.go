@@ -68,7 +68,7 @@ func (r *lateSupplyRun) apply(peer PeerData, request *serviceRequest, height int
 		PeerID: peer.peerID,
 		Block:  &types.Block{Header: types.Header{Height: height}},
 	}))
-	sync.advance(r.blockTimes[height], defaultPrecision)
+	sync.advance(peer.peerID, r.blockTimes[height], defaultPrecision)
 	r.served++
 }
 

@@ -22,7 +22,7 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncStallBackstopIgnoresAFarClaim
 	near.supplied = true
 	h := suite.newWaitForSyncHarness(height, near, newPeerData("claimant", 1, maxPlausiblePeerHeight))
 	defer h.cancel()
-	h.setLastBlockTime(h.clock.Now().Add(-time.Hour))
+	h.setLastBlockTime(h.clock.Now().Add(-staleBlockAge / 2))
 
 	elapsed, caughtUp, ended := h.run(maxSyncStall+time.Minute, nil)
 	suite.Require().True(ended, "a far claim nobody backed kept a stalled node in block sync")
