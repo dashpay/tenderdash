@@ -1940,6 +1940,39 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverPastUnservedClaims()
 	}
 }
 
+// TestWaitForSyncHandsOverPastRotatingUnservedClaims checks that unserved far
+// claims arriving under a fresh peer ID before the previous one has failed do
+// not keep a node at the tip in block sync indefinitely. A node ID costs a peer
+// nothing, so a claim record kept per ID must not be the only way out.
+func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverPastRotatingUnservedClaims() {
+	const (
+		height  = int64(100)
+		tipPeer = types.NodeID("tip peer")
+		// a new ID joins every rotateEvery; each fails syncTimeout after joining
+		rotateEvery = 30 * time.Second
+	)
+	h := suite.newWaitForSyncHarness(height, newPeerData(tipPeer, 1, height-1))
+	defer h.cancel()
+
+	traffic := h.tipBlocks(tipPeer, tipBlockInterval)
+	limit := maxSyncStall + tipGrace
+	elapsed, caughtUp, ended := h.run(limit, func(elapsed time.Duration) {
+		traffic(elapsed)
+		if elapsed%rotateEvery == 0 {
+			id := types.NodeID(fmt.Sprintf("rotating peer %d", elapsed/rotateEvery))
+			h.sync.AddPeer(newPeerData(id, 1, maxPlausiblePeerHeight))
+		}
+		if elapsed >= syncTimeout && (elapsed-syncTimeout)%rotateEvery == 0 {
+			id := types.NodeID(fmt.Sprintf("rotating peer %d", (elapsed-syncTimeout)/rotateEvery))
+			next, _ := h.sync.GetStatus()
+			h.fail(id, next, client.ErrPeerNotResponded)
+		}
+	})
+	suite.Require().True(ended,
+		"block sync still following the tip after %s behind far claims under rotating peer IDs", elapsed)
+	suite.Require().False(caughtUp)
+}
+
 // TestWaitForSyncKeepsSyncingWhenASlowPeerRecovers checks that a peer far ahead
 // which once failed the height we need, and then serves a run of blocks from it,
 // keeps block sync going: one timeout from a slow peer does not make its claim
