@@ -56,10 +56,10 @@ const (
 	// Platform runs with and a margin for extra rounds and clock skew.
 	tipRecency = 5 * time.Minute
 
-	// tipLag is how far behind the network block sync runs at the tip: a status
-	// round to learn of a new block, serviceGrace before every peer that has it
-	// is asked for it, and serviceGrace each for an answer and a margin.
-	tipLag = statusUpdateIntervalSeconds*time.Second + 3*serviceGrace
+	// tipLag is the shortest at-tip window: the stall after which a node with
+	// nothing to fetch hands over, and a status round to learn there is nothing.
+	// A pause in block production then ends block sync by one rule or the other.
+	tipLag = syncTimeout + statusUpdateIntervalSeconds*time.Second
 
 	// tipGrace is how long the node must stay at the tip before higher height
 	// claims stop keeping it in block sync.
