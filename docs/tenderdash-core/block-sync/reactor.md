@@ -58,17 +58,18 @@ claims; when no peer advertises the next height and no block has been applied
 for 60 seconds; when the node has been at the tip of the chain for two minutes;
 or when no block has been applied for 10 minutes and the node is within 10
 blocks of every claim that covers the next height and comes from a peer that
-has backed it. When the node's last block is more than an hour old, that last
-rule counts every claim that covers the next height, backed or not, so a node
-far behind keeps syncing while its peers fail requests and resumes as soon as
-one serves again.
+has backed it. When the node's last block was more than a day old as the stall
+began, that last rule counts every claim that covers the next height, backed or
+not, so a node far behind keeps syncing while its peers fail requests and
+resumes as soon as one serves again.
 
 Whether the node is at the tip is judged from the time of its last applied
 block, which the validators commit to and a peer cannot change: a node behind
 the network applies old blocks. The node is at the tip while that block is no
-older than the chain took to commit its last 10 blocks, or than 70 seconds (a
-status round and a request timeout) where that is longer, and in any case no
-older than five minutes. The pace of the chain is taken from the blocks in the
+older than the chain took to commit its last 10 blocks, or than 40 seconds (a
+status round, the 10-second wait before every peer is asked for the next
+block, and time for an answer) where that is longer, and in any case no older
+than five minutes. The pace of the chain is taken from the blocks in the
 block store at start and from those applied since; with no earlier block
 stored, only the five-minute limit applies until a block is applied. Five
 minutes covers the three-minute empty-block interval Dash Platform runs with
@@ -81,18 +82,24 @@ A peer backs its claim by supplying a block the node applies, and loses that
 credit when it fails a request (a timeout or other failure, or a
 `NoBlockResponse`) or is dropped; a newly connected peer has none. Block
 requests go to peers that have backed their claims first. Once a request for
-the next block fails, every other peer that advertises it is asked for it as
-well.
+the next block fails or goes unanswered for 10 seconds, every other peer that
+advertises it is asked for it as well.
 
 What operators can expect:
 
-- A node that keeps receiving each next block while that block is less than
-  its at-tip window minus two minutes old hands over within two minutes of
-  reaching the tip, whatever heights peers claim.
+- A node that has reached the tip hands over two minutes later, whatever
+  heights peers claim, as long as it applies each new block before the one
+  before it is older than the at-tip window: within about two minutes of its
+  commit on a chain committing a block every three minutes, and within about
+  35 seconds on a chain committing one every few seconds. A single slow peer
+  delays a block by about 10 seconds.
 - On a chain that has stopped producing blocks, a restarted node hands over
   after 10 minutes without a block, or once every peer that supplied blocks
-  earlier has failed a request for the next one, whichever is later.
-- A node may hand over a few blocks behind the network, up to about 70
+  earlier has failed a request for the next one, whichever is later. If the
+  chain had been stopped for more than a day when the node started waiting,
+  the node keeps waiting while a peer claims a height more than 10 blocks
+  above it and advertises the next block.
+- A node may hand over a few blocks behind the network, up to about 40
   seconds of blocks on a fast chain, or up to five minutes of blocks after a
   restart with no earlier block stored; consensus catch-up closes the rest.
 - A node whose clock runs ahead of the validators' by more than its at-tip
