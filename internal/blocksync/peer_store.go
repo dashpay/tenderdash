@@ -131,8 +131,13 @@ func (p *InMemPeerStore) Query(spec store.QueryFunc[types.NodeID, PeerData], lim
 // FindPeer prefers a peer that supplied a block we applied since it last failed
 // a request, then a due recovery probe, then ordinary service.
 func (p *InMemPeerStore) FindPeer(height int64) (PeerData, bool) {
+	return p.findPeer(height, nil)
+}
+
+// findPeer is FindPeer among peers not in except.
+func (p *InMemPeerStore) findPeer(height int64, except map[types.NodeID]struct{}) (PeerData, bool) {
 	peers := p.Query(store.AndX(peerNumPendingCond(maxPendingRequestsPerPeer, "<"),
-		heightBetweenPeerHeightRange(height)), 0)
+		heightBetweenPeerHeightRange(height), notIn(except)), 0)
 	var selected PeerData
 	priority := 0
 	for _, peer := range peers {
@@ -151,7 +156,12 @@ func (p *InMemPeerStore) FindPeer(height int64) (PeerData, bool) {
 // reservePeer checks and reserves both pending capacity and the single probe
 // under the store lock. Concurrent producers cannot reserve the same probe.
 func (p *InMemPeerStore) reservePeer(height int64) (PeerData, bool) {
-	peer, found := p.FindPeer(height)
+	return p.reservePeerExcept(height, nil)
+}
+
+// reservePeerExcept is reservePeer among peers not in except.
+func (p *InMemPeerStore) reservePeerExcept(height int64, except map[types.NodeID]struct{}) (PeerData, bool) {
+	peer, found := p.findPeer(height, except)
 	if !found {
 		return PeerData{}, false
 	}
@@ -227,6 +237,13 @@ func peerNumPendingCond(val int32, op string) store.QueryFunc[types.NodeID, Peer
 			return peer.numPending > val
 		}
 		panic("unsupported operation")
+	}
+}
+
+func notIn(except map[types.NodeID]struct{}) store.QueryFunc[types.NodeID, PeerData] {
+	return func(peerID types.NodeID, _ PeerData) bool {
+		_, found := except[peerID]
+		return !found
 	}
 }
 

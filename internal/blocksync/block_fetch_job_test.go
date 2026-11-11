@@ -471,3 +471,47 @@ func (suite *BlockFetchJobTestSuite) TestSlowSuccessPrefersAnotherPeer() {
 	suite.Require().True(syncer.peerStore.HasPeerForHeight(2))
 	suite.Require().Equal(2, syncer.peerStore.Len())
 }
+
+// TestRetryOfTheHeightToApplyAsksEveryPeer checks that once a request for the
+// height block sync waits to apply fails, that height is asked of every peer
+// that advertises it at once, not of one peer after another. Peers listed first
+// could otherwise each hold it until its request times out while a peer able to
+// serve it waits behind them.
+func TestRetryOfTheHeightToApplyAsksEveryPeer(t *testing.T) {
+	const height = int64(100)
+	peerIDs := []types.NodeID{"first", "second", "third", "fourth", "serving"}
+	store := NewInMemPeerStore()
+	for _, peerID := range peerIDs {
+		store.Upsert(newPeerData(peerID, 1, height+1000))
+	}
+	asked := map[types.NodeID]int{}
+	blockClient := mocks.NewBlockClient(t)
+	blockClient.
+		On("GetBlock", mock.Anything, mock.Anything, mock.Anything).
+		Return(func(_ context.Context, h int64, peerID types.NodeID) *promise.Promise[*bcproto.BlockResponse] {
+			if h == height {
+				asked[peerID]++
+			}
+			return promise.New(func(_ func(*bcproto.BlockResponse), reject func(error)) {
+				reject(client.ErrPeerNotResponded)
+			})
+		}, nil)
+	gen := newJobGenerator(height+1, log.NewNopLogger(), blockClient, store)
+	require.True(t, gen.shouldJobBeGenerated(height, 0))
+
+	// the first request for height went to the first peer and failed
+	store.Update("first", AddNumPending(1))
+	store.AddFailure("first", maxConsecutiveFailures)
+	gen.pushBack(height)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	for range 2 * len(peerIDs) {
+		job, err := gen.nextJob(ctx)
+		require.NoError(t, err)
+		job.Execute(ctx)
+	}
+	for _, peerID := range peerIDs {
+		require.Equal(t, 1, asked[peerID], "%s asked for the height %d times", peerID, asked[peerID])
+	}
+}

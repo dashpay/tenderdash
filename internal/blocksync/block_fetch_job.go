@@ -97,6 +97,12 @@ type jobGenerator struct {
 	peerStore  *InMemPeerStore
 	height     int64
 	pushedBack []int64
+	// applyHeight is the height block sync waits to apply. Once a request for it
+	// fails, every peer that advertises it is asked for it; asked holds the
+	// peers asked since, and spreading says some may remain.
+	applyHeight int64
+	asked       map[types.NodeID]struct{}
+	spreading   bool
 }
 
 func newJobGenerator(height int64, logger log.Logger, client client.BlockClient, peerStore *InMemPeerStore) *jobGenerator {
@@ -110,21 +116,30 @@ func newJobGenerator(height int64, logger log.Logger, client client.BlockClient,
 }
 
 func (p *jobGenerator) nextHeight() int64 {
+	height, _ := p.next()
+	return height
+}
+
+// next returns the next height to request and whether it is a retry.
+func (p *jobGenerator) next() (int64, bool) {
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
 	if len(p.pushedBack) > 0 {
 		height := p.pushedBack[0]
 		p.pushedBack = p.pushedBack[1:]
-		return height
+		return height, true
 	}
 	height := p.height
 	p.height++
-	return height
+	return height, false
 }
 
 func (p *jobGenerator) nextJob(ctx context.Context) (*workerpool.Job, error) {
+	if job := p.spreadRetry(); job != nil {
+		return job, nil
+	}
 	for {
-		height := p.nextHeight()
+		height, retry := p.next()
 		peer, err := p.getPeer(ctx, height)
 		if errors.Is(err, errLowerHeightQueued) {
 			p.pushBack(height)
@@ -133,8 +148,44 @@ func (p *jobGenerator) nextJob(ctx context.Context) (*workerpool.Job, error) {
 		if err != nil {
 			return nil, err
 		}
+		if retry {
+			p.markAsked(height, peer.peerID)
+		}
 		return workerpool.NewJob(blockFetchJobHandler(p.client, peer, height)), nil
 	}
+}
+
+// markAsked records that the height block sync waits to apply was asked of
+// peerID again, and has it asked of every other peer that advertises it. One
+// peer after another, peers listed first could each hold it until it times out.
+func (p *jobGenerator) markAsked(height int64, peerID types.NodeID) {
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+	if height != p.applyHeight {
+		return
+	}
+	if p.asked == nil {
+		p.asked = map[types.NodeID]struct{}{}
+	}
+	p.asked[peerID] = struct{}{}
+	p.spreading = true
+}
+
+// spreadRetry returns a job asking one more peer, not asked yet, for the
+// height block sync waits to apply, or nil once there is none.
+func (p *jobGenerator) spreadRetry() *workerpool.Job {
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+	if !p.spreading {
+		return nil
+	}
+	peer, found := p.peerStore.reservePeerExcept(p.applyHeight, p.asked)
+	if !found {
+		p.spreading = false
+		return nil
+	}
+	p.asked[peer.peerID] = struct{}{}
+	return workerpool.NewJob(blockFetchJobHandler(p.client, peer, p.applyHeight))
 }
 
 // errLowerHeightQueued reports that a height below the one waiting for a peer
@@ -227,9 +278,12 @@ func (p *jobGenerator) getPeer(ctx context.Context, height int64) (PeerData, err
 // typically the very height everything else is waiting for, so holding those
 // back is what would turn a bound into a permanent stall.
 func (p *jobGenerator) shouldJobBeGenerated(applyHeight int64, pendingBytes int) bool {
-	p.mtx.RLock()
-	defer p.mtx.RUnlock()
-	if len(p.pushedBack) > 0 {
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+	if applyHeight != p.applyHeight {
+		p.applyHeight, p.asked, p.spreading = applyHeight, nil, false
+	}
+	if len(p.pushedBack) > 0 || p.spreading {
 		return true
 	}
 	if pendingBytes >= maxPendingApplyBytes || p.height-applyHeight >= maxOutstandingHeights {
