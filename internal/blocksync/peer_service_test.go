@@ -219,7 +219,6 @@ func TestServiceProbationRemainsServableBelowTip(t *testing.T) {
 	require.True(t, st.servable)
 	require.True(t, st.hasPeers)
 	require.EqualValues(t, 1000, st.maxServableHeight)
-	require.EqualValues(t, 1000, st.maxCredibleHeight, "cooling is not a failure to serve")
 }
 
 func TestServiceSavedCreditCannotHideNewSlowService(t *testing.T) {

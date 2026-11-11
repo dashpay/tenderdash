@@ -4,9 +4,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
-	"time"
 
-	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/types"
@@ -318,48 +316,26 @@ func TestAddFailureClearsPending(t *testing.T) {
 	require.EqualValues(t, 2, peer.numFailures)
 }
 
-// TestUnservedRecord checks what discounts a peer's claim and what makes it count
-// again, and that records of peers that stop failing are forgotten.
-func TestUnservedRecord(t *testing.T) {
-	clock := clockwork.NewFakeClock()
-	peers := NewInMemPeerStore()
-	peers.clock = clock
-	from := func(peerID types.NodeID) (int64, bool) {
-		height, ok := peers.unservedFrom([]PeerData{{peerID: peerID}})[peerID]
-		return height, ok
+// TestFailureEndsSuppliedCredit checks that a failed request or an answer that
+// the block is missing ends the credit a peer earned by supplying blocks, and
+// that a fresh status for the peer does not.
+func TestFailureEndsSuppliedCredit(t *testing.T) {
+	peerID := types.NodeID("peer1")
+	for name, fail := range map[string]func(*InMemPeerStore){
+		"failed request": func(p *InMemPeerStore) { p.AddFailure(peerID, 10) },
+		"missing block":  func(p *InMemPeerStore) { p.RecordMissingBlock(peerID, 5) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			supplier := newPeerData(peerID, 1, 100)
+			supplier.supplied = true
+			inmem := NewInMemPeerStore(supplier)
+			inmem.Upsert(newPeerData(peerID, 1, 200))
+			peer, _ := inmem.Get(peerID)
+			require.True(t, peer.supplied, "a status update keeps the credit")
+
+			fail(inmem)
+			peer, _ = inmem.Get(peerID)
+			require.False(t, peer.supplied)
+		})
 	}
-
-	peers.RecordUnserved("peer", 100)
-	peers.RecordUnserved("peer", 90)
-	height, ok := from("peer")
-	require.True(t, ok)
-	require.EqualValues(t, 90, height, "the lowest failed height is the one discounted from")
-
-	peers.RecordServed("peer", 89)
-	_, ok = from("peer")
-	require.True(t, ok, "a block below the failed height does not restore the claim")
-	peers.RecordServed("peer", 90)
-	_, ok = from("peer")
-	require.False(t, ok, "an applied block at the failed height restores the claim")
-
-	peers.RecordUnserved("gone", 5)
-	clock.Advance(unservedRecordTTL + time.Second)
-	peers.RecordUnserved("fresh", 7)
-	_, ok = from("gone")
-	require.False(t, ok, "a record not refreshed within unservedRecordTTL is dropped")
-	_, ok = from("fresh")
-	require.True(t, ok)
-}
-
-// TestUnservedRecordExpiresWithoutAnotherFailure checks the documented expiry: a
-// record is forgotten unservedRecordTTL after the peer's last failure, whether or
-// not some other peer fails in the meantime.
-func TestUnservedRecordExpiresWithoutAnotherFailure(t *testing.T) {
-	clock := clockwork.NewFakeClock()
-	peers := NewInMemPeerStore()
-	peers.clock = clock
-	peers.RecordUnserved("peer", 5)
-	clock.Advance(unservedRecordTTL + time.Second)
-	_, ok := peers.unservedFrom([]PeerData{{peerID: "peer"}})["peer"]
-	require.False(t, ok, "the record outlived unservedRecordTTL")
 }

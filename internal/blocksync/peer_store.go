@@ -1,11 +1,7 @@
 package blocksync
 
 import (
-	"maps"
-	"time"
-
 	"github.com/jonboulle/clockwork"
-	sync "github.com/sasha-s/go-deadlock"
 	"golang.org/x/exp/constraints"
 
 	"github.com/dashpay/tenderdash/libs/store"
@@ -21,18 +17,6 @@ type (
 		// a concurrent write is lost. Nothing here substitutes another store.
 		store *store.InMemStore[types.NodeID, PeerData]
 		clock clockwork.Clock
-
-		unservedMtx sync.Mutex
-		// unserved holds the peers whose claims are discounted. It is kept
-		// outside PeerData so that neither dropping the peer nor its next status
-		// erases it.
-		unserved map[types.NodeID]unservedRecord
-	}
-	// unservedRecord discounts a peer's claim from the lowest height it failed to serve.
-	unservedRecord struct {
-		from int64
-		// failedAt is when the peer last failed, for pruning.
-		failedAt time.Time
 	}
 	// PeerData uses to keep peer related data like base height and the current height etc
 	PeerData struct {
@@ -50,15 +34,17 @@ type (
 		// status on. Requests go out by node ID, so a reservation's copy of it is
 		// the only generation known for a request that never gets an answer.
 		connID uint64
+		// supplied says a block this peer sent has been applied since it last
+		// failed a request. A new peer has supplied nothing.
+		supplied bool
 	}
 )
 
 // NewInMemPeerStore creates a new in-memory peer store
 func NewInMemPeerStore(peers ...PeerData) *InMemPeerStore {
 	mem := &InMemPeerStore{
-		store:    store.NewInMemStore[types.NodeID, PeerData](),
-		clock:    clockwork.NewRealClock(),
-		unserved: map[types.NodeID]unservedRecord{},
+		store: store.NewInMemStore[types.NodeID, PeerData](),
+		clock: clockwork.NewRealClock(),
 	}
 	for _, peer := range peers {
 		mem.Put(peer.peerID, peer)
@@ -195,6 +181,7 @@ func (p *InMemPeerStore) AddFailure(peerID types.NodeID, maxFailures int32) bool
 	p.store.Update(peerID, func(_ types.NodeID, peer *PeerData) {
 		peer.addPending(-1)
 		peer.numFailures++
+		peer.supplied = false
 		tooMany = peer.numFailures >= maxFailures
 	})
 	return tooMany
@@ -205,55 +192,8 @@ func (p *InMemPeerStore) RecordMissingBlock(peerID types.NodeID, height int64) {
 	p.store.Update(peerID, func(_ types.NodeID, peer *PeerData) {
 		peer.addPending(-1)
 		peer.missingThrough = max(peer.missingThrough, height)
+		peer.supplied = false
 	})
-}
-
-// RecordUnserved notes that the peer failed to serve a height it was asked for.
-func (p *InMemPeerStore) RecordUnserved(peerID types.NodeID, height int64) {
-	p.unservedMtx.Lock()
-	defer p.unservedMtx.Unlock()
-	now := p.pruneUnservedLocked()
-	record, ok := p.unserved[peerID]
-	if !ok || height < record.from {
-		record.from = height
-	}
-	record.failedAt = now
-	p.unserved[peerID] = record
-}
-
-// RecordServed clears the peer's record once a block it supplied at or above
-// the failed height has been applied. Delivery alone is not enough: anyone can
-// send a block that fails verification.
-func (p *InMemPeerStore) RecordServed(peerID types.NodeID, height int64) {
-	p.unservedMtx.Lock()
-	defer p.unservedMtx.Unlock()
-	if record, ok := p.unserved[peerID]; ok && height >= record.from {
-		delete(p.unserved, peerID)
-	}
-}
-
-// unservedFrom returns the lowest unserved height of each of peers that has a record.
-func (p *InMemPeerStore) unservedFrom(peers []PeerData) map[types.NodeID]int64 {
-	p.unservedMtx.Lock()
-	defer p.unservedMtx.Unlock()
-	p.pruneUnservedLocked()
-	from := make(map[types.NodeID]int64)
-	for _, peer := range peers {
-		if record, ok := p.unserved[peer.peerID]; ok {
-			from[peer.peerID] = record.from
-		}
-	}
-	return from
-}
-
-// pruneUnservedLocked drops records of peers that have not failed for
-// unservedRecordTTL and returns the time it pruned at.
-func (p *InMemPeerStore) pruneUnservedLocked() time.Time {
-	now := p.clock.Now()
-	maps.DeleteFunc(p.unserved, func(_ types.NodeID, record unservedRecord) bool {
-		return now.Sub(record.failedAt) > unservedRecordTTL
-	})
-	return now
 }
 
 // All returns all stored peers in the store

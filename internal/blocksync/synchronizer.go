@@ -131,11 +131,9 @@ type (
 		logger log.Logger
 
 		lastAdvance time.Time
-		// lastBlockTime is the time of the last applied block, guarded by mtx.
-		lastBlockTime time.Time
-		// synchrony bounds how far ahead of the local clock a block time can be
-		// for a clock in step with the validators'. Set before WaitForSync runs.
-		synchrony types.SynchronyParams
+		// blockTimes holds the times of the last maxCatchupGap+1 applied blocks,
+		// oldest first. Guarded by mtx.
+		blockTimes []time.Time
 
 		mtx sync.RWMutex
 
@@ -211,7 +209,6 @@ func NewSynchronizer(start int64, client client.BlockClient, blockExec *blockApp
 		monitorInterval: defaultSyncRateIntervalBlocks,
 		workerPool:      workerpool.New(poolWorkerSize, workerpool.WithLogger(logger)),
 		pendingToApply:  map[int64]BlockResponse{},
-		synchrony:       types.DefaultSynchronyParams(),
 	}
 	for _, opt := range opts {
 		opt(bp)
@@ -251,9 +248,7 @@ func (s *Synchronizer) OnStart(ctx context.Context) error {
 	s.lastAdvance = s.clock.Now()
 	s.lastMonitorUpdate = s.lastAdvance
 	if s.applier != nil {
-		state := s.applier.State()
-		s.lastBlockTime = state.LastBlockTime
-		s.synchrony = state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()
+		s.blockTimes = []time.Time{s.applier.State().LastBlockTime}
 	}
 	s.ctx, s.cancel = context.WithCancel(ctx)
 	applicationCtx, ok := ctx.Value(applicationContextKey{}).(context.Context)
@@ -335,7 +330,6 @@ func (s *Synchronizer) consumeJobResult(ctx, applyCtx context.Context) error {
 		if !errors.As(res.Err, &bfErr) {
 			return nil
 		}
-		s.peerStore.RecordUnserved(bfErr.peerID, bfErr.height)
 		var missing *client.ErrBlockNotFound
 		if errors.As(bfErr.err, &missing) && missing.Height == bfErr.height {
 			s.peerStore.RecordMissingBlock(bfErr.peerID, bfErr.height)
@@ -395,7 +389,6 @@ func (s *Synchronizer) consumeJobResult(ctx, applyCtx context.Context) error {
 			"height", failed.Block.Height,
 			"peer", failed.PeerID,
 			"error", err.Error())
-		s.peerStore.RecordUnserved(failed.PeerID, failed.Block.Height)
 		s.RemovePeer(failed.PeerID)
 		_ = s.client.Send(ctx, p2p.PeerError{NodeID: failed.PeerID, Err: err, ConnID: failed.ConnID})
 	}
@@ -455,17 +448,16 @@ func (s *Synchronizer) IsCaughtUp() bool {
 // peer holds the block we are waiting for there is something to retry, so keep
 // going and say so loudly. Give up on the stall only once no peer can serve that
 // block, or once the stall has outlasted maxSyncStall within maxCatchupGap of
-// the tip, so that a wedged synchronizer can still hand over rather than
-// blocking forever without handing over a node consensus cannot catch up.
+// the tip or with no peer holding the block that has backed its claim, so that
+// a wedged synchronizer can still hand over rather than blocking forever
+// without handing over a node consensus cannot catch up.
 //
-// A height claim costs a peer nothing, so claims alone cannot keep the node in
-// block sync once the node is at the tip. The time of the last applied block is
-// what tells it so: the validators commit to it, and a node far behind applies
-// old blocks. Once that time has stayed within tipRecency of the local clock for
-// unservedClaimGrace, and no peer that has not failed to serve it holds the next
-// block, the node hands over even though blocks arriving meanwhile keep it from
-// stalling. A chain that stops producing blocks ages that time out, and then
-// only a stall of maxSyncStall with no such peer ends block sync.
+// A height claim costs a peer nothing, and a node ID costs nothing either, so
+// what a peer claims cannot keep the node in block sync once it is at the tip.
+// The time of the last applied block tells it so: the validators commit to it,
+// and a node far behind applies old blocks. Once the node has stayed at the tip
+// by that time for tipGrace, it hands over whatever peers claim, even though
+// blocks arriving meanwhile keep it from stalling.
 func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHeight int64) {
 	ticker := s.clock.NewTicker(switchToConsensusIntervalSeconds * time.Second)
 	defer ticker.Stop()
@@ -482,24 +474,21 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHe
 				return true, targetHeight
 			}
 			now := s.clock.Now()
-			if !s.isRecent(st.lastBlockTime, now) {
+			if !atTip(st.lastBlockTime, st.tipWindow, s.precision(), now) {
 				atTipSince = now
 			}
-			atTipFor := now.Sub(atTipSince)
 			verdict := stallVerdictFor(st.servable, st.maxServableHeight-st.height, st.stalledFor,
-				st.maxCredibleHeight >= st.height, atTipFor)
+				st.suppliedServable, now.Sub(atTipSince))
 			switch verdict {
-			case stopUnservedClaims:
-				s.logger.Error(
-					"higher peer claims went unserved, handing over to consensus",
+			case stopAtTip:
+				s.logger.Warn(
+					"at the tip by block time, handing over to consensus below the highest peer claim",
 					"height", st.height,
 					"max_peer_height", st.maxPeerHeight,
-					"max_counted_height", st.maxCountedHeight,
 					"last_block_time", st.lastBlockTime,
-					"stalled_for", st.stalledFor,
 				)
-				// Claims that went unserved must not hold back our own proposals.
-				return false, st.maxCountedHeight
+				// Claims out of reach of the tip must not hold back our own proposals.
+				return false, st.maxNearHeight
 			case stopNothingToFetch:
 				if st.maxPeerHeight > st.height {
 					// Peers claim to be ahead yet none of them holds the block we
@@ -544,12 +533,22 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHe
 	}
 }
 
-// isRecent reports whether a block with blockTime puts the node at the tip. A
-// time further ahead of the local clock than the synchrony bounds allow means
-// the clock is behind the validators', so how old the block is cannot be told.
-func (s *Synchronizer) isRecent(blockTime, now time.Time) bool {
+// atTip reports whether a last applied block with blockTime puts the node at
+// the tip: it is at most window old, and no further ahead of the local clock
+// than precision, the bound validators hold block times to. Further ahead, the
+// local clock is behind the validators' and cannot tell how old the block is.
+func atTip(blockTime time.Time, window, precision time.Duration, now time.Time) bool {
 	age := now.Sub(blockTime)
-	return age <= tipRecency && -age <= s.synchrony.Precision+s.synchrony.MessageDelay
+	return age <= window && age >= -precision
+}
+
+// precision is the synchrony precision of the chain's current parameters.
+func (s *Synchronizer) precision() time.Duration {
+	var params types.SynchronyParams
+	if s.applier != nil {
+		params = s.applier.State().ConsensusParams.Synchrony
+	}
+	return params.SynchronyParamsOrDefaults().Precision
 }
 
 // stallState is one observation of what the stall verdict is formed from.
@@ -563,13 +562,16 @@ type stallState struct {
 	servable          bool
 	maxServableHeight int64
 	maxPeerHeight     int64
-	// maxCredibleHeight is the highest servable claim still counted, capped below
-	// the height its peer failed; 0 when none covers height.
-	maxCredibleHeight int64
-	// maxCountedHeight is the highest claim of any peer, capped the same way.
-	maxCountedHeight int64
-	// lastBlockTime is the time of the last applied block.
+	// suppliedServable says a peer advertising height has supplied a block we
+	// applied since it last failed a request.
+	suppliedServable bool
+	// maxNearHeight is the highest claim within maxCatchupGap of the last
+	// applied block.
+	maxNearHeight int64
+	// lastBlockTime is the time of the last applied block; within tipWindow of
+	// the local clock the node is at the tip.
 	lastBlockTime time.Time
+	tipWindow     time.Duration
 }
 
 // stallSnapshot reads everything the stall verdict is formed from as one
@@ -582,14 +584,17 @@ type stallState struct {
 // - a peer whose blocks start above us has nothing we can use however high it
 // claims to be. Only servable peers determine the stall gap; the overall maximum
 // remains the handover target so pruning cannot erase evidence of a higher tip.
-// A claim is counted only below the lowest height its peer failed to serve.
+//
+// The node is at the tip when its last block is no older than the chain took
+// to commit the last maxCatchupGap blocks, or than tipLag where that is longer,
+// and in any case no older than tipRecency.
 //
 // They are read under one lock because advance() stamps the height, the advance
-// time, the block time and the supplier's record together under that same lock. A block applied
-// concurrently therefore lands either wholly inside the snapshot or wholly
-// outside it, and the verdict can never pair a height with a staleness or a
-// servability measured against a different one. Read separately, it could: a
-// height read before an advance, checked for servability after one, reports
+// time, the block time and the supplier's credit together under that same lock.
+// A block applied concurrently therefore lands either wholly inside the snapshot
+// or wholly outside it, and the verdict can never pair a height with a staleness
+// or a servability measured against a different one. Read separately, it could:
+// a height read before an advance, checked for servability after one, reports
 // nothing to fetch while the height we had by then moved on to is served. Ending
 // block sync is a one-way door, so a stop assembled from two inconsistent
 // readings leaves the node in consensus catch-up it cannot leave.
@@ -597,27 +602,28 @@ func (s *Synchronizer) stallSnapshot() stallState {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
 	peers := s.peerStore.All()
-	unserved := s.peerStore.unservedFrom(peers)
 	st := stallState{
-		height:        s.height,
-		stalledFor:    s.clock.Since(s.lastAdvance),
-		hasPeers:      len(peers) > 0,
-		lastBlockTime: s.lastBlockTime,
+		height:     s.height,
+		stalledFor: s.clock.Since(s.lastAdvance),
+		hasPeers:   len(peers) > 0,
+		tipWindow:  tipRecency,
+	}
+	if last := len(s.blockTimes) - 1; last >= 0 {
+		st.lastBlockTime = s.blockTimes[last]
+		if last == int(maxCatchupGap) {
+			st.tipWindow = min(tipRecency, max(tipLag, s.blockTimes[last].Sub(s.blockTimes[0])))
+		}
 	}
 	hasHeight := heightBetweenPeerHeightRange(s.height)
 	for _, peer := range peers {
 		st.maxPeerHeight = max(st.maxPeerHeight, peer.height)
-		counted := peer.height
-		if from, failed := unserved[peer.peerID]; failed {
-			counted = min(counted, from-1)
+		if peer.height < s.height+maxCatchupGap {
+			st.maxNearHeight = max(st.maxNearHeight, peer.height)
 		}
-		st.maxCountedHeight = max(st.maxCountedHeight, counted)
 		if hasHeight(peer.peerID, peer) {
 			st.servable = true
 			st.maxServableHeight = max(st.maxServableHeight, peer.height)
-			if counted >= s.height {
-				st.maxCredibleHeight = max(st.maxCredibleHeight, counted)
-			}
+			st.suppliedServable = st.suppliedServable || peer.supplied
 		}
 	}
 	return st
@@ -633,8 +639,8 @@ const (
 	stopNothingToFetch
 	// stopStalledTooLong means a peer still holds it but we have to hand over anyway
 	stopStalledTooLong
-	// stopUnservedClaims means the claims above us went unserved for too long
-	stopUnservedClaims
+	// stopAtTip means the node has stayed at the tip for tipGrace
+	stopAtTip
 )
 
 // stallVerdictFor decides what to do when block sync has made no progress for
@@ -655,25 +661,26 @@ const (
 // the backstop buys nothing and costs what dashpay/tenderdash#1413 describes, so
 // block sync keeps retrying and says so every interval.
 //
-// credibleServable tells such a peer apart once it has failed a request: it says
-// whether a peer that has not failed to serve the block holds it. atTipFor is how
-// long the last applied block has been recent. Unlike stalledFor it is not reset
-// by applying blocks, so a node following its peers at the tip is not kept in
-// block sync by a claim nobody serves. A node whose last block is not recent
-// relies on a stall of maxSyncStall with no such peer holding the block instead.
+// Advertising costs nothing, so far behind the backstop counts only a peer that
+// has backed its claim: suppliedServable says a peer holding the block supplied
+// one we applied since it last failed a request. A stall of maxSyncStall means
+// every peer asked for the block meanwhile failed, so only one never asked keeps
+// that credit, and a new peer has none.
+//
+// atTipFor is how long the node has been at the tip by the time of its last
+// block. Unlike stalledFor it is not reset by applying blocks, so a node
+// following the network is not kept in block sync by a claim nobody can reach.
 func stallVerdictFor(
-	servable bool, behindBy int64, stalledFor time.Duration, credibleServable bool, atTipFor time.Duration,
+	servable bool, behindBy int64, stalledFor time.Duration, suppliedServable bool, atTipFor time.Duration,
 ) stallVerdict {
 	switch {
-	case !credibleServable && atTipFor > unservedClaimGrace:
-		return stopUnservedClaims
+	case atTipFor > tipGrace:
+		return stopAtTip
 	case stalledFor <= syncTimeout:
 		return keepSyncing
 	case !servable:
 		return stopNothingToFetch
-	case !credibleServable && stalledFor > maxSyncStall:
-		return stopUnservedClaims
-	case stalledFor > maxSyncStall && behindBy <= maxCatchupGap:
+	case stalledFor > maxSyncStall && (behindBy <= maxCatchupGap || !suppliedServable):
 		return stopStalledTooLong
 	default:
 		return keepSyncing
@@ -739,7 +746,7 @@ func (s *Synchronizer) applyBlock(ctx context.Context) (BlockResponse, error) {
 		if err != nil {
 			return resp, fmt.Errorf("cannot apply block: %w", err)
 		}
-		s.advance()
+		s.advance(s.applier.State().LastBlockTime)
 		s.updateMonitor()
 	}
 }
@@ -751,14 +758,17 @@ func (s *Synchronizer) getPendingResponse() (BlockResponse, bool) {
 	return resp, ok
 }
 
-func (s *Synchronizer) advance() {
+// advance moves past the block just applied, which carries blockTime, and
+// credits the peer that supplied it.
+func (s *Synchronizer) advance(blockTime time.Time) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 	if resp, ok := s.pendingToApply[s.height]; ok {
-		s.peerStore.RecordServed(resp.PeerID, s.height)
-		if resp.Block != nil {
-			s.lastBlockTime = resp.Block.Time
-		}
+		s.peerStore.Update(resp.PeerID, func(_ types.NodeID, peer *PeerData) { peer.supplied = true })
+	}
+	s.blockTimes = append(s.blockTimes, blockTime)
+	if len(s.blockTimes) > int(maxCatchupGap)+1 {
+		s.blockTimes = s.blockTimes[1:]
 	}
 	delete(s.pendingToApply, s.height)
 	s.height++
