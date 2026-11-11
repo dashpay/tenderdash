@@ -102,12 +102,14 @@ undecodable block → error (`addProposalBlockPart`). Parts with invalid Merkle
 proofs are charged to the sender's `blockPartProofBudget` and dropped
 silently once it is exhausted (`internal/consensus/block_part_budget.go`).
 
-### Application rejects the block, or the header does not match
+### Block is invalid, application rejects it, or the header does not match
 
-`ProcessProposal` returning `REJECT` (`sm.ErrBlockRejected`), or a
-well-formed `ACCEPT` whose contents disagree with the block — header
-mismatch / invalid `LastCommit` / invalid chain lock (`sm.ErrInvalidBlock`)
-— → nil prevote (`prevoter.handleError`). A failed `ProcessProposal` clears
+`BlockExecutor.ProcessProposal` first validates the block against the
+committed state (`ValidateBlock`); a block that fails is never sent to the
+application. That failure (`sm.ErrInvalidBlock`), the application returning
+`REJECT` (`sm.ErrBlockRejected`), or a well-formed `ACCEPT` whose contents
+disagree with the block — header mismatch / invalid `LastCommit` / invalid
+chain lock (`sm.ErrInvalidBlock`) — → nil prevote (`prevoter.handleError`). A failed `ProcessProposal` clears
 `CurrentRoundState`, so no round counts as processed until a later call
 succeeds (`blockExecutor.ensureProcess`). Any **other** error **panics**
 the node: transport failure, `UNKNOWN` status, or a malformed response — an
