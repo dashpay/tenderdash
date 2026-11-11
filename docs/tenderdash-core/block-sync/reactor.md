@@ -107,6 +107,9 @@ What operators can expect:
 - A node less than a day behind the network whose peers all fail to deliver
   the next block for 10 minutes hands over where it is. Restart it once its
   peers serve blocks again if consensus catch-up does not close the gap.
+- With only a few peers serving blocks, a node restarting far behind a chain
+  that commits a block every second or two may need much longer to reach the
+  tip. More peers that serve blocks help.
 - A node whose clock runs minutes ahead of the validators', or
   behind them by more than the synchrony precision, does not see its last
   block as recent and leaves block sync only by the other rules. Keep the

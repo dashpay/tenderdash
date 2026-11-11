@@ -529,8 +529,9 @@ func (s *Synchronizer) IsCaughtUp() bool {
 // old blocks. Once that time has been within tipRecency of the local clock for
 // tipGrace, the node hands over whatever peers report, even though blocks
 // arriving meanwhile keep it from stalling. The wait starts over each time the
-// last block has got tipGain younger: the node is still closing the gap. A stall of maxSyncStall that began
-// on a block less than staleBlockAge old ends block sync the same way.
+// last block has got tipGain younger: the node is still closing the gap. A
+// stall of maxSyncStall that began on a block less than staleBlockAge old ends
+// block sync the same way.
 func (s *Synchronizer) WaitForSync(ctx context.Context) (caughtUp bool, targetHeight int64) {
 	ticker := s.clock.NewTicker(switchToConsensusIntervalSeconds * time.Second)
 	defer ticker.Stop()
