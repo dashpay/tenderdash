@@ -1708,37 +1708,35 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncKeepsGoingWhileAPeerCanServeU
 // that claims our height and never answers keeps the node in block sync
 // indefinitely unless a stall long enough to look like a wedge ends it. Within
 // reach of the tip consensus catch-up can cover what is left, so the backstop
-// applies.
+// applies. The last block is old, so the node is not at the tip.
 func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverAfterMaxSyncStall() {
 	const height = int64(100)
 	peer := newPeerData("peer in range", 1, height+maxCatchupGap)
 	h := suite.newWaitForSyncHarness(height, peer)
 	defer h.cancel()
+	h.setLastBlockTime(h.clock.Now().Add(-2 * staleBlockAge))
 
-	h.clock.Advance(maxSyncStall + time.Second)
-
-	caughtUp, ended := h.result(2 * time.Second)
+	elapsed, caughtUp, ended := h.run(maxSyncStall+time.Minute, nil)
 	suite.Require().True(ended, "no progress for %s did not hand over to consensus", maxSyncStall)
 	suite.Require().False(caughtUp, "handing over after a stall is not catching up")
+	suite.Require().Greater(elapsed, maxSyncStall)
+	suite.Require().LessOrEqual(elapsed, maxSyncStall+unservedHandoverSlack)
 }
 
 // TestWaitForSyncKeepsSyncingWhileFarBehind is the counterpart: the wall-clock
 // backstop must not hand over a node that is thousands of blocks behind. It
 // would arrive in consensus as a validator at a height the network committed
 // long ago (dashpay/tenderdash#1413), and consensus catch-up moves about one
-// block per gossip cycle, so it would never reach the tip that way either. The
-// peer far ahead has backed its claim by supplying blocks the node applied.
+// block per gossip cycle, so it would never reach the tip that way either.
 func (suite *SynchronizerTestSuite) TestWaitForSyncKeepsSyncingWhileFarBehind() {
 	const height = int64(100)
 	peer := newPeerData("peer far ahead", 1, height+maxCatchupGap+1)
-	peer.supplied = true
 	h := suite.newWaitForSyncHarness(height, peer)
 	defer h.cancel()
+	h.setLastBlockTime(h.clock.Now().Add(-2 * staleBlockAge))
 
-	h.clock.Advance(maxSyncStall + time.Second)
-
-	_, ended := h.result(200 * time.Millisecond)
-	suite.Require().False(ended, "block sync gave up while still %d blocks behind", maxCatchupGap+1)
+	elapsed, _, ended := h.run(maxSyncStall+time.Minute, nil)
+	suite.Require().False(ended, "block sync gave up after %s while still %d blocks behind", elapsed, maxCatchupGap+1)
 }
 
 func (suite *SynchronizerTestSuite) TestStallSnapshotServableHeight() {
