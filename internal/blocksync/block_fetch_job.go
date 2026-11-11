@@ -123,13 +123,23 @@ func (p *jobGenerator) nextHeight() int64 {
 }
 
 func (p *jobGenerator) nextJob(ctx context.Context) (*workerpool.Job, error) {
-	height := p.nextHeight()
-	peer, err := p.getPeer(ctx, height)
-	if err != nil {
-		return nil, err
+	for {
+		height := p.nextHeight()
+		peer, err := p.getPeer(ctx, height)
+		if errors.Is(err, errLowerHeightQueued) {
+			p.pushBack(height)
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		return workerpool.NewJob(blockFetchJobHandler(p.client, peer, height)), nil
 	}
-	return workerpool.NewJob(blockFetchJobHandler(p.client, peer, height)), nil
 }
+
+// errLowerHeightQueued reports that a height below the one waiting for a peer
+// was queued for a retry meanwhile.
+var errLowerHeightQueued = errors.New("a lower height is queued")
 
 // pushBack schedules heights to be fetched again, skipping those already queued so
 // a queued height is not fetched twice. Heights already handed to a worker are not
@@ -164,6 +174,12 @@ func (p *jobGenerator) pushBack(heights ...int64) {
 	slices.Sort(p.pushedBack)
 }
 
+func (p *jobGenerator) lowerQueued(height int64) bool {
+	p.mtx.RLock()
+	defer p.mtx.RUnlock()
+	return len(p.pushedBack) > 0 && p.pushedBack[0] < height
+}
+
 func (p *jobGenerator) getPeer(ctx context.Context, height int64) (PeerData, error) {
 	for {
 		if ctx.Err() != nil {
@@ -172,6 +188,11 @@ func (p *jobGenerator) getPeer(ctx context.Context, height int64) (PeerData, err
 		peer, found := p.peerStore.reservePeer(height)
 		if found {
 			return peer, nil
+		}
+		// Blocks are applied in order, so waiting on a higher height for a free
+		// peer must not hold back a lower one that has to be fetched again.
+		if p.lowerQueued(height) {
+			return PeerData{}, errLowerHeightQueued
 		}
 		// This is preferable to using a timer because the request
 		// interval is so small. Larger request intervals may
