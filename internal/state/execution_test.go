@@ -1501,6 +1501,7 @@ const badCommitSignature = "invalid commit signatures for quorum"
 // commit verification flow needs.
 type verifiedCommitFixture struct {
 	ctx       context.Context
+	app       *testApp
 	blockExec *sm.BlockExecutor
 	// skipped counts the LastCommit verifications the executor skipped
 	skipped *metricspy.Counter
@@ -1554,6 +1555,7 @@ func newVerifiedCommitFixture(t *testing.T) verifiedCommitFixture {
 
 	f := verifiedCommitFixture{
 		ctx:             ctx,
+		app:             app,
 		blockExec:       blockExec,
 		skipped:         skipped,
 		state:           state,
@@ -1890,4 +1892,42 @@ func TestProcessProposalValidatesChainLockHeightBeforeApp(t *testing.T) {
 	_, err = blockExec.ProcessProposal(ctx, block, 0, state, true, types.VerifiedCommit{})
 	require.ErrorAs(t, err, &sm.ErrInvalidBlock{})
 	app.AssertNotCalled(t, "ProcessProposal", mock.Anything, mock.Anything)
+}
+
+// TestProcessProposalRevalidatesUncoveredPartsOfCachedBlock checks that a block
+// whose header was validated before, but whose LastCommit or chain lock
+// differs where the header hash does not cover it, is refused as invalid
+// without reaching the application.
+func TestProcessProposalRevalidatesUncoveredPartsOfCachedBlock(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(*types.Block)
+	}{
+		{"last commit quorum hash", func(b *types.Block) { b.LastCommit.QuorumHash = crypto.RandQuorumHash() }},
+		{"last commit round", func(b *types.Block) { b.LastCommit.Round++ }},
+		{"last commit vote extensions", func(b *types.Block) {
+			b.LastCommit.ThresholdVoteExtensions = append(b.LastCommit.ThresholdVoteExtensions,
+				&tmtypes.VoteExtension{Type: tmtypes.VoteExtensionType_THRESHOLD_RECOVER, Signature: []byte{1}})
+		}},
+		{"chain lock", func(b *types.Block) {
+			b.CoreChainLock = &types.CoreChainLock{CoreBlockHeight: b.CoreChainLockedHeight}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newVerifiedCommitFixture(t)
+			require.NoError(t, f.blockExec.ValidateBlock(f.ctx, f.state, f.block, types.VerifiedCommit{}))
+
+			pb, err := f.block.ToProto()
+			require.NoError(t, err)
+			altered, err := types.BlockFromProto(pb)
+			require.NoError(t, err)
+			tc.mutate(altered)
+			require.Equal(t, f.block.Hash(), altered.Hash(), "the header must not change")
+
+			calls := f.app.ProcessProposalCalls.Load()
+			_, err = f.blockExec.ProcessProposal(f.ctx, altered, 0, f.state, true, types.VerifiedCommit{})
+			require.ErrorAs(t, err, &sm.ErrInvalidBlock{})
+			assert.Equal(t, calls, f.app.ProcessProposalCalls.Load(), "the application was asked")
+		})
+	}
 }
