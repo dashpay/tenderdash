@@ -72,18 +72,20 @@ interval Dash Platform runs with and a margin for extra rounds and clock skew. A
 block time further ahead of the local clock than the synchrony precision does
 not count, since the clock is then behind the validators' and cannot tell how
 old the block is. Peer height claims play no part in this rule: a claim costs
-nothing, and neither does the node ID it comes with. On this handover the
-consensus catch-up target leaves out claims more than 10 blocks above the node,
-so they do not delay its own proposals.
+nothing, and neither does the node ID it comes with. Whenever a node at the tip
+hands over, the consensus catch-up target is the highest claim seen within 10
+blocks of it, so claims further above do not delay its own proposals.
 
 A peer backs its claim by supplying a block the node applies, and loses that
 credit when it fails a request (a timeout or other failure, or a
 `NoBlockResponse`) or is dropped; a newly connected peer has none. Block
 requests go to peers that have backed their claims before any other, and a
 height that has to be fetched again is requested before the node waits for a
-peer to take a higher one. Within a 10-minute stall every peer asked for the
-next block has failed it, so only a peer not asked since it last supplied a
-block can hold the node in block sync.
+peer to take a higher one. Once a request for the next block fails, every
+other peer that advertises it is asked for it as well, so peers listed or
+ranked first cannot hold it one after another. Within a 10-minute stall every
+peer asked for the next block has failed it, so only a peer not asked since it
+last supplied a block can hold the node in block sync.
 
 Once the node has reached the tip, a peer that claims a far height therefore
 cannot keep it in block sync for more than two minutes, whatever node IDs it
@@ -102,24 +104,26 @@ Some cases remain open:
   claim keeps it in block sync.
 - A peer that delays the next block beyond the node's at-tip window keeps the
   node from reaching the tip, and so in block sync, for as long as it does so.
-  The block is first asked of a peer that advertises it, which before other
-  peers report it may be only the one claiming a far height; that costs up to
-  a request timeout, enough on a chain that commits more than 10 blocks in 70
-  seconds. Several node IDs can each take a request for it in turn while no
-  peer that has backed its claim advertises the block - after a restart, or
-  while every such peer is busy - which is enough on slower chains too.
+  The block is first asked of one peer that advertises it, which before other
+  peers report it may be only the one claiming a far height, or one that
+  earned credit by supplying earlier blocks; until that request times out and
+  the block is asked of every peer, up to about 70 seconds pass. That is
+  enough on a chain that commits a block more often than about every eight
+  seconds, and each peer that earns credit again can repeat it once.
 - On a chain that commits more than 10 blocks in 70 seconds, the node can hand
   over at the tip up to 70 seconds of blocks behind, which consensus catch-up
   then closes.
 - A node that restarts with a last block less than five minutes old and then
   applies no block for two minutes hands over at the tip; on a chain that
   commits more than 10 blocks in 70 seconds it may then be up to five minutes
-  of blocks behind. Besides a lack of peers, this can follow from peers that
-  report their status first and then hold the first requests.
+  of blocks behind. Peers that report their status first and hold the first
+  requests can delay the first block by about a request timeout, which alone
+  does not reach two minutes.
 - A node any distance behind whose peers that advertise the next height fail
   every request for 10 minutes hands over, as it would if none advertised it.
-- After a handover on a stall, the catch-up target includes every claim, so
-  consensus may withhold the node's own proposals for up to 10 minutes.
+- When a node not at the tip hands over on a stall, the catch-up target
+  includes every claim seen, so consensus may withhold the node's own
+  proposals for up to 10 minutes.
 
 The historical Blocksync reactor is organised as a set of concurrent tasks:
 
