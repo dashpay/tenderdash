@@ -17,6 +17,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/mempool"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmstate "github.com/dashpay/tenderdash/proto/tendermint/state"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -457,16 +458,17 @@ func (blockExec *BlockExecutor) ValidateBlock(
 	block *types.Block,
 	lastCommit types.VerifiedCommit,
 ) error {
-	hash := block.Hash()
-	// The cache is keyed on the header hash alone, which covers neither state nor
-	// the block's chain lock, so a hit counts only for a block that still
-	// continues state with a chain lock that fits it.
-	if _, ok := blockExec.cache[hash.String()]; ok && validateBlockPosition(state, block) == nil &&
-		validateCoreChainLock(block, state) == nil {
+	key, err := validationCacheKey(block)
+	if err != nil {
+		return err
+	}
+	// The key does not cover state, so a hit counts only for a block that still
+	// continues state.
+	if _, ok := blockExec.cache[key]; ok && validateBlockPosition(state, block) == nil {
 		return nil
 	}
 
-	err := validateBlock(state, block, lastCommit, blockExec.metrics)
+	err = validateBlock(state, block, lastCommit, blockExec.metrics)
 	if err != nil {
 		return err
 	}
@@ -476,8 +478,22 @@ func (blockExec *BlockExecutor) ValidateBlock(
 		return err
 	}
 
-	blockExec.cache[hash.String()] = struct{}{}
+	blockExec.cache[key] = struct{}{}
 	return nil
+}
+
+// validationCacheKey identifies the block content ValidateBlock checks: the
+// header, by the block hash, and in full the last commit and the chain lock,
+// which the header covers only by the commit's threshold signature.
+func validationCacheKey(block *types.Block) (string, error) {
+	uncovered, err := (&tmproto.Block{
+		LastCommit:    block.LastCommit.ToProto(),
+		CoreChainLock: block.CoreChainLock.ToProto(),
+	}).Marshal()
+	if err != nil {
+		return "", fmt.Errorf("encode block for validation cache: %w", err)
+	}
+	return block.Hash().String() + hex.EncodeToString(crypto.Checksum(uncovered)), nil
 }
 
 // VerifyCommit verifies commit against state.Validators as the commit for the
@@ -523,9 +539,9 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 	}
 
 	// ValidateBlock above normally verifies block.LastCommit, but a hit on its
-	// cache, keyed on the block hash, re-checks only the block's position and
-	// chain lock against state, not its LastCommit. That is why this second
-	// verification exists. lastCommit's proof is safe to skip on instead: it names
+	// cache re-checks only the block's position against state, not whether
+	// LastCommit verifies against it. That is why this second verification
+	// exists. lastCommit's proof is safe to skip on instead: it names
 	// the verified data itself, not a block hash.
 	if block.Height > state.InitialHeight {
 		if err := verifyLastCommit(state, block, lastCommit, blockExec.metrics); err != nil {
