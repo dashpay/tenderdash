@@ -285,6 +285,60 @@ func TestProcessProposal(t *testing.T) {
 	app.AssertCalled(t, "ProcessProposal", ctx, expectedRpp)
 }
 
+// TestProcessProposalValidatesBlockBeforeApp checks that a block whose header
+// does not follow the committed state is refused as invalid without reaching the
+// application, which may fail on it rather than reject it.
+func TestProcessProposalValidatesBlockBeforeApp(t *testing.T) {
+	state, stateDB, _ := makeState(t, 1, 1)
+	// the state after the genesis block, for a proposal that repeats that block
+	advanced := state.Copy()
+	advanced.LastBlockHeight = state.InitialHeight
+	advanced.LastBlockID = factory.MakeBlockID()
+
+	testCases := []struct {
+		name   string
+		mutate func(*types.Block)
+		state  sm.State
+		// validate the block against state first, caching its hash
+		validateFirst bool
+	}{
+		{name: "height", mutate: func(b *types.Block) { b.Height++ }, state: state},
+		{name: "chain ID", mutate: func(b *types.Block) { b.ChainID = "other-chain" }, state: state},
+		{name: "last block ID", mutate: func(b *types.Block) { b.LastBlockID = factory.MakeBlockID() }, state: state},
+		{name: "genesis block at the next height", state: advanced, validateFirst: true},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			app := abcimocks.NewApplication(t)
+			app.On("ProcessProposal", mock.Anything, mock.Anything).
+				Return(nil, errors.New("application cannot process this block")).Maybe()
+			logger := log.NewNopLogger()
+			proxyApp := proxy.New(abciclient.NewLocalClient(logger, app), logger, proxy.NopMetrics())
+			require.NoError(t, proxyApp.Start(ctx))
+			eventBus := eventbus.NewDefault(logger)
+			require.NoError(t, eventBus.Start(ctx))
+			blockExec := sm.NewBlockExecutor(sm.NewStore(stateDB), proxyApp, new(mpmocks.Mempool),
+				sm.EmptyEvidencePool{}, store.NewBlockStore(dbm.NewMemDB()), eventBus)
+
+			block, err := sf.MakeBlock(state, state.InitialHeight, new(types.Commit), 1)
+			require.NoError(t, err)
+			if tc.validateFirst {
+				require.NoError(t, blockExec.ValidateBlock(ctx, state, block, types.VerifiedCommit{}))
+			}
+			if tc.mutate != nil {
+				tc.mutate(block)
+			}
+
+			_, err = blockExec.ProcessProposal(ctx, block, 0, tc.state, true, types.VerifiedCommit{})
+			require.ErrorAs(t, err, &sm.ErrInvalidBlock{})
+			app.AssertNotCalled(t, "ProcessProposal", mock.Anything, mock.Anything)
+		})
+	}
+}
+
 func TestUpdateConsensusParams(t *testing.T) {
 	const (
 		height = 1

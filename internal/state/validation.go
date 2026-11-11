@@ -29,37 +29,8 @@ func validateBlock(state State, block *types.Block, lastCommit types.VerifiedCom
 		}
 	}
 
-	// Validate basic info.
-	// We don't validate app version because proposer can override it on a block-by-block basis.
-	if block.Version.Block != state.Version.Consensus.Block {
-		return fmt.Errorf("wrong Block.Header.Version.Block. Expected %v, got %v",
-			state.Version.Consensus,
-			block.Version,
-		)
-	}
-	if block.ChainID != state.ChainID {
-		return fmt.Errorf("wrong Block.Header.ChainID. Expected %v, got %v",
-			state.ChainID,
-			block.ChainID,
-		)
-	}
-	if state.LastBlockHeight == 0 && block.Height != state.InitialHeight {
-		return fmt.Errorf("wrong Block.Header.Height. Expected %v for initial block, got %v",
-			block.Height, state.InitialHeight)
-	}
-	if state.LastBlockHeight > 0 && block.Height != state.LastBlockHeight+1 {
-		return fmt.Errorf("wrong Block.Header.Height. Expected %v, got %v",
-			state.LastBlockHeight+1,
-			block.Height,
-		)
-	}
-
-	// Validate prev block info.
-	if !block.LastBlockID.Equals(state.LastBlockID) {
-		return fmt.Errorf("wrong Block.Header.LastBlockID.  Expected %v, got %v",
-			state.LastBlockID,
-			block.LastBlockID,
-		)
+	if err := validateBlockPosition(state, block); err != nil {
+		return err
 	}
 
 	// Validate app info
@@ -130,6 +101,44 @@ func validateBlock(state State, block *types.Block, lastCommit types.VerifiedCom
 		return types.NewErrEvidenceOverflow(max, got)
 	}
 
+	return nil
+}
+
+// validateBlockPosition checks that block's header continues the chain where
+// state ends: same chain and block version, next height, and last block ID.
+func validateBlockPosition(state State, block *types.Block) error {
+	// Validate basic info.
+	// We don't validate app version because proposer can override it on a block-by-block basis.
+	if block.Version.Block != state.Version.Consensus.Block {
+		return fmt.Errorf("wrong Block.Header.Version.Block. Expected %v, got %v",
+			state.Version.Consensus,
+			block.Version,
+		)
+	}
+	if block.ChainID != state.ChainID {
+		return fmt.Errorf("wrong Block.Header.ChainID. Expected %v, got %v",
+			state.ChainID,
+			block.ChainID,
+		)
+	}
+	if state.LastBlockHeight == 0 && block.Height != state.InitialHeight {
+		return fmt.Errorf("wrong Block.Header.Height. Expected %v for initial block, got %v",
+			state.InitialHeight, block.Height)
+	}
+	if state.LastBlockHeight > 0 && block.Height != state.LastBlockHeight+1 {
+		return fmt.Errorf("wrong Block.Header.Height. Expected %v, got %v",
+			state.LastBlockHeight+1,
+			block.Height,
+		)
+	}
+
+	// Validate prev block info.
+	if !block.LastBlockID.Equals(state.LastBlockID) {
+		return fmt.Errorf("wrong Block.Header.LastBlockID.  Expected %v, got %v",
+			state.LastBlockID,
+			block.LastBlockID,
+		)
+	}
 	return nil
 }
 

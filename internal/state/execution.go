@@ -359,7 +359,9 @@ func deterministicPrepareProposalHashes(request *abci.RequestPrepareProposal, re
 	return crypto.Checksum(reqBytes), crypto.Checksum(respBytes)
 }
 
-// ProcessProposal sends the proposal to ABCI App and verifies the response
+// ProcessProposal sends the proposal to ABCI App and verifies the response.
+// With verify, the block is validated against state before the app sees it,
+// and against the app's response afterwards; a failure returns ErrInvalidBlock.
 func (blockExec *BlockExecutor) ProcessProposal(
 	ctx context.Context,
 	block *types.Block,
@@ -368,8 +370,16 @@ func (blockExec *BlockExecutor) ProcessProposal(
 	verify bool,
 	lastCommit types.VerifiedCommit,
 ) (CurrentRoundState, error) {
-	version := block.Version.ToProto()
 	stages := blockExec.metrics.startStages()
+	// The app may fail, rather than reject, on a block that does not continue
+	// state, and consensus treats such a failure as fatal.
+	if verify {
+		if err := blockExec.ValidateBlock(ctx, state, block, lastCommit); err != nil {
+			return CurrentRoundState{}, ErrInvalidBlock{err}
+		}
+		stages.done("process_proposal_prevalidate")
+	}
+	version := block.Version.ToProto()
 	resp, err := blockExec.appClient.ProcessProposal(ctx, &abci.RequestProcessProposal{
 		Hash:               block.Header.Hash(),
 		Height:             block.Header.Height,
@@ -448,7 +458,9 @@ func (blockExec *BlockExecutor) ValidateBlock(
 	lastCommit types.VerifiedCommit,
 ) error {
 	hash := block.Hash()
-	if _, ok := blockExec.cache[hash.String()]; ok {
+	// The cache is keyed on the block hash alone, so a hit counts only for a
+	// block that still continues state.
+	if _, ok := blockExec.cache[hash.String()]; ok && validateBlockPosition(state, block) == nil {
 		return nil
 	}
 

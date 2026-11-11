@@ -395,10 +395,13 @@ Rules, in evaluation order:
    (`POLRound ≥ 0`) keep the original header's proposer and are exempt.
 6. **P-Process.** `blockExecutor.ensureProcess(rs, r)`: ABCI
    `ProcessProposal` for round `r` unless `CurrentRoundState` already is the
-   result for this block and round. `ErrBlockRejected` (application
-   `REJECT`) or `ErrInvalidBlock` (a well-formed `ACCEPT` whose contents
-   disagree with the block: header fields differ from the application's
-   answer, `LastCommit` invalid, chain lock invalid —
+   result for this block and round. The block is first validated against the
+   committed state (`BlockExecutor.ValidateBlock`: version, chain ID, height,
+   `LastBlockID`, `LastCommit`, proposer, evidence, …); a block that fails is
+   never sent to the application and yields `ErrInvalidBlock`.
+   `ErrBlockRejected` (application `REJECT`) or `ErrInvalidBlock` (also a
+   well-formed `ACCEPT` whose contents disagree with the block: header fields
+   differ from the application's answer, `LastCommit` invalid, chain lock invalid —
    `ValidateBlockWithRoundState`) → nil prevote; any other error →
    **panic** (`prevoter.handleError`). A malformed application response is
    in the panic class, not the nil-prevote class: `UNKNOWN` status, an
