@@ -1912,6 +1912,11 @@ func TestProcessProposalRevalidatesUncoveredPartsOfCachedBlock(t *testing.T) {
 		{"chain lock", func(b *types.Block) {
 			b.CoreChainLock = &types.CoreChainLock{CoreBlockHeight: b.CoreChainLockedHeight}
 		}},
+		{"header chain locked height", func(b *types.Block) { b.CoreChainLockedHeight++ }},
+		{"malformed chain lock agreeing with the header", func(b *types.Block) {
+			b.CoreChainLockedHeight++
+			b.CoreChainLock = &types.CoreChainLock{CoreBlockHeight: b.CoreChainLockedHeight}
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newVerifiedCommitFixture(t)
