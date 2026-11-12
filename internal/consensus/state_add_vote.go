@@ -9,6 +9,7 @@ import (
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
+	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/eventemitter"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -275,6 +276,8 @@ func addVoteVerifyVoteExtensionMw(
 		privVal = data.(privValidator)
 		return nil
 	})
+	// Touched only by the consensus goroutine, like every vote middleware.
+	var rejected rejectedVotes
 	return func(next AddVoteFunc) AddVoteFunc {
 		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 			// Verify VoteExtension if precommit and not nil
@@ -333,6 +336,18 @@ func addVoteVerifyVoteExtensionMw(
 			err = blockExec.blockExec.VerifyVoteExtension(ctx, vote)
 			metrics.MarkVoteExtensionReceived(err == nil)
 			if err != nil {
+				// Every copy logs at Debug (see isPeerFloodableError). A refusal
+				// of a block not processed for the round is expected — the
+				// application has no context for it yet — where one of a
+				// processed block is a disagreement over the extensions, worth
+				// one Warn: the first copy's, counted from when the block was
+				// processed, so a refusal before that does not hide it.
+				rs := &stateData.RoundState
+				if errors.Is(err, sm.ErrVoteExtensionRejected) &&
+					processedFor(rs, vote.Round) && rs.ProcessedBlockID.Equals(vote.BlockID) &&
+					rejected.remember(vote) {
+					log.FromCtxOrNop(ctx).Warn("application rejected a precommit's vote extensions for a block it processed; the precommit is not counted")
+				}
 				return false, err
 			}
 			return next(ctxWithVoteVerification(ctx, vote, verified), stateData, vote)
@@ -379,6 +394,8 @@ func addVoteErrorMw(evpool evidencePool, logger log.Logger, privVal privValidato
 		privVal = data.(privValidator)
 		return nil
 	})
+	// Touched only by the consensus goroutine, like every vote middleware.
+	var reported rejectedVotes
 	return func(next AddVoteFunc) AddVoteFunc {
 		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 			added, err := next(ctx, stateData, vote)
@@ -408,7 +425,15 @@ func addVoteErrorMw(evpool evidencePool, logger log.Logger, privVal privValidato
 				return added, err
 			}
 
-			// report conflicting votes to the evidence pool
+			// A conflicting vote is never stored, so its sender re-offers it
+			// for the rest of the round (see PeerState.ReofferUnackedVotes).
+			// The pool drops a duplicate when it forms the evidence; reporting
+			// it once spares the pool's buffer and the log the copies.
+			if !reported.remember(vote) {
+				logger.Debug("conflicting vote delivered again; already reported to the evidence pool",
+					"height", vote.Height, "round", vote.Round, "type", vote.Type, "val_index", vote.ValidatorIndex)
+				return added, err
+			}
 			evpool.ReportConflictingVotes(voteErr.VoteA, voteErr.VoteB)
 			logger.Error("found and sent conflicting votes to the evidence pool",
 				"vote_a", voteErr.VoteA,
@@ -416,6 +441,45 @@ func addVoteErrorMw(evpool evidencePool, logger log.Logger, privVal privValidato
 			return added, err
 		}
 	}
+}
+
+// rejectedVotesCap bounds a rejectedVotes memory. Nothing stored bounds a
+// rejected vote, and a validator key signs one for any round and block, so
+// past the cap a new vote is reported on every copy rather than remembered.
+const rejectedVotesCap = 4096
+
+// rejectedVotes remembers the peer votes of one height that were rejected for
+// a reason no resend can change. A rejected vote is never stored, so no HasVote
+// acknowledges it and its sender re-offers it for the rest of the round (see
+// PeerState.ReofferUnackedVotes); remembering it lets only the first copy be
+// reported. The memory is reset when the height changes.
+type rejectedVotes struct {
+	height int64
+	seen   map[rejectedVoteKey]struct{}
+}
+
+type rejectedVoteKey struct {
+	round          int32
+	voteType       tmproto.SignedMsgType
+	validatorIndex int32
+	blockKey       string
+}
+
+// remember records the vote's rejection and reports whether it is the first of
+// that vote at its height. A vote the full memory cannot take is not recorded,
+// so every copy of it counts as the first.
+func (r *rejectedVotes) remember(vote *types.Vote) (first bool) {
+	if r.seen == nil || r.height != vote.Height {
+		r.height, r.seen = vote.Height, map[rejectedVoteKey]struct{}{}
+	}
+	key := rejectedVoteKey{vote.Round, vote.Type, vote.ValidatorIndex, vote.BlockID.Key()}
+	if _, seen := r.seen[key]; seen {
+		return false
+	}
+	if len(r.seen) < rejectedVotesCap {
+		r.seen[key] = struct{}{}
+	}
+	return true
 }
 
 func addVoteLoggingMw() AddVoteMiddlewareFunc {

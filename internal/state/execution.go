@@ -106,8 +106,8 @@ type Executor interface {
 	// VerifyVoteExtension asks the application to verify vote extensions: those
 	// of one validator's precommit when vote.ValidatorProTxHash is set, or a
 	// commit's threshold-recovered vector, after ProcessProposal of its block,
-	// when it is empty. It returns an error on REJECT and panics if the ABCI
-	// call itself fails.
+	// when it is empty. It returns ErrVoteExtensionRejected on REJECT and
+	// panics if the ABCI call itself fails.
 	VerifyVoteExtension(ctx context.Context, vote *types.Vote) error
 }
 
@@ -750,7 +750,7 @@ func (blockExec *BlockExecutor) VerifyVoteExtension(ctx context.Context, vote *t
 	}
 
 	if !resp.IsOK() {
-		return errors.New("invalid vote extension")
+		return ErrVoteExtensionRejected
 	}
 
 	return nil

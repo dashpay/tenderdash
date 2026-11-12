@@ -1167,7 +1167,12 @@ type ConsensusConfig struct {
 	// tick then already exceeds the gap it is meant to enforce. Lowering it
 	// does not shrink the gap — it only fits more ticks (and so more sends of
 	// a multi-part block) into that same fixed window before it applies.
-	PeerGossipSleepDuration     time.Duration `mapstructure:"peer-gossip-sleep-duration"`
+	PeerGossipSleepDuration time.Duration `mapstructure:"peer-gossip-sleep-duration"`
+	// PeerQueryMaj23SleepDuration is the cadence of the per-peer majority-claim
+	// gossip and of the repairs paced against it: round skip certificate and
+	// round vote resends, and the redelivery of votes a peer has not
+	// acknowledged (one interval after a vote went out, then doubling up to 8
+	// intervals). Raising it to cut majority-claim chatter slows stall recovery.
 	PeerQueryMaj23SleepDuration time.Duration `mapstructure:"peer-query-maj23-sleep-duration"`
 
 	// PeerVoteRateLimit bounds the per-second token budget a single peer may

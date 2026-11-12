@@ -68,12 +68,15 @@ func roundSkipGossipHandler(
 // transactions in this node's round, which a skip certificate began, or is in
 // a round this node has left.
 //
-// Vote gossip takes a vote as the peer's once the channel takes it, so one
-// lost after that is not sent again. On a chain that skips rounds, a peer
-// that lost the votes of its round can be left in it for good: a waiting
-// round has no timeout and its proposer's heartbeats keep arriving, and the
-// prevote and precommit steps start their timeouts only on votes. Votes are
-// picked at random, so over the passes the peer gets each one this node has.
+// Vote gossip takes a vote as the peer's once the channel takes it; one lost
+// after that is offered again only after a redelivery interval, then with
+// backoff (see PeerState.ReofferUnackedVotes), and a later round's votes are
+// not offered to a peer in an earlier round at all. On a chain that skips
+// rounds, a peer that lost the votes of its round waits all that time: a
+// waiting round has no timeout and its proposer's heartbeats keep arriving,
+// and the prevote and precommit steps start their timeouts only on votes.
+// Votes are picked at random, so over the passes the peer gets each one this
+// node has.
 //
 // A peer waiting in this node's round, after round 0, is sent the round's
 // prevotes: one ends the wait (see StateData.waitsAfterRoundSkip). A peer in a
