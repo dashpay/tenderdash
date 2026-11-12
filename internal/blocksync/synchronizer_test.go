@@ -1326,6 +1326,59 @@ func (suite *SynchronizerTestSuite) TestNoBlockResponseForWrongHeightPreservesRa
 	suite.EqualValues(1, peer.numFailures)
 }
 
+// defaultPrecision is the synchrony precision of a chain on default parameters.
+var defaultPrecision = types.DefaultSynchronyParams().Precision
+
+// TestStartSeedsTheLastBlockTime checks that block sync judges the tip from the
+// last block the node already has, and the synchrony precision of its stored
+// state, until it applies another block, so a node restarting after long
+// downtime is not taken for one at the tip.
+func (suite *SynchronizerTestSuite) TestStartSeedsTheLastBlockTime() {
+	state := suite.initialState.Copy()
+	state.LastBlockTime = time.Unix(1_700_000_000, 0)
+	state.ConsensusParams.Synchrony.Precision = 2 * time.Second
+	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(state))
+	pool := NewSynchronizer(1, suite.client, applier, WithWorkerPool(workerpool.New(0)))
+	suite.Require().NoError(pool.Start(context.Background()))
+	defer pool.Stop()
+	st := pool.stallSnapshot()
+	suite.Equal(state.LastBlockTime, st.lastBlockTime)
+	suite.Equal(2*time.Second, st.precision)
+}
+
+// TestApplyingABlockTakesThePrecisionOfTheNewState checks that the synchrony
+// precision follows the chain's parameters as blocks are applied, not those it
+// had when block sync started.
+func (suite *SynchronizerTestSuite) TestApplyingABlockTakesThePrecisionOfTheNewState() {
+	ctx := context.Background()
+	b := suite.newBacklogHarness()
+	suite.Equal(defaultPrecision, b.pool.stallSnapshot().precision)
+	state := suite.initialState.Copy()
+	state.ConsensusParams.Synchrony.Precision = 3 * time.Second
+	b.pool.applier.UpdateState(state)
+	resp := b.produce(ctx)
+	suite.Require().NotNil(resp)
+	b.deliver(ctx, resp)
+	st := b.pool.stallSnapshot()
+	suite.EqualValues(2, st.height)
+	suite.Equal(3*time.Second, st.precision)
+}
+
+// TestWaitForSyncDoesNotWaitForABlockBeingApplied checks that the handover
+// loop does not wait on the applier, which is held for the whole time a block
+// is executed, so it notices cancellation while a slow block is applied.
+func (suite *SynchronizerTestSuite) TestWaitForSyncDoesNotWaitForABlockBeingApplied() {
+	const height = int64(100)
+	h := suite.newWaitForSyncHarness(height, newPeerData("peer", 1, height+1000))
+	h.sync.applier.mtx.Lock()
+	defer h.sync.applier.mtx.Unlock()
+	h.clock.Advance(time.Second)
+	time.Sleep(10 * time.Millisecond)
+	h.cancel()
+	_, ended := h.result(time.Second)
+	suite.Require().True(ended, "the handover loop waited for the block being applied")
+}
+
 // TestStatusRefreshUpdatesAdvertisedRange checks that a status response still does
 // the one thing it is for: moving the range of blocks the peer claims to serve. It
 // is the guard on the tests above, which a synchronizer that ignored status
@@ -1409,6 +1462,7 @@ func TestStallVerdictFor(t *testing.T) {
 		servable   bool
 		behindBy   int64
 		stalledFor time.Duration
+		atTipFor   time.Duration
 		want       stallVerdict
 	}{
 		{
@@ -1461,10 +1515,32 @@ func TestStallVerdictFor(t *testing.T) {
 			stalledFor: maxSyncStall + time.Second,
 			want:       stopNothingToFetch,
 		},
+		{
+			name:       "stalled past the wedge limit with no claim backed",
+			servable:   true,
+			behindBy:   -100,
+			stalledFor: maxSyncStall + time.Second,
+			want:       stopStalledTooLong,
+		},
+		{
+			name:     "at the tip past the grace, behind a far claim",
+			servable: true,
+			behindBy: maxCatchupGap + 1,
+			atTipFor: tipGrace + time.Second,
+			want:     stopAtTip,
+		},
+		{
+			name:     "at the tip within the grace",
+			servable: true,
+			behindBy: maxCatchupGap + 1,
+			atTipFor: tipGrace,
+			want:     keepSyncing,
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.want, stallVerdictFor(tc.servable, tc.behindBy, tc.stalledFor))
+			require.Equal(t, tc.want,
+				stallVerdictFor(tc.servable, tc.behindBy, tc.stalledFor, tc.atTipFor))
 		})
 	}
 }
@@ -1473,9 +1549,14 @@ func TestStallVerdictFor(t *testing.T) {
 // The synchronizer never advances a height, so the only thing that changes the
 // verdict is how far the clock is moved.
 type waitForSyncHarness struct {
-	clock  *clockwork.FakeClock
-	done   chan bool
-	cancel context.CancelFunc
+	suite    *SynchronizerTestSuite
+	sync     *Synchronizer
+	resultCh chan workerpool.Result
+	clock    *clockwork.FakeClock
+	done     chan bool
+	cancel   context.CancelFunc
+	// target is the handover target WaitForSync returned; read it only after done.
+	target int64
 }
 
 // newWaitForSyncHarness starts WaitForSync at the given height with the given
@@ -1484,22 +1565,35 @@ type waitForSyncHarness struct {
 func (suite *SynchronizerTestSuite) newWaitForSyncHarness(height int64, peers ...PeerData) *waitForSyncHarness {
 	clock := clockwork.NewFakeClock()
 	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
-	sync := NewSynchronizer(height, suite.client, applier, WithClock(clock))
+	resultCh := make(chan workerpool.Result, 1)
+	sync := NewSynchronizer(height, suite.client, applier, WithClock(clock),
+		WithWorkerPool(workerpool.New(0, workerpool.WithResultCh(resultCh))))
 	// Deliberately not started: WaitForSync reads only the height, the peer store
 	// and lastAdvance, and leaving the job pipeline out keeps the ticker the sole
 	// waiter on the fake clock.
 	sync.lastAdvance = clock.Now()
+	// The node starts at the tip: its last block is recent.
+	sync.lastBlockTime = clock.Now()
 	for _, peer := range peers {
 		sync.AddPeer(peer)
 	}
+	h := suite.startWaitForSync(sync, clock)
+	h.resultCh = resultCh
+	return h
+}
+
+// startWaitForSync runs WaitForSync for sync on its own goroutine and returns once
+// its ticker is registered with clock.
+func (suite *SynchronizerTestSuite) startWaitForSync(sync *Synchronizer, clock *clockwork.FakeClock) *waitForSyncHarness {
 	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan bool, 1)
+	h := &waitForSyncHarness{suite: suite, sync: sync, clock: clock, done: make(chan bool, 1), cancel: cancel}
 	go func() {
-		caughtUp, _ := sync.WaitForSync(ctx)
-		done <- caughtUp
+		caughtUp, target := sync.WaitForSync(ctx)
+		h.target = target
+		h.done <- caughtUp
 	}()
 	suite.Require().NoError(clock.BlockUntilContext(ctx, 1))
-	return &waitForSyncHarness{clock: clock, done: done, cancel: cancel}
+	return h
 }
 
 // result waits up to timeout of real time for WaitForSync to return. ended
@@ -1554,18 +1648,19 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncKeepsGoingWhileAPeerCanServeU
 // that claims our height and never answers keeps the node in block sync
 // indefinitely unless a stall long enough to look like a wedge ends it. Within
 // reach of the tip consensus catch-up can cover what is left, so the backstop
-// applies.
+// applies. The last block is old, so the node is not at the tip.
 func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverAfterMaxSyncStall() {
 	const height = int64(100)
 	peer := newPeerData("peer in range", 1, height+maxCatchupGap)
 	h := suite.newWaitForSyncHarness(height, peer)
 	defer h.cancel()
+	h.setLastBlockTime(h.clock.Now().Add(-2 * staleBlockAge))
 
-	h.clock.Advance(maxSyncStall + time.Second)
-
-	caughtUp, ended := h.result(2 * time.Second)
+	elapsed, caughtUp, ended := h.run(maxSyncStall+time.Minute, nil)
 	suite.Require().True(ended, "no progress for %s did not hand over to consensus", maxSyncStall)
 	suite.Require().False(caughtUp, "handing over after a stall is not catching up")
+	suite.Require().Greater(elapsed, maxSyncStall)
+	suite.Require().LessOrEqual(elapsed, maxSyncStall+unservedHandoverSlack)
 }
 
 // TestWaitForSyncKeepsSyncingWhileFarBehind is the counterpart: the wall-clock
@@ -1578,11 +1673,10 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncKeepsSyncingWhileFarBehind() 
 	peer := newPeerData("peer far ahead", 1, height+maxCatchupGap+1)
 	h := suite.newWaitForSyncHarness(height, peer)
 	defer h.cancel()
+	h.setLastBlockTime(h.clock.Now().Add(-2 * staleBlockAge))
 
-	h.clock.Advance(maxSyncStall + time.Second)
-
-	_, ended := h.result(200 * time.Millisecond)
-	suite.Require().False(ended, "block sync gave up while still %d blocks behind", maxCatchupGap+1)
+	elapsed, _, ended := h.run(maxSyncStall+time.Minute, nil)
+	suite.Require().False(ended, "block sync gave up after %s while still %d blocks behind", elapsed, maxCatchupGap+1)
 }
 
 func (suite *SynchronizerTestSuite) TestStallSnapshotServableHeight() {
@@ -1594,6 +1688,7 @@ func (suite *SynchronizerTestSuite) TestStallSnapshotServableHeight() {
 		peers      []PeerData
 		wantMax    int64
 		wantUsable int64
+		wantNear   int64
 	}{
 		{name: "no peers"},
 		{
@@ -1609,15 +1704,23 @@ func (suite *SynchronizerTestSuite) TestStallSnapshotServableHeight() {
 			wantUsable: 20,
 		},
 		{
-			name:    "no overlapping range",
-			peers:   []PeerData{newPeerData("older", 1, 9), newPeerData("recent", 25, 30)},
-			wantMax: 30,
+			name:     "no overlapping range",
+			peers:    []PeerData{newPeerData("older", 1, 9), newPeerData("recent", 25, 30)},
+			wantMax:  30,
+			wantNear: 9,
 		},
 		{
 			name:       "busy peer remains servable",
 			peers:      []PeerData{busyPeer},
 			wantMax:    30,
 			wantUsable: 30,
+		},
+		{
+			name:       "claims within reach of the node",
+			peers:      []PeerData{newPeerData("near", 1, height+maxCatchupGap-1), newPeerData("far", 1, 30)},
+			wantMax:    30,
+			wantUsable: 30,
+			wantNear:   height + maxCatchupGap - 1,
 		},
 	}
 	for _, tc := range testCases {
@@ -1627,11 +1730,12 @@ func (suite *SynchronizerTestSuite) TestStallSnapshotServableHeight() {
 			for _, peer := range tc.peers {
 				sync.AddPeer(peer)
 			}
-			_, _, servable, maxHeight, hasPeers, maxServableHeight := sync.stallSnapshot()
-			suite.Require().Equal(tc.wantMax, maxHeight)
-			suite.Require().Equal(tc.wantUsable, maxServableHeight)
-			suite.Require().Equal(tc.wantUsable > 0, servable)
-			suite.Require().Equal(len(tc.peers) > 0, hasPeers)
+			st := sync.stallSnapshot()
+			suite.Require().Equal(tc.wantMax, st.maxPeerHeight)
+			suite.Require().Equal(tc.wantUsable, st.maxServableHeight)
+			suite.Require().Equal(tc.wantUsable > 0, st.servable)
+			suite.Require().Equal(tc.wantNear, st.maxNearHeight)
+			suite.Require().Equal(len(tc.peers) > 0, st.hasPeers)
 		})
 	}
 }
@@ -1656,12 +1760,14 @@ func (suite *SynchronizerTestSuite) TestStallSnapshotIsOneObservation() {
 		applied := make(chan struct{})
 		go func() {
 			<-ready
-			sync.advance()
+			sync.advance(time.Time{}, defaultPrecision)
 			close(applied)
 		}()
 		runtime.Gosched()
 		close(ready)
-		height, stalled, servable, maxPeerHeight, hasPeers, maxServableHeight := sync.stallSnapshot()
+		st := sync.stallSnapshot()
+		height, stalled, servable, maxPeerHeight, hasPeers, maxServableHeight :=
+			st.height, st.stalledFor, st.servable, st.maxPeerHeight, st.hasPeers, st.maxServableHeight
 		<-applied
 		suite.Require().True(hasPeers)
 		suite.Require().Equal(int64(1000), maxPeerHeight, "the retained handover target")
@@ -1695,6 +1801,758 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncStopsWhenThereIsNothingToFetc
 	caughtUp, ended := h.result(2 * time.Second)
 	suite.Require().True(ended, "block sync kept waiting with no peer to fetch from")
 	suite.Require().False(caughtUp)
+}
+
+// fail hands the consumer a request to peerID for height that failed with err, as
+// the worker pool would.
+func (h *waitForSyncHarness) fail(peerID types.NodeID, height int64, err error) {
+	h.resultCh <- errorResult(PeerData{peerID: peerID}, height, err)
+	h.suite.Require().NoError(h.sync.consumeJobResult(context.Background(), context.Background()))
+}
+
+// run moves the fake clock a second at a time for up to limit, calling each
+// before every step. It returns how long WaitForSync took to hand over, its
+// verdict, and whether it did by limit.
+func (h *waitForSyncHarness) run(limit time.Duration, each func(elapsed time.Duration)) (
+	elapsed time.Duration, caughtUp bool, ended bool,
+) {
+	for ; elapsed <= limit; elapsed += time.Second {
+		select {
+		case caughtUp = <-h.done:
+			return elapsed, caughtUp, true
+		default:
+		}
+		if each != nil {
+			each(elapsed)
+		}
+		h.clock.Advance(time.Second)
+		// let WaitForSync read this tick before the next one moves the clock again
+		time.Sleep(time.Millisecond)
+	}
+	caughtUp, ended = h.result(2 * time.Second)
+	return elapsed, caughtUp, ended
+}
+
+// tipBlocks returns a step for run that, every interval, lets the tip peer
+// advertise the height the node needs and applies it, as for a node level with
+// the network when it commits a block. Blocks arrive well within syncTimeout, so
+// block sync never sees a stall.
+func (h *waitForSyncHarness) tipBlocks(tipPeer types.NodeID, interval time.Duration) func(time.Duration) {
+	return func(elapsed time.Duration) {
+		if elapsed == 0 || elapsed%interval != 0 {
+			return
+		}
+		height, _ := h.sync.GetStatus()
+		h.sync.AddPeer(newPeerData(tipPeer, 1, height))
+		h.suite.Require().NoError(h.sync.addBlock(BlockResponse{
+			PeerID: tipPeer,
+			Block:  &types.Block{Header: types.Header{Height: height}},
+		}))
+		h.sync.advance(h.clock.Now(), defaultPrecision)
+	}
+}
+
+// setLastBlockTime makes blockTime the time of the last block the node applied.
+func (h *waitForSyncHarness) setLastBlockTime(blockTime time.Time) {
+	h.sync.mtx.Lock()
+	defer h.sync.mtx.Unlock()
+	h.sync.lastBlockTime = blockTime
+}
+
+const (
+	// tipBlockInterval is shorter than syncTimeout, so chain growth alone
+	// keeps every stall-based handover from firing.
+	tipBlockInterval = 30 * time.Second
+	// unservedHandoverSlack covers ticks WaitForSync reads late.
+	unservedHandoverSlack = 10 * time.Second
+)
+
+// TestWaitForSyncHandsOverPastUnservedClaims checks that a node level with the
+// other peers hands over to consensus even while another peer claims heights
+// far above and never serves them, and while new blocks keep arriving faster
+// than a stall can be declared. Each variant costs the peer nothing to send.
+func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverPastUnservedClaims() {
+	const (
+		height    = int64(100)
+		tipPeer   = types.NodeID("tip peer")
+		unserving = types.NodeID("unserving peer")
+	)
+	testCases := []struct {
+		name      string
+		claimBase int64
+		evidence  func(h *waitForSyncHarness)
+	}{
+		{
+			name:      "claims our height and never answers",
+			claimBase: 1,
+			evidence:  func(h *waitForSyncHarness) { h.fail(unserving, height, client.ErrPeerNotResponded) },
+		},
+		{
+			name:      "claims our height and answers it has no block",
+			claimBase: 1,
+			evidence:  func(h *waitForSyncHarness) { h.fail(unserving, height, &client.ErrBlockNotFound{Height: height}) },
+		},
+		{
+			// The base stays above every height new blocks take us to here,
+			// so the peer is never asked for anything and never fails.
+			name:      "claims a range starting above ours",
+			claimBase: height + 1000,
+			evidence:  func(*waitForSyncHarness) {},
+		},
+	}
+	for _, tc := range testCases {
+		suite.Run(tc.name, func() {
+			h := suite.newWaitForSyncHarness(height,
+				newPeerData(tipPeer, 1, height-1),
+				newPeerData(unserving, tc.claimBase, maxPlausiblePeerHeight))
+			defer h.cancel()
+			tc.evidence(h)
+
+			elapsed, caughtUp, ended := h.run(tipGrace+time.Minute, h.tipBlocks(tipPeer, tipBlockInterval))
+			suite.Require().True(ended, "block sync kept following the tip behind a claim nobody serves")
+			suite.Require().False(caughtUp, "an unserved claim was not reached, so this is not catching up")
+			suite.Require().LessOrEqual(elapsed, tipGrace+unservedHandoverSlack)
+		})
+	}
+}
+
+// TestWaitForSyncHandsOverPastRotatingUnservedClaims checks that unserved far
+// claims arriving under a fresh peer ID before the previous one has failed do
+// not keep a node at the tip in block sync for good. A node ID costs a peer
+// nothing, so a claim record kept per ID must not be the only way out.
+func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverPastRotatingUnservedClaims() {
+	const (
+		height  = int64(100)
+		tipPeer = types.NodeID("tip peer")
+		// a new ID joins every rotateEvery; each fails syncTimeout after joining
+		rotateEvery = 30 * time.Second
+	)
+	h := suite.newWaitForSyncHarness(height, newPeerData(tipPeer, 1, height-1))
+	defer h.cancel()
+
+	traffic := h.tipBlocks(tipPeer, tipBlockInterval)
+	limit := maxSyncStall + tipGrace
+	elapsed, caughtUp, ended := h.run(limit, func(elapsed time.Duration) {
+		traffic(elapsed)
+		if elapsed%rotateEvery == 0 {
+			id := types.NodeID(fmt.Sprintf("rotating peer %d", elapsed/rotateEvery))
+			h.sync.AddPeer(newPeerData(id, 1, maxPlausiblePeerHeight))
+		}
+		if elapsed >= syncTimeout && (elapsed-syncTimeout)%rotateEvery == 0 {
+			id := types.NodeID(fmt.Sprintf("rotating peer %d", (elapsed-syncTimeout)/rotateEvery))
+			next, _ := h.sync.GetStatus()
+			h.fail(id, next, client.ErrPeerNotResponded)
+		}
+	})
+	suite.Require().True(ended,
+		"block sync still following the tip after %s behind far claims under rotating peer IDs", elapsed)
+	suite.Require().False(caughtUp)
+}
+
+// TestWaitForSyncKeepsSyncingWhenASlowPeerRecovers checks that a peer far ahead
+// which once failed the height we need, and then serves a run of blocks from it,
+// keeps block sync going: one timeout from a slow peer does not make its claim
+// false, and handing over while thousands of blocks behind leaves the node in
+// consensus catch-up it cannot finish (dashpay/tenderdash#1413).
+func (suite *SynchronizerTestSuite) TestWaitForSyncKeepsSyncingWhenASlowPeerRecovers() {
+	ctx := context.Background()
+	b := suite.newBacklogHarness()
+	clock := clockwork.NewFakeClock()
+	b.pool.clock = clock
+	b.pool.lastAdvance = clock.Now()
+	for _, peer := range b.pool.peerStore.All() {
+		b.pool.peerStore.Delete(peer.peerID)
+	}
+	const slow = types.NodeID("slow peer")
+	b.pool.AddPeer(newPeerData(slow, 1, 10000))
+	b.pool.AddPeer(newPeerData("level", 0, 0))
+
+	const run = maxCatchupGap + 1
+	first := b.produce(ctx)
+	suite.Require().NotNil(first)
+	suite.Require().EqualValues(1, first.Block.Height)
+	b.timeout(ctx, slow, 1)
+	responses := map[int64]*BlockResponse{}
+	for len(responses) < int(run) {
+		resp := b.produce(ctx)
+		suite.Require().NotNil(resp)
+		responses[resp.Block.Height] = resp
+	}
+
+	h := suite.startWaitForSync(b.pool, clock)
+	defer h.cancel()
+	_, _, ended := h.run(3*tipGrace, func(elapsed time.Duration) {
+		if elapsed == tipGrace/2 {
+			for height := int64(1); height <= run; height++ {
+				b.deliver(ctx, responses[height])
+			}
+			b.pool.AddPeer(newPeerData("level", 0, run))
+		}
+	})
+	suite.Require().False(ended, "block sync gave up on a peer that served the heights it had failed")
+	height, _ := b.pool.GetStatus()
+	suite.Require().EqualValues(run+1, height, "the recovered blocks must have been applied")
+}
+
+// TestWaitForSyncKeepsSyncingBehindASoleSlowPeerThatFailsTwice checks that a sole
+// peer thousands of blocks ahead, which times out the height we need and then
+// times out the recovery probe for it too, does not make block sync hand over
+// while the node is still far behind. Two timeouts are well short of the
+// failures that drop a peer, and the peer serves the height afterwards.
+func (suite *SynchronizerTestSuite) TestWaitForSyncKeepsSyncingBehindASoleSlowPeerThatFailsTwice() {
+	ctx := context.Background()
+	b := suite.newBacklogHarness()
+	fake := clockwork.NewFakeClock()
+	b.pool.clock = fake
+	b.pool.lastAdvance = fake.Now()
+	for _, peer := range b.pool.peerStore.All() {
+		b.pool.peerStore.Delete(peer.peerID)
+	}
+	const slow = types.NodeID("slow peer")
+	b.pool.AddPeer(newPeerData(slow, 1, 10000))
+
+	resp := b.produce(ctx)
+	suite.Require().NotNil(resp)
+	suite.Require().EqualValues(1, resp.Block.Height)
+	b.timeout(ctx, slow, 1)
+
+	h := suite.startWaitForSync(b.pool, fake)
+	defer h.cancel()
+	// first timeout at 0; probe 30s after it times out 60s later; served afterwards
+	const (
+		probeTimedOut = 90 * time.Second
+		served        = tipGrace + 30*time.Second
+	)
+	elapsed, _, ended := h.run(3*tipGrace, func(elapsed time.Duration) {
+		switch elapsed {
+		case probeTimedOut:
+			b.timeout(ctx, slow, 1)
+		case served:
+			b.deliver(ctx, resp)
+		}
+	})
+	suite.Require().False(ended,
+		"block sync handed over after %s while 9999 blocks behind a peer that failed only twice", elapsed)
+}
+
+// TestWaitForSyncKeepsSyncingBehindASlowPeerWithASyncingPeerAlongside is the sole
+// slow peer case with one more peer that is itself still syncing at our height,
+// as when several nodes start together. That peer has nothing to offer, so it
+// must not make the node give up on the slow peer thousands of blocks ahead.
+func (suite *SynchronizerTestSuite) TestWaitForSyncKeepsSyncingBehindASlowPeerWithASyncingPeerAlongside() {
+	ctx := context.Background()
+	b := suite.newBacklogHarness()
+	fake := clockwork.NewFakeClock()
+	b.pool.clock = fake
+	b.pool.lastAdvance = fake.Now()
+	for _, peer := range b.pool.peerStore.All() {
+		b.pool.peerStore.Delete(peer.peerID)
+	}
+	const slow = types.NodeID("slow peer")
+	b.pool.AddPeer(newPeerData(slow, 1, 10000))
+	b.pool.AddPeer(newPeerData("syncing peer", 0, 0))
+
+	resp := b.produce(ctx)
+	suite.Require().NotNil(resp)
+	suite.Require().EqualValues(1, resp.Block.Height)
+	b.timeout(ctx, slow, 1)
+
+	h := suite.startWaitForSync(b.pool, fake)
+	defer h.cancel()
+	const (
+		probeTimedOut = 90 * time.Second
+		served        = tipGrace + 30*time.Second
+	)
+	elapsed, _, ended := h.run(3*tipGrace, func(elapsed time.Duration) {
+		switch elapsed {
+		case probeTimedOut:
+			b.timeout(ctx, slow, 1)
+		case served:
+			b.deliver(ctx, resp)
+		}
+	})
+	suite.Require().False(ended,
+		"block sync handed over after %s while 9999 blocks behind, because a syncing peer sat at our height", elapsed)
+}
+
+// TestWaitForSyncHandsOverPastAnUnservedClaimOnAFastChain checks the handover bound
+// when the chain commits more than maxCatchupGap blocks between two status rounds,
+// so each status briefly shows the other peers more than maxCatchupGap ahead
+// until the node applies what they report a second later.
+func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverPastAnUnservedClaimOnAFastChain() {
+	const (
+		height    = int64(100)
+		tip       = types.NodeID("tip peer")
+		unserving = types.NodeID("unserving peer")
+		perRound  = maxCatchupGap + 2
+	)
+	h := suite.newWaitForSyncHarness(height,
+		newPeerData(tip, 1, height-1),
+		newPeerData(unserving, 1, maxPlausiblePeerHeight))
+	defer h.cancel()
+	h.fail(unserving, height, client.ErrPeerNotResponded)
+
+	limit := 10 * time.Minute
+	elapsed, caughtUp, ended := h.run(limit, func(elapsed time.Duration) {
+		if elapsed == 0 {
+			return
+		}
+		next, _ := h.sync.GetStatus()
+		switch elapsed % (10 * time.Second) {
+		case 0:
+			// status round: the tip peer reports perRound new blocks
+			h.sync.AddPeer(newPeerData(tip, 1, next-1+perRound))
+		case 2 * time.Second:
+			for i := int64(0); i < perRound; i++ {
+				h.sync.advance(h.clock.Now(), defaultPrecision)
+			}
+		}
+	})
+	suite.Require().True(ended, "block sync still following the tip after %s behind a claim nobody serves", limit)
+	suite.Require().False(caughtUp)
+	suite.Require().LessOrEqual(elapsed, syncTimeout+tipGrace+unservedHandoverSlack)
+}
+
+// TestWaitForSyncHandsOverPastAnUnservedClaimOnAHaltedChain checks that a chain
+// that stopped producing blocks, as one waiting for this node's vote may, does not
+// leave the node in block sync behind a claim nobody serves. Its last block is
+// too old to say the node is at the tip, so the wedge limit decides.
+func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverPastAnUnservedClaimOnAHaltedChain() {
+	const (
+		height    = int64(100)
+		tipPeer   = types.NodeID("tip peer")
+		unserving = types.NodeID("unserving peer")
+	)
+	h := suite.newWaitForSyncHarness(height,
+		newPeerData(tipPeer, 1, height-1),
+		newPeerData(unserving, 1, maxPlausiblePeerHeight))
+	defer h.cancel()
+	h.setLastBlockTime(h.clock.Now().Add(-tipRecency))
+
+	// the peer fails the probes it is sent for the height, too seldom to
+	// be dropped for it, and reports its status again after each
+	suite.client.On("Send", mock.Anything, mock.AnythingOfType("p2p.PeerError")).Maybe().Return(nil)
+	const probeEvery = 150 * time.Second
+	elapsed, caughtUp, ended := h.run(maxSyncStall+time.Minute, func(elapsed time.Duration) {
+		if elapsed > 0 && elapsed%probeEvery == 0 {
+			h.fail(unserving, height, client.ErrPeerNotResponded)
+			h.sync.AddPeer(newPeerData(unserving, 1, maxPlausiblePeerHeight))
+		}
+	})
+	suite.Require().True(ended, "block sync kept waiting on a halted chain behind a claim nobody serves")
+	suite.Require().False(caughtUp)
+	suite.Require().Greater(elapsed, maxSyncStall, "handed over with no recent block before the wedge limit")
+	suite.Require().LessOrEqual(elapsed, maxSyncStall+unservedHandoverSlack)
+}
+
+// flakySource returns a step for run in which source, the only peer far ahead,
+// supplies the next block every deliverEvery and times out one request every
+// failEvery, the way a loaded peer does. The node keeps making progress.
+func (h *waitForSyncHarness) flakySource(source types.NodeID, deliverEvery, failEvery time.Duration) func(time.Duration) {
+	return func(elapsed time.Duration) {
+		if elapsed == 0 {
+			return
+		}
+		next, _ := h.sync.GetStatus()
+		if elapsed%failEvery == 0 {
+			h.fail(source, next, client.ErrPeerNotResponded)
+			return
+		}
+		if elapsed%deliverEvery == 0 {
+			h.suite.Require().NoError(h.sync.addBlock(BlockResponse{
+				PeerID: source,
+				Block:  &types.Block{Header: types.Header{Height: next}},
+			}))
+			// a block the network committed long ago
+			h.sync.advance(time.Time{}, defaultPrecision)
+			h.sync.peerStore.Update(source, ResetFailures())
+		}
+	}
+}
+
+// TestWaitForSyncKeepsSyncingFromAFlakySourceWithAPeerSyncingBehind checks that a
+// node far behind, making steady progress from its only source ahead, does not
+// hand over because that source times out a request now and then while another
+// node syncs behind it.
+func (suite *SynchronizerTestSuite) TestWaitForSyncKeepsSyncingFromAFlakySourceWithAPeerSyncingBehind() {
+	const (
+		height  = int64(100)
+		source  = types.NodeID("source")
+		behind  = types.NodeID("peer syncing behind")
+		limit   = 3 * tipGrace
+		deliver = 5 * time.Second
+		failure = 50 * time.Second
+	)
+	h := suite.newWaitForSyncHarness(height,
+		newPeerData(source, 1, height+10000),
+		newPeerData(behind, 1, height-5))
+	defer h.cancel()
+	h.fail(source, height, client.ErrPeerNotResponded)
+
+	flaky := h.flakySource(source, deliver, failure)
+	elapsed, _, ended := h.run(limit, func(elapsed time.Duration) {
+		flaky(elapsed)
+		if elapsed%deliver == 0 {
+			next, _ := h.sync.GetStatus()
+			h.sync.AddPeer(newPeerData(behind, 1, next-3))
+		}
+	})
+	applied, _ := h.sync.GetStatus()
+	suite.Require().False(ended,
+		"handed over after %s at height %d, about 10000 blocks behind a source still delivering", elapsed, applied)
+}
+
+// TestWaitForSyncKeepsSyncingFromAFlakySourceThroughADropAndReAdd checks the same
+// for a sole source that once fails enough requests in a row to be dropped and
+// comes back with its next status.
+func (suite *SynchronizerTestSuite) TestWaitForSyncKeepsSyncingFromAFlakySourceThroughADropAndReAdd() {
+	const (
+		height  = int64(100)
+		source  = types.NodeID("source")
+		limit   = 3 * tipGrace
+		deliver = 5 * time.Second
+		failure = 50 * time.Second
+		dropAt  = tipGrace + 7*time.Second
+	)
+	h := suite.newWaitForSyncHarness(height, newPeerData(source, 1, height+10000))
+	defer h.cancel()
+	suite.client.On("Send", mock.Anything, mock.AnythingOfType("p2p.PeerError")).Maybe().Return(nil)
+	h.fail(source, height, client.ErrPeerNotResponded)
+
+	flaky := h.flakySource(source, deliver, failure)
+	elapsed, _, ended := h.run(limit, func(elapsed time.Duration) {
+		switch elapsed {
+		case dropAt:
+			next, _ := h.sync.GetStatus()
+			for i := int64(0); i < int64(maxConsecutiveFailures); i++ {
+				h.fail(source, next+i, client.ErrPeerNotResponded)
+			}
+			return
+		case dropAt + 5*time.Second:
+			h.sync.AddPeer(newPeerData(source, 1, height+10000))
+			return
+		}
+		if _, present := h.sync.peerStore.Get(source); present {
+			flaky(elapsed)
+		}
+	})
+	applied, _ := h.sync.GetStatus()
+	suite.Require().False(ended,
+		"handed over after %s at height %d, about 10000 blocks behind a source still delivering", elapsed, applied)
+}
+
+// TestWaitForSyncKeepsSyncingWhenTheLastBlockLooksNewerThanTheLocalClock checks
+// that a node whose clock runs behind the validators', so that a block it applied
+// long ago carries a time ahead of its clock, does not take that block for one at
+// the tip and give up on a slow peer thousands of blocks ahead.
+func (suite *SynchronizerTestSuite) TestWaitForSyncKeepsSyncingWhenTheLastBlockLooksNewerThanTheLocalClock() {
+	const (
+		height = int64(100)
+		slow   = types.NodeID("slow peer")
+	)
+	h := suite.newWaitForSyncHarness(height, newPeerData(slow, 1, height+10000))
+	defer h.cancel()
+	h.setLastBlockTime(h.clock.Now().Add(30 * time.Minute))
+	h.fail(slow, height, client.ErrPeerNotResponded)
+
+	elapsed, _, ended := h.run(3*tipGrace, nil)
+	suite.Require().False(ended,
+		"handed over after %s, 10000 blocks behind, on a block time ahead of the local clock", elapsed)
+}
+
+// TestIsRecent checks which last block times count as recent: none older than
+// the window, and none further ahead of the local clock than the precision
+// validators hold block times to.
+func TestIsRecent(t *testing.T) {
+	const (
+		window    = time.Minute
+		precision = time.Second
+	)
+	now := time.Unix(1_700_000_000, 0)
+	for _, tc := range []struct {
+		name string
+		age  time.Duration
+		want bool
+	}{
+		{name: "just applied", age: 0, want: true},
+		{name: "as old as the window", age: window, want: true},
+		{name: "older than the window", age: window + time.Millisecond},
+		{name: "ahead within the precision", age: -precision, want: true},
+		{name: "ahead beyond the precision", age: -precision - time.Millisecond},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, isRecent(now.Add(-tc.age), window, precision, now))
+		})
+	}
+	require.False(t, isRecent(time.Time{}, window, precision, now), "no block time")
+}
+
+// TestWaitForSyncAtTipHandoverTargetsNearClaims checks that handing over at the
+// tip does not pass on a claim out of reach of the tip as the consensus catch-up
+// target, which would hold back the node's own proposals for that long again.
+func (suite *SynchronizerTestSuite) TestWaitForSyncAtTipHandoverTargetsNearClaims() {
+	const (
+		height    = int64(100)
+		tipPeer   = types.NodeID("tip peer")
+		unserving = types.NodeID("unserving peer")
+	)
+	h := suite.newWaitForSyncHarness(height,
+		newPeerData(tipPeer, 1, height-1),
+		newPeerData(unserving, 1, maxPlausiblePeerHeight))
+	defer h.cancel()
+
+	_, caughtUp, ended := h.run(tipGrace+time.Minute, h.tipBlocks(tipPeer, tipBlockInterval))
+	suite.Require().True(ended)
+	suite.Require().False(caughtUp)
+	applied, _ := h.sync.GetStatus()
+	suite.Require().Equal(applied-1, h.target, "a claim out of reach of the tip must not become the catch-up target")
+}
+
+// TestWaitForSyncHandoverTargetAtTheTip checks that whichever way a node at the
+// tip hands over, the consensus catch-up target holds the claims within reach
+// of the tip that were seen while waiting, including those of peers gone since,
+// and leaves out claims beyond it.
+func (suite *SynchronizerTestSuite) TestWaitForSyncHandoverTargetAtTheTip() {
+	const (
+		height    = int64(100)
+		tipPeer   = types.NodeID("tip peer")
+		claimant  = types.NodeID("claimant")
+		nearPeer  = types.NodeID("near peer")
+		nearClaim = height + 3
+	)
+	testCases := []struct {
+		name  string
+		peers []PeerData
+		setup func(h *waitForSyncHarness)
+		step  func(h *waitForSyncHarness, elapsed time.Duration)
+		want  int64
+		// caughtUp is set where no claim above the node remains
+		caughtUp bool
+	}{
+		{
+			name:  "the far claimant has no block for the next height",
+			peers: []PeerData{newPeerData(tipPeer, 1, height-1), newPeerData(claimant, 1, maxPlausiblePeerHeight)},
+			setup: func(h *waitForSyncHarness) {
+				h.fail(claimant, height, &client.ErrBlockNotFound{Height: height})
+			},
+			want: height - 1,
+		},
+		{
+			name:  "the far claimant is removed for failing",
+			peers: []PeerData{newPeerData(tipPeer, 1, height-1), newPeerData(claimant, 1, maxPlausiblePeerHeight)},
+			step: func(h *waitForSyncHarness, elapsed time.Duration) {
+				if elapsed == 5*time.Second {
+					for i := int64(0); i < int64(maxConsecutiveFailures); i++ {
+						h.fail(claimant, height+i, client.ErrPeerNotResponded)
+					}
+				}
+			},
+			want:     height - 1,
+			caughtUp: true,
+		},
+		{
+			name: "a near peer leaves without failing",
+			peers: []PeerData{
+				newPeerData(nearPeer, 1, nearClaim),
+				newPeerData(claimant, 1, maxPlausiblePeerHeight),
+			},
+			step: func(h *waitForSyncHarness, elapsed time.Duration) {
+				if elapsed == 5*time.Second {
+					h.sync.RemovePeer(nearPeer)
+				}
+			},
+			want: nearClaim,
+		},
+	}
+	for _, tc := range testCases {
+		suite.Run(tc.name, func() {
+			suite.client.On("Send", mock.Anything, mock.AnythingOfType("p2p.PeerError")).Maybe().Return(nil)
+			h := suite.newWaitForSyncHarness(height, tc.peers...)
+			defer h.cancel()
+			if tc.setup != nil {
+				tc.setup(h)
+			}
+			_, caughtUp, ended := h.run(tipGrace+time.Minute, func(elapsed time.Duration) {
+				if tc.step != nil {
+					tc.step(h, elapsed)
+				}
+			})
+			suite.Require().True(ended)
+			suite.Require().Equal(tc.caughtUp, caughtUp)
+			suite.Require().Equal(tc.want, h.target)
+		})
+	}
+}
+
+// newPeerEveryMinute returns a step for run that, every minute, drops the peer
+// claiming a far height and connects a new one making the same claim. Node IDs
+// cost nothing, so no new peer has a history to judge it by.
+func (h *waitForSyncHarness) newPeerEveryMinute() func(time.Duration) {
+	var current types.NodeID
+	return func(elapsed time.Duration) {
+		if elapsed%time.Minute != 0 {
+			return
+		}
+		if current != "" {
+			h.sync.RemovePeer(current)
+		}
+		current = types.NodeID(fmt.Sprintf("claimant %d", elapsed/time.Minute))
+		h.sync.AddPeer(newPeerData(current, 1, maxPlausiblePeerHeight))
+	}
+}
+
+// TestWaitForSyncHandsOverPastAFarClaimFromNewPeers checks that a far claim made
+// by a new peer every minute does not keep a node level with the network in
+// block sync while the chain keeps committing blocks.
+func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverPastAFarClaimFromNewPeers() {
+	const (
+		height  = int64(100)
+		tipPeer = types.NodeID("tip peer")
+	)
+	h := suite.newWaitForSyncHarness(height, newPeerData(tipPeer, 1, height-1))
+	defer h.cancel()
+
+	traffic := h.tipBlocks(tipPeer, tipBlockInterval)
+	claims := h.newPeerEveryMinute()
+	elapsed, caughtUp, ended := h.run(tipGrace+time.Minute, func(elapsed time.Duration) {
+		claims(elapsed)
+		traffic(elapsed)
+	})
+	suite.Require().True(ended, "block sync kept following the tip behind a claim moved to a new peer every minute")
+	suite.Require().False(caughtUp)
+	suite.Require().LessOrEqual(elapsed, tipGrace+unservedHandoverSlack)
+}
+
+// TestWaitForSyncHandsOverPastAFarClaimFromNewPeersOnAHaltedChain checks the same
+// on a chain that stopped producing blocks: the stall backstop still fires.
+func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverPastAFarClaimFromNewPeersOnAHaltedChain() {
+	const (
+		height  = int64(100)
+		tipPeer = types.NodeID("tip peer")
+	)
+	h := suite.newWaitForSyncHarness(height, newPeerData(tipPeer, 1, height-1))
+	defer h.cancel()
+	h.setLastBlockTime(h.clock.Now().Add(-staleBlockAge / 2))
+
+	elapsed, caughtUp, ended := h.run(maxSyncStall+time.Minute, h.newPeerEveryMinute())
+	suite.Require().True(ended, "block sync kept waiting on a halted chain behind a claim moved to a new peer every minute")
+	suite.Require().False(caughtUp)
+	suite.Require().Greater(elapsed, maxSyncStall)
+	suite.Require().LessOrEqual(elapsed, maxSyncStall+unservedHandoverSlack)
+}
+
+// TestWaitForSyncHandsOverPastAFarClaimFromAPeerSupplyingTheTip checks that a peer
+// claiming a far height does not keep the node in block sync by supplying each
+// new block as the network commits it. It never fails a request, yet its blocks
+// only ever take the node to the network's head.
+func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverPastAFarClaimFromAPeerSupplyingTheTip() {
+	const (
+		height  = int64(100)
+		tipPeer = types.NodeID("tip peer")
+		relay   = types.NodeID("relay")
+	)
+	h := suite.newWaitForSyncHarness(height,
+		newPeerData(tipPeer, 1, height-1),
+		newPeerData(relay, 1, maxPlausiblePeerHeight))
+	defer h.cancel()
+
+	elapsed, caughtUp, ended := h.run(tipGrace+time.Minute, func(elapsed time.Duration) {
+		if elapsed == 0 || elapsed%tipBlockInterval != 0 {
+			return
+		}
+		next, _ := h.sync.GetStatus()
+		h.sync.AddPeer(newPeerData(tipPeer, 1, next))
+		h.suite.Require().NoError(h.sync.addBlock(BlockResponse{
+			PeerID: relay,
+			Block:  &types.Block{Header: types.Header{Height: next}},
+		}))
+		h.sync.advance(h.clock.Now(), defaultPrecision)
+		h.sync.peerStore.Update(relay, ResetFailures())
+	})
+	suite.Require().True(ended, "block sync kept following the tip behind a claim of a peer supplying the tip")
+	suite.Require().False(caughtUp)
+	suite.Require().LessOrEqual(elapsed, tipGrace+unservedHandoverSlack)
+}
+
+// TestWaitForSyncOnAFastChainBehindTheTip checks where the at-tip rule draws
+// the line on a chain committing two blocks a second, for a node behind a
+// source that supplies blocks no faster than the chain commits them, whatever
+// another peer claims. While its last block stays older than tipRecency the
+// node keeps syncing. Once that block has been within tipRecency for tipGrace
+// the node hands over, up to tipRecency of blocks behind: no peer serves it
+// faster than the chain moves, so block sync would not close the gap either.
+func (suite *SynchronizerTestSuite) TestWaitForSyncOnAFastChainBehindTheTip() {
+	const (
+		height   = int64(100)
+		source   = types.NodeID("source")
+		interval = 500 * time.Millisecond
+	)
+	testCases := []struct {
+		name string
+		// behind is how old the node's last block is when block sync starts
+		behind time.Duration
+		// supplyEvery is how often the source supplies the next block
+		supplyEvery time.Duration
+		// failEvery, when set, is how often the source, then the only peer,
+		// fails a request
+		failEvery    time.Duration
+		wantHandover bool
+	}{
+		{name: "at the chain's pace, out of the window", behind: tipRecency + time.Minute, supplyEvery: interval},
+		{name: "falling behind a slow source", behind: tipRecency - time.Minute, supplyEvery: 15 * time.Second},
+		{
+			name:        "a sole source that fails now and then, out of the window",
+			behind:      tipRecency + time.Minute,
+			supplyEvery: interval,
+			failEvery:   50 * time.Second,
+		},
+		{name: "at the chain's pace, within the window", behind: 100 * time.Second, supplyEvery: interval, wantHandover: true},
+	}
+	for _, tc := range testCases {
+		suite.Run(tc.name, func() {
+			peers := []PeerData{newPeerData(source, 1, height+10000)}
+			if tc.failEvery == 0 {
+				peers = append(peers, newPeerData("claimant", 1, maxPlausiblePeerHeight))
+			}
+			h := suite.newWaitForSyncHarness(height, peers...)
+			defer h.cancel()
+			last := h.clock.Now().Add(-tc.behind)
+			h.setLastBlockTime(last)
+			supply := func() {
+				next, _ := h.sync.GetStatus()
+				h.suite.Require().NoError(h.sync.addBlock(BlockResponse{
+					PeerID: source,
+					Block:  &types.Block{Header: types.Header{Height: next}},
+				}))
+				h.sync.advance(last.Add(time.Duration(next-height+1)*interval), defaultPrecision)
+				h.sync.peerStore.Update(source, ResetFailures())
+			}
+			elapsed, caughtUp, ended := h.run(maxSyncStall/2, func(elapsed time.Duration) {
+				if tc.failEvery > 0 && elapsed > 0 && elapsed%tc.failEvery == 0 {
+					next, _ := h.sync.GetStatus()
+					h.fail(source, next, client.ErrPeerNotResponded)
+					return
+				}
+				if tc.supplyEvery < time.Second {
+					for i := 0; i < int(time.Second/tc.supplyEvery); i++ {
+						supply()
+					}
+				} else if elapsed%tc.supplyEvery == 0 {
+					supply()
+				}
+			})
+			applied, _ := h.sync.GetStatus()
+			if !tc.wantHandover {
+				suite.Require().False(ended, "handed over after %s at height %d, more than %s of blocks behind",
+					elapsed, applied, tipRecency)
+				return
+			}
+			suite.Require().True(ended, "still in block sync after %s with a last block %s old", elapsed, tc.behind)
+			suite.Require().False(caughtUp)
+			suite.Require().Greater(elapsed, tipGrace)
+			suite.Require().LessOrEqual(elapsed, tipGrace+unservedHandoverSlack)
+		})
+	}
 }
 
 // backlogChainLen is how many heights the backlog tests have blocks for. It is
@@ -2320,9 +3178,11 @@ func (suite *SynchronizerTestSuite) TestSmallBlocksAfterSlowApplyKeepPeersUsable
 	}
 
 	fakeClock.Advance(syncTimeout + time.Second)
-	height, stalled, servable, tip, _, servableTip := h.pool.stallSnapshot()
-	suite.Equal(keepSyncing, stallVerdictFor(servable, servableTip-height, stalled),
-		"healthy peers must not trigger consensus handoff at height %d below tip %d", height, tip)
+	st := h.pool.stallSnapshot()
+	height := st.height
+	suite.Equal(keepSyncing,
+		stallVerdictFor(st.servable, st.maxServableHeight-height, st.stalledFor, 0),
+		"healthy peers must not trigger consensus handoff at height %d below tip %d", height, st.maxPeerHeight)
 	_, found := h.pool.peerStore.FindPeer(height)
 	suite.True(found, "healthy peers must accept the next block request after the batch drains")
 	if found {

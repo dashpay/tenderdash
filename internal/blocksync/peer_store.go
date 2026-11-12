@@ -146,6 +146,11 @@ func (p *InMemPeerStore) reservePeer(height int64) (PeerData, bool) {
 	if !found {
 		return PeerData{}, false
 	}
+	return p.reserve(peer, height)
+}
+
+// reserve is reservePeer for a peer the caller selected.
+func (p *InMemPeerStore) reserve(peer PeerData, height int64) (PeerData, bool) {
 	reserved := false
 	p.store.Update(peer.peerID, func(_ types.NodeID, current *PeerData) {
 		if current.service != peer.service || current.numPending >= maxPendingRequestsPerPeer ||
