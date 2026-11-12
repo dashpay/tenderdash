@@ -1844,7 +1844,7 @@ func (h *waitForSyncHarness) tipBlocks(tipPeer types.NodeID, interval time.Durat
 		h.sync.AddPeer(newPeerData(tipPeer, 1, height))
 		h.suite.Require().NoError(h.sync.addBlock(BlockResponse{
 			PeerID: tipPeer,
-			Block:  &types.Block{Header: types.Header{Height: height}},
+			Height: height,
 		}))
 		h.sync.advance(h.clock.Now(), defaultPrecision)
 	}
@@ -1968,13 +1968,13 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncKeepsSyncingWhenASlowPeerReco
 	const run = maxCatchupGap + 1
 	first := b.produce(ctx)
 	suite.Require().NotNil(first)
-	suite.Require().EqualValues(1, first.Block.Height)
+	suite.Require().EqualValues(1, first.Height)
 	b.timeout(ctx, slow, 1)
 	responses := map[int64]*BlockResponse{}
 	for len(responses) < int(run) {
 		resp := b.produce(ctx)
 		suite.Require().NotNil(resp)
-		responses[resp.Block.Height] = resp
+		responses[resp.Height] = resp
 	}
 
 	h := suite.startWaitForSync(b.pool, clock)
@@ -2011,7 +2011,7 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncKeepsSyncingBehindASoleSlowPe
 
 	resp := b.produce(ctx)
 	suite.Require().NotNil(resp)
-	suite.Require().EqualValues(1, resp.Block.Height)
+	suite.Require().EqualValues(1, resp.Height)
 	b.timeout(ctx, slow, 1)
 
 	h := suite.startWaitForSync(b.pool, fake)
@@ -2052,7 +2052,7 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncKeepsSyncingBehindASlowPeerWi
 
 	resp := b.produce(ctx)
 	suite.Require().NotNil(resp)
-	suite.Require().EqualValues(1, resp.Block.Height)
+	suite.Require().EqualValues(1, resp.Height)
 	b.timeout(ctx, slow, 1)
 
 	h := suite.startWaitForSync(b.pool, fake)
@@ -2159,7 +2159,7 @@ func (h *waitForSyncHarness) flakySource(source types.NodeID, deliverEvery, fail
 		if elapsed%deliverEvery == 0 {
 			h.suite.Require().NoError(h.sync.addBlock(BlockResponse{
 				PeerID: source,
-				Block:  &types.Block{Header: types.Header{Height: next}},
+				Height: next,
 			}))
 			// a block the network committed long ago
 			h.sync.advance(time.Time{}, defaultPrecision)
@@ -2462,7 +2462,7 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncHandsOverPastAFarClaimFromAPe
 		h.sync.AddPeer(newPeerData(tipPeer, 1, next))
 		h.suite.Require().NoError(h.sync.addBlock(BlockResponse{
 			PeerID: relay,
-			Block:  &types.Block{Header: types.Header{Height: next}},
+			Height: next,
 		}))
 		h.sync.advance(h.clock.Now(), defaultPrecision)
 		h.sync.peerStore.Update(relay, ResetFailures())
@@ -2520,7 +2520,7 @@ func (suite *SynchronizerTestSuite) TestWaitForSyncOnAFastChainBehindTheTip() {
 				next, _ := h.sync.GetStatus()
 				h.suite.Require().NoError(h.sync.addBlock(BlockResponse{
 					PeerID: source,
-					Block:  &types.Block{Header: types.Header{Height: next}},
+					Height: next,
 				}))
 				h.sync.advance(last.Add(time.Duration(next-height+1)*interval), defaultPrecision)
 				h.sync.peerStore.Update(source, ResetFailures())
