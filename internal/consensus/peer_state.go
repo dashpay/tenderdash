@@ -359,20 +359,11 @@ func (ps *PeerState) getVoteBitArray(height int64, round int32, votesType tmprot
 
 		return nil
 	}
-	if ps.PRS.Height == height+1 {
-		if ps.PRS.LastCommitRound == round {
-			switch votesType {
-			case tmproto.PrevoteType:
-				return nil
 
-			case tmproto.PrecommitType:
-				return ps.PRS.Precommits
-			}
-		}
-
-		return nil
-	}
-
+	// Votes of the height the peer has left are not tracked: its commit is
+	// gossiped whole (see GossipCommit), and ps.PRS.Precommits belongs to the
+	// peer's current height, so a late previous-height precommit must not
+	// touch it.
 	return nil
 }
 
@@ -644,12 +635,7 @@ func (ps *PeerState) ApplyNewRoundStepMessage(msg *NewRoundStepMessage) {
 	}
 
 	if psHeight != msg.Height {
-		// Shift Precommits to LastPrecommits.
-		if psHeight+1 == msg.Height && psRound == msg.LastCommitRound {
-			ps.PRS.LastCommitRound = msg.LastCommitRound
-		} else {
-			ps.PRS.LastCommitRound = msg.LastCommitRound
-		}
+		ps.PRS.LastCommitRound = msg.LastCommitRound
 
 		// we'll update the BitArray capacity later
 		ps.PRS.CatchupCommitRound = -1
