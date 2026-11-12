@@ -1,3 +1,41 @@
+## [2.0.0-dev.2] - 2026-11-12
+
+### Migration Notes
+
+- The Docker entrypoint waits for Tenderdash to finish its shutdown after forwarding a signal, so `--shutdown-timeout` (default 30s) now applies in containers; give `docker stop`/orchestrators a longer grace period than Docker's 10s default to avoid a SIGKILL during cleanup (#1607)
+- The generated Go type `blocksync.BlockResponse.Block` is `[]byte` (the serialized block) instead of `*types.Block`; the wire format is unchanged (#1595)
+- New `consensus_block_sync_apply_stage_duration` stage `decode` and `state_block_apply_stage_duration` stage `process_proposal_prevalidate` (#1595, #1616)
+
+### Protocol Versions
+
+- ABCI stays 1.5.0, P2P protocol stays 11 and block protocol stays 14: `BlockResponse.block` changes from an embedded block message to its bytes, which is the same encoding on the wire (#1595)
+
+### Bug Fixes
+
+- Validate a proposed block against the committed state before `ProcessProposal`, so a block that does not continue the chain gets a nil prevote without reaching the application; WAL replay judges proposal timeliness again (#1616)
+- Serve block sync blocks as the bytes they were committed with, so blocks with unknown fields or non-canonical encoding can be synced (#1595)
+- Hand over from block sync to consensus at the chain tip despite peers claiming heights they do not serve (#1618)
+- Stop a JSON-RPC batch whose caller has disconnected (#1610)
+- Wait for Tenderdash to exit after the Docker entrypoint forwards a signal (#1607)
+
+### Documentation
+
+- Version releases by RPC, ABCI, P2P/consensus and block-format contracts (#1603)
+- Document proposer liveness and round skipping (#1606)
+
+### Build
+
+- Update Go to 1.27.4 (#1617)
+- Bump golang.org/x/sync to 0.25.0 (#1614)
+- Bump golang.org/x/sys to 0.50.0 (#1613)
+- Bump github.com/oasisprotocol/oasis-core/go to 0.2604.0 (#1615)
+
+### Miscellaneous Tasks
+
+- Make `dev` the only development branch (#1608)
+- Check Markdown links on every PR and fix dead links (#1609)
+- Update CI actions (#1611, #1612)
+
 ## [2.0.0-dev.1] - 2026-11-09
 
 ### Breaking Changes
