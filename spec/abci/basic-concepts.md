@@ -44,7 +44,7 @@ The first time a new blockchain is started, Tenderdash calls
 `InitChain`. From then on, method `FinalizeBlock` is executed at the end of each
 block, resulting in an updated Application state.
 During consensus execution of a block height, before method `FinalizeBlock` is
-called, methods `PrepareProposal`, `ProcessProposal`, `ExtendVote`, and
+called, methods `PrepareProposal`, `ProcessProposal`, `ApplyBlockRandomness`, `ExtendVote`, and
 `VerifyVoteExtension` may be called several times.
 See [Tenderdash's expected behavior](expected-behavior.md)
 for details on the possible call sequences of these methods.
@@ -57,6 +57,11 @@ for details on the possible call sequences of these methods.
 * [**ProcessProposal:**](methods.md#processproposal) Executes a candidate deterministically
   and returns its status and commitments. Processing precedes the lock-based voting
   decision and can repeat when validating a commit from another round.
+* [**ApplyBlockRandomness:**](methods.md#applyblockrandomness) From consensus version 2, it hands the
+  Application the random beacon of a block and round, recovered from the Prevotes, and the Application
+  applies it to the candidate state that `ProcessProposal` left for that block and round. Tenderdash calls
+  it before `ExtendVote` and before signing a Precommit for the block, and may call it for rounds that
+  never commit, so it must not modify the committed state.
 * [**ExtendVote:**](methods.md#extendvote) Supplies the extensions for a non-nil precommit.
   It can also run on an observer after a rejected commit, without signing a vote.
 * [**VerifyVoteExtension:**](methods.md#verifyvoteextension) Checks a peer's precommit
@@ -146,9 +151,10 @@ for the actual fields, defaults and scheduling rules.
 Application processing must produce deterministic consensus commitments for a
 block, round and last committed state. `PrepareProposal` constructs a candidate;
 `ProcessProposal` verifies its current-block application/results hashes and
-next-state commitments. Candidate changes must not replace committed application
-state until `FinalizeBlock` persists the decided candidate. There is no subsequent
-ABCI `Commit` call.
+next-state commitments. `ApplyBlockRandomness` applies a block's randomness to its
+candidate. Candidate changes must not replace committed application state until
+`FinalizeBlock` persists the decided candidate. There is no subsequent ABCI `Commit`
+call.
 
 Processing can revisit the same block and round after another execution context
 has replaced it. Commit verification can also call `ExtendVote` without signing

@@ -455,6 +455,10 @@ changed the execution context; see
   round, to learn the vector a commit of that block and round must carry; see
   [VerifyVoteExtension](#verifyvoteextension). An ABCI error or an invalid response from this
   call is fatal, as on the Precommit path.
+* From consensus version 2, Tenderdash calls [ApplyBlockRandomness](#applyblockrandomness) before
+  `ExtendVote`, but the extensions MUST NOT depend on the beacon or on the state `ApplyBlockRandomness`
+  produced: other processes verify them against the state `ProcessProposal` left, possibly before they
+  recover the round's beacon, or without ever recovering it.
 
 #### When does Tenderdash call it?
 
@@ -554,6 +558,58 @@ requires acceptance before saving/finalizing the block. Replacement candidates a
 stored-block replay have different retry behavior, as described in the usage
 contract above and [Commit handling](../consensus/consensus-commit.md).
 
+### ApplyBlockRandomness
+
+#### Parameters and Types
+
+* **Request**:
+
+    | Name   | Type  | Description                                                              | Field Number |
+    |--------|-------|--------------------------------------------------------------------------|--------------|
+    | hash   | bytes | The header hash of the block the Prevotes are for.                       | 1            |
+    | height | int64 | Height of the block.                                                     | 2            |
+    | round  | int32 | Round whose Prevotes produced the beacon.                                | 3            |
+    | beacon | bytes | 96-byte BLS threshold signature recovered from the Prevotes of `round`. | 4            |
+
+* **Response**:
+
+    | Name     | Type  | Description                                                                | Field Number |
+    |----------|-------|----------------------------------------------------------------------------|--------------|
+    | app_hash | bytes | App hash after the randomness is applied; the hash the Precommits sign. | 1            |
+
+#### Usage
+
+* Used from consensus version 2 (`VersionParams.consensus_version`). Before that, Tenderdash never calls it.
+  This release never calls it, at any consensus version.
+* The beacon is the BLS threshold signature recovered from the Prevotes of round `round` for block `hash`.
+  Every set of threshold shares recovers the same bytes, and nobody can compute them before the Prevotes exist.
+  Tenderdash verifies the beacon against the quorum's threshold public key before the call.
+* The Application applies the randomness to the state that `ProcessProposal` (or `PrepareProposal`) left for
+  that block and round, and returns the resulting app hash. When nothing in the block uses randomness, it
+  returns the header app hash.
+* The header keeps the app hash from `ProcessProposal`, which Prevotes sign. Precommits and the commit sign the
+  returned app hash, and the commit carries it with the beacon (`Commit.app_hash`, `Commit.beacon`, and
+  `CommitInfo.app_hash`, `CommitInfo.beacon` in `RequestFinalizeBlock`).
+* The randomness may change only the application state behind `app_hash`. Transaction results, events,
+  validator set updates, consensus parameter updates and the other outputs of `ProcessProposal` are fixed by
+  the header the Prevotes signed: they MUST NOT depend on the beacon, and Tenderdash keeps the ones
+  `ProcessProposal` returned.
+* Vote extensions and their verification MUST NOT depend on the beacon or on the state this call produces;
+  see [ExtendVote](#extendvote).
+* The implementation MUST be deterministic, and MUST return the same `app_hash` when called again for the same
+  block, round and beacon.
+* It MUST NOT modify the committed state: Tenderdash may call it for a round that never commits, and
+  `FinalizeBlock` commits the state for the commit round.
+* An ABCI error is fatal, as for `ExtendVote`.
+
+#### When does Tenderdash call it?
+
+* On a validator, once the Prevotes of round _r_ for block _v_ reach the threshold and their signature is
+  recovered, before `ExtendVote` and before signing its Precommit for _v_.
+* On every path that finalizes a block from a commit (consensus, block sync, replay, a node that did not
+  vote): after `ProcessProposal` of the committed block for the commit round, with the commit's beacon, and
+  before `FinalizeBlock`. Tenderdash compares the returned `app_hash` with the commit's and stops on a mismatch.
+
 ### FinalizeBlock
 
 #### Parameters and Types
@@ -597,6 +653,11 @@ contract above and [Commit handling](../consensus/consensus-commit.md).
   The Application must select the candidate matching the finalized block and
   the round processed last; a block hash alone does not identify a round's
   execution context. See [Commit validity depends on the application](../consensus/consensus-commit.md#commit-validity-depends-on-the-application).
+* From consensus version 2, the state to commit is the candidate state of the block for
+  `RequestFinalizeBlock.round` with `RequestFinalizeBlock.commit.beacon` applied, as
+  [ApplyBlockRandomness](#applyblockrandomness) applies it, and its Merkle root hash MUST equal
+  `RequestFinalizeBlock.commit.app_hash`. Committing the candidate state without the randomness diverges
+  from the rest of the network.
 
 #### When does Tenderdash call it?
 

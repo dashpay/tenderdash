@@ -162,6 +162,16 @@ message Commit {
   bytes                  quorum_hash               = 4;
   bytes                  threshold_block_signature = 5;
   repeated VoteExtension threshold_vote_extensions = 6;
+  // Random beacon: the threshold signature recovered from the prevotes of the commit round, which
+  // verifies against their sign item and the quorum's threshold public key.
+  // Set from consensus version 2; empty before. The commit's signature covers neither this field
+  // nor app_hash as bytes: a commit is refused unless both are empty or they are exactly 96 and 32
+  // bytes, and a block's last commit is read without them when they are not.
+  bytes beacon = 7;
+  // App hash returned by ApplyBlockRandomness for this block and round. The precommits sign it only
+  // through block_id.state_id, the hash of the block header's state ID with its app hash replaced by
+  // this one: trust this field only once that hash matches. Set from consensus version 2; empty before.
+  bytes app_hash = 8;
 }
 
 message Proposal {
