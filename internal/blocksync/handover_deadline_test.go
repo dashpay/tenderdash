@@ -99,7 +99,7 @@ func (r *tipRun) consume(now time.Time) bool {
 		sync.peerStore.Update(req.peer.peerID, AddNumPending(-1), ResetFailures())
 		err := sync.addBlock(BlockResponse{
 			PeerID: req.peer.peerID,
-			Block:  &types.Block{Header: types.Header{Height: req.height}},
+			Height: req.height,
 		})
 		if err != nil && !errors.Is(err, errDuplicateBlock) {
 			r.h.suite.Require().NoError(err)
@@ -109,7 +109,7 @@ func (r *tipRun) consume(now time.Time) bool {
 			if !ok {
 				break
 			}
-			sync.advance(r.blockTimes[resp.Block.Height], defaultPrecision)
+			sync.advance(r.blockTimes[resp.Height], defaultPrecision)
 			r.applied++
 			r.suppliedBy[resp.PeerID]++
 		}
