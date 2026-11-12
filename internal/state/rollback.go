@@ -42,11 +42,6 @@ func Rollback(bs BlockStore, ss Store) (int64, []byte, error) {
 	if rollbackBlock == nil {
 		return -1, nil, fmt.Errorf("block at height %d not found", rollbackHeight)
 	}
-	// we also need to retrieve the latest block because the app hash and last results hash is only agreed upon in the following block
-	latestBlock := bs.LoadBlockMeta(invalidState.LastBlockHeight)
-	if latestBlock == nil {
-		return -1, nil, fmt.Errorf("block at height %d not found", invalidState.LastBlockHeight)
-	}
 
 	previousLastValidatorSet, err := ss.LoadValidators(rollbackHeight, bs)
 	if err != nil {
@@ -97,8 +92,9 @@ func Rollback(bs BlockStore, ss Store) (int64, []byte, error) {
 		ConsensusParams:                  previousParams,
 		LastHeightConsensusParamsChanged: paramsChangeHeight,
 
-		LastResultsHash: latestBlock.Header.ResultsHash,
-		LastAppHash:     latestBlock.Header.AppHash,
+		// Execution is same-block: the header carries the app and results hashes after its own block.
+		LastResultsHash: rollbackBlock.Header.ResultsHash,
+		LastAppHash:     rollbackBlock.Header.AppHash,
 	}
 
 	// persist the new state. This overrides the invalid one. NOTE: this will also
