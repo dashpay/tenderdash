@@ -875,8 +875,9 @@ func execBlock(
 	if err != nil {
 		return nil, err
 	}
-	blockID := block.BlockID(nil)
-	protoBlockID := blockID.ToProto()
+	// The commit's block ID, not block.BlockID(nil): the block may have been
+	// committed with parts that re-encoding it does not reproduce.
+	protoBlockID := commit.BlockID.ToProto()
 
 	responseFinalizeBlock, err := appConn.FinalizeBlock(
 		ctx,

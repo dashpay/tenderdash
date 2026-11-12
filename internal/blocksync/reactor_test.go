@@ -43,7 +43,15 @@ type reactorTestSuite struct {
 	blockSyncChannels map[types.NodeID]p2p.Channel
 	peerChans         map[types.NodeID]chan p2p.PeerUpdate
 	peerUpdates       map[types.NodeID]*p2p.PeerUpdates
+
+	// blockBytes returns the bytes the nodes commit their blocks with
+	blockBytes blockBytesFunc
 }
+
+// blockBytesFunc returns the bytes a block is committed with, cut into parts of
+// types.BlockPartSizeBytes. Nil commits the block as types.Block.MakePartSet
+// encodes it.
+type blockBytesFunc func(t *testing.T, block *types.Block) []byte
 
 func setup(
 	ctx context.Context,
@@ -52,6 +60,22 @@ func setup(
 	genDoc *types.GenesisDoc,
 	privVal types.PrivValidator,
 	maxBlockHeights []int64,
+	opts ...ReactorOption,
+) *reactorTestSuite {
+	t.Helper()
+	return setupWithBlockBytes(ctx, t, conf, genDoc, privVal, maxBlockHeights, nil, opts...)
+}
+
+// setupWithBlockBytes is setup with the nodes committing their blocks with the
+// bytes blockBytes returns.
+func setupWithBlockBytes(
+	ctx context.Context,
+	t *testing.T,
+	conf *config.Config,
+	genDoc *types.GenesisDoc,
+	privVal types.PrivValidator,
+	maxBlockHeights []int64,
+	blockBytes blockBytesFunc,
 	opts ...ReactorOption,
 ) *reactorTestSuite {
 	t.Helper()
@@ -72,6 +96,7 @@ func setup(
 		blockSyncChannels: make(map[types.NodeID]p2p.Channel, numNodes),
 		peerChans:         make(map[types.NodeID]chan p2p.PeerUpdate, numNodes),
 		peerUpdates:       make(map[types.NodeID]*p2p.PeerUpdates, numNodes),
+		blockBytes:        blockBytes,
 	}
 
 	chDesc := &p2p.ChannelDescriptor{ID: p2p.BlockSyncChannel}
@@ -199,7 +224,8 @@ func (rts *reactorTestSuite) addNode(
 	state, err := reactor.stateStore.Load()
 	require.NoError(t, err)
 	for blockHeight := int64(1); blockHeight <= maxBlockHeight; blockHeight++ {
-		block, blockID, partSet, seenCommit := makeNextBlock(ctx, t, state, privVal, blockHeight, commit)
+		block, blockID, partSet, seenCommit := makeNextBlockWithBytes(ctx, t, state, privVal, blockHeight, commit,
+			rts.blockBytes)
 		state, err = reactor.blockExec.ApplyBlock(ctx, state, blockID, block, seenCommit, types.VerifiedCommit{})
 		require.NoError(t, err)
 		reactor.store.SaveBlock(block, partSet, seenCommit)
@@ -217,13 +243,29 @@ func makeNextBlock(ctx context.Context,
 	signer types.PrivValidator,
 	height int64,
 	commit *types.Commit) (*types.Block, types.BlockID, *types.PartSet, *types.Commit) {
+	return makeNextBlockWithBytes(ctx, t, state, signer, height, commit, nil)
+}
+
+// makeNextBlockWithBytes is makeNextBlock with the block committed with the
+// bytes blockBytes returns.
+func makeNextBlockWithBytes(ctx context.Context,
+	t *testing.T,
+	state sm.State,
+	signer types.PrivValidator,
+	height int64,
+	commit *types.Commit,
+	blockBytes blockBytesFunc) (*types.Block, types.BlockID, *types.PartSet, *types.Commit) {
 	block, err := sf.MakeBlock(state, height, commit, 0)
 	require.NoError(t, err)
 	block.CoreChainLockedHeight = state.LastCoreChainLockedBlockHeight
-	partSet, err := block.MakePartSet(types.BlockPartSizeBytes)
-	require.NoError(t, err)
+	var partSet *types.PartSet
+	if blockBytes != nil {
+		partSet = types.NewPartSetFromData(blockBytes(t, block), types.BlockPartSizeBytes)
+	} else {
+		partSet, err = block.MakePartSet(types.BlockPartSizeBytes)
+		require.NoError(t, err)
+	}
 	blockID := block.BlockID(partSet)
-	require.NoError(t, err)
 
 	// Simulate a commit for the current height
 	vote, err := factory.MakeVote(
@@ -414,6 +456,62 @@ func TestReactor_NoBlockResponse(t *testing.T) {
 			require.Equal(t, tc.existent, block != nil)
 		})
 	}
+}
+
+// TestReactor_SyncBlocksAsCommitted syncs a block committed with bytes that
+// types.Block.MakePartSet does not reproduce from the decoded block. The
+// commit's part set header is computed over the committed bytes, so a peer can
+// only serve such a block from the parts it stored, and the syncing node must
+// cut the part set from the bytes it received.
+func TestReactor_SyncBlocksAsCommitted(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
+	require.NoError(t, err)
+	defer os.RemoveAll(cfg.RootDir)
+
+	genDoc, privVals := factory.RandGenesisDoc(1, factory.ConsensusParams())
+	const (
+		maxBlockHeight = int64(6)
+		// a field that tendermint.types.Block does not define, which decoding
+		// skips, appended to the block's bytes
+		unknownFieldHeight = int64(3)
+	)
+	committedBytes := func(t *testing.T, block *types.Block) []byte {
+		if block.Height == unknownFieldHeight {
+			return withUnknownField(t, block)
+		}
+		return blockBytes(t, block)
+	}
+	rts := setupWithBlockBytes(ctx, t, cfg, genDoc, privVals[0], []int64{maxBlockHeight, 0}, committedBytes)
+	source, syncing := rts.reactors[rts.nodes[0]], rts.reactors[rts.nodes[1]]
+	require.Equal(t, maxBlockHeight, source.store.Height())
+	require.NotEqual(t,
+		source.store.LoadBlockMeta(unknownFieldHeight).BlockID.PartSetHeader,
+		source.store.LoadBlock(unknownFieldHeight).BlockID(nil).PartSetHeader,
+		"the block must be committed with bytes a re-encoding does not reproduce")
+
+	rts.start(ctx, t)
+
+	require.Eventually(t,
+		func() bool { return syncing.store.Height() > unknownFieldHeight },
+		30*time.Second,
+		10*time.Millisecond,
+		"expected node to sync the block committed with other bytes")
+	require.Equal(t,
+		source.store.LoadBlockMeta(unknownFieldHeight).BlockID,
+		syncing.store.LoadBlockMeta(unknownFieldHeight).BlockID)
+	require.Equal(t,
+		loadBlockBytes(source.store, unknownFieldHeight),
+		loadBlockBytes(syncing.store, unknownFieldHeight))
+}
+
+// withUnknownField returns the bytes of block with field 15 appended, a field
+// tendermint.types.Block does not define and decoding skips.
+func withUnknownField(t *testing.T, block *types.Block) []byte {
+	// tag (15 << 3 | varint wire type), then the value 1
+	return append(blockBytes(t, block), 15<<3, 1)
 }
 
 func TestReactor_BadBlockStopsPeer(t *testing.T) {

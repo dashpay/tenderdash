@@ -34,11 +34,23 @@ NoBlockResponse notifies the peer requesting a block that the node does not cont
 
 ### BlockResponse
 
-BlockResponse contains the block requested.
+BlockResponse contains the block requested and its commit.
 
-| Name  | Type                                         | Description     | Field Number |
-|-------|----------------------------------------------|-----------------|--------------|
-| Block | [Block](../../core/data_structures.md#block) | Requested Block | 1            |
+| Name   | Type                                           | Description                                                                                                                                                                  | Field Number |
+|--------|------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------|
+| Block  | bytes                                          | Requested [Block](../../core/data_structures.md#block), serialized as it was committed: the bytes of its parts, in order. On the wire this is the same as an embedded Block. | 1            |
+| Commit | [Commit](../../core/data_structures.md#commit) | Commit for the requested block                                                                                                                                               | 2            |
+
+The receiver cuts `Block` into parts of 64kB, the last one shorter, and checks
+the part set header it computes against the one in the commit's block ID.
+`Block` is served as stored, because decoding and re-encoding the block can
+change its bytes.
+
+Block sync rebuilds only this standard cut, which honest proposers use.
+Consensus does not require it yet: it accepts parts of other sizes, and proofs
+of a tree larger than the header counts. A block committed that way fails the
+commit check (`wrong block ID`) whichever peer serves it, and block sync does
+not get past its height.
 
 ### StatusRequest
 

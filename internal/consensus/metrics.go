@@ -249,8 +249,8 @@ func (m *Metrics) ObserveBlockSyncStage(stage string, d time.Duration) {
 // RecordConsMetrics uses for recording the block related metrics during fast-sync.
 //
 // blockSize is the size of the serialized block in bytes. It is passed in rather
-// than derived from block, because callers on the block sync path have already
-// serialized the block and recomputing it there is expensive.
+// than derived from block, because callers on the block sync path already hold
+// the serialized block and serializing it again there is expensive.
 func (m *Metrics) RecordConsMetrics(block *types.Block, blockSize int64) {
 	m.NumTxs.Set(float64(len(block.Data.Txs)))
 	m.TotalTxs.Add(float64(len(block.Data.Txs)))

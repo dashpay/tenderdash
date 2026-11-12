@@ -159,8 +159,13 @@ func TestAttributedConn(t *testing.T) {
 }
 
 func TestBlockResponseValidate(t *testing.T) {
-	block := func(h int64) *types.Block {
-		return &types.Block{Header: types.Header{Height: h}}
+	// a block at height h, as a response holds it
+	block := func(h int64) BlockResponse {
+		return BlockResponse{Height: h, BlockBytes: blockBytes(t, &types.Block{Header: types.Header{Height: h}})}
+	}
+	withCommit := func(resp BlockResponse, commit *types.Commit) BlockResponse {
+		resp.Commit = commit
+		return resp
 	}
 	commit := func(h int64) *types.Commit {
 		return &types.Commit{Height: h}
@@ -182,17 +187,17 @@ func TestBlockResponseValidate(t *testing.T) {
 		},
 		{
 			name:    "block, nil commit",
-			resp:    BlockResponse{Block: block(10)},
+			resp:    block(10),
 			wantErr: "a block without a commit at height 10",
 		},
 		{
 			name:    "height mismatch",
-			resp:    BlockResponse{Block: block(10), Commit: commit(11)},
+			resp:    withCommit(block(10), commit(11)),
 			wantErr: "heights don't match",
 		},
 		{
 			name: "valid",
-			resp: BlockResponse{Block: block(10), Commit: commit(10)},
+			resp: withCommit(block(10), commit(10)),
 		},
 	}
 	for _, tc := range testCases {
@@ -269,8 +274,8 @@ func (suite *BlockFetchJobTestSuite) TestGeneratorNextJobWaitForPeerAndPushBackH
 		resp2 := res2.Value.(*BlockResponse)
 		return suite.Equal(suite.peer.peerID, resp1.PeerID) &&
 			suite.Equal(suite.peer.peerID, resp2.PeerID) &&
-			suite.Contains([]int64{5, 9}, resp1.Block.Height) &&
-			suite.Contains([]int64{5, 9}, resp2.Block.Height)
+			suite.Contains([]int64{5, 9}, resp1.Height) &&
+			suite.Contains([]int64{5, 9}, resp2.Height)
 	}, 10*time.Millisecond, 5*time.Millisecond)
 }
 

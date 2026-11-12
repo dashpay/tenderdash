@@ -69,29 +69,71 @@ func newBlockApplier(blockExec sm.Executor, store sm.BlockStore, opts ...applier
 	return applier
 }
 
-// Apply safely verifies, saves to the store and executes a block with commit
-func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *types.Commit) error {
+// Apply safely verifies, saves to the store and executes a block with commit.
+// blockBytes is the block as it was committed, the bytes block was decoded
+// from.
+func (e *blockApplier) Apply(
+	ctx context.Context,
+	block *types.Block,
+	blockBytes []byte,
+	commit *types.Commit,
+) error {
 	e.mtx.Lock()
 	defer e.mtx.Unlock()
+	e.observeWait()
+	defer func() { e.lastDone = time.Now() }()
+	return e.apply(ctx, block, blockBytes, commit, 0)
+}
+
+// ApplyBytes is Apply for a block held only as the bytes it was committed with:
+// it decodes the block from them first. Block sync keeps pending blocks in that
+// form, so that a response waiting for a lower height does not hold a decoded
+// copy beside its bytes.
+func (e *blockApplier) ApplyBytes(ctx context.Context, blockBytes []byte, commit *types.Commit) error {
+	e.mtx.Lock()
+	defer e.mtx.Unlock()
+	e.observeWait()
 	defer func() { e.lastDone = time.Now() }()
 
-	// Time between the end of the previous apply and the start of this one. With
-	// a fast application this is what the sync rate is actually limited by, and
-	// it is block fetching, not block execution.
-	if !e.lastDone.IsZero() {
-		e.observeSince("wait", e.lastDone)
-	}
-
-	// The part set is needed twice: to derive the block ID and to persist the
-	// block. Building it serializes the whole block and builds a Merkle tree over
-	// the parts, so build it once and pass it to both.
 	start := time.Now()
-	blockParts, err := block.MakePartSet(types.BlockPartSizeBytes)
+	block, err := decodeBlock(blockBytes)
+	decodeTime := e.observeSince("decode", start)
 	if err != nil {
 		return err
 	}
+	return e.apply(ctx, block, blockBytes, commit, decodeTime)
+}
+
+// observeWait records the time between the end of the previous apply and the
+// start of this one. With a fast application this is what the sync rate is
+// actually limited by, and it is block fetching, not block execution.
+func (e *blockApplier) observeWait() {
+	if !e.lastDone.IsZero() {
+		e.observeSince("wait", e.lastDone)
+	}
+}
+
+// apply is Apply with the lock held. decodeTime is how long decoding block
+// took, counted with building its part set in the per-block timings.
+func (e *blockApplier) apply(
+	ctx context.Context,
+	block *types.Block,
+	blockBytes []byte,
+	commit *types.Commit,
+	decodeTime time.Duration,
+) error {
+	// The part set is needed twice: to derive the block ID and to persist the
+	// block. Building it builds a Merkle tree over the parts, so build it once
+	// and pass it to both. It is cut from the bytes the block was committed
+	// with, not from block: the commit's part set header is computed over those
+	// bytes, and a re-encoding of block drops unknown fields and non-canonical
+	// encoding. Only the standard cut is rebuilt, the one honest proposers use.
+	// Consensus does not require it yet, and a block committed with another cut
+	// fails the commit check whichever peer serves it.
+	start := time.Now()
+	blockParts := types.NewPartSetFromData(blockBytes, types.BlockPartSizeBytes)
 	blockID := block.BlockID(blockParts)
-	partSetTime := e.observeSince("partset", start)
+	partSetTime := decodeTime + e.observeSince("partset", start)
 
 	start = time.Now()
 	verified, err := e.verify(ctx, blockID, block, commit)
@@ -137,8 +179,8 @@ func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *ty
 	e.metrics.ObserveBlockSyncStage("exec", execTime)
 
 	e.stats.add(partSetTime, verifyTime, saveTime, execTime)
-	// ByteSize is the size of the serialized block we just built, so the metric
-	// costs nothing extra here
+	// ByteSize is the length of the bytes the part set was cut from, so the
+	// metric costs nothing extra here
 	e.metrics.RecordConsMetrics(block, blockParts.ByteSize())
 	return nil
 }
@@ -219,7 +261,8 @@ func (e *blockApplier) observeSince(stage string, start time.Time) time.Duration
 // applyTimings is the average time a single block spends in each stage of the
 // apply pipeline.
 type applyTimings struct {
-	// PartSet is block serialization plus the Merkle tree over its parts
+	// PartSet is decoding the block, when it is held as bytes, and the Merkle
+	// tree over its parts
 	PartSet time.Duration
 	// Verify is commit signature verification and block validation
 	Verify time.Duration
@@ -231,8 +274,8 @@ type applyTimings struct {
 
 // applyStats accumulates per-stage timings of the block apply pipeline. Block
 // sync applies blocks one at a time, so this is where a slow sync shows up; the
-// breakdown attributes it to serialization, signature verification, disk or the
-// ABCI application without needing a profiler.
+// breakdown attributes it to building the part set, signature verification,
+// disk or the ABCI application without needing a profiler.
 type applyStats struct {
 	mtx     sync.Mutex
 	blocks  int64
