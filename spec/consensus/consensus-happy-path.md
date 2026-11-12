@@ -32,6 +32,7 @@ sequenceDiagram
     P-->>V: ProposalMessage, BlockPartMessages (gossip)
     V->>V: Proposaler.Set (verify proposer signature), AddProposalBlockPart
     V->>V: ProposalCompleted → EnterPrevote(h,0)
+    V->>V: ValidateBlock against committed state
     V->>A: ProcessProposal(block, round=0)
     A-->>V: ACCEPT + AppHash/TxResults/...
     V->>V: ValidateBlockWithRoundState, sign PREVOTE(B)
@@ -202,26 +203,30 @@ POL round's prevotes already have a majority) → `EnterPrevote(h, Round)`.
 → `prevoter.Do` (`internal/consensus/state_prevoter.go`):
 
 1. `StateData.isValidForPrevote`: block and proposal held; proposal timestamp
-   equals block time; the proposal is timely (unless replaying or the block is
-   already `ValidBlock`); the core chain lock is consistent
+   equals block time; the proposal is timely (unless the block is already
+   `ValidBlock`; in replay, only a proposal received too early fails); the
+   core chain lock is consistent
    (`sm.ValidateBlockChainLock`); for `POLRound == -1` the block's
    `ProposerProTxHash` is this round's proposer.
-2. `blockExecutor.ensureProcess(rs, Round)` → ABCI `ProcessProposal`
-   (`verify = true`): the response must be `ACCEPT`, well-formed, and
+2. `blockExecutor.ensureProcess(rs, Round)` → `ValidateBlock` against the
+   committed state, core chain lock included, then ABCI `ProcessProposal`
+   (`verify = true`); a block
+   failing `ValidateBlock` never reaches the application. The response must be
+   `ACCEPT`, well-formed, and
    `ValidateBlockWithRoundState` must pass — header fields `AppHash`,
    `ResultsHash`, `NextValidatorsHash`, `NextConsensusHash` must equal the
-   application's answer, `LastCommit` must verify against `LastValidators`,
-   and the core chain lock must validate. The result becomes
+   application's answer, and `LastCommit` must verify against
+   `LastValidators`. The result becomes
    `CurrentRoundState` tagged with round 0.
 3. `blockExecutor.mustValidate` (panics on failure, cannot fail after step 2).
 4. `prevoter.signVote`: with no lock and `POLRound == -1`,
    `checkProposalBlock` is true → `voteSigner.signAddVote(PrevoteType, BlockID)`.
 
 Step `Prevote` is set on return. A failure in step 1, or `ErrBlockRejected`
-(application `REJECT`) or `ErrInvalidBlock` (`ValidateBlockWithRoundState`) in
-step 2, yields a **nil prevote** instead. Any other step-2 error — transport
-failure, `UNKNOWN` status or a malformed response — **panics** the node
-(`prevoter.handleError`). **⇢** [Prevote rule](./consensus-transitions.md#prevote-decision-prevoterdo).
+(application `REJECT`) or `ErrInvalidBlock` (`ValidateBlock` before the call,
+`ValidateBlockWithRoundState` after it) in step 2, yields a **nil prevote**
+instead. Any other step-2 error — transport failure, `UNKNOWN` status or a
+malformed response — **panics** the node (`prevoter.handleError`). **⇢** [Prevote rule](./consensus-transitions.md#prevote-decision-prevoterdo).
 
 ### 6. Collecting prevotes
 
