@@ -743,3 +743,106 @@ func TestRoundVoteResendGossipHandler(t *testing.T) {
 		})
 	}
 }
+
+// A validator peer at this height, in an earlier round, collecting the block
+// this node holds as valid or locked is served its parts from there, since the
+// round that left it dropped the proposal part set. The part set header names
+// the block; nothing is served on round or hash alone, to another height, or to
+// a non-validator.
+func (suite *GossipHandlerTestSuite) TestDataGossipHandlerServesHeldBlockToLaggingPeer() {
+	ctx := context.Background()
+	logger := log.NewTestingLogger(suite.T())
+	valSet, _ := factory.MockValidatorSet()
+	validator, nonValidator := valSet.GetProTxHashes()[0], crypto.RandProTxHash()
+	held := types.NewPartSetFromData(tmrand.Bytes(200), 100)
+	other := types.NewPartSetFromData(tmrand.Bytes(100), 100)
+	incomplete := types.NewPartSetFromHeader(held.Header())
+	_, err := incomplete.AddPart(held.GetPart(0))
+	suite.Require().NoError(err)
+	collecting := func(parts *types.PartSet, height int64, round int32) cstypes.PeerRoundState {
+		return cstypes.PeerRoundState{
+			Height:                     height,
+			Round:                      round,
+			ProposalBlockPartSetHeader: parts.Header(),
+			ProposalBlockParts:         types.NewPartSetFromHeader(parts.Header()).BitArray(),
+		}
+	}
+	testCases := []struct {
+		name      string
+		proTxHash crypto.ProTxHash
+		rs        cstypes.RoundState
+		prs       cstypes.PeerRoundState
+		served    bool
+	}{
+		{
+			name:      "valid block to a peer in an earlier round",
+			proTxHash: validator,
+			rs:        cstypes.RoundState{Height: 10, Round: 2, ValidRound: 1, ValidBlockParts: held},
+			prs:       collecting(held, 10, 1),
+			served:    true,
+		},
+		{
+			name:      "locked block to a peer in an earlier round",
+			proTxHash: validator,
+			rs:        cstypes.RoundState{Height: 10, Round: 2, LockedRound: 1, LockedBlockParts: held},
+			prs:       collecting(held, 10, 1),
+			served:    true,
+		},
+		{
+			name:      "valid block while this round proposes another",
+			proTxHash: validator,
+			rs:        cstypes.RoundState{Height: 10, Round: 2, ValidRound: 1, ValidBlockParts: held, ProposalBlockParts: other},
+			prs:       collecting(held, 10, 1),
+			served:    true,
+		},
+		{
+			name:      "not a block the peer collects",
+			proTxHash: validator,
+			rs:        cstypes.RoundState{Height: 10, Round: 2, ValidRound: 1, ValidBlockParts: held},
+			prs:       collecting(other, 10, 1),
+		},
+		{
+			name:      "not to another height",
+			proTxHash: validator,
+			rs:        cstypes.RoundState{Height: 10, Round: 2, ValidRound: 1, ValidBlockParts: held},
+			prs:       collecting(held, 11, 1),
+		},
+		{
+			name:      "not to a peer in this round or a later one",
+			proTxHash: validator,
+			rs:        cstypes.RoundState{Height: 10, Round: 2, ValidRound: 1, ValidBlockParts: held},
+			prs:       collecting(held, 10, 2),
+		},
+		{
+			name:      "not an incomplete block",
+			proTxHash: validator,
+			rs:        cstypes.RoundState{Height: 10, Round: 2, ValidRound: 1, ValidBlockParts: incomplete},
+			prs:       collecting(held, 10, 1),
+		},
+		{
+			name:      "not to a non-validator",
+			proTxHash: nonValidator,
+			rs:        cstypes.RoundState{Height: 10, Round: 2, ValidRound: 1, ValidBlockParts: held},
+			prs:       collecting(held, 10, 1),
+		},
+	}
+	for _, tc := range testCases {
+		suite.Run(tc.name, func() {
+			suite.SetupTest()
+			ps := &PeerState{ProTxHash: tc.proTxHash, PRS: tc.prs}
+			stateData := StateData{RoundState: tc.rs, state: sm.State{Validators: valSet}}
+			if tc.served {
+				// The part set served and the round it is marked as the peer's
+				// under are the peer's, on the handler's copy of the snapshot.
+				rsMatchedBy := mock.MatchedBy(func(rs cstypes.RoundState) bool {
+					return rs.ProposalBlockParts == held && rs.Round == tc.prs.Round
+				})
+				suite.fakeGossiper.On("GossipProposalBlockParts", ctx, rsMatchedBy, mock.Anything).Once()
+			} else {
+				suite.fakeBlockStore.On("Base").Return(int64(1)).Maybe()
+			}
+			hd := dataGossipHandler(ps, logger, suite.fakeBlockStore, suite.fakeGossiper)
+			hd(ctx, stateData)
+		})
+	}
+}
