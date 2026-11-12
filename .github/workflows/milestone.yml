@@ -1,0 +1,71 @@
+name: Milestone on merge
+# Assigns a pull request merged into the default branch to the milestone of the
+# next release: the open vX.Y milestone with the lowest version above the latest
+# stable release. With v1.8.2 released and v1.8, v2.0, v2.1 and v3.0 open, that
+# is v2.0; once v2.0.0 is released it becomes v2.1. No list is maintained here.
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  milestone:
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == github.event.repository.default_branch
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      # No checkout: only the API is used.
+      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd  # v8.0.0
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const { owner, repo } = context.repo;
+            const parse = (text) => {
+              const m = /^v?(\d+)\.(\d+)(?:\.(\d+))?$/.exec(text.trim());
+              return m && { major: +m[1], minor: +m[2], patch: +(m[3] ?? 0) };
+            };
+            const compare = (a, b) =>
+              a.major - b.major || a.minor - b.minor || a.patch - b.patch;
+
+            // Latest non-prerelease, non-draft release.
+            const { data: release } = await github.rest.repos.getLatestRelease({ owner, repo });
+            const stable = parse(release.tag_name);
+            if (!stable) {
+              core.warning(`Latest release tag ${release.tag_name} is not vX.Y.Z; milestone of #${pr.number} left unchanged.`);
+              return;
+            }
+
+            // Next line: lowest open milestone whose major.minor is above the stable
+            // release, so the stable line's own milestones (v1.8, v1.8.3) are skipped.
+            const open = await github.paginate(github.rest.issues.listMilestones, {
+              owner, repo, state: 'open', per_page: 100,
+            });
+            const candidates = open
+              .map((m) => ({ milestone: m, version: parse(m.title) }))
+              .filter(({ version }) => version &&
+                compare({ ...version, patch: 0 }, { ...stable, patch: 0 }) > 0)
+              .sort((a, b) => compare(a.version, b.version) ||
+                a.milestone.title.length - b.milestone.title.length);
+            if (candidates.length === 0) {
+              core.warning(`No open milestone above ${release.tag_name}; milestone of #${pr.number} left unchanged.`);
+              return;
+            }
+            const { milestone } = candidates[0];
+
+            if (pr.milestone?.number === milestone.number) {
+              core.info(`#${pr.number} is already in ${milestone.title}.`);
+              return;
+            }
+            if (pr.milestone) {
+              core.notice(`#${pr.number} moves from ${pr.milestone.title} to ${milestone.title}, the next release after ${release.tag_name}.`);
+            }
+            await github.rest.issues.update({
+              owner, repo, issue_number: pr.number, milestone: milestone.number,
+            });
+            core.info(`#${pr.number} assigned to ${milestone.title} (latest stable release ${release.tag_name}).`);
