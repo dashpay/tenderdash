@@ -147,8 +147,10 @@ const (
 	// ceiling over the cheap state updates too would be one several identities
 	// could fill from inside their own legal allowances, and every honest peer's
 	// round-step and vote announcements would then be dropped indiscriminately —
-	// those are sent once, on a state change, and never repeated, so dropping
-	// them leaves our picture of a peer stale and the gossip we send it wrong.
+	// vote announcements are sent once, on a state change, and never repeated,
+	// and round steps are repeated only once per PeerQueryMaj23SleepDuration, so
+	// dropping them leaves our picture of a peer stale and the gossip we send it
+	// wrong.
 	// They cost a bit-set each and are already bounded per peer; the answer that
 	// costs a bit array over every validator is what needs bounding across peers.
 	maj23NodeRateLimit = 400
@@ -234,6 +236,10 @@ type Reactor struct {
 	eventBus *eventbus.EventBus
 	Metrics  *Metrics
 
+	// cadence is how often each peer's gossip handlers run, from the config
+	// with the floor applied once.
+	cadence gossipCadence
+
 	mtx         sync.RWMutex
 	peers       map[types.NodeID]*PeerState
 	waitSync    bool
@@ -308,6 +314,7 @@ func NewReactor(
 	r := &Reactor{
 		logger:          logger,
 		state:           cs,
+		cadence:         flooredGossipCadence(logger, cs.config),
 		waitSync:        waitSync,
 		peers:           make(map[types.NodeID]*PeerState),
 		eventBus:        eventBus,
@@ -734,13 +741,11 @@ func (r *Reactor) sendState(ctx context.Context, stateCh p2p.Channel) {
 // has block parts, which of them it holds.
 func (r *Reactor) resendRoundState(ctx context.Context, stateCh p2p.Channel) {
 	rs := r.state.GetStateData().RoundState
-	err := r.broadcast(ctx, stateCh, rs.NewRoundStepMessage())
-	r.logResult(err, r.logger, "broadcasting round step message again", "height", rs.Height, "round", rs.Round)
-	if rs.ProposalBlockParts == nil {
-		return
+	for _, msg := range roundStateMessages(rs) {
+		err := r.broadcast(ctx, stateCh, msg)
+		r.logResult(err, r.logger, "broadcasting round state message again",
+			"msg_type", fmt.Sprintf("%T", msg), "height", rs.Height, "round", rs.Round)
 	}
-	err = r.broadcast(ctx, stateCh, rs.NewValidBlockMessage())
-	r.logResult(err, r.logger, "broadcasting new valid block message again", "height", rs.Height, "round", rs.Round)
 }
 
 // broadcast sends a broadcast message to all peers connected to the `channel`.
@@ -921,7 +926,7 @@ func (r *Reactor) peerUp(ctx context.Context, peerUpdate p2p.PeerUpdate, retries
 	if !ok {
 		ps = NewPeerState(r.logger, peerUpdate.NodeID,
 			WithPeerStateClock(r.clock),
-			WithMaj23AnswerTTL(maj23AnswerTTLFor(r.state.config.PeerQueryMaj23SleepDuration)))
+			WithMaj23AnswerTTL(maj23AnswerTTLFor(r.cadence.queryMaj23)))
 		ps.SetProTxHash(peerUpdate.ProTxHash)
 		r.peers[peerUpdate.NodeID] = ps
 	} else if len(peerUpdate.ProTxHash) > 0 {
@@ -941,7 +946,7 @@ func (r *Reactor) peerUp(ctx context.Context, peerUpdate p2p.PeerUpdate, retries
 	)
 	// TODO needs to register this gossip worker, to be able to stop it once a peer will be down
 	msgSender := p2pMsgSender{logger: logger, ps: ps, chans: chans}
-	pgw := newPeerGossipWorker(logger, ps, r.state, &msgSender)
+	pgw := newPeerGossipWorker(logger, ps, r.state, &msgSender, r.cadence)
 
 	select {
 	case <-ctx.Done():
@@ -974,18 +979,9 @@ func (r *Reactor) peerUp(ctx context.Context, peerUpdate p2p.PeerUpdate, retries
 			if !ps.IsRunning() {
 				return
 			}
-			// start goroutines for this peer
+			// start goroutines for this peer; the round-state handler's first
+			// pass announces our height, round and step to the peer at once
 			_ = pgw.Start(ctx)
-
-			// Send our state to the peer. If we're block-syncing, broadcast a
-			// RoundStepMessage later upon SwitchToConsensus().
-			if !r.WaitSync() {
-				go func() {
-					rs := r.state.GetRoundState()
-					err := msgSender.send(ctx, rs.NewRoundStepMessage())
-					r.logResult(err, r.logger, "sending round step msg", "height", rs.Height, "round", rs.Round)
-				}()
-			}
 		}()
 	}
 }
