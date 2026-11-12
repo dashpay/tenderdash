@@ -71,7 +71,7 @@ func (r *lateSupplyRun) apply(peer PeerData, request *serviceRequest, height int
 	}
 	r.h.suite.Require().NoError(sync.addBlock(BlockResponse{
 		PeerID: peer.peerID,
-		Block:  &types.Block{Header: types.Header{Height: height}},
+		Height: height,
 	}))
 	sync.advance(r.blockTimes[height], defaultPrecision)
 	r.served++

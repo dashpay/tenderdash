@@ -77,7 +77,7 @@ func TestReserveNextBlockPeers(t *testing.T) {
 	sync.AddPeer(newPeerData("late", 1, height))
 	require.NoError(t, sync.addBlock(BlockResponse{
 		PeerID: "first",
-		Block:  &types.Block{Header: types.Header{Height: height}},
+		Height: height,
 	}))
 	require.Empty(t, next())
 	require.Empty(t, next())
