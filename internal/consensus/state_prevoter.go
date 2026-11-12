@@ -3,7 +3,6 @@ package consensus
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
@@ -72,7 +71,7 @@ func (p *prevoter) handleError(err error, args ...any) {
 		return
 	}
 	// Unknown error, so we panic
-	panic(fmt.Sprintf("ProcessProposal: %v", err))
+	panic(err.Error())
 }
 
 func (p *prevoter) signAndAddNilVote(ctx context.Context, stateData *StateData) {

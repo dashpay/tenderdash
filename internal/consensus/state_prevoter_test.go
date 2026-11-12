@@ -2,6 +2,7 @@ package consensus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"testing"
@@ -150,6 +151,21 @@ func (suite *PrevoterTestSuite) TestDo() {
 			tmrequire.Error(suite.T(), tc.wantErr, err)
 		})
 	}
+}
+
+// TestDoPanicsOnProcessProposalFailure pins the panic text for a ProcessProposal
+// error that is neither a rejection nor an invalid block.
+func (suite *PrevoterTestSuite) TestDoPanicsOnProcessProposalFailure() {
+	ctx := context.Background()
+	validStateData := suite.makeValidStateData()
+	stateData := StateData{state: validStateData.state, RoundState: validStateData.RoundState}
+	suite.mockExecutor.
+		On("ProcessProposal", ctx, mock.Anything, int32(0), mock.Anything, true, types.VerifiedCommit{}).
+		Once().
+		Return(sm.CurrentRoundState{}, errors.New("ProcessProposal abci method: client has stopped"))
+	suite.PanicsWithValue("process proposal: ProcessProposal abci method: client has stopped", func() {
+		_ = suite.prevoter.Do(ctx, &stateData)
+	})
 }
 
 func (suite *PrevoterTestSuite) TestCheckProposalBlock() {
