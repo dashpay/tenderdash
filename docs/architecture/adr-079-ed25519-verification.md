@@ -23,7 +23,7 @@ Ed25519 keys are the only supported key types for Tendermint validators currentl
     - This library is implements `ed25519.Verify()` in accordance to zip-215. Tendermint-go will continue to use `crypto/ed25519` for signing and key generation.
 
 - Tendermint-rs would adopt [ed25519-zebra](https://github.com/ZcashFoundation/ed25519-zebra)
-    - related [issue](https://github.com/informalsystems/tendermint-rs/issues/355)
+    - related [issue](https://github.com/cometbft/tendermint-rs/issues/355)
 
 Signature verification is one of the major bottlenecks of Tendermint-go, batch verification can not be used unless it has the same consensus rules, ZIP 215 makes verification safe in consensus critical areas.
 

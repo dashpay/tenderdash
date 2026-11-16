@@ -82,6 +82,8 @@ func (cs *State) readReplayMessage(ctx context.Context, msg *TimedWALMessage, ne
 			}
 		}
 	case msgInfo:
+		// The WAL keeps no receive time; the entry's time is the closest, never earlier.
+		m.ReceiveTime = msg.Time
 		peerID := m.PeerID
 		if peerID == "" {
 			peerID = "local"

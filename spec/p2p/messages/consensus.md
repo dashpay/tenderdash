@@ -151,6 +151,75 @@ the votes a process has.
 | block_id | [BlockID](../../core/data_structures.md#blockid)                 |                                        | 4            |
 | votes    | BitArray                                                         | Votes the process has for the BlockID. | 5            |
 
+### ProposerHeartbeat
+
+ProposerHeartbeat is sent on the StateChannel by the proposer of a round that
+waits for transactions, and relayed once by validators that verify it
+(`CONSENSUS_VERSION_2`; see
+[Proposer liveness](../../consensus/consensus-proposer-liveness.md#heartbeats)).
+
+| Name      | Type                                             | Description           | Field Number |
+|-----------|--------------------------------------------------|-----------------------|--------------|
+| heartbeat | [ProposerHeartbeat](#proposerheartbeat-contents) | The signed heartbeat. | 1            |
+
+#### ProposerHeartbeat contents
+
+`tendermint.types.ProposerHeartbeat`:
+
+| Name                 | Type                      | Description                                                                                                                      | Field Number |
+|----------------------|---------------------------|----------------------------------------------------------------------------------------------------------------------------------|--------------|
+| height               | int64                     | Height of the round.                                                                                                             | 1            |
+| round                | int32                     | Round the sender proposes in.                                                                                                    | 2            |
+| sequence             | uint64                    | Grows with every heartbeat of the round, counting from the signing time in milliseconds.                                         | 3            |
+| proposer_pro_tx_hash | bytes                     | ProTxHash of the proposer.                                                                                                       | 4            |
+| timestamp            | google.protobuf.Timestamp | Signing time.                                                                                                                    | 5            |
+| signature            | bytes                     | Signature with the proposer's quorum key share ([Signing](../../consensus/signing.md#proposer-heartbeats-and-round-skip-votes)). | 6            |
+
+### RoundSkipVote
+
+RoundSkipVote is sent on the StateChannel by a validator that heard no
+heartbeat from the proposer of its waiting round for the silence timeout, and
+relayed by validators when they first count it and again on a later copy until
+the round is certified (`CONSENSUS_VERSION_2`; see
+[Collecting votes](../../consensus/consensus-proposer-liveness.md#collecting-votes-and-recovering-the-certificate)).
+
+| Name | Type                                     | Description           | Field Number |
+|------|------------------------------------------|-----------------------|--------------|
+| vote | [RoundSkipVote](#roundskipvote-contents) | The signed skip vote. | 1            |
+
+#### RoundSkipVote contents
+
+`tendermint.types.RoundSkipVote`:
+
+| Name                  | Type  | Description                                                                     | Field Number |
+|-----------------------|-------|---------------------------------------------------------------------------------|--------------|
+| height                | int64 | Height of the round to skip.                                                    | 1            |
+| round                 | int32 | Round to skip.                                                                  | 2            |
+| validator_pro_tx_hash | bytes | ProTxHash of the voting validator.                                              | 3            |
+| validator_index       | int32 | Index of the voting validator in the validator set.                             | 4            |
+| signature             | bytes | Signature share over the round's skip sign bytes, the same for every validator. | 5            |
+
+### RoundSkipCertificate
+
+RoundSkipCertificate is sent on the StateChannel by a node that recovered or
+received a valid certificate, and resent by gossip to peers at its height that
+have not sent one for that round or a later one (`CONSENSUS_VERSION_2`).
+
+| Name        | Type                                                   | Description                 | Field Number |
+|-------------|--------------------------------------------------------|-----------------------------|--------------|
+| certificate | [RoundSkipCertificate](#roundskipcertificate-contents) | The round skip certificate. | 1            |
+
+#### RoundSkipCertificate contents
+
+`tendermint.types.RoundSkipCertificate`:
+
+| Name                | Type  | Description                                                                                                                                                         | Field Number |
+|---------------------|-------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------|
+| height              | int64 | Height of the skipped round.                                                                                                                                        | 1            |
+| round               | int32 | Skipped round.                                                                                                                                                      | 2            |
+| quorum_hash         | bytes | Quorum that signed.                                                                                                                                                 | 3            |
+| threshold_signature | bytes | Quorum threshold signature recovered from the skip votes of +2/3 of the validator set (the mainnet default; the quorum type and `VotingPowerThreshold` can change it). | 4            |
+
 ### Message
 
 Message is a [`oneof` protobuf type](https://developers.google.com/protocol-buffers/docs/proto#oneof).
@@ -168,3 +237,6 @@ Message is a [`oneof` protobuf type](https://developers.google.com/protocol-buff
 | vote_set_bits | [VoteSetBits](#votesetbits) | | 9 |
 | commit | [Commit](#commit) | | 10 |
 | has_commit | [HasCommit](#hascommit) | | 11 |
+| proposer_heartbeat | [ProposerHeartbeat](#proposerheartbeat) | | 12 |
+| round_skip_vote | [RoundSkipVote](#roundskipvote) | | 13 |
+| round_skip_certificate | [RoundSkipCertificate](#roundskipcertificate) | | 14 |

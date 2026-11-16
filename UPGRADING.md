@@ -1125,7 +1125,7 @@ the compilation tag:
 
 Use `cleveldb` tag instead of `gcc` to compile Tendermint with CLevelDB or
 use `make build_c` / `make install_c` (full instructions can be found at
-<https://docs.tendermint.com/v0.35/introduction/install.html)
+<https://docs.tendermint.com/v0.35/introduction/install.html>)
 
 ## v0.31.0
 

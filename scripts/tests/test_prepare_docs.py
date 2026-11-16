@@ -41,14 +41,14 @@ class PrepareDocsTests(unittest.TestCase):
     def test_stages_sources_assets_and_rpc_without_changing_originals(self):
         original = (self.root / "docs/README.md").read_text()
         self.write("docs/image.svg", "<svg/>")
-        self.module.prepare(self.root, "v1.8-dev")
+        self.module.prepare(self.root, "dev")
         staged = self.root / "book/src"
         welcome = (staged / "docs/README.md").read_text()
         self.assertNotIn("Old metadata", welcome)
         self.assertIn("[Guides](docs/index.md)", (staged / "README.md").read_text())
         self.assertIn("[Protocol](../spec/consensus.md#rounds)", welcome)
         self.assertIn(
-            "https://github.com/dashpay/tenderdash/blob/v1.8-dev/internal/state.go",
+            "https://github.com/dashpay/tenderdash/blob/dev/internal/state.go",
             welcome,
         )
         self.assertIn(
@@ -79,29 +79,29 @@ class PrepareDocsTests(unittest.TestCase):
         for directory in ("node_modules", ".vuepress", "dist", "_build", "spec"):
             (self.root / "docs" / directory).mkdir()
             self.write(f"docs/{directory}/stale.md", "# Old build output\n")
-        self.module.prepare(self.root, "v1.8-dev")
+        self.module.prepare(self.root, "dev")
         for directory in ("node_modules", ".vuepress", "dist", "_build", "spec"):
             self.assertFalse((self.root / "book/src/docs" / directory).exists())
 
     def test_strips_metadata_without_final_newline(self):
         self.write("docs/README.md", "---\norder: false\n---")
-        self.module.prepare(self.root, "v1.8-dev")
+        self.module.prepare(self.root, "dev")
         self.assertEqual((self.root / "book/src/docs/README.md").read_text(), "")
 
     def test_rejects_unlisted_chapter(self):
         self.write("spec/new-protocol.md", "# New protocol\n")
         with self.assertRaisesRegex(ValueError, "new-protocol.md"):
-            self.module.prepare(self.root, "v1.8-dev")
+            self.module.prepare(self.root, "dev")
 
     def test_rejects_missing_chapter(self):
         (self.root / "spec/consensus.md").unlink()
         with self.assertRaisesRegex(ValueError, "consensus.md"):
-            self.module.prepare(self.root, "v1.8-dev")
+            self.module.prepare(self.root, "dev")
 
     def test_removes_stale_staged_files(self):
-        self.module.prepare(self.root, "v1.8-dev")
+        self.module.prepare(self.root, "dev")
         self.write("book/src/stale.md", "# Removed\n")
-        self.module.prepare(self.root, "v1.8-dev")
+        self.module.prepare(self.root, "dev")
         self.assertFalse((self.root / "book/src/stale.md").exists())
 
 

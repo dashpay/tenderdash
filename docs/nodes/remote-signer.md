@@ -8,6 +8,8 @@ Tenderdash provides a remote signer option for validators. A remote signer enabl
 
 The remote signer protocol implements a [client and server architecture](https://en.wikipedia.org/wiki/Client%E2%80%93server_model). When Tenderdash requires the public key or signature for a proposal or vote it requests it from the remote signer.
 
+The remote signer protocol does not cover proposer heartbeats or round skip votes. On a chain with consensus version 2, a validator using a remote signer sends neither, so validators skip its rounds that wait for transactions once its heartbeats are missed. See [Proposer liveness and round skipping](../../spec/consensus/consensus-proposer-liveness.md#signers).
+
 To run a secure validator and remote signer system it is recommended to use a VPC (virtual private cloud) or a private connection. 
 
 There are two different configurations that can be used: Raw or gRPC.

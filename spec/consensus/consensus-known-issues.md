@@ -58,8 +58,10 @@ the last tick after it fires. When `EnterPropose` itself was triggered by a
 else moves the node out of `NewRound` for that round. The node recovers only
 when the other validators' nil precommits reach +2/3-any
 (`addVoteDispatchPrecommitMw` → `EnterPrecommitWait` → `EnterNewRound(r + 1)`),
-costing the network one round. Preconditions: `WaitForTxs()` true, round 0,
-the node is the proposer, and its clock is behind the previous block time by
+costing the network one round. Preconditions: `WaitForTxs()` true, round 0
+(on `CONSENSUS_VERSION_2` chains also a round entered on a round skip
+certificate that waits, whose empty-block interval schedules the same
+`NewRound` tock), the node is the proposer, and its clock is behind the previous block time by
 more than the time since that block was produced. (Inferred; not reproduced.)
 
 ## Precommit requires this round's proposal even when locked

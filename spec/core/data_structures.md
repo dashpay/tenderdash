@@ -252,6 +252,10 @@ enum SignedMsgType {
 
   // Proposal
   SIGNED_MSG_TYPE_PROPOSAL = 32;
+
+  // Proposer liveness, from CONSENSUS_VERSION_2
+  SIGNED_MSG_TYPE_PROPOSER_HEARTBEAT = 48;
+  SIGNED_MSG_TYPE_ROUND_SKIP = 49;
 }
 ```
 
@@ -378,6 +382,8 @@ This override does not lower the separate BLS recovery threshold `R` returned by
 `QuorumTypeThresholdVotingPower`. Prevotes expose a majority at `T`; precommits
 also require successful recovery and verification of threshold signatures. A low
 vote-counting threshold alone does not let one signature share produce a commit.
+A threshold above `R` disables round skipping
+([Proposer liveness](../consensus/consensus-proposer-liveness.md#when-it-applies)).
 See [Threshold recovery](../consensus/consensus.md#threshold-recovery) for the
 canonical extension-group and recovery rules, and
 [Commit threshold is configurable below the BFT bound](../consensus/consensus-known-issues.md#commit-threshold-is-configurable-below-the-bft-bound)
@@ -390,7 +396,7 @@ parameter is absent from a particular header-hash subset.
 | Name        | Type   | Description                   | Field Number |
 |-------------|--------|-------------------------------|--------------|
 | app_version | uint64 | The ABCI application version. | 1            |
-| consensus_version | `ConsensusVersion` | Version of the consensus protocol, selecting the [proposer strategy](../consensus/proposer-selection.md). | 2 |
+| consensus_version | `ConsensusVersion` | Version of the consensus protocol, selecting the [proposer strategy](../consensus/proposer-selection.md). `CONSENSUS_VERSION_2` also enables [proposer liveness](../consensus/consensus-proposer-liveness.md). | 2 |
 
 ### SynchronyParams
 
@@ -407,6 +413,8 @@ parameter is absent from a particular header-hash subset.
 | propose_delta | [google.protobuf.Duration](https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#google.protobuf.Duration) | Parameter that, along with propose, configures the timeout for the propose step of the consensus algorithm. | 2 |
 | vote | [google.protobuf.Duration](https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#google.protobuf.Duration) | Parameter that, along with vote_delta, configures the timeout for the prevote and precommit step of the consensus algorithm. | 3 |
 | vote_delta | [google.protobuf.Duration](https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#google.protobuf.Duration) | Parameter that, along with vote, configures the timeout for the prevote and precommit step of the consensus algorithm. | 4 |
+| proposer_heartbeat | [google.protobuf.Duration](https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#google.protobuf.Duration) | How often the proposer of a round that waits for transactions sends a heartbeat. Used from `CONSENSUS_VERSION_2`; unset means derived (see [Parameters](../consensus/consensus-proposer-liveness.md#parameters)). | 7 |
+| proposer_silence | [google.protobuf.Duration](https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#google.protobuf.Duration) | How long a validator waits without a heartbeat before it votes to skip the round; grows by `proposer_heartbeat` per round. Used from `CONSENSUS_VERSION_2`; unset means derived. | 8 |
 
 ### ABCIParams
 

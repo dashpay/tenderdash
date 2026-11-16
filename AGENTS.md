@@ -72,10 +72,12 @@ make format
 ## Branching and PR Workflow
 
 - `dev` is the integration branch; `master` is the latest stable Dash Platform release line.
-- Select PR targets by their role and dependencies, not by sorting versioned
-  branch names.
-- Create feature branches from integration and open PRs back into it. Stable
-  hotfixes branch from `master` and are forward-ported to integration.
+- Do all development on `dev`: create feature branches from `origin/dev` and
+  open PRs into `dev`. The only exception is a stable hotfix, which branches
+  from `master` and is forward-ported to `dev`.
+- Versioned `vX.Y-dev` branches (e.g. `v1.8-dev`, `v1.9-dev`) are retired. Never
+  branch from, target, or compare against them, even if one still exists on
+  the remote.
 - Keep commits focused and well-described.
 - Use conventional commit format for commit and PR titles.
 - Do not manually edit or generate `CHANGELOG.md` for development changes.
