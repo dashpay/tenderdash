@@ -9,7 +9,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
   pull-requests: write
 
 jobs:
@@ -26,16 +25,19 @@ jobs:
           script: |
             const pr = context.payload.pull_request;
             const { owner, repo } = context.repo;
-            const parse = (text) => {
-              const m = /^v?(\d+)\.(\d+)(?:\.(\d+))?$/.exec(text.trim());
-              return m && { major: +m[1], minor: +m[2], patch: +(m[3] ?? 0) };
+            const releaseTag = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+            const milestoneTitle = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+            const parse = (text, pattern) => {
+              const m = pattern.exec(text);
+              return m && m[0] === text &&
+                { major: +m[1], minor: +m[2], patch: +(m[3] ?? 0) };
             };
             const compare = (a, b) =>
               a.major - b.major || a.minor - b.minor || a.patch - b.patch;
 
             // Latest non-prerelease, non-draft release.
             const { data: release } = await github.rest.repos.getLatestRelease({ owner, repo });
-            const stable = parse(release.tag_name);
+            const stable = parse(release.tag_name, releaseTag);
             if (!stable) {
               core.warning(`Latest release tag ${release.tag_name} is not vX.Y.Z; milestone of #${pr.number} left unchanged.`);
               return;
@@ -47,11 +49,10 @@ jobs:
               owner, repo, state: 'open', per_page: 100,
             });
             const candidates = open
-              .map((m) => ({ milestone: m, version: parse(m.title) }))
+              .map((m) => ({ milestone: m, version: parse(m.title, milestoneTitle) }))
               .filter(({ version }) => version &&
                 compare({ ...version, patch: 0 }, { ...stable, patch: 0 }) > 0)
-              .sort((a, b) => compare(a.version, b.version) ||
-                a.milestone.title.length - b.milestone.title.length);
+              .sort((a, b) => compare(a.version, b.version));
             if (candidates.length === 0) {
               core.warning(`No open milestone above ${release.tag_name}; milestone of #${pr.number} left unchanged.`);
               return;
