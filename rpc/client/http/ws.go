@@ -27,7 +27,6 @@ type wsEvents struct {
 
 type wsSubscription struct {
 	res   chan coretypes.ResultEvent
-	id    string
 	query string
 }
 
@@ -109,13 +108,7 @@ func (w *wsEvents) Unsubscribe(ctx context.Context, _subscriber, query string) e
 
 	w.mtx.Lock()
 	defer w.mtx.Unlock()
-	info, ok := w.subscriptions[query]
-	if ok {
-		if info.id != "" {
-			delete(w.subscriptions, info.id)
-		}
-		delete(w.subscriptions, info.query)
-	}
+	delete(w.subscriptions, query)
 
 	return nil
 }
@@ -146,10 +139,7 @@ func (w *wsEvents) redoSubscriptionsAfter(d time.Duration) {
 	w.mtx.Lock()
 	defer w.mtx.Unlock()
 
-	for q, info := range w.subscriptions {
-		if q != "" && q == info.id {
-			continue
-		}
+	for q := range w.subscriptions {
 		err := w.ws.Subscribe(ctx, q)
 		if err != nil {
 			w.Logger.Error("failed to resubscribe", "query", q, "err", err)
@@ -193,13 +183,6 @@ func (w *wsEvents) eventListener(ctx context.Context) {
 
 			w.mtx.RLock()
 			out, ok := w.subscriptions[result.Query]
-			if ok {
-				if _, idOk := w.subscriptions[result.SubscriptionID]; !idOk {
-					out.id = result.SubscriptionID
-					w.subscriptions[result.SubscriptionID] = out
-				}
-			}
-
 			w.mtx.RUnlock()
 			if ok {
 				select {
