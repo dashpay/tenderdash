@@ -141,8 +141,9 @@ func (o *RouterOptions) Validate() error {
 //	up the recipient peer's outbound message queue in peerQueues, and submits
 //	the message to it.
 //
-// Consensus state messages are dropped when a peer queue is full so one slow
-// peer cannot stall state updates to other peers. Other outbound sends block.
+// Messages on channels with DropOnFullPeerQueue are dropped when a peer queue
+// is full, so one slow peer cannot stall them for other peers. Other outbound
+// sends block.
 // Inbound sends block unless the channel specifies an enqueue timeout.
 // Queues may also prioritize and drop messages.
 type Router struct {
@@ -290,7 +291,7 @@ func (r *Router) OpenChannel(ctx context.Context, chDesc *ChannelDescriptor) (Ch
 			queue.close()
 		}()
 
-		r.routeChannel(ctx, chDesc.ID, outCh, errCh)
+		r.routeChannel(ctx, chDesc, outCh, errCh)
 	}()
 
 	return channel, nil
@@ -303,10 +304,11 @@ func (r *Router) OpenChannel(ctx context.Context, chDesc *ChannelDescriptor) (Ch
 // for messages, see Wrapper for details.
 func (r *Router) routeChannel(
 	ctx context.Context,
-	chID ChannelID,
+	chDesc *ChannelDescriptor,
 	outCh <-chan Envelope,
 	errCh <-chan PeerError,
 ) {
+	chID := chDesc.ID
 	for {
 		select {
 		case envelope := <-outCh:
@@ -370,9 +372,7 @@ func (r *Router) routeChannel(
 			for _, q := range queues {
 				start := time.Now().UTC()
 
-				// State messages are repeated or advisory. A congested peer must
-				// not delay the round-state updates that other peers need to gossip.
-				if chID == ConsensusStateChannel {
+				if chDesc.DropOnFullPeerQueue {
 					select {
 					case q.enqueue() <- envelope:
 						r.metrics.RouterPeerQueueSend.Observe(time.Since(start).Seconds())

@@ -662,6 +662,12 @@ type ChannelDescriptor struct {
 	//
 	// If zero, enqueue operations will not time out.
 	EnqueueTimeout time.Duration
+
+	// DropOnFullPeerQueue drops an outbound message, instead of waiting, when
+	// the recipient peer's queue is full, so one slow peer cannot stall the
+	// channel for every other peer. Use only for channels whose messages are
+	// repeated or advisory; dropped messages are counted, not logged.
+	DropOnFullPeerQueue bool
 }
 
 func (chDesc ChannelDescriptor) FillDefaults() (filled ChannelDescriptor) {

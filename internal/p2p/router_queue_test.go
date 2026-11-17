@@ -27,6 +27,7 @@ func TestRouterFullPeerQueueDoesNotBlockOtherPeers(t *testing.T) {
 			defer cancel()
 			const slow, healthy types.NodeID = "slow", "healthy"
 			const chID = ConsensusStateChannel
+			chDesc := ConsensusChannelDescriptors()[chID]
 			fullQueue, healthyQueue := newFIFOQueue(1), newFIFOQueue(2)
 			fullQueue.enqueue() <- Envelope{Message: &tmcons.NewRoundStep{Height: 1}}
 			metrics := NopMetrics()
@@ -49,7 +50,7 @@ func TestRouterFullPeerQueueDoesNotBlockOtherPeers(t *testing.T) {
 			stopped := make(chan struct{})
 			go func() {
 				defer close(stopped)
-				router.routeChannel(ctx, chID, out, nil)
+				router.routeChannel(ctx, chDesc, out, nil)
 			}()
 			t.Cleanup(func() {
 				cancel()
@@ -109,6 +110,7 @@ func TestRouterOtherChannelsKeepPeerQueueBackpressure(t *testing.T) {
 			defer cancel()
 			const peer types.NodeID = "peer"
 			chID := pending.ChannelID
+			chDesc := &ChannelDescriptor{ID: chID}
 			peerQueue := newFIFOQueue(1)
 			peerQueue.enqueue() <- Envelope{To: peer}
 			router := &Router{
@@ -121,7 +123,7 @@ func TestRouterOtherChannelsKeepPeerQueueBackpressure(t *testing.T) {
 			stopped := make(chan struct{})
 			go func() {
 				defer close(stopped)
-				router.routeChannel(ctx, chID, out, nil)
+				router.routeChannel(ctx, chDesc, out, nil)
 			}()
 			t.Cleanup(func() {
 				cancel()
