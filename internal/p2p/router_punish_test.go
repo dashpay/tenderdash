@@ -156,7 +156,7 @@ func (c *fakeConn) String() string { return "fakeConn" }
 func (f *punishFixture) registerChannel(ctx context.Context, t *testing.T) {
 	t.Helper()
 	f.router.chDescs[1] = &ChannelDescriptor{ID: 1, Name: "test"}
-	f.router.channelQueues[1] = newSimplePriorityQueue(ctx, 10)
+	f.router.channelQueues[1] = newSimplePriorityQueue(ctx, 10, NopMetrics(), func(ChannelID) uint { return 0 })
 }
 
 // TestReceivePeer_MalformedBytes_EvictsPeer is the headline case: a peer sends

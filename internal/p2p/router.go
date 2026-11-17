@@ -242,11 +242,20 @@ func (r *Router) createQueueFactory(ctx context.Context) (func(int) queue, error
 		}, nil
 
 	case queueTypeSimplePriority:
-		return func(size int) queue { return newSimplePriorityQueue(ctx, size) }, nil
+		return func(size int) queue { return newSimplePriorityQueue(ctx, size, r.metrics, r.channelPriority) }, nil
 
 	default:
 		return nil, fmt.Errorf("cannot construct queue of type %q", r.options.QueueType)
 	}
+}
+
+func (r *Router) channelPriority(chID ChannelID) uint {
+	r.channelMtx.RLock()
+	defer r.channelMtx.RUnlock()
+	if desc := r.chDescs[chID]; desc != nil {
+		return uint(desc.Priority)
+	}
+	return 0
 }
 
 // ChannelCreator allows routers to construct their own channels,
