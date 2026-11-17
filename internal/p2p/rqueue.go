@@ -11,7 +11,7 @@ import (
 )
 
 // Allow bursts while bounding heap memory and trimming work by buffer size.
-const simpleQueueCapacityMultiplier = 4
+const simpleQueueCapacityMultiplier = 16
 
 type simpleQueue struct {
 	input   chan Envelope
@@ -55,13 +55,15 @@ func (q *simpleQueue) run(ctx context.Context) {
 
 	pq := make(priorityQueue, 0, q.maxSize)
 	heap.Init(&pq)
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	// must have a buffer of exactly one because both sides of
-	// this channel are used in this loop, and simply signals adds
-	// to the heap
-	signal := make(chan struct{}, 1)
 	for {
+		// Sending on a nil channel blocks forever, so the send case stays disabled
+		// while the heap is empty.
+		var out chan<- Envelope
+		var next Envelope
+		if len(pq) > 0 {
+			out, next = q.output, pq[0].envelope
+		}
+
 		select {
 		case <-ctx.Done():
 			return
@@ -86,34 +88,8 @@ func (q *simpleQueue) run(ctx context.Context) {
 				pq = pq[:q.maxSize]
 			}
 
-			select {
-			case signal <- struct{}{}:
-			default:
-			}
-
-		case <-ticker.C:
-			if len(pq) > 0 {
-				select {
-				case signal <- struct{}{}:
-				default:
-				}
-			}
-		case <-signal:
-		SEND:
-			for len(pq) > 0 {
-				next := pq[0].envelope
-				select {
-				case <-ctx.Done():
-					return
-				case <-q.closeCh:
-					return
-				case q.output <- next:
-					heap.Pop(&pq)
-					continue SEND
-				default:
-					break SEND
-				}
-			}
+		case out <- next:
+			heap.Pop(&pq)
 		}
 	}
 }

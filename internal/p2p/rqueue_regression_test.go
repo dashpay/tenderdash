@@ -25,7 +25,7 @@ func TestSimpleQueueHeapLimit(t *testing.T) {
 		t.Run(strconv.Itoa(size), func(t *testing.T) {
 			q := r.queueFactory(size).(*simpleQueue)
 			defer q.close()
-			require.Equal(t, 4*size, q.maxSize)
+			require.Equal(t, simpleQueueCapacityMultiplier*size, q.maxSize)
 		})
 	}
 	t.Run("retained", func(t *testing.T) {
@@ -39,7 +39,7 @@ func TestSimpleQueueHeapLimit(t *testing.T) {
 				t.Fatal("queue stopped accepting envelopes")
 			}
 		}
-		require.LessOrEqual(t, drainQueue(t, q), 4*size+cap(q.input)+cap(q.output))
+		require.LessOrEqual(t, drainQueue(t, q), simpleQueueCapacityMultiplier*size+cap(q.input)+cap(q.output))
 	})
 }
 
