@@ -5,6 +5,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -152,6 +153,12 @@ func (n *round1Node) deliverVotes(t *testing.T, voteType tmproto.SignedMsgType, 
 // round's proposer.
 func (n *round1Node) deliverProposal(t *testing.T) {
 	t.Helper()
+	n.deliverProposalAt(t, n.block.Time)
+}
+
+// deliverProposalAt is deliverProposal with the proposal timestamped at ts.
+func (n *round1Node) deliverProposalAt(t *testing.T, ts time.Time) {
+	t.Helper()
 	proposer, err := n.sd.ProposerSelector.GetProposer(1, 1)
 	require.NoError(t, err)
 	var pv types.PrivValidator
@@ -161,7 +168,7 @@ func (n *round1Node) deliverProposal(t *testing.T) {
 		}
 	}
 	require.NotNil(t, pv)
-	proposal := types.NewProposal(1, n.block.CoreChainLockedHeight, 1, -1, n.blockID, n.block.Time)
+	proposal := types.NewProposal(1, n.block.CoreChainLockedHeight, 1, -1, n.blockID, ts)
 	pp := proposal.ToProto()
 	_, err = pv.SignProposal(n.ctx, n.sd.state.ChainID, n.sd.Validators.QuorumType, n.sd.Validators.QuorumHash, pp)
 	require.NoError(t, err)
@@ -286,6 +293,31 @@ func TestStatePolkaFormedAfterTheBlockCompletedInPrecommitIsProcessed(t *testing
 	require.Equal(t, 1, calls, "the polka block is processed once its polka forms")
 	require.True(t, processedFor(&n.sd.RoundState, 1))
 	require.Equal(t, cstypes.RoundStepPrecommit, n.sd.Step, "no vote is cast again")
+
+	n.deliverVotes(t, tmproto.PrecommitType, types.BlockID{}, n.self)
+	n.deliverVotes(t, tmproto.PrecommitType, n.blockID, n.peers[:2]...)
+	calls, accepted, rejected := n.app.counts()
+	require.Equal(t, [3]int{1, 2, 0}, [3]int{calls, accepted, rejected})
+	require.True(t, n.sd.TriggeredTimeoutPrecommit, "precommit wait starts once every precommit counts")
+}
+
+// A polka block that the node precommits nil because its proposal's timestamp
+// differs from the block's is processed, so that the precommits for it verify.
+func TestStatePolkaBlockPrecommittedNilOnATimestampMismatchIsProcessed(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	n := newRound1Node(ctx, t, &verifyExtensionContractApp{}, cstypes.RoundStepPrevote)
+	n.deliverProposalAt(t, n.block.Time.Add(time.Millisecond))
+	n.deliverParts(t)
+	require.True(t, n.sd.ProposalBlock.HashesTo(n.blockID.Hash))
+
+	n.deliverVotes(t, tmproto.PrevoteType, types.BlockID{}, n.self)
+	n.deliverVotes(t, tmproto.PrevoteType, n.blockID, n.peers...)
+	require.Equal(t, cstypes.RoundStepPrecommit, n.sd.Step)
+	require.Equal(t, int32(-1), n.sd.LockedRound, "nil precommitted on the timestamp mismatch")
+	calls, _, _ := n.app.counts()
+	require.Equal(t, 1, calls, "the polka block is processed once")
+	require.True(t, processedFor(&n.sd.RoundState, 1))
 
 	n.deliverVotes(t, tmproto.PrecommitType, types.BlockID{}, n.self)
 	n.deliverVotes(t, tmproto.PrecommitType, n.blockID, n.peers[:2]...)
