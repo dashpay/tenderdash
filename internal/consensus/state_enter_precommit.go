@@ -99,18 +99,16 @@ func (c *EnterPrecommitAction) Execute(ctx context.Context, stateEvent StateEven
 	}
 	// At this point, +2/3 prevoted for a particular block.
 
-	// If we never received a proposal for this block, we must precommit nil.
-	// A polka block held without one is still processed, before our precommit
-	// can move the round on, so that precommits for it verify.
+	// If we never received a proposal for this block, we must precommit nil
 	if stateData.Proposal == nil || stateData.ProposalBlock == nil {
 		logger.Debug("precommit step; did not receive proposal, precommitting nil")
-		c.blockExec.processPolkaBlock(ctx, &stateData.RoundState)
 		c.voteSigner.signAddVote(ctx, stateData, tmproto.PrecommitType, types.BlockID{})
 		return nil
 	}
 
-	// If the proposal time does not match the block time, precommit nil, and
-	// process the polka block as above.
+	// If the proposal time does not match the block time, precommit nil. The
+	// polka block is still processed, before our precommit can move the round
+	// on, so that precommits for it verify.
 	if !stateData.Proposal.Timestamp.Equal(stateData.ProposalBlock.Header.Time) {
 		logger.Error("precommit step: proposal timestamp not equal; precommitting nil")
 		c.blockExec.processPolkaBlock(ctx, &stateData.RoundState)
