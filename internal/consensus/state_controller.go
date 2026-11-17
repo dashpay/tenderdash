@@ -27,6 +27,7 @@ const (
 	EnterPrevoteWaitType
 	EnterPrecommitWaitType
 	AddVoteType
+	AddRoundSkipCertificateType
 )
 
 var (
@@ -157,6 +158,12 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo], prop
 			logger:         cs.logger,
 			scheduler:      cs.roundScheduler,
 			eventPublisher: cs.eventPublisher,
+		},
+		AddRoundSkipCertificateType: &AddRoundSkipCertificateAction{
+			logger:         cs.logger,
+			eventPublisher: cs.eventPublisher,
+			metrics:        cs.metrics,
+			wal:            wal,
 		},
 	}
 	subscribeActions(cs.emitter, ctrl.actions)

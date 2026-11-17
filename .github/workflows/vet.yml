@@ -15,9 +15,10 @@ on:
     branches:
       - master
       - dev
-      # Keep both names until the integration-branch migration is complete.
-      - v1.8-dev
-      - v1.9-dev
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   vet:
@@ -37,7 +38,7 @@ jobs:
       # enforces without anyone changing the repository.
       - uses: actions/setup-go@v7.0.0
         with:
-          go-version: "1.27.3"
+          go-version: "1.27.4"
 
       # cmd/abcidump imports gopacket/pcap, which is cgo.
       - name: Install libpcap

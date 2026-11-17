@@ -9,9 +9,14 @@ on:
     branches:
       - master
       - dev
-      # Keep both names until the integration-branch migration is complete.
-      - v1.8-dev
-      - v1.9-dev
+
+# Branch creation/rename events can refer to the deleted old branch.
+env:
+  GIT_DIFF: ${{ github.event_name == 'push' && github.event.created && 'all' || '' }}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   e2e-test:
@@ -33,6 +38,7 @@ jobs:
         with:
           submodules: true
       - uses: technote-space/get-diff-action@v6
+        if: github.event_name != 'push' || !github.event.created
         with:
           PATTERNS: |
             .github/workflows/e2e.yml
@@ -50,7 +56,7 @@ jobs:
       - uses: actions/setup-go@v7.0.0
         if: "github.event_name != 'pull_request' || env.GIT_DIFF != ''"
         with:
-          go-version: "1.27.3"
+          go-version: "1.27.4"
           # A dedicated key: the default one (a hash of go.mod) is shared with
           # tests.yml and lint.yml, whose caches hold -race and lint artifacts
           # this job does not build. BLS headers are part of the key because

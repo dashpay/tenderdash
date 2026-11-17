@@ -208,7 +208,10 @@ func ResolveChannelID(msg proto.Message) ChannelID {
 	case *consensus.NewRoundStep, *consensus.NewValidBlock,
 		*consensus.HasCommit,
 		*consensus.HasVote,
-		*consensus.VoteSetMaj23:
+		*consensus.VoteSetMaj23,
+		*consensus.ProposerHeartbeat,
+		*consensus.RoundSkipVote,
+		*consensus.RoundSkipCertificate:
 		return ConsensusStateChannel
 	// pex
 	case *p2pproto.PexRequest,

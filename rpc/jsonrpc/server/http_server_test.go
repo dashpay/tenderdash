@@ -91,6 +91,66 @@ func TestMaxOpenConnections(t *testing.T) {
 	}
 }
 
+// A caller that closes its connection in the middle of a batch ends the batch: the call in
+// progress sees its context canceled, and the calls after it do not run.
+func TestServeStopsBatchWhenCallerDisconnects(t *testing.T) {
+	ln, err := net.Listen("tcp", "localhost:0")
+	require.NoError(t, err)
+	defer ln.Close()
+
+	var calls atomic.Int32
+	started := make(chan struct{})
+	funcMap := map[string]*RPCFunc{
+		"wait": NewRPCFunc(func(ctx context.Context) (string, error) {
+			if calls.Add(1) == 1 {
+				close(started)
+				select {
+				case <-ctx.Done():
+				case <-time.After(10 * time.Second):
+				}
+			}
+			return "done", nil
+		}),
+	}
+	mux := http.NewServeMux()
+	RegisterRPCFuncs(mux, funcMap, log.NewNopLogger())
+	finished := make(chan struct{})
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer close(finished)
+		mux.ServeHTTP(w, r)
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = Serve(ctx, ln, handler, log.NewNopLogger(), DefaultConfig()) }()
+
+	const batch = `[
+		{"jsonrpc": "2.0","method":"wait","id":"1"},
+		{"jsonrpc": "2.0","method":"wait","id":"2"},
+		{"jsonrpc": "2.0","method":"wait","id":"3"}
+	]`
+	conn, err := net.Dial("tcp", ln.Addr().String())
+	require.NoError(t, err)
+	_, err = fmt.Fprintf(conn,
+		"POST / HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n%s",
+		len(batch), batch)
+	require.NoError(t, err)
+
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "the first call did not start")
+	}
+	require.NoError(t, conn.Close())
+
+	select {
+	case <-finished:
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "the batch went on after its caller disconnected")
+	}
+	require.EqualValues(t, 1, calls.Load(), "only the call in progress ran")
+}
+
 func TestServeTLS(t *testing.T) {
 	t.Cleanup(leaktest.Check(t))
 

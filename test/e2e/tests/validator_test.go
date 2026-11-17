@@ -67,25 +67,50 @@ func TestValidator_Sets(t *testing.T) {
 			}
 			// fmt.Printf("node %s(%X) validator set for height %d is %v\n",
 			//	node.Name, node.ProTxHash, h, valSchedule.Set)
-			for i, valScheduleValidator := range valSchedule.ValidatorProposer.ValidatorSet().Validators {
+			expected := valSchedule.ValidatorProposer.ValidatorSet().Validators
+			// Full nodes get a genesis without validator public keys unless
+			// FULLNODE_PUBKEY_KEEP is set, so one that block-synced from genesis
+			// has none for the genesis validator set.
+			if node.Mode == e2e.ModeFull && len(validators) > 0 && validators[0].PubKey == nil {
+				expected = withoutPubKeys(expected)
+			}
+			for i, valScheduleValidator := range expected {
 				validator := validators[i]
 				require.Equal(t, valScheduleValidator.ProTxHash, validator.ProTxHash,
 					"mismatching validator proTxHashes at height %v (%X <=> %X", h,
 					valScheduleValidator.ProTxHash, validator.ProTxHash)
-				require.Equal(t, valScheduleValidator.PubKey.Bytes(), validator.PubKey.Bytes(),
+				require.Equal(t, pubKeyBytes(valScheduleValidator.PubKey), pubKeyBytes(validator.PubKey),
 					"mismatching validator %X publicKey at height %v (%X <=> %X",
-					valScheduleValidator.ProTxHash, h, valScheduleValidator.PubKey.Bytes(), validator.PubKey.Bytes())
+					valScheduleValidator.ProTxHash, h, pubKeyBytes(valScheduleValidator.PubKey), pubKeyBytes(validator.PubKey))
 
 				// Validators in the schedule don't contain addresses
 				validator.NodeAddress = types.ValidatorAddress{}
 			}
-			require.Equal(t, valSchedule.ValidatorProposer.ValidatorSet().Validators, validators,
+			require.Equal(t, expected, validators,
 				"incorrect validator set at height %v", h)
 			require.Equal(t, valSchedule.ValidatorProposer.ValidatorSet().ThresholdPublicKey, thresholdPublicKey,
 				"incorrect thresholdPublicKey at height %v", h)
 			require.NoError(t, valSchedule.Increment(1))
 		}
 	})
+}
+
+// withoutPubKeys returns copies of validators with their public keys removed.
+func withoutPubKeys(validators []*types.Validator) []*types.Validator {
+	stripped := make([]*types.Validator, len(validators))
+	for i, v := range validators {
+		stripped[i] = v.Copy()
+		stripped[i].PubKey = nil
+	}
+	return stripped
+}
+
+// pubKeyBytes returns the key bytes, or nil for a missing key.
+func pubKeyBytes(key crypto.PubKey) []byte {
+	if key == nil {
+		return nil
+	}
+	return key.Bytes()
 }
 
 // Tests that a validator proposes blocks when it's supposed to. It tolerates some

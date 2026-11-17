@@ -58,8 +58,10 @@ the last tick after it fires. When `EnterPropose` itself was triggered by a
 else moves the node out of `NewRound` for that round. The node recovers only
 when the other validators' nil precommits reach +2/3-any
 (`addVoteDispatchPrecommitMw` → `EnterPrecommitWait` → `EnterNewRound(r + 1)`),
-costing the network one round. Preconditions: `WaitForTxs()` true, round 0,
-the node is the proposer, and its clock is behind the previous block time by
+costing the network one round. Preconditions: `WaitForTxs()` true, round 0
+(on `CONSENSUS_VERSION_2` chains also a round entered on a round skip
+certificate that waits, whose empty-block interval schedules the same
+`NewRound` tock), the node is the proposer, and its clock is behind the previous block time by
 more than the time since that block was produced. (Inferred; not reproduced.)
 
 ## Precommit requires this round's proposal even when locked
@@ -99,6 +101,16 @@ Safety of the protocol is not guaranteed below the strict floor.
 sets the proposer to **index 1** after a validator-set change ("bug preserved
 to avoid breaking consensus"); the v1 selector uses index 0. See
 [Proposer selection](./proposer-selection.md).
+
+## FilePV repeated proposal returns sign bytes as the signature
+
+`FilePV.signProposal` (`privval/file.go`) checks for an identical persisted
+height/round/step and identical canonical proposal bytes. In that branch it assigns
+`proposal.Signature = lss.BlockSignBytes`, rather than `lss.BlockSignature`.
+The vote path instead reuses `BlockSignature`. The repeated-proposal path therefore
+returns serialized sign bytes in a signature field; verification failure is the
+inferred effect (no reproducing test). This differs from a guarantee of successful
+signature reuse during recovery. WAL replay itself does not create proposals.
 
 ## Code/comment drift and dead code
 

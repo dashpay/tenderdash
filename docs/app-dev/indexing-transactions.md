@@ -4,35 +4,20 @@ order: 6
 
 # Indexing Transactions
 
-Tenderdash allows you to index transactions and blocks and later query or
-subscribe to their results. Transactions are indexed by `TxResult.Events` and
-blocks are indexed by `Response(Begin|End)Block.Events`. However, transactions
-are also indexed by a primary key which includes the transaction hash and maps
-to and stores the corresponding `TxResult`. Blocks are indexed by a primary key
-which includes the block height and maps to and stores the block height, i.e.
-the block itself is never stored.
+Tenderdash can index committed transaction results and block events for RPC
+searches and subscriptions. Transaction events come from `ExecTxResult.Events`
+in the proposal execution results. Block events come from
+`ResponseProcessProposal.Events`. They are published after block finalization;
+`ResponseFinalizeBlock` does not contain an events field.
 
-Each event contains a type and a list of attributes, which are key-value pairs
-denoting something about what happened during the method's execution. For more
-details on `Events`, see the
-[ABCI](https://github.com/dashpay/tenderdash/blob/master/spec/abci/abci.md#events)
-documentation.
+Each event has a type and string-valued attributes. The search key combines the
+event type and attribute key with a dot. An event of type `transfer` with an
+attribute `sender=Bob` can therefore be queried as `transfer.sender='Bob'`.
+Set an attribute's `Index` flag to `true` to include it in event indexes.
 
-An `Event` has a composite key associated with it. A `compositeKey` is
-constructed by its type and key separated by a dot.
-
-For example:
-
-```json
-"jack": [
-  "account.number": 100
-]
-```
-
-would be equal to the composite key of `jack.account.number`.
-
-By default, Tenderdash will index all transactions by their respective hashes
-and height and blocks by their height.
+For the execution lifecycle, see [commit and apply](../../spec/consensus/consensus-happy-path.md#9-commit-and-apply).
+The [event publisher](../../internal/state/events.go)
+shows how committed proposal results become transaction and block events.
 
 ## Configuration
 
@@ -98,35 +83,32 @@ The following indexes are indexed by default:
 
 ## Adding Events
 
-Applications are free to define which events to index. Tenderdash does not
-expose functionality to define which events to index and which to ignore. In
-your application's `DeliverTx` method, add the `Events` field with pairs of
-UTF-8 encoded strings (e.g. "transfer.sender": "Bob", "transfer.recipient":
-"Alice", "transfer.balance": "100").
-
-Example:
+Return transaction events in the corresponding `ExecTxResult` in
+`ResponsePrepareProposal.TxResults` / `ResponseProcessProposal.TxResults`.
+For example, an individual transaction result can contain:
 
 ```go
-func (app *KVStoreApplication) DeliverTx(req types.RequestDeliverTx) types.Result {
-    //...
-    events := []abci.Event{
+result := &abci.ExecTxResult{
+    Code: 0,
+    Events: []abci.Event{
         {
             Type: "transfer",
             Attributes: []abci.EventAttribute{
-                {Key: []byte("sender"), Value: []byte("Bob"), Index: true},
-                {Key: []byte("recipient"), Value: []byte("Alice"), Index: true},
-                {Key: []byte("balance"), Value: []byte("100"), Index: true},
-                {Key: []byte("note"), Value: []byte("nothing"), Index: true},
+                {Key: "sender", Value: "Bob", Index: true},
+                {Key: "recipient", Value: "Alice", Index: true},
+                {Key: "note", Value: "payment", Index: false},
             },
         },
-    }
-    return types.ResponseDeliverTx{Code: code.CodeTypeOK, Events: events}
+    },
 }
 ```
 
-If the indexer is not `null`, the transaction will be indexed. Each event is
-indexed using a composite key in the form of `{eventType}.{eventAttribute}={eventValue}`,
-e.g. `transfer.sender=bob`.
+Here `abci` refers to `github.com/dashpay/tenderdash/abci/types`; append `result`
+to the response's transaction results in the same order as the executed
+transactions. The `kv` indexer indexes `transfer.sender` and
+`transfer.recipient`; `transfer.note` is not indexed. An empty event type or
+attribute key is not indexed. Avoid reserved keys such as `tx.hash` and
+`tx.height`.
 
 ## Querying Transactions Events
 
@@ -134,7 +116,7 @@ You can query for a paginated set of transaction by their events by calling the
 `/tx_search` RPC endpoint:
 
 ```bash
-curl "localhost:26657/tx_search?query=\"message.sender='cosmos1...'\"&prove=true"
+curl "localhost:26657/tx_search?query=\"transfer.sender='Bob'\"&prove=true"
 ```
 
 Check out [API docs](../tenderdash-core/rpc.md)
@@ -151,7 +133,7 @@ a query to `/subscribe` RPC endpoint.
   "method": "subscribe",
   "id": "0",
   "params": {
-    "query": "message.sender='cosmos1...'"
+    "query": "transfer.sender='Bob'"
   }
 }
 ```
@@ -165,7 +147,7 @@ You can query for a paginated set of blocks by their events by calling the
 `/block_search` RPC endpoint:
 
 ```bash
-curl "localhost:26657/block_search?query=\"block.height > 10 AND val_set.num_changed > 0\""
+curl "localhost:26657/block_search?query=\"block.height > 10\""
 ```
 
 Check out [API docs](../tenderdash-core/rpc.md)

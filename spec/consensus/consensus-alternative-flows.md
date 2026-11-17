@@ -41,6 +41,11 @@ sequenceDiagram
     V->>V: EnterPrecommit (no-op) → EnterNewRound(h,r+1) → EnterPropose(h,r+1)
 ```
 
+A proposer that is silent while its round waits for transactions is handled
+before the propose step on `CONSENSUS_VERSION_2` chains: validators that stop
+hearing its heartbeats skip the round with a round skip certificate
+([Proposer liveness and round skipping](./consensus-proposer-liveness.md)).
+
 ### Proposal arrives after the node prevoted
 
 `Proposaler.Set` has no step check, so the proposal is still stored and parts
@@ -97,12 +102,14 @@ undecodable block → error (`addProposalBlockPart`). Parts with invalid Merkle
 proofs are charged to the sender's `blockPartProofBudget` and dropped
 silently once it is exhausted (`internal/consensus/block_part_budget.go`).
 
-### Application rejects the block, or the header does not match
+### Block is invalid, application rejects it, or the header does not match
 
-`ProcessProposal` returning `REJECT` (`sm.ErrBlockRejected`), or a
-well-formed `ACCEPT` whose contents disagree with the block — header
-mismatch / invalid `LastCommit` / invalid chain lock (`sm.ErrInvalidBlock`)
-— → nil prevote (`prevoter.handleError`). A failed `ProcessProposal` clears
+`BlockExecutor.ProcessProposal` first validates the block against the
+committed state (`ValidateBlock`); a block that fails is never sent to the
+application. That failure (`sm.ErrInvalidBlock`), the application returning
+`REJECT` (`sm.ErrBlockRejected`), or a well-formed `ACCEPT` whose contents
+disagree with the block — header mismatch / invalid `LastCommit`
+(`sm.ErrInvalidBlock`) — → nil prevote (`prevoter.handleError`). A failed `ProcessProposal` clears
 `CurrentRoundState`, so no round counts as processed until a later call
 succeeds (`blockExecutor.ensureProcess`). Any **other** error **panics**
 the node: transport failure, `UNKNOWN` status, or a malformed response — an
@@ -189,9 +196,17 @@ on another block prevotes nil for it; see
   `r + 1`. A precommit majority for a block at **any** round (including a
   round below the current one) → `EnterCommit` with that round
   (`TestCommitFromPreviousRound`).
-- **Future-round commit.** A verified `CommitMessage` for `commit.Round > r`
-  → `EnterNewRound(commit.Round)` then application
-  ([Commit handling](./consensus-commit.md#commit-for-a-later-round)).
+- **Future-round commit.** If its block is already held, a verified
+  `CommitMessage` for `commit.Round > r` is checked against the block and
+  application before advancing the round; rejection does not move the round.
+  If the block is absent, signature verification can park the commit and advance
+  to its round before the later application check. See
+  [Commit handling](./consensus-commit.md#commit-for-a-later-round).
+- **Round skip certificate** (`CONSENSUS_VERSION_2`). A verified certificate
+  for round `r' ≥ r` → `EnterNewRound(r' + 1)`, unless the node is at
+  `ApplyCommit`; one for `r' < r` is only kept and gossiped
+  (`AddRoundSkipCertificateAction`). See
+  [Proposer liveness and round skipping](./consensus-proposer-liveness.md).
 - **Round bookkeeping.** `HeightVoteSet` keeps vote sets for rounds
   `0 .. Round + 1` (`SetRound(round + 1)` in `EnterNewRoundAction`) plus at
   most two "catch-up" rounds per validator pro-tx-hash
@@ -276,9 +291,15 @@ and `addVoteErrorMw` (`internal/consensus/state_add_vote.go`).
 - Timeliness is checked **only at prevote time**, against the proposal's
   receive time (`ProposalReceiveTime` = enqueue time of the
   `ProposalMessage`, `chanMsgSender.send`), with the window of
-  `checkTimely` (rule P-Timely). It is skipped in replay mode and for a
-  block that is the node's `ValidBlock`, so re-proposals of an already
-  polka'd block are not re-judged.
+  `checkTimely` (rule P-Timely). It is skipped for a block that is the
+  node's `ValidBlock`, so re-proposals of an already polka'd block are not
+  re-judged. In replay mode the receive time is the time of the proposal's
+  WAL entry, and only a proposal received too early fails. The entry is never
+  earlier than the receipt, so replay refuses only what the node refused when
+  it received the proposal, not always all of it. That time also becomes
+  `ValidBlockRecvTime` for a block made valid during replay, which decides
+  whether the node re-proposes it after a restart
+  (`Proposaler.checkValidBlock`), and feeds `ProposalTimestampDifference`.
 - Timeliness governs re-proposal (`Proposaler.checkValidBlock`).
 - Metric `ProposalTimestampDifference{is_timely}` is recorded for proposals
   with `POLRound = -1` (`Proposaler.proposalTimestampDifferenceMetric`).
@@ -287,17 +308,25 @@ and `addVoteErrorMw` (`internal/consensus/state_add_vote.go`).
 
 `EnterNewRoundAction.Execute` waits for transactions when
 `WaitForTxs() = ¬CreateEmptyBlocks ∨ CreateEmptyBlocksInterval > 0`, at
-round 0, above `InitialHeight`, unless `ProposeNextBlockImmediately`
+round 0 or in a round entered on a round skip certificate that satisfies
+`StateData.waitsAfterRoundSkip`
+([The round after a skip](./consensus-proposer-liveness.md#the-round-after-a-skip)),
+above `InitialHeight`, unless `ProposeNextBlockImmediately`
 (set from `ResponseFinalizeBlock.propose_next_block_immediately` of the
 previous height by `ApplyCommitAction.Execute`; consumed by the next
 `updateToState`; not persisted, so a restart falls back to the configured
 wait).
 
-`State.handleTxsAvailable` acts only at round 0: at step `NewHeight` (and
-not at `InitialHeight`) it schedules a `NewRound` tock for
+`State.handleTxsAvailable` records the report in `TxsReported` (the mempool
+reports once per height) and acts only at round 0 or in a round that may wait
+after a round skip (`StateData.mayWaitAfterRoundSkip`): at step `NewHeight`
+(and not at `InitialHeight`) it schedules a `NewRound` tock for
 `StartTime − now + 1 ms`; at step `NewRound` it dispatches `EnterPropose`.
 With `CreateEmptyBlocksInterval > 0` the interval tock calls `EnterPropose`
-even without transactions (empty block). Rounds `≥ 1` never wait.
+even without transactions (empty block); in a round after a skip the interval
+counts from `StartTime`. Other rounds `≥ 1` never wait. On
+`CONSENSUS_VERSION_2` chains a proposal or prevotes can also end the wait
+([When it applies](./consensus-proposer-liveness.md#when-it-applies)).
 
 ## Validator-set and parameter changes
 
@@ -316,14 +345,15 @@ even without transactions (empty block). Rounds `≥ 1` never wait.
   version) proposed in block `h` take effect at `h + 1`
   (`LastHeightConsensusParamsChanged`).
 - Proposer selection version is `ConsensusParams.Version.ConsensusVersion`
-  ([Proposer selection](./proposer-selection.md)).
+  ([Proposer selection](./proposer-selection.md)); version 2 also enables
+  [proposer liveness](./consensus-proposer-liveness.md).
 
 ## Core chain locks
 
 - Header fields: `CoreChainLockedHeight`; optional `CoreChainLock` in the
   block (and `CoreChainLockUpdate` in the proposal, not signed).
 - `ValidateBlockChainLock` (prevote) and `validateCoreChainLock`
-  (`ValidateBlockWithRoundState`): with a lock, the header height equals the
+  (`validateBlock`, before the application call): with a lock, the header height equals the
   lock's and exceeds `state.LastCoreChainLockedBlockHeight`; without one, it
   equals it.
 - `Proposaler.Set` rejects `proposal.CoreChainLockedHeight` below the
@@ -353,7 +383,15 @@ even without transactions (empty block). Rounds `≥ 1` never wait.
   `(h, r)` names the same block (`Proposaler.verifyProposalForNonValidatorSet`).
 - **Signing failure** (`PrivValidator.SignVote`/`SignProposal` error or
   deadline): logged; no vote/proposal and **no retry** within the step
-  (`voteSigner.signAddVote`, `Proposaler.Create`).
+  (`voteSigner.signAddVote`, `Proposaler.Create`). A failed round skip vote is
+  retried after another silence timeout.
+- **Remote signers** (socket, gRPC) cannot sign proposer heartbeats or round
+  skip votes (`RemoteSignerError` 501, `types.ErrSigningNotSupported`): a
+  validator using one sends neither, so its waiting rounds are skipped
+  ([Signers](./consensus-proposer-liveness.md#signers)).
+- **Observers and liveness messages:** a node without the validators' key
+  shares neither verifies nor relays heartbeats and skip votes; it verifies
+  and applies round skip certificates against the quorum public key.
 - **Block sync just finished**: proposing is suppressed until the node has
   passed the handover target height or 10 minutes elapsed
   (`catchupTracker.mayPropose`, `maxCatchupSuppression`); voting is not.
@@ -384,7 +422,8 @@ logged (`Reactor.handleMessage`), not panicked.
 
 These mechanisms never change *what* a node signs, but they decide whether a
 message is processed at all (dropped messages are local decisions, not peer
-faults, unless stated). Design details live in `docs/CONSENSUS_DOS_*.md`.
+faults, unless stated). For operational monitoring, see
+[DoS observability](../../docs/dos-observability/README.md).
 
 - **Reactor admission** (`internal/consensus/reactor.go`,
   `message_cost.go`): per-peer token buckets on the vote channel (cost 1 per
@@ -404,6 +443,11 @@ faults, unless stated). Design details live in `docs/CONSENSUS_DOS_*.md`.
   evicts a peer (`isPeerFloodableError`).
 - **Block-part proof budget** (`block_part_budget.go`): per-peer allowance
   for parts whose Merkle proof fails.
+- **Liveness messages** (`CONSENSUS_VERSION_2`): heartbeats, round skip votes
+  and certificates pay extra state-channel tokens only when new, go through
+  the peer lanes and the verification budget, and are sent through a bounded
+  reactor outbox; heartbeats are paced per round
+  ([Message admission and budgets](./consensus-proposer-liveness.md#message-admission-and-budgets)).
 - **Bounded memory per height:** commit candidate slots (one per peer),
   `commitExpectations`, `MaxVoteExtensions`, `HeightVoteSet` catch-up rounds,
   `maxPeerMaj23s` claims per vote set.

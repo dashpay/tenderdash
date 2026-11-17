@@ -342,9 +342,9 @@ by Tendermint itself. Right now, we return a regular error when this happens.
 #### ABCI++
 
 For information on how ABCI++ works, see the
-[Specification](spec/abci%2B%2B/README.md).
+[Specification](spec/abci/README.md).
 In particular, the simplest way to upgrade your application is described
-[here](spec/abci%2B%2B/abci++_tmint_expected_behavior.md#adapting-existing-applications-that-use-abci).
+[here](spec/abci/expected-behavior.md#application-execution-requirements).
 
 #### Moving the `app_hash` parameter
 
@@ -1159,7 +1159,7 @@ the compilation tag:
 
 Use `cleveldb` tag instead of `gcc` to compile Tendermint with CLevelDB or
 use `make build_c` / `make install_c` (full instructions can be found at
-<https://docs.tendermint.com/v0.35/introduction/install.html)
+<https://docs.tendermint.com/v0.35/introduction/install.html>)
 
 ## v0.31.0
 

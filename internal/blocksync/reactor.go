@@ -34,11 +34,14 @@ const (
 
 	// hand over to consensus after this duration of inactivity, even when peers
 	// still report higher blocks, so that a wedged synchronizer cannot keep the
-	// node out of consensus forever - but only within maxCatchupGap of the tip
+	// node out of consensus forever - but only within maxCatchupGap of the tip,
+	// or when the inactivity began on a block less than staleBlockAge old
 	maxSyncStall = 10 * time.Minute
 
 	// maxCatchupGap is how far behind the highest height any peer claims the node
-	// may be and still hand over to consensus on the stall backstop above.
+	// may be and still hand over to consensus on the stall backstop above when
+	// its last block is older than staleBlockAge. It also bounds the claims a
+	// node with a recent last block passes on as the consensus catch-up target.
 	//
 	// What is left after the handover is covered by consensus catch-up, which
 	// moves about one block per gossip cycle: it closes a gap of a few blocks in
@@ -47,6 +50,26 @@ const (
 	// up on it puts a validator at heights the network committed long ago
 	// (dashpay/tenderdash#1413).
 	maxCatchupGap int64 = 10
+
+	// tipRecency is the oldest the last applied block may be for the node to
+	// count as at the tip. It covers the three-minute empty-block interval Dash
+	// Platform runs with and a margin for extra rounds and clock skew.
+	tipRecency = 5 * time.Minute
+
+	// tipGrace is how long the node must stay at the tip before higher height
+	// claims stop keeping it in block sync.
+	tipGrace = 2 * syncTimeout
+
+	// tipGain is how much younger the last applied block must get while the
+	// node counts as at the tip for tipGrace to start over: the node is still
+	// closing the gap, as it does when it applies blocks a quarter faster than
+	// the chain commits them. One block of a slow chain does that too, once.
+	tipGain = 30 * time.Second
+
+	// staleBlockAge is how old the last applied block must be, when a stall
+	// begins, for peer height claims to count in the stall backstop. It is
+	// longer than any halt a restarted node is expected to help end.
+	staleBlockAge = 24 * time.Hour
 )
 
 type ReactorOption func(*Reactor)

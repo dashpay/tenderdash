@@ -198,7 +198,7 @@ mutually exclusive.
 - [JSON-RPC 2.0 Specification](https://www.jsonrpc.org/specification)
 
 [rpc-service]: ../tenderdash-core/rpc.md
-[rpc-methods]: https://github.com/dashpay/tenderdash/blob/master/internal/rpc/core/routes.go#L12
+[rpc-methods]: ../../internal/rpc/core/routes.go#L12
 [events]: https://github.com/tendermint/tendermint/blob/7cdf560173dee6773b80d1c574a06489d4c394fe/docs/rfc/rfc-005-event-system.rst
 [rpc-transport]: https://github.com/tendermint/tendermint/blob/7cdf560173dee6773b80d1c574a06489d4c394fe/docs/rfc/rfc-002-ipc-ecosystem.md#rpc-transport
 [ws]: https://datatracker.ietf.org/doc/html/rfc6455

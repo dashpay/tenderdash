@@ -78,6 +78,11 @@ type PeerState struct {
 	// its session.
 	connID      uint64
 	laneSession uint64
+
+	// roundSkipHeight and roundSkipRound name the latest round skip
+	// certificate the peer is known to hold: the latest it sent this node.
+	roundSkipHeight int64
+	roundSkipRound  int32
 }
 
 // PeerStateOptionFunc overrides a default of a PeerState.
@@ -232,16 +237,17 @@ func (ps *PeerState) SetHasProposal(proposal *types.Proposal) {
 	}
 
 	ps.PRS.Proposal = true
+	ps.PRS.ProposalPOLRound = proposal.POLRound
+	ps.PRS.ProposalPOL = nil // Nil until ProposalPOLMessage received.
 
-	// ps.PRS.ProposalBlockParts is set due to NewValidBlockMessage
+	// A NewValidBlockMessage may already have told us which parts the peer
+	// holds; the proposal's POL round is recorded above regardless.
 	if ps.PRS.ProposalBlockParts != nil {
 		return
 	}
 
 	ps.PRS.ProposalBlockPartSetHeader = proposal.BlockID.PartSetHeader
 	ps.PRS.ProposalBlockParts = bits.NewBitArray(int(proposal.BlockID.PartSetHeader.Total))
-	ps.PRS.ProposalPOLRound = proposal.POLRound
-	ps.PRS.ProposalPOL = nil // Nil until ProposalPOLMessage received.
 }
 
 // InitProposalBlockParts initializes the peer's proposal block parts header
@@ -539,6 +545,27 @@ func (ps *PeerState) setHasVote(height int64, round int32, voteType tmproto.Sign
 	return nil
 }
 
+// SetHasRoundSkip records that the peer holds a round skip certificate for
+// round at height: it sent one.
+func (ps *PeerState) SetHasRoundSkip(height int64, round int32) {
+	ps.mtx.Lock()
+	defer ps.mtx.Unlock()
+
+	if height > ps.roundSkipHeight || (height == ps.roundSkipHeight && round > ps.roundSkipRound) {
+		ps.roundSkipHeight = height
+		ps.roundSkipRound = round
+	}
+}
+
+// HasRoundSkip reports whether the peer is known to hold a round skip
+// certificate for round at height, or for a later round.
+func (ps *PeerState) HasRoundSkip(height int64, round int32) bool {
+	ps.mtx.RLock()
+	defer ps.mtx.RUnlock()
+
+	return height == ps.roundSkipHeight && round <= ps.roundSkipRound
+}
+
 // SetHasCommit sets the given vote as known by the peer
 func (ps *PeerState) SetHasCommit(commit *types.Commit) {
 	ps.mtx.Lock()
@@ -632,6 +659,12 @@ func (ps *PeerState) ApplyNewRoundStepMessage(msg *NewRoundStepMessage) {
 }
 
 // ApplyNewValidBlockMessage updates the peer state for the new valid block.
+//
+// The header and holdings replace what is held, with no ordering guard: the
+// message carries no sequence, and the peer repeats it every gossip pass, so a
+// stale copy that lands after a newer one is corrected within one pass. A
+// guard that only let holdings grow would instead make a wrong bit permanent,
+// and a part the peer is marked as holding is never sent to it.
 func (ps *PeerState) ApplyNewValidBlockMessage(msg *NewValidBlockMessage) {
 	ps.mtx.Lock()
 	defer ps.mtx.Unlock()
@@ -720,9 +753,9 @@ const maj23AnswerTicks = 2
 // the cadence at which a gossip loop repeats it.
 func maj23AnswerTTLFor(sleep time.Duration) time.Duration {
 	if sleep <= 0 {
-		// Nothing throttles the gossip loop, so there is no cadence to count
-		// passes of. The default is what the rest of these ceilings are sized
-		// against.
+		// The reactor passes its floored cadence (see gossipCadence); zero is a
+		// peer state built without one, as NewPeerState does. The default is
+		// what the rest of these ceilings are sized against.
 		sleep = config.DefaultConsensusConfig().PeerQueryMaj23SleepDuration
 	}
 	return maj23AnswerTicks * sleep

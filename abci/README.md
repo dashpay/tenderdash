@@ -19,7 +19,7 @@ To get up and running quickly, see the [getting started guide](../docs/app-dev/g
 
 A detailed description of the ABCI methods and message types is contained in:
 
-- [The main spec](../spec/abci/abci.md)
+- [The main spec](../spec/abci/methods.md)
 - [A protobuf file](../proto/tendermint/abci/types.proto)
 - [A Go interface](./types/application.go)
 

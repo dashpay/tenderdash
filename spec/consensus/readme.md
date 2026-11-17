@@ -17,6 +17,7 @@ implementation in `internal/consensus`.
     - [Primary flow of a height](./consensus-happy-path.md)
     - [Transitions and decision rules](./consensus-transitions.md)
     - [Alternative flows and edge cases](./consensus-alternative-flows.md)
+    - [Proposer liveness and round skipping](./consensus-proposer-liveness.md)
     - [Commit handling](./consensus-commit.md)
     - [Recovery and synchronisation](./consensus-recovery.md)
     - [Known issues and discrepancies](./consensus-known-issues.md)
@@ -28,8 +29,7 @@ implementation in `internal/consensus`.
   recover from crashes.
 - [Evidence](./evidence.md) — detection and handling of misbehaviour.
 - [Proposer-Based Timestamps](./proposer-based-timestamp/README.md) —
-  historical design material that predates the implementation; the rules in
-  force are in
+  pointers to current rules and retained historical research; the rules in force are in
   [Proposal timestamps and time rules](./consensus-alternative-flows.md#proposal-timestamps-and-time-rules).
 - [BFT Time](./bft-time.md) — historical: the median-based timestamp rule
   Tenderdash no longer uses.

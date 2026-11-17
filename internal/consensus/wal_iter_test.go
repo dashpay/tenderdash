@@ -125,6 +125,28 @@ func TestWalIter_Next(t *testing.T) {
 				EndHeightMessage{Height: 1002},
 			},
 		},
+		{
+			// A certificate is skipped with the rest of its round, including
+			// one written after its round was left. Replay of a chain that
+			// skips rounds reads every round instead (see replaySkipsRounds).
+			input: []any{
+				newEventDataRoundState(1001, 0, types.RoundStepNewHeight),
+				newRoundSkipCertificateMessage(1001, 0),
+				newEventDataRoundState(1001, 1, types.RoundStepPropose),
+				newVoteMessage(1001, 1),
+				newEventDataRoundState(1001, 2, types.RoundStepPropose),
+				newRoundSkipCertificateMessage(1001, 1),
+				newVoteMessage(1001, 2),
+				EndHeightMessage{Height: 1001},
+				newEventDataRoundState(1002, 0, types.RoundStepNewHeight),
+			},
+			want: []any{
+				newEventDataRoundState(1001, 2, types.RoundStepPropose),
+				newVoteMessage(1001, 2),
+				EndHeightMessage{Height: 1001},
+				newEventDataRoundState(1002, 0, types.RoundStepNewHeight),
+			},
+		},
 	}
 	testFunc := func(t *testing.T, it walIter, want []any) {
 		cnt := 0
@@ -230,5 +252,13 @@ func newVoteMessage(height int64, round int32) msgInfo {
 			Height: height,
 			Round:  round,
 		}},
+	}
+}
+
+func newRoundSkipCertificateMessage(height int64, round int32) msgInfo {
+	return msgInfo{
+		Msg: &RoundSkipCertificateMessage{
+			Certificate: &tmtypes.RoundSkipCertificate{Height: height, Round: round},
+		},
 	}
 }

@@ -17,7 +17,7 @@ type LCInitData struct {
 
 where only one of the components must be provided. `GenesisDoc` is
 defined in the [Tenderdash
-Types](https://github.com/dashpay/tenderdash/blob/v1.9-dev/types/genesis.go).
+Types](../../../types/genesis.go).
 
 
 ### Initialization
