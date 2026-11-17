@@ -239,6 +239,35 @@ func TestUnsubscribeAllKeepsOtherSubscribers(t *testing.T) {
 	}
 }
 
+// A cleanup timing out behind another subscriber's send during a reconnect must
+// still forget its subscriptions, or the reconnect restores an unread channel.
+func TestUnsubscribeAllTimeoutBehindSubscribeForgetsSubscriptions(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	upstream := &fakeUpstream{}
+	w := startWsEvents(ctx, t, upstream)
+	upstream.subscribeAs(ctx, t, w, "A", "gone")
+	require.Eventually(t, func() bool { return len(upstream.subscribesOnCurrentConnection()) == 1 },
+		5*time.Second, time.Millisecond)
+
+	reconnecting(t, w, upstream)
+	subscribed := make(chan error, 1)
+	go func() {
+		_, err := w.Subscribe(ctx, "B", "other")
+		subscribed <- err
+	}()
+	require.Eventually(t, func() bool { return len(w.changes) == 1 }, 5*time.Second, time.Millisecond)
+	cleanupCtx, cancelCleanup := context.WithTimeout(ctx, 10*time.Millisecond)
+	defer cancelCleanup()
+	require.ErrorIs(t, w.UnsubscribeAll(cleanupCtx, "A"), context.DeadlineExceeded)
+
+	require.NoError(t, <-subscribed)
+	upstream.setEvents(map[string][]string{"sync": {"sync"}})
+	requireEvent(t, upstream.subscribeAs(ctx, t, w, "C", "sync"), "sync")
+	require.NotContains(t, upstream.subscribesOnCurrentConnection(), "gone",
+		"the reconnect restored a subscription whose cleanup timed out")
+}
+
 // Forgetting a subscription must also release a delivery blocked on its unread channel.
 func TestUnsubscribeAllReleasesBlockedDelivery(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())

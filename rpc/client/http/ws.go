@@ -22,6 +22,10 @@ type wsEvents struct {
 	Logger log.Logger
 	ws     *jsonrpcclient.WSClient
 
+	// changes orders upstream (un)subscribes: a subscriber is recorded, and an
+	// unused query confirmed, while holding it across the send. Taken before mtx.
+	changes chan struct{}
+
 	mtx sync.RWMutex
 	// subscriptions maps each query, and its upstream subscription ID once known,
 	// to the local subscribers sharing its single upstream subscription.
@@ -56,6 +60,7 @@ func newWsEvents(remote string) (*wsEvents, error) {
 	w := &wsEvents{
 		Logger:        log.NewNopLogger(),
 		subscriptions: make(map[string]*wsSubscription),
+		changes:       make(chan struct{}, 1),
 
 		resubscribeDelay: time.Second,
 	}
@@ -132,6 +137,10 @@ func (w *wsEvents) stopListener() {
 // It returns an error if wsEvents is not running.
 func (w *wsEvents) Subscribe(ctx context.Context, subscriber, query string,
 	outCapacity ...int) (out <-chan coretypes.ResultEvent, err error) {
+	if err := w.lockChanges(ctx); err != nil {
+		return nil, err
+	}
+	defer w.unlockChanges()
 	if err := w.ws.Subscribe(ctx, query); err != nil {
 		return nil, err
 	}
@@ -194,6 +203,19 @@ func (w *wsEvents) UnsubscribeAll(ctx context.Context, subscriber string) error 
 	return w.unsubscribeUpstream(ctx, unused)
 }
 
+// lockChanges waits for the changes lock as long as ctx allows: its holder's send
+// can block until the writer restarts.
+func (w *wsEvents) lockChanges(ctx context.Context) error {
+	select {
+	case w.changes <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (w *wsEvents) unlockChanges() { <-w.changes }
+
 // removeSubscriber forgets subscriber's subscription to sub, and sub itself once
 // unused, which it then appends to unused. Callers must hold mtx.
 func (w *wsEvents) removeSubscriber(sub *wsSubscription, subscriber string, unused []string) []string {
@@ -213,13 +235,28 @@ func (w *wsEvents) removeSubscriber(sub *wsSubscription, subscriber string, unus
 	return append(unused, sub.query)
 }
 
-// unsubscribeUpstream must not hold mtx: sending can block until the writer restarts.
-// After an error, eventListener drops events for the queries left subscribed.
+// unsubscribeUpstream unsubscribes from queries still unused once it holds the
+// changes lock. Callers must not hold mtx: sending can block until the writer
+// restarts. After an error, eventListener drops events for queries left subscribed.
 func (w *wsEvents) unsubscribeUpstream(ctx context.Context, queries []string) error {
-	if len(queries) == 0 && !w.IsRunning() {
-		return errNotRunning
+	if len(queries) == 0 {
+		if !w.IsRunning() {
+			return errNotRunning
+		}
+		return nil
 	}
+	if err := w.lockChanges(ctx); err != nil {
+		return err
+	}
+	defer w.unlockChanges()
 	for _, query := range queries {
+		// Lock, not RLock: eventListener writes to the map under RLock.
+		w.mtx.Lock()
+		_, used := w.subscriptions[query]
+		w.mtx.Unlock()
+		if used {
+			continue
+		}
 		if err := w.ws.Unsubscribe(ctx, query); err != nil {
 			return err
 		}

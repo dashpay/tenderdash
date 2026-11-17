@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -107,7 +108,9 @@ func TestConcurrentSubscribeAndLastUnsubscribeKeepsUpstream(t *testing.T) {
 	w.mtx.RUnlock()
 	require.True(t, bRegistered, "B is registered locally")
 
-	require.Eventually(t, func() bool { r, _ := upstream.state(); return len(r) >= 2 }, 5*time.Second, time.Millisecond)
+	// B's subscribe must reach this session; A's unsubscribe, if sent, may follow it.
+	require.Eventually(t, func() bool { r, _ := upstream.state(); return slices.Contains(r, "subscribe q") },
+		5*time.Second, time.Millisecond)
 	time.Sleep(200 * time.Millisecond)
 	reqs, s := upstream.state()
 	require.True(t, s["q"], "upstream unsubscribed q while B still needs it; requests on session: %v", reqs)
