@@ -378,6 +378,7 @@ func (r *Router) routeChannel(
 						r.metrics.RouterPeerQueueSend.Observe(time.Since(start).Seconds())
 					case <-q.closed():
 						envelope.NotifyDelivery()
+						r.logger.Debug("dropping state message for peer with closed queue", "peer", envelope.To, "channel", chID)
 					case <-ctx.Done():
 						return
 					default:
