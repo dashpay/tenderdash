@@ -75,6 +75,7 @@ func TestReconnectResubscribesOnlyQueries(t *testing.T) {
 	logger := log.NewNopLogger()
 	bus := eventbus.NewDefault(logger)
 	require.NoError(t, bus.Start(ctx))
+	t.Cleanup(func() { cancel(); joinWithin(t, "event bus", bus.Wait) })
 	env := &rpccore.Environment{EventBus: bus, Config: *config.DefaultRPCConfig(), Logger: logger}
 	// As the node does, a closed session's subscriptions are dropped.
 	wm := rpcserver.NewWebsocketManager(logger, rpccore.NewRoutesMap(env, nil),
@@ -97,7 +98,14 @@ func TestReconnectResubscribesOnlyQueries(t *testing.T) {
 	require.NoError(t, err)
 	// Unread events would stall the client's single event loop.
 	events := make(chan coretypes.ResultEvent, 1000)
+	forwarded := make(chan struct{})
+	t.Cleanup(func() {
+		cancel()
+		joinWithin(t, "client", func() { require.NoError(t, client.Stop()) })
+		joinWithin(t, "event forwarder", func() { <-forwarded })
+	})
 	go func() {
+		defer close(forwarded)
 		for {
 			select {
 			case event := <-out:
@@ -121,6 +129,17 @@ func TestReconnectResubscribesOnlyQueries(t *testing.T) {
 		}
 	}
 	require.NotContains(t, logs.String(), "WS error")
+}
+
+func joinWithin(t *testing.T, what string, join func()) {
+	t.Helper()
+	joined := make(chan struct{})
+	go func() { defer close(joined); join() }()
+	select {
+	case <-joined:
+	case <-time.After(5 * time.Second):
+		t.Errorf("%s did not stop", what)
+	}
 }
 
 // requireNewRound publishes until an event arrives, as (re)subscribing is
