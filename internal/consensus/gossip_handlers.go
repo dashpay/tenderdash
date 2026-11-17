@@ -3,6 +3,7 @@ package consensus
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cosmos/gogoproto/proto"
 
@@ -207,8 +208,11 @@ func votesAndCommitGossipHandler(
 	ps *PeerState,
 	blockStore sm.BlockStore,
 	gossiper Gossiper,
+	commitResendInterval time.Duration,
 ) gossipHandlerFunc {
 	return func(ctx context.Context, stateData StateData) {
+		// Before the round state is read: a re-offered commit is sent this pass.
+		ps.ReofferUnackedCommit(commitResendInterval)
 		rs := stateData.RoundState
 		prs := ps.GetRoundState()
 		isValidator := stateData.isValidator(ps.GetProTxHash())
