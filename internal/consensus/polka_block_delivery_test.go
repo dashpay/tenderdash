@@ -262,6 +262,38 @@ func TestStatePolkaBlockDeliveryEndsThePrecommitStall(t *testing.T) {
 	require.Equal(t, int32(1), n.sd.Round)
 }
 
+// A block that completes in the precommit step before its polka is processed
+// once the polka forms, so that the precommits for it verify.
+func TestStatePolkaFormedAfterTheBlockCompletedInPrecommitIsProcessed(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	n := newRound1Node(ctx, t, &verifyExtensionContractApp{}, cstypes.RoundStepPrevote)
+	n.deliverProposal(t)
+	// +2/3 prevotes of any kind, no polka: the node times out and precommits nil.
+	n.deliverVotes(t, tmproto.PrevoteType, types.BlockID{}, n.self)
+	n.deliverVotes(t, tmproto.PrevoteType, n.blockID, n.peers[:2]...)
+	require.Equal(t, cstypes.RoundStepPrevoteWait, n.sd.Step)
+	n.timeoutPrevote(t)
+
+	n.deliverParts(t)
+	require.True(t, n.sd.ProposalBlock.HashesTo(n.blockID.Hash))
+	calls, _, _ := n.app.counts()
+	require.Equal(t, 0, calls, "a block without its polka is not processed")
+
+	// The delayed prevote forms the polka.
+	n.deliverVotes(t, tmproto.PrevoteType, n.blockID, n.peers[2])
+	calls, _, _ = n.app.counts()
+	require.Equal(t, 1, calls, "the polka block is processed once its polka forms")
+	require.True(t, processedFor(&n.sd.RoundState, 1))
+	require.Equal(t, cstypes.RoundStepPrecommit, n.sd.Step, "no vote is cast again")
+
+	n.deliverVotes(t, tmproto.PrecommitType, types.BlockID{}, n.self)
+	n.deliverVotes(t, tmproto.PrecommitType, n.blockID, n.peers[:2]...)
+	calls, accepted, rejected := n.app.counts()
+	require.Equal(t, [3]int{1, 2, 0}, [3]int{calls, accepted, rejected})
+	require.True(t, n.sd.TriggeredTimeoutPrecommit, "precommit wait starts once every precommit counts")
+}
+
 // A polka block the application rejects is processed once: the precommits for
 // it stay rejected and do not have it processed anew.
 func TestStatePolkaBlockRejectedByTheApplicationIsNotRetried(t *testing.T) {

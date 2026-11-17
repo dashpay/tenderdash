@@ -301,7 +301,7 @@ func (suite *AddVoteTestSuite) TestAddVoteUpdateValidBlockMw() {
 	mockFn := func(_ctx context.Context, _stateData *StateData, _vote *types.Vote) (bool, error) {
 		return returnAdded, returnError
 	}
-	fn := addVoteUpdateValidBlockMw(suite.publisher)(mockFn)
+	fn := addVoteUpdateValidBlockMw(suite.publisher, nil)(mockFn)
 	testCases := []struct {
 		presetVotes      []types.Vote
 		vote             types.Vote
