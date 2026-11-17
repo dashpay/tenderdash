@@ -2,6 +2,7 @@ package consensus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -492,6 +493,66 @@ func TestShouldVoteBeGossiped(t *testing.T) {
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			require.Equal(t, tc.want, shouldVoteBeGossiped(tc.rs, tc.prs, tc.isValidator))
+		})
+	}
+}
+
+// A peer rebuilds this node's round picture from the round step and, when the
+// round has block parts, which of them this node holds. Both are sent at every
+// pass; a failed send is left to the next pass.
+func TestRoundStateGossipHandler(t *testing.T) {
+	ctx := context.Background()
+	parts := types.NewPartSetFromData(tmrand.Bytes(3*int(types.BlockPartSizeBytes)), types.BlockPartSizeBytes)
+	withParts := StateData{RoundState: cstypes.RoundState{
+		Height: 7, Round: 2, Step: cstypes.RoundStepPrevote, ProposalBlockParts: parts,
+	}}
+	withoutParts := StateData{RoundState: cstypes.RoundState{Height: 7, Round: 2, Step: cstypes.RoundStepPropose}}
+	errSend := errors.New("channel full")
+
+	testCases := map[string]struct {
+		stateData StateData
+		// failAt is the 1-based send that fails, 0 for none.
+		failAt   int
+		wantSent []proto.Message
+	}{
+		"should announce the round step alone when the round has no block parts": {
+			stateData: withoutParts,
+			wantSent:  []proto.Message{withoutParts.NewRoundStepMessage()},
+		},
+		"should announce the round step and the block parts it holds": {
+			stateData: withParts,
+			wantSent:  []proto.Message{withParts.NewRoundStepMessage(), withParts.NewValidBlockMessage()},
+		},
+		"should stop the pass at a failed send and return": {
+			stateData: withParts,
+			failAt:    1,
+			wantSent:  []proto.Message{withParts.NewRoundStepMessage()},
+		},
+	}
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			var sent []proto.Message
+			send := func(_ context.Context, msg proto.Message) error {
+				sent = append(sent, msg)
+				if len(sent) == tc.failAt {
+					return errSend
+				}
+				return nil
+			}
+			roundStateGossipHandler(log.NewNopLogger(), send)(ctx, tc.stateData)
+			require.Len(t, sent, len(tc.wantSent))
+			for i, want := range tc.wantSent {
+				switch want := want.(type) {
+				case *tmcons.NewRoundStep:
+					got, ok := sent[i].(*tmcons.NewRoundStep)
+					require.True(t, ok, "sent[%d] is %T", i, sent[i])
+					require.Equal(t, want.Height, got.Height)
+					require.Equal(t, want.Round, got.Round)
+					require.Equal(t, want.Step, got.Step)
+				default:
+					require.Equal(t, want, sent[i])
+				}
+			}
 		})
 	}
 }
