@@ -110,15 +110,14 @@ func NewClient(logger log.Logger, next rpcclient.Client, lc LightClient, opts ..
 
 func (c *Client) OnStart(ctx context.Context) error {
 	c.serviceCtx = ctx
-	// A local client shares its node's event bus, whose Start ignores ctx if it is
-	// already running. Clients not reporting their state are started here.
+	// A client already running, such as a local client sharing its node's event
+	// bus, belongs to its caller; other clients are started here.
 	running, ok := c.next.(interface{ IsRunning() bool })
 	c.callerOwnsNext = ok && running.IsRunning()
-	if err := c.next.Start(ctx); err != nil {
-		return err
+	if c.callerOwnsNext {
+		return nil
 	}
-
-	return nil
+	return c.next.Start(ctx)
 }
 
 func (c *Client) OnStop() {}

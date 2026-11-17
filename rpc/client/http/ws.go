@@ -87,6 +87,19 @@ func (w *wsEvents) Stop() error {
 	return err
 }
 
+// IsRunning reports whether the client has started and not yet shut down.
+func (w *wsEvents) IsRunning() bool {
+	if w.listenerDone == nil {
+		return false
+	}
+	select {
+	case <-w.listenerDone:
+		return false
+	default:
+		return true
+	}
+}
+
 // stopListener ends the event loop, even if blocked on a subscriber not reading.
 func (w *wsEvents) stopListener() {
 	if w.listenerDone != nil {
