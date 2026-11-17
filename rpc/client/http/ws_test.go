@@ -27,6 +27,7 @@ type fakeUpstream struct {
 	gates      map[string]chan struct{} // hold a query's events until closed
 	conn       *websocket.Conn
 	subscribes []string
+	others     []string // non-subscribe requests on any connection, as "method query"
 }
 
 func (u *fakeUpstream) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
@@ -45,9 +46,6 @@ func (u *fakeUpstream) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		if err := conn.ReadJSON(&req); err != nil {
 			return
 		}
-		if req.Method != "subscribe" {
-			continue
-		}
 		var params struct {
 			Query string `json:"query"`
 		}
@@ -55,6 +53,11 @@ func (u *fakeUpstream) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			return
 		}
 		u.mtx.Lock()
+		if req.Method != "subscribe" {
+			u.others = append(u.others, strings.TrimSpace(req.Method+" "+params.Query))
+			u.mtx.Unlock()
+			continue
+		}
 		u.subscribes = append(u.subscribes, params.Query)
 		events, failed, gate := u.events[params.Query], u.failed[params.Query], u.gates[params.Query]
 		u.mtx.Unlock()
@@ -85,6 +88,12 @@ func (u *fakeUpstream) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 // events that arrive first.
 func (u *fakeUpstream) subscribe(ctx context.Context, t *testing.T, w *wsEvents, query string) <-chan coretypes.ResultEvent {
 	t.Helper()
+	return u.subscribeAs(ctx, t, w, "", query)
+}
+
+func (u *fakeUpstream) subscribeAs(ctx context.Context, t *testing.T, w *wsEvents,
+	subscriber, query string) <-chan coretypes.ResultEvent {
+	t.Helper()
 	gate := make(chan struct{})
 	defer close(gate)
 	u.mtx.Lock()
@@ -93,7 +102,7 @@ func (u *fakeUpstream) subscribe(ctx context.Context, t *testing.T, w *wsEvents,
 	}
 	u.gates[query] = gate
 	u.mtx.Unlock()
-	out, err := w.Subscribe(ctx, "", query)
+	out, err := w.Subscribe(ctx, subscriber, query)
 	require.NoError(t, err)
 	return out
 }
@@ -110,6 +119,12 @@ func (u *fakeUpstream) dropConnection(t *testing.T) {
 	u.mtx.Lock()
 	defer u.mtx.Unlock()
 	require.NoError(t, u.conn.Close())
+}
+
+func (u *fakeUpstream) otherRequests() []string {
+	u.mtx.Lock()
+	defer u.mtx.Unlock()
+	return append([]string(nil), u.others...)
 }
 
 func (u *fakeUpstream) subscribesOnCurrentConnection() []string {
@@ -171,6 +186,57 @@ func TestUnsubscribeAllTimeoutDuringReconnectForgetsSubscriptions(t *testing.T) 
 	requireEvent(t, other, "other")
 	require.NotContains(t, upstream.subscribesOnCurrentConnection(), "gone",
 		"the reconnect restored a subscription whose cleanup timed out")
+}
+
+// One subscriber's cleanup, whether sent upstream or timed out during a reconnect,
+// must leave every other subscriber's queries subscribed and delivering. All
+// subscribers share one upstream session, so the cleanup may only unsubscribe
+// queries nobody else uses.
+func TestUnsubscribeAllKeepsOtherSubscribers(t *testing.T) {
+	for name, tc := range map[string]struct {
+		bQuery  string
+		timeout bool
+		sent    []string
+	}{
+		"sent":                     {bQuery: "b", sent: []string{"unsubscribe a"}},
+		"timeout during reconnect": {bQuery: "b", timeout: true},
+		"shared query":             {bQuery: "a"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			upstream := &fakeUpstream{}
+			w := startWsEvents(ctx, t, upstream)
+			a := upstream.subscribeAs(ctx, t, w, "A", "a")
+			b := upstream.subscribeAs(ctx, t, w, "B", tc.bQuery)
+			// Dropping a session with unread requests resets it, which the client misses.
+			require.Eventually(t, func() bool { return len(upstream.subscribesOnCurrentConnection()) == 2 },
+				5*time.Second, time.Millisecond)
+
+			if tc.timeout {
+				reconnecting(t, w, upstream)
+				cleanupCtx, cancelCleanup := context.WithTimeout(ctx, 10*time.Millisecond)
+				defer cancelCleanup()
+				require.ErrorIs(t, w.UnsubscribeAll(cleanupCtx, "A"), context.DeadlineExceeded)
+			} else {
+				require.NoError(t, w.UnsubscribeAll(ctx, "A"))
+				// The upstream handles requests in order, so this event follows the cleanup.
+				upstream.setEvents(map[string][]string{"sync": {"sync"}})
+				requireEvent(t, upstream.subscribeAs(ctx, t, w, "C", "sync"), "sync")
+				require.Equal(t, tc.sent, upstream.otherRequests())
+				reconnecting(t, w, upstream)
+			}
+			// Served only once the reconnect resubscribes.
+			upstream.setEvents(map[string][]string{"a": {"a"}, "b": {"b"}})
+
+			requireEvent(t, b, tc.bQuery)
+			require.Empty(t, a, "a cleaned up subscriber received an event")
+			if tc.bQuery != "a" {
+				require.NotContains(t, upstream.subscribesOnCurrentConnection(), "a",
+					"the reconnect restored a cleaned up subscriber's query")
+			}
+		})
+	}
 }
 
 // Forgetting a subscription must also release a delivery blocked on its unread channel.

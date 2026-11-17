@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -21,11 +22,10 @@ type wsEvents struct {
 	Logger log.Logger
 	ws     *jsonrpcclient.WSClient
 
-	mtx           sync.RWMutex
+	mtx sync.RWMutex
+	// subscriptions maps each query, and its upstream subscription ID once known,
+	// to the local subscribers sharing its single upstream subscription.
 	subscriptions map[string]*wsSubscription
-	// cleared closes when UnsubscribeAll forgets the subscriptions read with it,
-	// and is then replaced. Both fields are guarded by mtx.
-	cleared chan struct{}
 
 	// lifetime bounds resubscribing and event delivery. It ends with the context
 	// passed to Start, or in Stop if the client shut down by itself first.
@@ -36,10 +36,18 @@ type wsEvents struct {
 	resubscribeDelay time.Duration
 }
 
+var errNotRunning = errors.New("websocket client is not running")
+
 type wsSubscription struct {
-	res   chan coretypes.ResultEvent
-	id    string
-	query string
+	id          string
+	query       string
+	subscribers map[string]*wsSubscriber
+}
+
+type wsSubscriber struct {
+	res chan coretypes.ResultEvent
+	// gone closes on unsubscribing, releasing a delivery its owner no longer reads.
+	gone chan struct{}
 }
 
 var _ rpcclient.SubscriptionClient = (*wsEvents)(nil)
@@ -48,7 +56,6 @@ func newWsEvents(remote string) (*wsEvents, error) {
 	w := &wsEvents{
 		Logger:        log.NewNopLogger(),
 		subscriptions: make(map[string]*wsSubscription),
-		cleared:       make(chan struct{}),
 
 		resubscribeDelay: time.Second,
 	}
@@ -119,8 +126,11 @@ func (w *wsEvents) stopListener() {
 // The channel is never closed to prevent clients from seeing an erroneous
 // event.
 //
+// Subscribers share one upstream subscription per query, which Tendermint keys
+// by remote IP; subscriber only identifies the owner locally.
+//
 // It returns an error if wsEvents is not running.
-func (w *wsEvents) Subscribe(ctx context.Context, _subscriber, query string,
+func (w *wsEvents) Subscribe(ctx context.Context, subscriber, query string,
 	outCapacity ...int) (out <-chan coretypes.ResultEvent, err error) {
 	if err := w.ws.Subscribe(ctx, query); err != nil {
 		return nil, err
@@ -134,49 +144,87 @@ func (w *wsEvents) Subscribe(ctx context.Context, _subscriber, query string,
 	outc := make(chan coretypes.ResultEvent, outCap)
 	w.mtx.Lock()
 	defer w.mtx.Unlock()
-	// subscriber param is ignored because Tendermint will override it with
-	// remote IP anyway.
-	w.subscriptions[query] = &wsSubscription{res: outc, query: query}
+	sub, ok := w.subscriptions[query]
+	if !ok {
+		sub = &wsSubscription{query: query, subscribers: make(map[string]*wsSubscriber)}
+		w.subscriptions[query] = sub
+	}
+	if old, ok := sub.subscribers[subscriber]; ok {
+		close(old.gone)
+	}
+	sub.subscribers[subscriber] = &wsSubscriber{res: outc, gone: make(chan struct{})}
 
 	return outc, nil
 }
 
-// Unsubscribe implements SubscriptionClient by using WSClient to unsubscribe
-// given subscriber from query.
+// Unsubscribe implements SubscriptionClient by unsubscribing given subscriber
+// from query, and using WSClient to unsubscribe from the upstream once no
+// subscriber is left.
 //
-// It returns an error if wsEvents is not running.
-func (w *wsEvents) Unsubscribe(ctx context.Context, _subscriber, query string) error {
-	if err := w.ws.Unsubscribe(ctx, query); err != nil {
-		return err
-	}
-
+// It returns an error if wsEvents is not running. The subscription is forgotten
+// even then; see UnsubscribeAll.
+func (w *wsEvents) Unsubscribe(ctx context.Context, subscriber, query string) error {
 	w.mtx.Lock()
-	defer w.mtx.Unlock()
-	info, ok := w.subscriptions[query]
-	if ok {
-		if info.id != "" {
-			delete(w.subscriptions, info.id)
-		}
-		delete(w.subscriptions, info.query)
+	var unused []string
+	if sub, ok := w.subscriptions[query]; ok && sub.query == query {
+		unused = w.removeSubscriber(sub, subscriber, unused)
 	}
+	w.mtx.Unlock()
 
-	return nil
+	return w.unsubscribeUpstream(ctx, unused)
 }
 
-// UnsubscribeAll implements SubscriptionClient by using WSClient to
-// unsubscribe given subscriber from all the queries.
+// UnsubscribeAll implements SubscriptionClient by unsubscribing given
+// subscriber from all the queries, and using WSClient to unsubscribe from the
+// upstream the queries no other subscriber uses.
 //
 // It returns an error if wsEvents is not running. Subscriptions are forgotten
 // even then: a reconnect must not restore one whose channel nobody reads, which
 // would stall every other subscription on the single events loop.
-func (w *wsEvents) UnsubscribeAll(ctx context.Context, _subscriber string) error {
+func (w *wsEvents) UnsubscribeAll(ctx context.Context, subscriber string) error {
 	w.mtx.Lock()
-	w.subscriptions = make(map[string]*wsSubscription)
-	close(w.cleared)
-	w.cleared = make(chan struct{})
+	var unused []string
+	for key, sub := range w.subscriptions {
+		if key == sub.query {
+			unused = w.removeSubscriber(sub, subscriber, unused)
+		}
+	}
 	w.mtx.Unlock()
 
-	return w.ws.UnsubscribeAll(ctx)
+	return w.unsubscribeUpstream(ctx, unused)
+}
+
+// removeSubscriber forgets subscriber's subscription to sub, and sub itself once
+// unused, which it then appends to unused. Callers must hold mtx.
+func (w *wsEvents) removeSubscriber(sub *wsSubscription, subscriber string, unused []string) []string {
+	s, ok := sub.subscribers[subscriber]
+	if !ok {
+		return unused
+	}
+	close(s.gone)
+	delete(sub.subscribers, subscriber)
+	if len(sub.subscribers) > 0 {
+		return unused
+	}
+	delete(w.subscriptions, sub.query)
+	if sub.id != "" {
+		delete(w.subscriptions, sub.id)
+	}
+	return append(unused, sub.query)
+}
+
+// unsubscribeUpstream must not hold mtx: sending can block until the writer restarts.
+// After an error, eventListener drops events for the queries left subscribed.
+func (w *wsEvents) unsubscribeUpstream(ctx context.Context, queries []string) error {
+	if len(queries) == 0 && !w.IsRunning() {
+		return errNotRunning
+	}
+	for _, query := range queries {
+		if err := w.ws.Unsubscribe(ctx, query); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // After being reconnected, it is necessary to redo subscription to server
@@ -257,19 +305,21 @@ func (w *wsEvents) eventListener(ctx context.Context, done chan<- struct{}) {
 			}
 
 			w.mtx.RLock()
-			out, ok := w.subscriptions[result.Query]
-			if ok {
+			var subscribers []*wsSubscriber
+			if out, ok := w.subscriptions[result.Query]; ok {
 				if _, idOk := w.subscriptions[result.SubscriptionID]; !idOk {
 					out.id = result.SubscriptionID
 					w.subscriptions[result.SubscriptionID] = out
 				}
+				for _, s := range out.subscribers {
+					subscribers = append(subscribers, s)
+				}
 			}
-			cleared := w.cleared
 			w.mtx.RUnlock()
-			if ok {
+			for _, s := range subscribers {
 				select {
-				case out.res <- *result:
-				case <-cleared:
+				case s.res <- *result:
+				case <-s.gone:
 				case <-ctx.Done():
 					return
 				}
