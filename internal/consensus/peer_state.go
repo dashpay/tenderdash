@@ -92,6 +92,10 @@ type PeerState struct {
 	// certificate the peer is known to hold: the latest it sent this node.
 	roundSkipHeight int64
 	roundSkipRound  int32
+
+	// commitSent is the commit handed to the transport for the peer that it has
+	// not acknowledged yet (see ReofferUnackedCommit).
+	commitSent unackedCommit
 }
 
 // PeerStateOptionFunc overrides a default of a PeerState.
@@ -748,11 +752,95 @@ func (ps *PeerState) HasRoundSkip(height int64, round int32) bool {
 	return height == ps.roundSkipHeight && round <= ps.roundSkipRound
 }
 
-// SetHasCommit sets the given vote as known by the peer
+// commitResendMaxBackoff caps how many times the wait before re-offering an
+// unacknowledged commit doubles: a peer that keeps losing it is still sent it
+// every 2^commitResendMaxBackoff intervals.
+const commitResendMaxBackoff = 3
+
+// unackedCommit is a commit handed to the transport for the peer and not yet
+// acknowledged by it. A zero sentAt means none is tracked.
+type unackedCommit struct {
+	height   int64
+	sentAt   time.Time
+	reoffers uint8
+}
+
+// SetHasCommit records a commit the peer has shown it holds: it sent it.
 func (ps *PeerState) SetHasCommit(commit *types.Commit) {
 	ps.mtx.Lock()
 	defer ps.mtx.Unlock()
 
+	ps.markHasCommit(commit)
+	ps.ackCommit(commit.Height)
+}
+
+// SetCommitSent records that commit was handed to the transport for the peer.
+// The peer is treated as having it, as by SetHasCommit, until a resend interval
+// passes without the peer acknowledging it — by a HasCommit for its height, by
+// sending a commit for it, or by moving to a later height — which puts it back
+// on offer (see ReofferUnackedCommit).
+//
+// A commit the peer showed it has after gossip picked this one, and before this
+// call, is not tracked: a resend could never be acknowledged.
+func (ps *PeerState) SetCommitSent(commit *types.Commit) {
+	ps.mtx.Lock()
+	defer ps.mtx.Unlock()
+
+	tracked := !ps.commitSent.sentAt.IsZero() && ps.commitSent.height == commit.Height
+	acked := !tracked && ps.PRS.Height == commit.Height && ps.PRS.HasCommit
+	ps.markHasCommit(commit)
+	if acked || ps.PRS.Height != commit.Height {
+		return
+	}
+	if !tracked {
+		ps.commitSent = unackedCommit{height: commit.Height}
+	}
+	// A re-offered commit keeps its backoff.
+	ps.commitSent.sentAt = ps.clock.Now()
+}
+
+// ackCommit drops the commit for height from redelivery tracking.
+func (ps *PeerState) ackCommit(height int64) {
+	if ps.commitSent.height == height {
+		ps.commitSent = unackedCommit{}
+	}
+}
+
+// ReofferUnackedCommit puts a commit the peer has not acknowledged back on
+// offer once interval has passed since it was sent, doubling the wait with
+// each re-offer up to commitResendMaxBackoff times.
+//
+// Gossip marks a commit as the peer's the moment it is handed to the
+// transport. A copy dropped after that (router queue overflow, receiver over
+// its allowance) is otherwise never sent again: commit gossip skips a peer
+// marked as having one, and the round state the peer keeps announcing, older
+// than the commit's round, does not clear the mark. A lagging peer that lost
+// the commit on every link would stay at its height until it reconnects.
+func (ps *PeerState) ReofferUnackedCommit(interval time.Duration) {
+	ps.mtx.Lock()
+	defer ps.mtx.Unlock()
+
+	sent := &ps.commitSent
+	if sent.sentAt.IsZero() {
+		return
+	}
+	if ps.PRS.Height != sent.height {
+		*sent = unackedCommit{}
+		return
+	}
+	if !ps.PRS.HasCommit || ps.clock.Since(sent.sentAt) < interval<<sent.reoffers {
+		return
+	}
+	ps.PRS.HasCommit = false
+	if sent.reoffers < commitResendMaxBackoff {
+		sent.reoffers++
+	}
+	ps.logger.Debug("re-offering a commit the peer has not acknowledged",
+		"height", sent.height, "reoffers", sent.reoffers)
+}
+
+// markHasCommit marks commit as the peer's, moving the peer to its round.
+func (ps *PeerState) markHasCommit(commit *types.Commit) {
 	ps.setHasCommit(commit.Height, commit.Round)
 
 	if ps.PRS.Height < commit.Height || (ps.PRS.Height == commit.Height && ps.PRS.Round < commit.Round) {
@@ -895,6 +983,7 @@ func (ps *PeerState) ApplyHasCommitMessage(msg *HasCommitMessage) {
 		return
 	}
 	ps.setHasCommit(msg.Height, msg.Round)
+	ps.ackCommit(msg.Height)
 }
 
 // maj23AnswerMemory is how many distinct majority claims per peer are

@@ -99,7 +99,7 @@ func newPeerGossipWorker(
 		stateDataStore: state.stateDataStore,
 		handlers: []gossipHandler{
 			newGossipHandler(
-				votesAndCommitGossipHandler(ps, state.blockStore, &gossiper),
+				votesAndCommitGossipHandler(ps, state.blockStore, &gossiper, cadence.queryMaj23),
 				cadence.gossip,
 			),
 			newGossipHandler(

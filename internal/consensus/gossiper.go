@@ -690,7 +690,7 @@ func updatePeerProposal(ps *PeerState, proposal *types.Proposal) func() error {
 
 func updatePeerCommit(ps *PeerState, commit *types.Commit) func() error {
 	return func() error {
-		ps.SetHasCommit(commit)
+		ps.SetCommitSent(commit)
 		return nil
 	}
 }
