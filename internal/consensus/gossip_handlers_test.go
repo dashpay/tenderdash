@@ -857,6 +857,17 @@ func (suite *GossipHandlerTestSuite) TestDataGossipHandlerServesHeldBlockToLaggi
 			served:    true,
 		},
 		{
+			name:      "valid block while this round collects it, incomplete",
+			proTxHash: validator,
+			rs:        cstypes.RoundState{Height: 10, Round: 2, ValidRound: 1, ValidBlockParts: held, ProposalBlockParts: incomplete},
+			prs: func() cstypes.PeerRoundState {
+				prs := collecting(held, 10, 1)
+				prs.ProposalBlockParts = incomplete.BitArray().Copy() // nothing left to send from the current set
+				return prs
+			}(),
+			served: true,
+		},
+		{
 			name:      "not a block the peer collects",
 			proTxHash: validator,
 			rs:        cstypes.RoundState{Height: 10, Round: 2, ValidRound: 1, ValidBlockParts: held},
