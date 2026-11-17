@@ -42,21 +42,57 @@ and regenerate with `make proto-gen`.
 ## Building, Testing, and Linting
 
 ```bash
-# Build (includes BLS native dependency)
+# Build the BLS native library: inits the submodule, needs cmake, a C++
+# compiler and libgmp-dev. Once per checkout or worktree.
+make build-bls
+
+# Build (includes build-bls)
 make build
 
-# Run all unit tests with race detector (matches CI: CGO, BLS, -tags=deadlock, -p 1)
-make test_race
-
-# Run all unit tests without race detector (matches CI configuration)
+# Run all unit tests (-p 1, -tags deadlock)
 make test
 
-# Lint
+# Run all unit tests with race detector (-p 1)
+make test_race
+
+# Lint lines changed vs origin/dev (what CI enforces);
+# stacked PRs: make lint LINT_BASE=origin/<base-branch>
 make lint
 
 # Format
 make format
 ```
+
+### Running targeted tests
+
+Most packages link BLS through cgo. The Makefile passes the cgo flags only to
+its own targets, so a bare `go test`, `go vet` or `go build` fails with:
+
+```text
+blschia.cpp:17:10: fatal error: dashbls/bls.hpp: No such file or directory
+```
+
+Export the Makefile's flags once per shell, then run `go` directly:
+
+```bash
+BLS_DIR="$(git rev-parse --show-toplevel)/third_party/bls-signatures"
+export CGO_ENABLED=1
+export CGO_CXXFLAGS="-I$BLS_DIR/build/depends/relic/include -I$BLS_DIR/src/depends/mimalloc/include -I$BLS_DIR/src/depends/relic/include -I$BLS_DIR/src/include"
+export CGO_LDFLAGS="-L$BLS_DIR/build/depends/mimalloc -L$BLS_DIR/build/depends/relic/lib -L$BLS_DIR/build/src -ldashbls -lrelic_s -lmimalloc-secure -lgmp"
+
+go test -race -count=1 -run 'TestName' ./internal/p2p/
+```
+
+- `third_party/bls-signatures/build/` exists only where `make build-bls` ran.
+  In a fresh clone or a new `git worktree`, run it there, or set `BLS_DIR` to
+  another checkout that already built the same BLS revision.
+- macOS: append `-L$(brew --prefix gmp)/lib` to `CGO_LDFLAGS` and
+  `-I$(brew --prefix gmp)/include` to `CGO_CXXFLAGS`, as the Makefile does.
+- CI (`.github/workflows/tests.yml`) installs BLS into `/usr/local` and runs
+  `go test -race -timeout=5m` over package groups (`make test-group-N
+  NUM_SPLIT=6`).
+- `cmd/abcidump` needs `libpcap-dev`.
+- `-count=1` bypasses the Go test cache when re-running unchanged tests.
 
 ## Working with Dependencies and Tools (Go modules, Buf, etc.)
 
@@ -72,10 +108,12 @@ make format
 ## Branching and PR Workflow
 
 - `dev` is the integration branch; `master` is the latest stable Dash Platform release line.
-- Select PR targets by their role and dependencies, not by sorting versioned
-  branch names.
-- Create feature branches from integration and open PRs back into it. Stable
-  hotfixes branch from `master` and are forward-ported to integration.
+- Do all development on `dev`: create feature branches from `origin/dev` and
+  open PRs into `dev`. The only exception is a stable hotfix, which branches
+  from `master` and is forward-ported to `dev`.
+- Versioned `vX.Y-dev` branches (e.g. `v1.8-dev`, `v1.9-dev`) are retired. Never
+  branch from, target, or compare against them, even if one still exists on
+  the remote.
 - Keep commits focused and well-described.
 - Use conventional commit format for commit and PR titles.
 - Do not manually edit or generate `CHANGELOG.md` for development changes.
@@ -97,7 +135,8 @@ make format
 ## Common Pitfalls
 
 - BLS native dependency must be built before Go binaries (`make build` handles
-  this; standalone `go build` may fail).
+  this); standalone `go` commands need the cgo flags from
+  [Running targeted tests](#running-targeted-tests).
 - `*.pb.go` files are generated — never edit them by hand.
 - `gogoproto` extensions (e.g., `nullable`, `customtype`) can produce
   unexpected Go types; always check the generated code after proto changes.

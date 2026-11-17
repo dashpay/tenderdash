@@ -348,7 +348,7 @@ something like this (subject to refinement):
 [i7247]: https://github.com/tendermint/tendermint/issues/7247
 [kv-index]: ../../internal/state/indexer/tx/kv
 [postgres]: https://postgresql.org/
-[psql]: https://github.com/tendermint/tendermint/blob/master/internal/state/indexer/sink/psql
+[psql]: https://github.com/tendermint/tendermint/tree/master/internal/state/indexer/sink/psql
 [query]: https://pkg.go.dev/github.com/dashpay/tenderdash/internal/pubsub/query/syntax
 [sdk]: https://github.com/cosmos/cosmos-sdk
 [tmdb]: https://pkg.go.dev/github.com/cometbft/cometbft-db#DB

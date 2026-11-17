@@ -65,6 +65,13 @@ func makeJSONRPCHandler(funcMap map[string]*RPCFunc, logger log.Logger) http.Han
 
 		var responses []rpctypes.RPCResponse
 		for _, req := range requests {
+			// A caller that has gone away cannot read the answer. Stop here, so that the
+			// calls it left behind in a batch do no work.
+			if err := hreq.Context().Err(); err != nil {
+				logger.Debug("Request abandoned by its caller", "err", err)
+				return
+			}
+
 			// Ignore notifications, which this service does not support.
 			if req.IsNotification() {
 				logger.Debug("Ignoring notification", "req", req)

@@ -2,6 +2,7 @@ package consensus
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cosmos/gogoproto/proto"
 
@@ -12,6 +13,40 @@ import (
 	tmcons "github.com/dashpay/tenderdash/proto/tendermint/consensus"
 	"github.com/dashpay/tenderdash/types"
 )
+
+// roundStateGossipHandler re-announces this node's round state to the peer:
+// its height, round and step and, when the round has block parts, which of
+// them it holds. Those announcements are otherwise sent once, on a state
+// change, and never acknowledged, so one lost after the channel accepted it —
+// to a full router queue or the peer's state-channel allowance — would leave
+// the peer gossiping for the round it last heard of until the next change, and
+// the step this node is in may be waiting on exactly the votes, proposal or
+// block parts the peer is holding back. A repeated round step is ignored by a
+// peer whose picture is current; a repeated NewValidBlock re-applies it, which
+// also corrects, within a pass, a stale copy that landed after a newer one
+// (see PeerState.ApplyNewValidBlockMessage). A failed send is left to the next
+// pass.
+func roundStateGossipHandler(logger log.Logger, send func(context.Context, proto.Message) error) gossipHandlerFunc {
+	return func(ctx context.Context, stateData StateData) {
+		for _, msg := range roundStateMessages(stateData.RoundState) {
+			if err := send(ctx, msg); err != nil {
+				logger.Debug("refreshing round state for peer failed", "msg_type", fmt.Sprintf("%T", msg), "err", err)
+				return
+			}
+		}
+	}
+}
+
+// roundStateMessages returns what a peer needs to rebuild this node's round
+// picture: the round step and, if the round has block parts, which of them it
+// holds.
+func roundStateMessages(rs cstypes.RoundState) []proto.Message {
+	msgs := []proto.Message{rs.NewRoundStepMessage()}
+	if rs.ProposalBlockParts != nil {
+		msgs = append(msgs, rs.NewValidBlockMessage())
+	}
+	return msgs
+}
 
 func queryMaj23GossipHandler(ps *PeerState, gossiper Gossiper) gossipHandlerFunc {
 	return func(ctx context.Context, stateData StateData) {

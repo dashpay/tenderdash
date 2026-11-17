@@ -17,6 +17,7 @@ implementation in `internal/consensus`.
     - [Primary flow of a height](./consensus-happy-path.md)
     - [Transitions and decision rules](./consensus-transitions.md)
     - [Alternative flows and edge cases](./consensus-alternative-flows.md)
+    - [Proposer liveness and round skipping](./consensus-proposer-liveness.md)
     - [Commit handling](./consensus-commit.md)
     - [Recovery and synchronisation](./consensus-recovery.md)
     - [Known issues and discrepancies](./consensus-known-issues.md)
