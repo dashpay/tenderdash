@@ -518,6 +518,9 @@ func (g *msgGossiper) GossipCommit(ctx context.Context, rs cstypes.RoundState, p
 
 // GossipVote sends a vote message to the peer
 func (g *msgGossiper) GossipVote(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState) {
+	// Sent votes are marked as the peer's on the spot; votes it never confirmed
+	// are periodically put back on offer so a copy lost in transit is resent.
+	g.ps.ReofferUnackedVotes()
 	vote, found := g.pickVoteForGossip(rs, prs)
 	if !found {
 		return
@@ -694,7 +697,7 @@ func updatePeerCommit(ps *PeerState, commit *types.Commit) func() error {
 
 func updatePeerVote(ps *PeerState, vote *types.Vote) func() error {
 	return func() error {
-		return ps.SetHasVote(vote)
+		return ps.SetVoteSent(vote)
 	}
 }
 
