@@ -163,6 +163,8 @@ proto-doc:
 		--doc_opt=markdown,api.md \
 		--doc_out=spec/abci \
 		tendermint/abci/types.proto
+# Types from other packages are not in api.md; link their protos instead.
+	@perl -pi -e 's{\]\(#tendermint-(types|crypto|version)-\w+\)}{](../../proto/tendermint/$$1/)}g; s{\]\(#google-protobuf-(\w+)\)}{"](https://protobuf.dev/reference/protobuf/google.protobuf/#" . lc($$1) . ")"}ge' spec/abci/api.md
 
 ###############################################################################
 ###                              Build ABCI                                 ###

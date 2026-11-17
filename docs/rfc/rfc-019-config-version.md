@@ -293,10 +293,10 @@ balance:
 - [ADR 075: RPC Event Subscription Interface][adr075]
 
 [config-pkg]: https://godoc.org/github.com/tendermint/tendermint/config
-[confix]: https://github.com/tendermint/tendermint/blob/master/scripts/confix
-[condiff]: https://github.com/tendermint/tendermint/blob/master/scripts/confix/condiff
-[plan]: https://github.com/tendermint/tendermint/blob/master/scripts/confix/plan.go
-[testdata]: https://github.com/tendermint/tendermint/blob/master/scripts/confix/testdata
+[confix]: ../../internal/libs/confix
+[condiff]: https://github.com/dashpay/tenderdash/tree/6dd4bcc93efa5cdcafe8128502f81851fa574146/scripts/confix/condiff
+[plan]: ../../internal/libs/confix/plan.go
+[testdata]: ../../internal/libs/confix/testdata
 [adr075]: https://github.com/tendermint/tendermint/blob/master/docs/architecture/adr-075-rpc-subscription.md
 
 ## Appendix: Research Notes

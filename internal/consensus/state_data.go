@@ -370,6 +370,10 @@ func (s *StateData) proposalIsTimely() error {
 			s.ProposalReceiveTime.Sub(s.Proposal.Timestamp).String(),
 		)
 	case 1: // too late
+		if s.replayMode {
+			// In replay, the receive time is the WAL time, which can lag the receipt.
+			return nil
+		}
 		return fmt.Errorf(
 			"%w: received too late: height %d, round %d, delay %s",
 			errPrevoteProposalNotTimely, s.Height, s.Round,
@@ -726,7 +730,7 @@ func (s *StateData) isValidForPrevote() error {
 	}
 
 	// if this block was not validated yet, we check if it's timely
-	if !s.replayMode && !s.ProposalBlock.HashesTo(s.ValidBlock.Hash()) {
+	if !s.ProposalBlock.HashesTo(s.ValidBlock.Hash()) {
 		if err := s.proposalIsTimely(); err != nil {
 			return err
 		}

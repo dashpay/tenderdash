@@ -52,11 +52,11 @@ func TestBlockApplierRejectsCommitExtensionsAndRetries(t *testing.T) {
 	metrics := consensus.NopMetrics()
 	metrics.CommitVerifyFailures = counter
 	applier := newBlockApplier(exec, store, applierWithState(initial), applierWithMetrics(metrics))
-	require.Error(t, applier.Apply(ctx, block, commit))
+	require.Error(t, applier.Apply(ctx, block, blockBytes(t, block), commit))
 	require.Equal(t, float64(1), counter.Value())
 	require.Equal(t, []string{"process", "verify"}, calls)
 	require.Equal(t, initial.LastBlockHeight, applier.State().LastBlockHeight)
-	require.NoError(t, applier.Apply(ctx, block, commit))
+	require.NoError(t, applier.Apply(ctx, block, blockBytes(t, block), commit))
 	require.Equal(t, float64(1), counter.Value())
 	require.Equal(t, []string{"process", "verify", "verify", "save", "finalize"}, calls)
 }
@@ -81,7 +81,7 @@ func TestBlockApplierInvalidatesRejectedProposal(t *testing.T) {
 			exec.On("VerifyVoteExtension", mock.Anything, mock.Anything).
 				Twice().Return(errors.New("invalid vote extension"))
 			applier := newBlockApplier(exec, store, applierWithState(initial))
-			require.ErrorIs(t, applier.Apply(ctx, block, commit), sm.ErrCommitExtensionsRejected)
+			require.ErrorIs(t, applier.Apply(ctx, block, blockBytes(t, block), commit), sm.ErrCommitExtensionsRejected)
 			switch change {
 			case "block":
 				block.AppHash = append(block.AppHash.Copy(), 1)
@@ -90,7 +90,7 @@ func TestBlockApplierInvalidatesRejectedProposal(t *testing.T) {
 			case "state":
 				applier.UpdateState(initial)
 			}
-			require.ErrorIs(t, applier.Apply(ctx, block, commit), sm.ErrCommitExtensionsRejected)
+			require.ErrorIs(t, applier.Apply(ctx, block, blockBytes(t, block), commit), sm.ErrCommitExtensionsRejected)
 		})
 	}
 }
@@ -135,9 +135,9 @@ func TestBlockApplierReprocessesRoundAfterAnother(t *testing.T) {
 	applier := newBlockApplier(exec, store, applierWithState(initial))
 
 	for _, round := range []int32{1, 1, 2} {
-		require.ErrorIs(t, applier.Apply(ctx, block, commitAt(round)), sm.ErrCommitExtensionsRejected)
+		require.ErrorIs(t, applier.Apply(ctx, block, blockBytes(t, block), commitAt(round)), sm.ErrCommitExtensionsRejected)
 	}
-	require.NotPanics(t, func() { require.NoError(t, applier.Apply(ctx, block, commitAt(1))) })
+	require.NotPanics(t, func() { require.NoError(t, applier.Apply(ctx, block, blockBytes(t, block), commitAt(1))) })
 	require.Equal(t, []int32{1, 2, 1}, rounds, "a round is processed again only after another one")
 }
 

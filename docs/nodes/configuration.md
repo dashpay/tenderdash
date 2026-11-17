@@ -410,9 +410,13 @@ create-empty-blocks-interval = "0s"
 # Reactor sleep duration parameters. peer-gossip-sleep-duration also sets the
 # tick rate a lagging peer's catch-up block-part replay is metered against
 # (a fixed 500ms internal throttle): raising this above 500ms disables that
-# throttle. peer-query-maj23-sleep-duration also paces the redelivery of votes a
-# peer has not acknowledged: one interval after a vote went out, then doubling
-# up to 8 intervals. Raising it slows stall recovery.
+# throttle. peer-query-maj23-sleep-duration also sets how often the node
+# re-announces its round state to each peer (recovery latency after a lost
+# announcement) and paces the redelivery of votes a peer has not acknowledged:
+# one interval after a vote went out, then doubling up to 8 intervals. Raising
+# it slows stall recovery. Either duration under 1ms is run at 1ms, which only
+# prevents a busy loop: well below the defaults, peers drop this node's state
+# updates over their per-peer allowance.
 peer-gossip-sleep-duration = "100ms"
 peer-query-maj23-sleep-duration = "2s"
 
@@ -492,7 +496,12 @@ namespace = "tendermint"
 `create-empty-blocks = false` makes round 0 wait for transactions above the
 initial height. A positive `create-empty-blocks-interval` starts a proposal after
 that interval even without transactions. Later rounds do not wait for
-transactions.
+transactions, except on a chain with consensus version 2, where a round entered
+because the validators skipped a silent proposer's waiting round may wait too,
+unless the node holds a locked or valid block, the mempool has already reported
+transactions at this height, a polka exists at the height, or a prevote of that
+round was recorded; its interval counts from the start of the height. See
+[Proposer liveness and round skipping](../../spec/consensus/consensus-proposer-liveness.md).
 
 The application can bypass that wait for the next height by setting
 `ResponseFinalizeBlock.propose_next_block_immediately`. The hint is local,

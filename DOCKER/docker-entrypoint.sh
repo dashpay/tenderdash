@@ -16,6 +16,7 @@ got_signal=false
 _forward_signal() {
 	echo "Caught signal! Forwarding to tenderdash process."
 	got_signal=true
+	interrupted=true
 	kill -s "$1" "$child"
 }
 
@@ -52,12 +53,19 @@ fi
 # Start tenderdash in the background
 tenderdash "$@" 2>&1 &
 child=$!
-wait "$child"
-exit_code=$?
+# A trapped signal interrupts wait before tenderdash exits; wait again until it
+# returns tenderdash's own status, so its graceful shutdown completes before
+# this script (PID 1) exits.
+while :; do
+	interrupted=false
+	wait "$child"
+	exit_code=$?
+	[ "$interrupted" = true ] || break
+done
 
-if [ $got_signal == false ] && [ $exit_code -ne 0 ] && [ "$1" == "start" ]; then
+if [ $got_signal == false ] && [ "$exit_code" -ne 0 ] && [ "$1" == "start" ]; then
 	echo "Sleeping for 10 seconds as workaround for the busy port problem. See entrypoint code for details."
 	sleep 10
 fi
 
-exit $exit_code
+exit "$exit_code"

@@ -77,6 +77,7 @@
     - [Primary flow of a height](spec/consensus/consensus-happy-path.md)
     - [Transitions and decision rules](spec/consensus/consensus-transitions.md)
     - [Alternative flows and edge cases](spec/consensus/consensus-alternative-flows.md)
+    - [Proposer liveness and round skipping](spec/consensus/consensus-proposer-liveness.md)
     - [Commit handling](spec/consensus/consensus-commit.md)
     - [Recovery and synchronisation](spec/consensus/consensus-recovery.md)
     - [Known issues and discrepancies](spec/consensus/consensus-known-issues.md)
