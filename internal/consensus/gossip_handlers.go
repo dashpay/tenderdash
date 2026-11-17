@@ -319,15 +319,16 @@ func shouldProposalBeGossiped(rs cstypes.RoundState, prs *cstypes.PeerRoundState
 
 // heldBlockPartsFor returns the complete part set of this node's valid or
 // locked block when a validator peer at this height, in an earlier round, is
-// collecting that block and rs.ProposalBlockParts is not it. Entering a later
-// round drops the proposal part set, and a peer whose polka retargeted it at
-// the block (see addVoteUpdateValidBlockMw) has nowhere else to get the parts
-// from: without them it rejects every precommit for the block, counts none of
-// them towards leaving its round, and stays there for good. The part set
-// header is the block's identity; a round or a hash alone names no bytes.
+// collecting that block and rs.ProposalBlockParts does not hold it complete.
+// Entering a later round drops the proposal part set, and a peer whose polka
+// retargeted it at the block (see addVoteUpdateValidBlockMw) has nowhere else
+// to get the parts from: without them it rejects every precommit for the block,
+// counts none of them towards leaving its round, and stays there for good. The
+// part set header is the block's identity; a round or a hash alone names no
+// bytes.
 func heldBlockPartsFor(rs cstypes.RoundState, prs *cstypes.PeerRoundState, isValidator bool) *types.PartSet {
 	if !isValidator || rs.Height != prs.Height || prs.Round >= rs.Round ||
-		rs.ProposalBlockParts.HasHeader(prs.ProposalBlockPartSetHeader) {
+		(rs.ProposalBlockParts.HasHeader(prs.ProposalBlockPartSetHeader) && rs.ProposalBlockParts.IsComplete()) {
 		return nil
 	}
 	for _, parts := range []*types.PartSet{rs.ValidBlockParts, rs.LockedBlockParts} {
