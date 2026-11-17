@@ -16,10 +16,7 @@ import (
 // hold, and what it does when it will hold no more, is part of what a flood
 // costs this node.
 //
-// This records both. The numbers are the ones an operator would need and
-// cannot currently read off a metric: the shared inbound queue has neither an
-// occupancy gauge nor a drop counter, only the latency histogram of enqueueing
-// into it.
+// This records occupancy and drops under a stalled consumer.
 func TestLoadRouterSharedQueueOccupancyAndDrops(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode")
@@ -28,11 +25,9 @@ func TestLoadRouterSharedQueueOccupancyAndDrops(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// The production capacity squared is far too large to fill in a test, and
-	// the shape is what is being pinned, not the constant. This is the same
-	// queue the router builds, at a size small enough to reach its ceiling.
+	// Use a small queue to reach its ceiling quickly.
 	const capacity = 8
-	q := newSimplePriorityQueue(ctx, capacity)
+	q := newSimplePriorityQueue(ctx, capacity, NopMetrics(), func(ChannelID) uint { return 0 })
 	// The queue holds envelopes in three places: waiting in the input buffer,
 	// in the heap, and popped into the output buffer. The heap is trimmed to
 	// maxSize on every push. The run loop holds one envelope in none of these
@@ -56,7 +51,7 @@ func TestLoadRouterSharedQueueOccupancyAndDrops(t *testing.T) {
 
 	held := drainQueue(t, q)
 	reportf(t, "shared inbound queue at capacity %d: %d envelopes offered, %d retained "+
-		"(ceiling %d), %d discarded without a metric or a peer error",
+		"(ceiling %d), %d discarded",
 		capacity, offered, held, ceiling, offered-held)
 
 	require.LessOrEqual(t, held, ceiling,
@@ -69,7 +64,7 @@ func TestLoadRouterSharedQueueOccupancyAndDrops(t *testing.T) {
 	for _, chDesc := range ConsensusChannelDescriptors() {
 		size := chDesc.RecvBufferCapacity
 		reportf(t, "channel %q: shared inbound queue holds up to %d envelopes of up to %d bytes",
-			chDesc.Name, size*size, chDesc.RecvMessageCapacity)
+			chDesc.Name, size*simpleQueueCapacityMultiplier, chDesc.RecvMessageCapacity)
 	}
 }
 

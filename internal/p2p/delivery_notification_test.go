@@ -54,7 +54,7 @@ func TestSimplePriorityQueueDoesNotPopWhenOutputIsFull(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	queue := newSimplePriorityQueue(ctx, 2)
+	queue := newSimplePriorityQueue(ctx, 2, NopMetrics(), func(ChannelID) uint { return 0 })
 	for i := 0; i < 3; i++ {
 		queue.enqueue() <- Envelope{
 			To:      types.NodeID(string(rune('a' + i))),
