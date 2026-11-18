@@ -920,7 +920,8 @@ func (r *Reactor) peerUp(ctx context.Context, peerUpdate p2p.PeerUpdate, chans c
 	if !ok {
 		ps = NewPeerState(r.logger, peerUpdate.NodeID,
 			WithPeerStateClock(r.clock),
-			WithMaj23AnswerTTL(maj23AnswerTTLFor(r.cadence.queryMaj23)))
+			WithMaj23AnswerTTL(maj23AnswerTTLFor(r.cadence.queryMaj23)),
+			WithVoteResendInterval(r.cadence.queryMaj23))
 		ps.SetProTxHash(peerUpdate.ProTxHash)
 		r.peers[peerUpdate.NodeID] = ps
 	} else if len(peerUpdate.ProTxHash) > 0 {

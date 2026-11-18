@@ -1,3 +1,30 @@
+## [2.0.0-dev.3] - 2026-11-17
+
+### Migration Notes
+
+- `consensus.peer-query-maj23-sleep-duration` (default 2s) also paces round state re-announcements and the redelivery of votes and commits a peer has not acknowledged; raising it slows recovery from lost consensus messages (#1598, #1599, #1624)
+- When a peer's outbound queue is full, consensus state-channel messages to that peer are dropped instead of blocking delivery to other peers; drops are counted in `router_channel_queue_dropped_msgs` with `ch_id="32"` (#1625)
+
+### Protocol Versions
+
+- ABCI stays 1.5.0, P2P protocol stays 11 and block protocol stays 14: no message, field or block-format changes; nodes send existing consensus messages more often, and receivers ignore round state copies that do not advance (#1598, #1599, #1624)
+
+### Bug Fixes
+
+- Re-announce round state to each peer periodically, so a peer that missed an announcement still receives proposals (#1598)
+- Stop a previous-height precommit from marking the peer's current-height votes as received (#1601)
+- Resend same-round votes the peer never acknowledged (#1599)
+- Resend a commit the peer has not acknowledged (#1624)
+- Stop a congested peer from stalling consensus round-state gossip to other peers (#1625)
+
+### Documentation
+
+- Document running targeted tests with BLS cgo flags (#1622)
+
+### Miscellaneous Tasks
+
+- Assign merged pull requests to their release line's milestone (#1619)
+
 ## [2.0.0-dev.2] - 2026-11-12
 
 ### Migration Notes

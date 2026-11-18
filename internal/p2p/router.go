@@ -141,10 +141,11 @@ func (o *RouterOptions) Validate() error {
 //	up the recipient peer's outbound message queue in peerQueues, and submits
 //	the message to it.
 //
-// All channel sends in the router are blocking. It is the responsibility of the
-// queue interface in peerQueues and channelQueues to prioritize and drop
-// messages as appropriate during contention to prevent stalls and ensure good
-// quality of service.
+// Messages on channels with DropOnFullPeerQueue are dropped when a peer queue
+// is full, so one slow peer cannot stall them for other peers. Other outbound
+// sends block.
+// Inbound sends block unless the channel specifies an enqueue timeout.
+// Queues may also prioritize and drop messages.
 type Router struct {
 	*service.BaseService
 	logger log.Logger
@@ -308,7 +309,7 @@ func (r *Router) OpenChannel(ctx context.Context, chDesc *ChannelDescriptor) (Ch
 			<-queue.closed()
 		}()
 
-		r.routeChannel(channelCtx, chDesc.ID, outCh, errCh)
+		r.routeChannel(channelCtx, chDesc, outCh, errCh)
 	}) {
 		stopCancel()
 		cancel()
@@ -327,10 +328,11 @@ func (r *Router) OpenChannel(ctx context.Context, chDesc *ChannelDescriptor) (Ch
 // for messages, see Wrapper for details.
 func (r *Router) routeChannel(
 	ctx context.Context,
-	chID ChannelID,
+	chDesc *ChannelDescriptor,
 	outCh <-chan Envelope,
 	errCh <-chan PeerError,
 ) {
+	chID := chDesc.ID
 	for {
 		select {
 		case envelope := <-outCh:
@@ -393,6 +395,22 @@ func (r *Router) routeChannel(
 			// send message to peers
 			for _, q := range queues {
 				start := time.Now().UTC()
+
+				if chDesc.DropOnFullPeerQueue {
+					select {
+					case q.enqueue() <- envelope:
+						r.metrics.RouterPeerQueueSend.Observe(time.Since(start).Seconds())
+					case <-q.closed():
+						envelope.NotifyDelivery()
+						r.logger.Debug("dropping state message for peer with closed queue", "peer", envelope.To, "channel", chID)
+					case <-ctx.Done():
+						return
+					default:
+						envelope.NotifyDelivery()
+						r.metrics.PeerQueueDroppedMsgs.With("ch_id", fmt.Sprint(chID)).Add(1)
+					}
+					continue
+				}
 
 				select {
 				case q.enqueue() <- envelope:
