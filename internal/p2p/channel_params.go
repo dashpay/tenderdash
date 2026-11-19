@@ -142,6 +142,8 @@ func ConsensusChannelDescriptors() map[ChannelID]*ChannelDescriptor {
 			RecvMessageCapacity: maxMsgSize,
 			RecvBufferCapacity:  128,
 			Name:                "state",
+			// Round-state messages are re-announced periodically.
+			DropOnFullPeerQueue: true,
 		},
 		ConsensusDataChannel: {
 			// TODO: Consider a split between gossiping current block and catchup

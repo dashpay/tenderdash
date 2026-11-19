@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cosmos/gogoproto/proto"
 	"github.com/stretchr/testify/mock"
@@ -136,7 +137,7 @@ func (suite *GossipHandlerTestSuite) TestVotesAndCommitGossipHandler() {
 	}
 	for i, tc := range testCases {
 		suite.Run(fmt.Sprintf("%d", i), func() {
-			hd := votesAndCommitGossipHandler(tc.peerState, suite.fakeBlockStore, suite.fakeGossiper)
+			hd := votesAndCommitGossipHandler(tc.peerState, suite.fakeBlockStore, suite.fakeGossiper, time.Second)
 			if tc.mockFn != nil {
 				tc.mockFn()
 			}

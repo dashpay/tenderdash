@@ -1547,3 +1547,130 @@ func (suite *GossiperSuiteTest) signVote(vote *types.Vote) {
 	err = vote.VoteExtensions.CopySignsFromProto(protoVote.VoteExtensions)
 	suite.Require().NoError(err)
 }
+
+// TestGossipVoteRedeliversUnacknowledged verifies that a current-round vote
+// marked delivered on send is offered again, at a bounded cadence, while the
+// peer stays in that round without acknowledging it — and not again once it
+// does. Neither side holds a majority, so no VoteSetMaj23 reconciliation can
+// restore the vote to the offer; without redelivery a lost copy would leave
+// the round stalled.
+func (suite *GossiperSuiteTest) TestGossipVoteRedeliversUnacknowledged() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	const voteResendInterval = time.Second
+
+	for _, tc := range []struct {
+		name     string
+		voteType tmproto.SignedMsgType
+		step     cstypes.RoundStepType
+	}{
+		{"prevote", tmproto.PrevoteType, cstypes.RoundStepPrevote},
+		{"precommit", tmproto.PrecommitType, cstypes.RoundStepPrecommit},
+	} {
+		suite.Run(tc.name, func() {
+			ps := NewPeerState(suite.logger, suite.ps.peerID,
+				WithPeerStateClock(suite.clock),
+				WithVoteResendInterval(voteResendInterval))
+			suite.ps, suite.sender.ps, suite.gossiper.ps = ps, ps, ps
+
+			vote := suite.makeSignedVote(100, 0, tc.voteType)
+			votes := cstypes.NewHeightVoteSet(factory.DefaultTestChainID, 100, suite.valSet)
+			_, _ = votes.AddVote(vote)
+			rs := cstypes.RoundState{Height: 100, Round: 0, Votes: votes}
+			ps.PRS = cstypes.PeerRoundState{Height: 100, Round: 0, Step: tc.step, ProposalPOLRound: -1, CatchupCommitRound: -1}
+
+			sends := 0
+			suite.voteCh.
+				On("Send", ctx, p2p.Envelope{To: ps.peerID, Message: &tmcons.Vote{Vote: vote.ToProto()}}).
+				Run(func(_ mock.Arguments) { sends++ }).
+				Return(nil)
+
+			// The vote goes out once and is then held back as delivered.
+			for range 10 {
+				suite.gossiper.GossipVote(ctx, rs, ps.GetRoundState())
+			}
+			suite.Require().Equal(1, sends, "a vote just sent must not be repeated within the interval")
+
+			// Still unacknowledged after the interval: offered again, once.
+			suite.clock.Advance(voteResendInterval)
+			for range 10 {
+				suite.gossiper.GossipVote(ctx, rs, ps.GetRoundState())
+			}
+			suite.clock.Advance(voteResendInterval)
+			for range 10 {
+				suite.gossiper.GossipVote(ctx, rs, ps.GetRoundState())
+			}
+			suite.Require().Equal(2, sends, "an unacknowledged vote must be resent once the interval elapses")
+
+			// The peer reports it has the vote: redelivery stops.
+			suite.Require().NoError(ps.ApplyHasVoteMessage(&HasVoteMessage{
+				Height: 100, Round: 0, Type: tc.voteType, Index: vote.ValidatorIndex,
+			}))
+			for range 3 {
+				suite.clock.Advance(voteResendInterval)
+				for range 10 {
+					suite.gossiper.GossipVote(ctx, rs, ps.GetRoundState())
+				}
+			}
+			suite.Require().Equal(2, sends, "an acknowledged vote must not be resent")
+		})
+	}
+}
+
+// TestGossipVoteRedeliveryStopsWhenPeerMovesOn verifies that bookkeeping of a
+// round the peer has left is dropped at the next rotation rather than applied
+// to the bits the old round number now stands for: here the peer's proposal
+// POL bits, which name that same round under its new round state.
+func (suite *GossiperSuiteTest) TestGossipVoteRedeliveryStopsWhenPeerMovesOn() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	const voteResendInterval = time.Second
+
+	ps := NewPeerState(suite.logger, suite.ps.peerID,
+		WithPeerStateClock(suite.clock),
+		WithVoteResendInterval(voteResendInterval))
+	suite.ps, suite.sender.ps, suite.gossiper.ps = ps, ps, ps
+
+	prevoteR0 := suite.makeSignedVote(100, 0, tmproto.PrevoteType)
+	prevoteR1 := suite.makeSignedVote(100, 1, tmproto.PrevoteType)
+	votes := cstypes.NewHeightVoteSet(factory.DefaultTestChainID, 100, suite.valSet)
+	_, _ = votes.AddVote(prevoteR0)
+	_, _ = votes.AddVote(prevoteR1)
+	ps.PRS = cstypes.PeerRoundState{Height: 100, Round: 0, Step: cstypes.RoundStepPrevote, ProposalPOLRound: -1, CatchupCommitRound: -1}
+
+	suite.voteCh.
+		On("Send", ctx, p2p.Envelope{To: ps.peerID, Message: &tmcons.Vote{Vote: prevoteR0.ToProto()}}).
+		Once().
+		Return(nil)
+	suite.gossiper.GossipVote(ctx, cstypes.RoundState{Height: 100, Round: 0, Votes: votes}, ps.GetRoundState())
+
+	// Peer moves to round 1 without acknowledging, and reports (via its
+	// proposal's POL) that it holds the round-0 prevote after all.
+	ps.ApplyNewRoundStepMessage(&NewRoundStepMessage{Height: 100, Round: 1, Step: cstypes.RoundStepPrevote, LastCommitRound: -1})
+	ps.PRS.ProposalPOLRound = 0
+	ps.PRS.ProposalPOL = bits.NewBitArray(suite.valSet.Size())
+	ps.PRS.ProposalPOL.SetIndex(int(prevoteR0.ValidatorIndex), true)
+
+	// The first rotation after the move sees round-0 bookkeeping against a
+	// round-1 peer and must drop it; the round-1 prevote then goes out once and
+	// is acknowledged. The round-0 prevote must never be offered again, which
+	// is what clearing POL bit 0 from the stale bookkeeping would cause.
+	rsR1 := cstypes.RoundState{Height: 100, Round: 1, Votes: votes}
+	suite.clock.Advance(voteResendInterval)
+	suite.voteCh.
+		On("Send", ctx, p2p.Envelope{To: ps.peerID, Message: &tmcons.Vote{Vote: prevoteR1.ToProto()}}).
+		Once().
+		Return(nil)
+	suite.gossiper.GossipVote(ctx, rsR1, ps.GetRoundState())
+	suite.Require().NoError(ps.ApplyHasVoteMessage(&HasVoteMessage{
+		Height: 100, Round: 1, Type: tmproto.PrevoteType, Index: prevoteR1.ValidatorIndex,
+	}))
+	for range 3 {
+		suite.clock.Advance(voteResendInterval)
+		for range 10 {
+			suite.gossiper.GossipVote(ctx, rsR1, ps.GetRoundState())
+		}
+	}
+	suite.Require().True(ps.PRS.ProposalPOL.GetIndex(int(prevoteR0.ValidatorIndex)),
+		"stale round-0 bookkeeping must not clear the peer's POL bits for round 0")
+}

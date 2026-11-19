@@ -412,9 +412,11 @@ create-empty-blocks-interval = "0s"
 # (a fixed 500ms internal throttle): raising this above 500ms disables that
 # throttle. peer-query-maj23-sleep-duration also sets how often the node
 # re-announces its round state to each peer (recovery latency after a lost
-# announcement). Either duration under 1ms is run at 1ms, which only prevents a
-# busy loop: well below the defaults, peers drop this node's state updates over
-# their per-peer allowance.
+# announcement) and paces the redelivery of votes a peer has not acknowledged:
+# one interval after a vote went out, then doubling up to 8 intervals. Raising
+# it slows stall recovery. Either duration under 1ms is run at 1ms, which only
+# prevents a busy loop: well below the defaults, peers drop this node's state
+# updates over their per-peer allowance.
 peer-gossip-sleep-duration = "100ms"
 peer-query-maj23-sleep-duration = "2s"
 
