@@ -26,8 +26,7 @@ type wsEvents struct {
 }
 
 type wsSubscription struct {
-	res   chan coretypes.ResultEvent
-	query string
+	res chan coretypes.ResultEvent
 }
 
 var _ rpcclient.SubscriptionClient = (*wsEvents)(nil)
@@ -92,7 +91,7 @@ func (w *wsEvents) Subscribe(ctx context.Context, _subscriber, query string,
 	defer w.mtx.Unlock()
 	// subscriber param is ignored because Tendermint will override it with
 	// remote IP anyway.
-	w.subscriptions[query] = &wsSubscription{res: outc, query: query}
+	w.subscriptions[query] = &wsSubscription{res: outc}
 
 	return outc, nil
 }

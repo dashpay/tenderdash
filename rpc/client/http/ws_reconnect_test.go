@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/config"
@@ -101,7 +102,7 @@ func TestReconnectResubscribesOnlyQueries(t *testing.T) {
 	forwarded := make(chan struct{})
 	t.Cleanup(func() {
 		cancel()
-		joinWithin(t, "client", func() { require.NoError(t, client.Stop()) })
+		joinWithin(t, "client", func() { assert.NoError(t, client.Stop()) })
 		joinWithin(t, "event forwarder", func() { <-forwarded })
 	})
 	go func() {
