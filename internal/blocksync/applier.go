@@ -135,6 +135,9 @@ func (e *blockApplier) apply(
 	blockID := block.BlockID(blockParts)
 	partSetTime := decodeTime + e.observeSince("partset", start)
 
+	// Before consensus version 2 a commit carries no beacon; see WithoutRandomBeacon.
+	commit = commit.WithoutRandomBeacon()
+
 	start = time.Now()
 	verified, err := e.verify(ctx, blockID, block, commit)
 	if err != nil {

@@ -5,7 +5,8 @@ order: 6
 # Commit handling
 
 A *commit* for height `h` is `(Height, Round, BlockID, QuorumHash,
-ThresholdBlockSignature, ThresholdVoteExtensions)` (`types.Commit`). A node
+ThresholdBlockSignature, ThresholdVoteExtensions, Beacon, AppHash)` (`types.Commit`); Beacon and
+AppHash are set from consensus version 2 and are not covered by the signature. A node
 obtains one in two ways:
 
 1. **locally**, from its own precommit vote set once the threshold signature

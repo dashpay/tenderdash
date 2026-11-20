@@ -167,6 +167,11 @@ func (app *proxyClient) FinalizeBlock(ctx context.Context, req *types.RequestFin
 	return app.client.FinalizeBlock(ctx, req)
 }
 
+func (app *proxyClient) ApplyBlockRandomness(ctx context.Context, req *types.RequestApplyBlockRandomness) (r *types.ResponseApplyBlockRandomness, err error) {
+	defer addTimeSample(app.metrics.MethodTiming.With("method", "apply_block_randomness", "type", "sync"))(&err)
+	return app.client.ApplyBlockRandomness(ctx, req)
+}
+
 func (app *proxyClient) Flush(ctx context.Context) (err error) {
 	defer addTimeSample(app.metrics.MethodTiming.With("method", "flush", "type", "sync"))(&err)
 	return app.client.Flush(ctx)

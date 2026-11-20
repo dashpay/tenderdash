@@ -761,3 +761,25 @@ func TestHasVoteMessageValidateBasic(t *testing.T) {
 		})
 	}
 }
+
+// TestCommitMessageRefusesMalformedRandomness checks that a commit gossiped with a beacon or app hash
+// of the wrong size is refused when the message is decoded: the commit's signature covers neither, so
+// a relaying peer could otherwise attach any bytes to a valid commit.
+func TestCommitMessageRefusesMalformedRandomness(t *testing.T) {
+	commit := &types.Commit{
+		Height:                  2,
+		BlockID:                 types.BlockID{Hash: crypto.CRandBytes(crypto.HashSize), PartSetHeader: types.PartSetHeader{Total: 1, Hash: crypto.CRandBytes(crypto.HashSize)}, StateID: crypto.CRandBytes(crypto.HashSize)},
+		QuorumHash:              crypto.RandQuorumHash(),
+		ThresholdBlockSignature: crypto.CRandBytes(types.SignatureSize),
+	}
+	decode := func(beacon, appHash []byte) error {
+		pb := commit.ToProto()
+		pb.Beacon = beacon
+		pb.AppHash = appHash
+		_, err := MsgFromProto(&tmcons.Commit{Commit: pb})
+		return err
+	}
+	require.NoError(t, decode(nil, nil))
+	require.NoError(t, decode(crypto.CRandBytes(types.SignatureSize), crypto.CRandBytes(crypto.DefaultAppHashSize)))
+	require.ErrorIs(t, decode(make([]byte, 900<<10), []byte("junk")), types.ErrInvalidCommitRandomness)
+}

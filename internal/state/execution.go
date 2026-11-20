@@ -234,6 +234,11 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	maxBytes := state.ConsensusParams.Block.MaxBytes
 	maxGas := state.ConsensusParams.Block.MaxGas
 
+	// The commit may come from a peer, which can set its beacon and app hash: they are empty before
+	// consensus version 2, and releases before them drop them when they decode a block, so block sync
+	// on those releases would rebuild a block that carried them into parts the next commit does not sign.
+	commit = commit.WithoutRandomBeacon()
+
 	evidence, evSize := blockExec.evpool.PendingEvidence(state.ConsensusParams.Evidence.MaxBytes)
 
 	// Fetch a limited amount of valid txs
@@ -801,18 +806,16 @@ func (blockExec *BlockExecutor) flushMempool(
 	return err
 }
 
+// buildLastCommitInfo returns the CommitInfo of block.LastCommit for the application, without its
+// beacon and app hash: they are empty before consensus version 2, and neither the block hash nor the
+// commit's signature covers them, so the proposer could have set any.
 func buildLastCommitInfo(block *types.Block, initialHeight int64) abci.CommitInfo {
 	if block.Height == initialHeight {
 		// there is no last commit for the initial height.
 		// return an empty value.
 		return abci.CommitInfo{}
 	}
-	return abci.CommitInfo{
-		Round:                   block.LastCommit.Round,
-		QuorumHash:              block.LastCommit.QuorumHash,
-		BlockSignature:          block.LastCommit.ThresholdBlockSignature,
-		ThresholdVoteExtensions: block.LastCommit.ThresholdVoteExtensions,
-	}
+	return block.LastCommit.WithoutRandomBeacon().ToCommitInfo()
 }
 
 // Update returns a copy of state with the fields set using the arguments passed in.
