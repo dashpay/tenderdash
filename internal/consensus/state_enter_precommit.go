@@ -106,9 +106,12 @@ func (c *EnterPrecommitAction) Execute(ctx context.Context, stateEvent StateEven
 		return nil
 	}
 
-	// If the proposal time does not match the block time, precommit nil.
+	// If the proposal time does not match the block time, precommit nil. The
+	// polka block is still processed, before our precommit can move the round
+	// on, so that precommits for it verify.
 	if !stateData.Proposal.Timestamp.Equal(stateData.ProposalBlock.Header.Time) {
 		logger.Error("precommit step: proposal timestamp not equal; precommitting nil")
+		c.blockExec.processPolkaBlock(ctx, &stateData.RoundState)
 		c.voteSigner.signAddVote(ctx, stateData, tmproto.PrecommitType, types.BlockID{})
 		return nil
 	}

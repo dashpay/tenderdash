@@ -101,7 +101,7 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo], prop
 			partProofBudget: newBlockPartProofBudget(),
 			candidates:      candidates,
 		},
-		ProposalCompletedType: &ProposalCompletedAction{logger: cs.logger},
+		ProposalCompletedType: &ProposalCompletedAction{logger: cs.logger, blockExec: cs.blockExecutor},
 		AddVoteType:           newAddVoteAction(cs, ctrl, statsQueue),
 		EnterCommitType: &EnterCommitAction{
 			logger:          cs.logger,
