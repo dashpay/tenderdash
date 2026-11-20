@@ -34,6 +34,7 @@ func TestRollback(t *testing.T) {
 	nextState.Version.Consensus.App = 11
 	nextState.LastBlockID = factory.MakeBlockID()
 	nextState.LastAppHash = factory.RandomHash()
+	nextState.LastResultsHash = factory.RandomHash()
 	nextState.LastValidators = initialState.Validators
 	nextState.ConsensusParams = *newParams
 	nextState.LastHeightConsensusParamsChanged = nextHeight + 1
@@ -42,11 +43,12 @@ func TestRollback(t *testing.T) {
 	// update the state
 	require.NoError(t, stateStore.Save(nextState))
 
+	// With same-block execution, each header carries the app and results hashes after its own block.
 	block := &types.BlockMeta{
 		BlockID: initialState.LastBlockID,
 		Header: types.Header{
 			Height:             initialState.LastBlockHeight,
-			AppHash:            factory.RandomHash(),
+			AppHash:            initialState.LastAppHash,
 			LastBlockID:        factory.MakeBlockID(),
 			ResultsHash:        initialState.LastResultsHash,
 			ProposerProTxHash:  initialState.Validators.Validators[0].ProTxHash,
@@ -55,10 +57,10 @@ func TestRollback(t *testing.T) {
 		},
 	}
 	nextBlock := &types.BlockMeta{
-		BlockID: initialState.LastBlockID,
+		BlockID: nextState.LastBlockID,
 		Header: types.Header{
 			Height:            nextState.LastBlockHeight,
-			AppHash:           initialState.LastAppHash,
+			AppHash:           nextState.LastAppHash,
 			LastBlockID:       block.BlockID,
 			ResultsHash:       nextState.LastResultsHash,
 			ProposerProTxHash: nextState.Validators.Validators[1].ProTxHash,
@@ -66,7 +68,8 @@ func TestRollback(t *testing.T) {
 		},
 	}
 	blockStore.On("LoadBlockMeta", height).Return(block)
-	blockStore.On("LoadBlockMeta", nextHeight).Return(nextBlock)
+	// The rolled back state needs nothing from the block being rolled back.
+	blockStore.On("LoadBlockMeta", nextHeight).Return(nextBlock).Maybe()
 	blockStore.On("Height").Return(nextHeight)
 	blockStore.On("Base").Return(height)
 
