@@ -174,7 +174,7 @@ func addVoteUpdateValidBlockMw(ep *EventPublisher, blockExec *blockExecutor) Add
 			stateData.retargetTo(blockID, retargetOnPolka)
 			// The round votes no more: a polka block already held is processed
 			// so that precommits for it verify (see processPolkaBlock).
-			if stateData.Step == cstypes.RoundStepPrecommit || stateData.Step == cstypes.RoundStepPrecommitWait {
+			if stateData.Step == cstypes.RoundStepPrecommit {
 				blockExec.processPolkaBlock(ctx, &stateData.RoundState)
 			}
 			err = stateData.Save()
