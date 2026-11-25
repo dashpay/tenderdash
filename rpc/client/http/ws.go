@@ -334,10 +334,7 @@ func (w *wsEvents) unsubscribeOrphanQuery(ctx context.Context, query string) err
 	defer w.unlockChanges()
 	w.mtx.RLock()
 	used := false
-	for q, sub := range w.subscriptions {
-		if len(sub.subscribers) == 0 {
-			continue
-		}
+	for q := range w.subscriptions {
 		if owned, err := canonicalQuery(q); err == nil && owned == canonical {
 			used = true
 			break
