@@ -147,9 +147,11 @@ func (c *blockExecutor) ensureOwnRound(ctx context.Context, rs *cstypes.RoundSta
 // when it is the round's non-nil polka block and is not processed yet, whatever
 // this node votes: it may have voted before the block or its polka arrived, may
 // lack the round's proposal, or may precommit nil over a proposal timestamp the
-// block does not match. An application keeping one execution context per
-// height, like Drive, verifies an extension only for the block and round it
-// processed last, and a precommit whose extension is rejected is not stored:
+// block does not match. An application can verify an extension only for a block
+// it processed: Drive checks one against the block it accepted in that round or,
+// failing that, the same block accepted in another round of the height, and
+// rejects it when it accepted the block in neither; other applications may
+// require the same round. A precommit whose extension is rejected is not stored:
 // with the block unprocessed, the precommits of the validators that had it
 // never count towards the +2/3 of any kind that start the precommit wait, and
 // this node, with no timeout to fall back on, never leaves the round.
