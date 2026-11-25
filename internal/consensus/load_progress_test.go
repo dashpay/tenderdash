@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	tmpubsub "github.com/dashpay/tenderdash/internal/pubsub"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -52,6 +52,9 @@ func TestLoadHeightProgressUnderSustainedFlood(t *testing.T) {
 	other := h.vss[1]
 
 	stateData := h.stateData()
+	timeouts := types.DefaultTimeoutParams()
+	require.Equal(t, timeouts.ProposeTimeout(0), stateData.proposeTimeout(0))
+	require.Equal(t, timeouts.VoteTimeout(0), stateData.voteTimeout(0))
 	height, round := stateData.Height, stateData.Round
 	chainID := stateData.state.ChainID
 
@@ -68,33 +71,64 @@ func TestLoadHeightProgressUnderSustainedFlood(t *testing.T) {
 	drainVerificationBudget(h.inner)
 
 	started := time.Now()
+	deadline := started.Add(heightProgressDeadline)
+	nextMessage := func(ch <-chan tmpubsub.Message) tmpubsub.Message {
+		t.Helper()
+		return ensureMessageBeforeTimeout(t, ch, time.Until(deadline))
+	}
+	checkRound := func(height int64, round int32) {
+		t.Helper()
+		event, ok := nextMessage(newRoundCh).Data().(types.EventDataNewRound)
+		require.True(t, ok)
+		require.Equal(t, height, event.Height)
+		require.Equal(t, round, event.Round)
+	}
+	checkVote := func(voteType tmproto.SignedMsgType, blockID *types.BlockID) *types.Vote {
+		t.Helper()
+		event, ok := nextMessage(voteCh).Data().(types.EventDataVote)
+		require.True(t, ok)
+		vote := event.Vote
+		require.Equal(t, height, vote.Height)
+		require.Equal(t, round, vote.Round)
+		require.Equal(t, voteType, vote.Type)
+		if blockID != nil {
+			require.Equal(t, *blockID, vote.BlockID)
+		}
+		return vote
+	}
 	startTestRound(ctx, h.cs, height, round)
-	ensureNewRound(t, newRoundCh, height, round)
-	ensurePrevote(t, voteCh, height, round)
+	checkRound(height, round)
+	ownPrevote := checkVote(tmproto.PrevoteType, nil)
+	require.Equal(t, h.vss[0].Index, ownPrevote.ValidatorIndex)
 
 	rs := h.cs.GetRoundState()
 	blockID := rs.BlockID()
 	require.False(t, blockID.IsNil(), "the node did not get a block proposed under the flood")
+	require.Equal(t, blockID, ownPrevote.BlockID, "the node did not prevote for its proposed block")
 
-	// Establish contention before honest votes; let the height finish on failure.
-	assert.Eventually(t, func() bool { return h.budgetWaits.count() > 0 }, ensureTimeout, time.Millisecond,
+	// Establish contention before honest votes.
+	require.Eventually(t, func() bool { return h.budgetWaits.count() > 0 }, time.Until(deadline), time.Millisecond,
 		"the verification budget was never contended, so the flood did not load the node")
 
 	// The other validator's prevote, arriving over its own lane like any peer's.
 	honestArrived := time.Now()
 	h.sendFromPeer(ctx, t, honestPeer, signVotes(ctx, t, tmproto.PrevoteType, chainID, blockID,
 		stateData.AppHash, stateData.Validators.QuorumType, stateData.Validators.QuorumHash, other)...)
-	ensurePrevote(t, voteCh, height, round)
+	peerPrevote := checkVote(tmproto.PrevoteType, &blockID)
+	require.Equal(t, other.Index, peerPrevote.ValidatorIndex)
 	prevoteLatency := time.Since(honestArrived)
 
-	ensurePrecommit(t, voteCh, height, round)
+	ownPrecommit := checkVote(tmproto.PrecommitType, &blockID)
+	require.Equal(t, h.vss[0].Index, ownPrecommit.ValidatorIndex)
 
 	// And its precommit, the expensive message of the round.
 	h.sendFromPeer(ctx, t, honestPeer, signVotes(ctx, t, tmproto.PrecommitType, chainID, blockID,
 		stateData.AppHash, stateData.Validators.QuorumType, stateData.Validators.QuorumHash, other)...)
 
-	ensureNewBlock(t, newBlockCh, height)
-	ensureNewRound(t, newRoundCh, height+1, 0)
+	blockEvent, ok := nextMessage(newBlockCh).Data().(types.EventDataNewBlock)
+	require.True(t, ok)
+	require.Equal(t, height, blockEvent.Block.Height)
+	checkRound(height+1, 0)
 	elapsed := time.Since(started)
 
 	reportf(t, "height %d finished in %s under %d/%d flooded lanes; honest prevote served in %s",

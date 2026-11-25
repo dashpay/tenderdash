@@ -188,6 +188,13 @@ func newFloodHarness(ctx context.Context, t *testing.T, args floodHarnessArgs) *
 			StateMetrics(m),
 		},
 	})
+	if args.wallClock {
+		timeouts := types.DefaultTimeoutParams()
+		h.cs.config.UnsafeProposeTimeoutOverride = timeouts.Propose
+		h.cs.config.UnsafeProposeTimeoutDeltaOverride = timeouts.ProposeDelta
+		h.cs.config.UnsafeVoteTimeoutOverride = timeouts.Vote
+		h.cs.config.UnsafeVoteTimeoutDeltaOverride = timeouts.VoteDelta
+	}
 	h.cs.wal = h.wal
 	return h
 }
