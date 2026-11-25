@@ -2,8 +2,8 @@
 # (scripts/govulncheck-gate.py). One entry per line:
 # <OSV ID> <module>@<version> <justification>
 # An entry covers only that module version; another affected version fails.
-# For a module replaced in go.mod, name the replacement (path and version), as
-# govulncheck reports it; the Go standard library is stdlib@<Go version>.
+# For a module replaced in go.mod, use the replacement path and version from
+# the finding. For the standard library, use the finding's version: stdlib@v1.27.4.
 # Remove an entry as soon as a fixed release can be adopted; the gate prints a
 # notice when an allowed vulnerability is no longer called.
 

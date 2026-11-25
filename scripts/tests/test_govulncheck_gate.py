@@ -138,6 +138,18 @@ class GateTests(unittest.TestCase):
         self.assertIn("now called at example.com/dep@v1.0.0", out)
         self.assertNotIn("no longer called", out)
 
+    def test_unused_entry_beside_allowed_version_asks_to_remove(self):
+        self.allowlist.write_text(
+            "GO-2026-0001 example.com/dep@v1.2.3 assessed\n"
+            "GO-2026-0001 example.com/dep@v1.0.0 assessed too\n"
+        )
+        code, out = self.gate(
+            stream(CONFIG, SBOM, osv("GO-2026-0001"), called("GO-2026-0001"))
+        )
+        self.assertEqual(code, 0)
+        self.assertIn("example.com/dep@v1.0.0 is no longer called", out)
+        self.assertNotIn("re-assess", out)
+
     def test_frame_without_version_is_blocked(self):
         code, out = self.gate(
             stream(

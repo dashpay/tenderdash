@@ -122,7 +122,7 @@ def gate(text, allowlist_path):
             f"::warning::{entry_name(key)} is called but allowed by {allowlist_path}: {allowed[key]}"
         )
     for key in sorted(set(allowed) - set(called)):
-        moved = sorted(f"{c[1]}@{c[2]}" for c in called if c[0] == key[0])
+        moved = sorted(f"{c[1]}@{c[2]}" for c in blocked if c[0] == key[0])
         if moved:
             print(
                 f"::notice::{entry_name(key)} is not called, but {key[0]} is now called at "
