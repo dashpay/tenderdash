@@ -321,6 +321,8 @@ func (ps *PartSet) GetPart(index int) *Part {
 }
 
 func (ps *PartSet) IsComplete() bool {
+	ps.mtx.Lock()
+	defer ps.mtx.Unlock()
 	return ps.count == ps.total
 }
 
