@@ -1,7 +1,8 @@
 ---
 name: Vulnerability Scan
 # Runs govulncheck to detect known vulnerabilities in Go dependencies.
-# The scan is GATING: the job fails if any vulnerability is found.
+# The scan is GATING: the job fails if the code calls a vulnerable symbol
+# that .github/govulncheck-allowlist.txt does not justify.
 on:
   pull_request:
   push:
