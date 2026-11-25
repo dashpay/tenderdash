@@ -337,7 +337,7 @@ func (w *wsEvents) eventListener(ctx context.Context, done chan<- struct{}) {
 
 			if resp.Error != nil {
 				if isErrHarmless(resp.Error) {
-					w.Logger.Debug("WS error", "err", resp.Error.Error())
+					w.Logger.Debug("ignoring harmless WS subscription error", "err", resp.Error.Error())
 					continue
 				}
 				w.Logger.Error("WS error", "err", resp.Error.Error())

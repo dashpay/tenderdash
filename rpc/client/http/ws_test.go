@@ -1,6 +1,7 @@
 package http
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/internal/pubsub"
+	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/rpc/coretypes"
 	rpctypes "github.com/dashpay/tenderdash/rpc/jsonrpc/types"
 	"github.com/dashpay/tenderdash/types"
@@ -299,9 +301,9 @@ func TestUnsubscribeAllReleasesBlockedDelivery(t *testing.T) {
 	requireEvent(t, other, "other")
 }
 
-// A clear landing during a resubscribe must not wait for it, and stops it restoring
-// more than the one query already being sent. That one stays subscribed upstream,
-// but only until the next reconnect, and its events are dropped.
+// UnsubscribeAll returns without waiting for the resubscribe's in-flight send.
+// The resubscribe skips the other forgotten queries and asynchronously unsubscribes
+// the in-flight query after its send completes. Events for forgotten queries are dropped.
 func TestUnsubscribeAllDuringResubscribe(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -395,6 +397,9 @@ func TestSubscriptionNotFoundDoesNotResubscribe(t *testing.T) {
 	t.Cleanup(srv.Close)
 	w, err := newWsEvents(srv.URL)
 	require.NoError(t, err)
+	var logs bytes.Buffer
+	w.Logger, err = log.NewLogger(log.LogLevelDebug, &logs)
+	require.NoError(t, err)
 	w.resubscribeDelay = time.Hour // a resubscribe would hold the event loop
 	require.NoError(t, w.Start(ctx))
 	t.Cleanup(func() { requireStopReturns(t, w) })
@@ -404,6 +409,9 @@ func TestSubscriptionNotFoundDoesNotResubscribe(t *testing.T) {
 	require.NoError(t, w.Unsubscribe(ctx, "", "a"))
 	// The upstream handles requests in order, so this event follows the error.
 	requireEvent(t, upstream.subscribe(ctx, t, w, "q"), "q")
+	cancel()
+	requireStopReturns(t, w)
+	require.Contains(t, logs.String(), `"message":"ignoring harmless WS subscription error"`)
 }
 
 // Every UnsubscribeAll gets a fresh signal: repeating it must not panic, and a

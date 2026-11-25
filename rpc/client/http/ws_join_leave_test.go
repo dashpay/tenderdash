@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -199,4 +201,53 @@ func TestResubscribeOfForgottenQueryKeepsRejoin(t *testing.T) {
 	require.NoError(t, <-joined)
 	reqs, s := settleResubscribe(ctx, t, w, upstream, resubscribed)
 	require.True(t, s["q"], "the rejoined query was unsubscribed upstream; requests on session: %v", reqs)
+}
+
+func TestStopWaitsForOrphanCleanup(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w := startWsEvents(ctx, t, &orderedUpstream{})
+	// Hold the orphan's subscription check across cancellation.
+	w.mtx.Lock()
+	unlock := sync.OnceFunc(w.mtx.Unlock)
+	defer unlock()
+	w.orphans.Add(1)
+	go w.unsubscribeOrphan(w.lifetime, "q")
+	require.Eventually(t, func() bool { return len(w.changes) == 1 }, 5*time.Second, time.Millisecond)
+
+	cancel()
+	stopped := make(chan struct{})
+	var stopErr error
+	go func() {
+		defer close(stopped)
+		stopErr = w.Stop()
+	}()
+	require.Eventually(t, func() bool {
+		select {
+		case <-stopped:
+			return true
+		default:
+		}
+		stacks := make([]byte, 1<<24)
+		for _, stack := range strings.Split(string(stacks[:runtime.Stack(stacks, true)]), "\n\n") {
+			if strings.Contains(stack, "(*wsEvents).Stop(") && strings.Contains(stack, "(*WaitGroup).Wait(") &&
+				!strings.Contains(stack, "(*WSClient).Stop(") {
+				return true
+			}
+		}
+		return false
+	}, 5*time.Second, time.Millisecond)
+	select {
+	case <-stopped:
+		t.Fatal("Stop returned while orphan cleanup was still blocked")
+	default:
+	}
+
+	unlock()
+	select {
+	case <-stopped:
+		require.NoError(t, stopErr)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop did not return after orphan cleanup was released")
+	}
 }
