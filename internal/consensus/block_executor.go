@@ -144,14 +144,15 @@ func (c *blockExecutor) ensureOwnRound(ctx context.Context, rs *cstypes.RoundSta
 }
 
 // processPolkaBlock has the application process rs.ProposalBlock for rs.Round
-// when it is the round's non-nil polka block and is not processed yet: the block
-// arrived, or its polka formed, too late for the round to vote on it. An
-// application keeping one execution context per height, like Drive, verifies an
-// extension only for the block and round it processed last, and a precommit
-// whose extension is rejected is not stored: with the block unprocessed, the
-// precommits of the validators that had it never count towards the +2/3 of any
-// kind that start the precommit wait, and this node, with no timeout to fall
-// back on, never leaves the round.
+// when it is the round's non-nil polka block and is not processed yet, whatever
+// this node votes: it may have voted before the block or its polka arrived, may
+// lack the round's proposal, or may precommit nil over a proposal timestamp the
+// block does not match. An application keeping one execution context per
+// height, like Drive, verifies an extension only for the block and round it
+// processed last, and a precommit whose extension is rejected is not stored:
+// with the block unprocessed, the precommits of the validators that had it
+// never count towards the +2/3 of any kind that start the precommit wait, and
+// this node, with no timeout to fall back on, never leaves the round.
 //
 // The block is processed, not voted on. A failure is logged, not returned; the
 // round's own path processes the block again should it vote on it, and panics
@@ -163,12 +164,12 @@ func (c *blockExecutor) processPolkaBlock(ctx context.Context, rs *cstypes.Round
 		return
 	}
 	if err := c.ensureProcess(ctx, rs, rs.Round); err != nil {
-		c.logger.Error("cannot process the round's polka block that arrived too late to vote on; precommits for it will be rejected",
+		c.logger.Error("cannot process the round's polka block; precommits for it will be rejected",
 			"height", rs.Height, "round", rs.Round, "hash", blockID.Hash, "error", err)
 		return
 	}
-	c.logger.Debug("processed the round's polka block without voting on it so that precommits for it verify",
-		"height", rs.Height, "round", rs.Round, "step", rs.Step, "hash", blockID.Hash)
+	c.logger.Debug("processed the round's polka block so that precommits for it verify",
+		"height", rs.Height, "round", rs.Round, "hash", blockID.Hash)
 }
 
 // refuseUnprocessedCommit returns an error wrapping
