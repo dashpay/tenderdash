@@ -11,7 +11,14 @@ from contextlib import redirect_stdout
 
 SCRIPT = Path(__file__).resolve().parents[1] / "govulncheck-gate.py"
 
-CONFIG = {"config": {"protocol_version": "v1.0.0", "scan_level": "symbol"}}
+CONFIG = {
+    "config": {
+        "protocol_version": "v1.0.0",
+        "scan_mode": "source",
+        "scan_level": "symbol",
+    }
+}
+SBOM = {"SBOM": {"roots": ["github.com/dashpay/tenderdash/rpc"]}}
 
 
 def load_gate():
@@ -28,7 +35,7 @@ def osv(osv_id):
     return {"osv": {"id": osv_id, "summary": f"summary of {osv_id}"}}
 
 
-def called(osv_id):
+def called(osv_id, version="v1.2.3"):
     return {
         "finding": {
             "osv": osv_id,
@@ -36,7 +43,7 @@ def called(osv_id):
             "trace": [
                 {
                     "module": "example.com/dep",
-                    "version": "v1.2.3",
+                    "version": version,
                     "package": "example.com/dep",
                     "function": "Vulnerable",
                 },
@@ -76,7 +83,7 @@ class GateTests(unittest.TestCase):
         self.dir = tempfile.TemporaryDirectory()
         self.allowlist = Path(self.dir.name) / "allowlist.txt"
         self.allowlist.write_text(
-            "# comment\n\nGO-2026-0001\tjustified because reasons\n"
+            "# comment\n\nGO-2026-0001\texample.com/dep@v1.2.3\tjustified because reasons\n"
         )
 
     def tearDown(self):
@@ -90,7 +97,7 @@ class GateTests(unittest.TestCase):
 
     def test_called_vulnerability_not_allowed_fails(self):
         code, out = self.gate(
-            stream(CONFIG, osv("GO-2026-0002"), called("GO-2026-0002"))
+            stream(CONFIG, SBOM, osv("GO-2026-0002"), called("GO-2026-0002"))
         )
         self.assertEqual(code, 1)
         self.assertIn("GO-2026-0002", out)
@@ -98,20 +105,27 @@ class GateTests(unittest.TestCase):
 
     def test_called_vulnerability_allowed_passes_with_warning(self):
         code, out = self.gate(
-            stream(CONFIG, osv("GO-2026-0001"), called("GO-2026-0001"))
+            stream(CONFIG, SBOM, osv("GO-2026-0001"), called("GO-2026-0001"))
         )
         self.assertEqual(code, 0)
-        self.assertIn("::warning::GO-2026-0001", out)
+        self.assertIn("::warning::GO-2026-0001 example.com/dep@v1.2.3", out)
+
+    def test_allowed_id_at_another_version_fails(self):
+        code, out = self.gate(
+            stream(CONFIG, SBOM, osv("GO-2026-0001"), called("GO-2026-0001", "v1.0.0"))
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("GO-2026-0001 example.com/dep@v1.0.0", out)
 
     def test_imported_but_not_called_passes_and_is_counted(self):
         code, out = self.gate(
-            stream(CONFIG, osv("GO-2026-0003"), imported_only("GO-2026-0003"))
+            stream(CONFIG, SBOM, osv("GO-2026-0003"), imported_only("GO-2026-0003"))
         )
         self.assertEqual(code, 0)
         self.assertIn("1 vulnerabilities in imported or required code", out)
 
     def test_stale_allowlist_entry_is_reported(self):
-        code, out = self.gate(stream(CONFIG))
+        code, out = self.gate(stream(CONFIG, SBOM))
         self.assertEqual(code, 0)
         self.assertIn("GO-2026-0001", out)
         self.assertIn("no longer called", out)
@@ -121,34 +135,54 @@ class GateTests(unittest.TestCase):
         self.assertEqual(code, 2)
 
     def test_non_symbol_scan_level_fails(self):
-        config = {"config": {"protocol_version": "v1.0.0", "scan_level": "package"}}
-        code, out = self.gate(stream(config))
+        config = {"config": {**CONFIG["config"], "scan_level": "package"}}
+        code, out = self.gate(stream(config, SBOM))
         self.assertEqual(code, 2)
         self.assertIn("scan_level", out)
 
+    def test_query_mode_fails(self):
+        # Query mode reports scan_level symbol but scans no code.
+        config = {"config": {**CONFIG["config"], "scan_mode": "query"}}
+        code, out = self.gate(stream(config, osv("GO-2026-0002")))
+        self.assertEqual(code, 2)
+        self.assertIn("scan_mode", out)
+
+    def test_scan_without_roots_fails(self):
+        code, out = self.gate(stream(CONFIG))
+        self.assertEqual(code, 2)
+        self.assertIn("SBOM roots", out)
+
     def test_finding_without_trace_fails(self):
         finding = {"finding": {"osv": "GO-2026-0004"}}
-        code, _ = self.gate(stream(CONFIG, finding))
+        code, _ = self.gate(stream(CONFIG, SBOM, finding))
         self.assertEqual(code, 2)
 
     def test_malformed_json_fails(self):
         with self.assertRaises(ValueError):
-            self.gate(stream(CONFIG) + "\n{not json")
+            self.gate(stream(CONFIG, SBOM) + "\n{not json")
 
     def test_entry_without_justification_is_rejected(self):
-        self.allowlist.write_text("GO-2026-0001\n")
+        self.allowlist.write_text("GO-2026-0001 example.com/dep@v1.2.3\n")
         with self.assertRaises(SystemExit):
-            self.gate(stream(CONFIG))
+            self.gate(stream(CONFIG, SBOM))
+
+    def test_entry_without_module_version_is_rejected(self):
+        self.allowlist.write_text("GO-2026-0001 justified because reasons\n")
+        with self.assertRaises(SystemExit):
+            self.gate(stream(CONFIG, SBOM))
 
     def test_duplicate_entry_is_rejected(self):
-        self.allowlist.write_text("GO-2026-0001 one\nGO-2026-0001 two\n")
+        self.allowlist.write_text(
+            "GO-2026-0001 example.com/dep@v1.2.3 one\n"
+            "GO-2026-0001 example.com/dep@v1.2.3 two\n"
+        )
         with self.assertRaises(SystemExit):
-            self.gate(stream(CONFIG))
+            self.gate(stream(CONFIG, SBOM))
 
     def test_malformed_id_is_rejected(self):
         self.allowlist.write_text("GO-2026-0001,reason\n")
         with self.assertRaises(SystemExit):
-            self.gate(stream(CONFIG))
+            self.gate(stream(CONFIG, SBOM))
 
 
 class MainTests(unittest.TestCase):
@@ -173,7 +207,7 @@ class MainTests(unittest.TestCase):
         self.assertNotEqual(code, 0)
 
     def test_clean_scan_passes(self):
-        script = f"print({json.dumps(json.dumps(CONFIG))})"
+        script = f"print({json.dumps(stream(CONFIG, SBOM))})"
         code, out = self.run_main(sys.executable, "-c", script)
         self.assertEqual(code, 0)
         self.assertIn("No called vulnerabilities", out)

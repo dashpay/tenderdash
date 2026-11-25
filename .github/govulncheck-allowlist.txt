@@ -1,6 +1,8 @@
 # Vulnerabilities that `make vulncheck` reports without failing
-# (scripts/govulncheck-gate.py). One entry per line: <OSV ID> <justification>.
+# (scripts/govulncheck-gate.py). One entry per line:
+# <OSV ID> <module>@<version> <justification>
+# An entry covers only that module version; another affected version fails.
 # Remove an entry as soon as a fixed release can be adopted; the gate prints a
 # notice when an allowed vulnerability is no longer called.
 
-GO-2026-6278 gorilla/websocket v1.5.3 regressed from crypto/rand to math/rand for client frame mask keys (v1.5.1 and v1.5.2 are unaffected, but cometbft, oasis-core and gosec require v1.5.3, so no downgrade is possible). The mask carries no confidentiality (the key is sent in the frame); it only protects WebSocket-unaware intercepting proxies from cache poisoning by attacker-chosen client payloads, and since Go 1.22 top-level math/rand draws from the runtime's ChaCha8 generator. Only Tenderdash's WebSocket client (rpc/jsonrpc/client) masks; the node's WebSocket server does not. The fix exists only as an untagged master pseudo-version (v1.5.4-0.20240701034025-d67f41855da4). Revisit when gorilla/websocket tags a fixed release.
+GO-2026-6278 github.com/gorilla/websocket@v1.5.3 gorilla/websocket v1.5.3 regressed from crypto/rand to math/rand for client frame mask keys (v1.5.1 and v1.5.2 are unaffected, but cometbft, oasis-core and gosec require v1.5.3, so no downgrade is possible). The mask carries no confidentiality (the key is sent in the frame); it only protects WebSocket-unaware intercepting proxies from cache poisoning by attacker-chosen client payloads, and since Go 1.22 top-level math/rand draws from the runtime's ChaCha8 generator by default (GODEBUG=randautoseed=0, or randseednop=0 plus an explicit rand.Seed call, selects the legacy generator; Tenderdash sets neither). Only Tenderdash's WebSocket client (rpc/jsonrpc/client) masks; the node's WebSocket server does not. The fix exists only as an untagged master pseudo-version (v1.5.4-0.20240701034025-d67f41855da4). Revisit when gorilla/websocket tags a fixed release.
