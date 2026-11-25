@@ -54,6 +54,7 @@ func TestSubscribeWSUnsubscribesRejectedAdmission(t *testing.T) {
 			} else {
 				require.EqualError(t, err, "websocket session is stopping")
 			}
+			requireTracked(t, client, 0)
 		})
 	}
 }
