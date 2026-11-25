@@ -42,7 +42,7 @@ jobs:
             .mockery.yaml
             .github/workflows/check-generated.yml
 
-      - uses: actions/setup-go@v7.0.0
+      - uses: actions/setup-go@v7.1.0
         if: env.GIT_DIFF
         with:
           go-version: "1.27.4"
@@ -85,7 +85,7 @@ jobs:
             buf.lock
             .github/workflows/check-generated.yml
 
-      - uses: actions/setup-go@v7.0.0
+      - uses: actions/setup-go@v7.1.0
         if: env.GIT_DIFF
         with:
           go-version: "1.27.4"
