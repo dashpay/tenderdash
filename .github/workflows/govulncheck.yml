@@ -40,5 +40,8 @@ jobs:
       - name: Install libpcap
         run: sudo apt-get update && sudo apt-get install --yes libpcap-dev
 
+      - name: Check the allowlist gate
+        run: python3 -B -m unittest discover -s scripts/tests -p test_govulncheck_gate.py
+
       - name: Run govulncheck
         run: make vulncheck

@@ -320,7 +320,7 @@ vet:
 
 vulncheck:
 	@echo "--> Running vulnerability scanner"
-	python3 scripts/govulncheck_gate.py .github/govulncheck-allowlist.txt -- \
+	python3 scripts/govulncheck-gate.py .github/govulncheck-allowlist.txt -- \
 		go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 -format json ./...
 .PHONY: vulncheck
 

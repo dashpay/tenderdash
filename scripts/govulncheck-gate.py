@@ -5,13 +5,16 @@ govulncheck has no way to suppress a finding, so this runs it with
 `-format json` (which always exits 0) and fails only for vulnerabilities
 the code calls (symbol-level findings) that the allowlist does not list.
 
-Usage: govulncheck_gate.py ALLOWLIST -- COMMAND [ARGS...]
+Usage: govulncheck-gate.py ALLOWLIST -- COMMAND [ARGS...]
 """
 
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
+
+OSV_ID = re.compile(r"GO-\d{4}-\d+")
 
 
 def parse_stream(text):
@@ -33,10 +36,15 @@ def load_allowlist(path):
         line = line.strip()
         if not line or line.startswith("#"):
             continue
-        osv_id, _, reason = line.partition(" ")
-        if not reason.strip():
+        fields = line.split(maxsplit=1)
+        osv_id = fields[0]
+        if not OSV_ID.fullmatch(osv_id):
+            sys.exit(f"{path}:{number}: {osv_id!r} is not an OSV ID like GO-2026-1234")
+        if len(fields) < 2:
             sys.exit(f"{path}:{number}: {osv_id} has no justification")
-        allowed[osv_id] = reason.strip()
+        if osv_id in allowed:
+            sys.exit(f"{path}:{number}: {osv_id} is listed twice")
+        allowed[osv_id] = fields[1]
     return allowed
 
 
@@ -53,18 +61,33 @@ def frame_name(frame):
 
 def gate(text, allowlist_path):
     messages = parse_stream(text)
-    if not any("config" in m for m in messages):
+    configs = [m["config"] for m in messages if "config" in m]
+    if not configs:
         print("error: govulncheck output has no config message")
+        return 2
+    # Only a symbol-level scan reports which vulnerabilities the code calls.
+    if configs[0].get("scan_level") != "symbol":
+        print(
+            f"error: govulncheck scan_level is {configs[0].get('scan_level')!r}, need 'symbol'"
+        )
         return 2
 
     summaries = {
         m["osv"]["id"]: m["osv"].get("summary", "") for m in messages if "osv" in m
     }
-    called = {}
+    called, uncalled = {}, set()
     for message in messages:
         finding = message.get("finding")
-        if finding and finding.get("trace") and finding["trace"][0].get("function"):
+        if finding is None:
+            continue
+        if not finding.get("osv") or not finding.get("trace"):
+            print(f"error: malformed govulncheck finding: {json.dumps(finding)}")
+            return 2
+        if finding["trace"][0].get("function"):
             called.setdefault(finding["osv"], finding)
+        else:
+            uncalled.add(finding["osv"])
+    uncalled -= set(called)
 
     allowed = load_allowlist(allowlist_path)
     blocked = sorted(set(called) - set(allowed))
@@ -75,6 +98,11 @@ def gate(text, allowlist_path):
     for osv_id in sorted(set(allowed) - set(called)):
         print(
             f"::notice::{osv_id} is no longer reported; remove it from {allowlist_path}"
+        )
+    if uncalled:
+        print(
+            f"{len(uncalled)} vulnerabilities in imported or required code are not called: "
+            + ", ".join(sorted(uncalled))
         )
     for osv_id in blocked:
         finding = called[osv_id]
@@ -99,7 +127,7 @@ def main(argv):
     result = subprocess.run(argv[3:], stdout=subprocess.PIPE, text=True)
     if result.returncode != 0:
         print(f"error: {' '.join(argv[3:])} exited with {result.returncode}")
-        return result.returncode
+        return result.returncode if result.returncode > 0 else 1
     return gate(result.stdout, argv[1])
 
 
