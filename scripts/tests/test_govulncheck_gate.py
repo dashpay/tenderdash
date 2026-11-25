@@ -130,6 +130,27 @@ class GateTests(unittest.TestCase):
         self.assertIn("GO-2026-0001", out)
         self.assertIn("no longer called", out)
 
+    def test_entry_at_another_called_version_asks_to_update(self):
+        code, out = self.gate(
+            stream(CONFIG, SBOM, osv("GO-2026-0001"), called("GO-2026-0001", "v1.0.0"))
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("now called at example.com/dep@v1.0.0", out)
+        self.assertNotIn("no longer called", out)
+
+    def test_frame_without_version_is_blocked(self):
+        code, out = self.gate(
+            stream(
+                CONFIG,
+                SBOM,
+                osv("GO-2026-0002"),
+                called("GO-2026-0002", None),
+                called("GO-2026-0002"),
+            )
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("GO-2026-0002 example.com/dep@(unknown)", out)
+
     def test_missing_config_fails(self):
         code, _ = self.gate(stream(osv("GO-2026-0002")))
         self.assertEqual(code, 2)

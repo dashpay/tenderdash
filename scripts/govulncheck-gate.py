@@ -103,7 +103,13 @@ def gate(text, allowlist_path):
             return 2
         frame = finding["trace"][0]
         if frame.get("function"):
-            key = (finding["osv"], frame.get("module"), frame.get("version"))
+            # A frame from a local replace has no version; it cannot be
+            # allowlisted, so the finding always blocks.
+            key = (
+                finding["osv"],
+                frame.get("module") or "(unknown)",
+                frame.get("version") or "(unknown)",
+            )
             called.setdefault(key, finding)
         else:
             uncalled.add(finding["osv"])
@@ -116,9 +122,17 @@ def gate(text, allowlist_path):
             f"::warning::{entry_name(key)} is called but allowed by {allowlist_path}: {allowed[key]}"
         )
     for key in sorted(set(allowed) - set(called)):
-        print(
-            f"::notice::{entry_name(key)} is no longer called; remove it from {allowlist_path}"
-        )
+        moved = sorted(f"{c[1]}@{c[2]}" for c in called if c[0] == key[0])
+        if moved:
+            print(
+                f"::notice::{entry_name(key)} is not called, but {key[0]} is now called at "
+                + ", ".join(moved)
+                + f"; re-assess and update the entry in {allowlist_path}"
+            )
+        else:
+            print(
+                f"::notice::{entry_name(key)} is no longer called; remove it from {allowlist_path}"
+            )
     if uncalled:
         print(
             f"{len(uncalled)} vulnerabilities in imported or required code are not called: "
