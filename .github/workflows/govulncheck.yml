@@ -1,7 +1,8 @@
 ---
 name: Vulnerability Scan
 # Runs govulncheck to detect known vulnerabilities in Go dependencies.
-# The scan is GATING: the job fails if any vulnerability is found.
+# The scan is GATING: the job fails if the code calls a vulnerable symbol
+# that .github/govulncheck-allowlist.txt does not justify.
 on:
   pull_request:
   push:
@@ -38,6 +39,9 @@ jobs:
 
       - name: Install libpcap
         run: sudo apt-get update && sudo apt-get install --yes libpcap-dev
+
+      - name: Check the allowlist gate
+        run: python3 -B -m unittest discover -s scripts/tests -p test_govulncheck_gate.py
 
       - name: Run govulncheck
         run: make vulncheck
