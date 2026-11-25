@@ -99,9 +99,11 @@ func (c *EnterPrecommitAction) Execute(ctx context.Context, stateEvent StateEven
 	}
 	// At this point, +2/3 prevoted for a particular block.
 
-	// If we never received a proposal for this block, we must precommit nil
+	// Without a proposal or its block, precommit nil. Process a held polka block
+	// so that peer precommits for it verify.
 	if stateData.Proposal == nil || stateData.ProposalBlock == nil {
 		logger.Debug("precommit step; did not receive proposal, precommitting nil")
+		c.blockExec.processPolkaBlock(ctx, &stateData.RoundState)
 		c.voteSigner.signAddVote(ctx, stateData, tmproto.PrecommitType, types.BlockID{})
 		return nil
 	}
