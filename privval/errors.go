@@ -18,6 +18,7 @@ func (e EndpointTimeoutError) Temporary() bool { return true }
 // Socket errors.
 var (
 	ErrConnectionTimeout  = EndpointTimeoutError{}
+	ErrEndpointClosed     = errors.New("endpoint is closed")
 	ErrNoConnection       = errors.New("endpoint is not connected")
 	ErrReadTimeout        = errors.New("endpoint read timed out")
 	ErrUnexpectedResponse = errors.New("empty response")

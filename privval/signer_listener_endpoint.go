@@ -148,6 +148,12 @@ func (sl *SignerListenerEndpoint) ensureConnection(ctx context.Context, maxWait 
 	if sl.GetAvailableConnection(sl.connectionAvailableCh) {
 		return nil
 	}
+	sl.liveMtx.Lock()
+	interrupted := sl.interrupted
+	sl.liveMtx.Unlock()
+	if interrupted {
+		return ErrEndpointClosed
+	}
 
 	// block until connected or timeout
 	sl.logger.Info("SignerListener: Blocking for connection")

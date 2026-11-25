@@ -57,7 +57,7 @@ func (se *signerEndpoint) GetAvailableConnection(connectionAvailableCh chan net.
 	select {
 	case se.conn = <-connectionAvailableCh:
 		se.publishConn()
-		return true
+		return se.isConnected()
 	default:
 	}
 	return false
@@ -73,6 +73,9 @@ func (se *signerEndpoint) WaitConnection(ctx context.Context, connectionAvailabl
 		return ctx.Err()
 	case se.conn = <-connectionAvailableCh:
 		se.publishConn()
+		if !se.isConnected() {
+			return ErrEndpointClosed
+		}
 	case <-time.After(maxWait):
 		return ErrConnectionTimeout
 	}
@@ -175,6 +178,7 @@ func (se *signerEndpoint) publishConn() {
 	se.liveMtx.Lock()
 	if se.interrupted && se.conn != nil {
 		_ = se.conn.Close()
+		se.conn = nil
 	}
 	se.liveConn = se.conn
 	se.liveMtx.Unlock()

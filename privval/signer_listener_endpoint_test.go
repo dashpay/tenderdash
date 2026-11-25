@@ -325,10 +325,31 @@ func TestListenerClosesConnectionHandedOffAfterStop(t *testing.T) {
 	endpoint.Stop()
 	endpoint.Wait()
 
-	conn, peer := net.Pipe()
-	defer peer.Close()
-	ready := make(chan net.Conn, 1)
-	ready <- conn
-	require.True(t, endpoint.GetAvailableConnection(ready))
-	require.ErrorIs(t, endpoint.WriteMessage(mustWrapMsg(&privvalproto.PingRequest{})), io.ErrClosedPipe)
+	for _, acquisition := range []string{"available", "wait", "ensure", "set"} {
+		t.Run(acquisition, func(t *testing.T) {
+			conn, peer := net.Pipe()
+			defer conn.Close()
+			defer peer.Close()
+			ready := make(chan net.Conn, 1)
+			ready <- conn
+			switch acquisition {
+			case "available":
+				require.False(t, endpoint.GetAvailableConnection(ready), "shutdown hand-off must not be available")
+			case "wait":
+				require.ErrorIs(t, endpoint.WaitConnection(context.Background(), ready, time.Second), ErrEndpointClosed)
+			case "ensure":
+				endpoint.connectionAvailableCh = ready
+				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+				defer cancel()
+				err := endpoint.ensureConnection(ctx, time.Hour)
+				require.ErrorIs(t, err, ErrEndpointClosed)
+			case "set":
+				endpoint.SetConnection(conn)
+			}
+			require.False(t, endpoint.IsConnected())
+			require.Nil(t, endpoint.conn)
+			require.Nil(t, endpoint.liveConn)
+			require.ErrorIs(t, conn.SetWriteDeadline(time.Now()), io.ErrClosedPipe)
+		})
+	}
 }
