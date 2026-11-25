@@ -739,7 +739,8 @@ func (c *Client) SubscribeWS(ctx context.Context, query string) (*coretypes.Resu
 }
 
 // UnsubscribeWS calls original client's Unsubscribe using remote address as a
-// subscriber.
+// subscriber, waiting at most wsUnsubscribeTimeout. The caller's forwarder for
+// query is retired even when an error is returned.
 func (c *Client) UnsubscribeWS(ctx context.Context, query string) (*coretypes.ResultUnsubscribe, error) {
 	// Bound upstream reconnect waits while preserving session cancellation.
 	ctx, cancel := context.WithTimeout(ctx, wsUnsubscribeTimeout)
@@ -757,7 +758,8 @@ func (c *Client) UnsubscribeWS(ctx context.Context, query string) (*coretypes.Re
 }
 
 // UnsubscribeAllWS calls original client's UnsubscribeAll using remote address
-// as a subscriber.
+// as a subscriber, waiting at most wsUnsubscribeTimeout. The caller's forwarders
+// are retired even when an error is returned.
 func (c *Client) UnsubscribeAllWS(ctx context.Context) (*coretypes.ResultUnsubscribe, error) {
 	// Bound upstream reconnect waits while preserving session cancellation.
 	ctx, cancel := context.WithTimeout(ctx, wsUnsubscribeTimeout)
