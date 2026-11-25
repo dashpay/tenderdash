@@ -97,7 +97,7 @@ def gate(text, allowlist_path):
         )
     for osv_id in sorted(set(allowed) - set(called)):
         print(
-            f"::notice::{osv_id} is no longer reported; remove it from {allowlist_path}"
+            f"::notice::{osv_id} is no longer called; remove it from {allowlist_path}"
         )
     if uncalled:
         print(

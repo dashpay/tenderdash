@@ -114,7 +114,7 @@ class GateTests(unittest.TestCase):
         code, out = self.gate(stream(CONFIG))
         self.assertEqual(code, 0)
         self.assertIn("GO-2026-0001", out)
-        self.assertIn("no longer reported", out)
+        self.assertIn("no longer called", out)
 
     def test_missing_config_fails(self):
         code, _ = self.gate(stream(osv("GO-2026-0002")))
