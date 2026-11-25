@@ -480,14 +480,12 @@ FOR_LOOP:
 				break FOR_LOOP
 			}
 
-			if ctx.Err() == nil {
-				if err == io.EOF {
-					c.logger.Info("Connection is closed @ recvRoutine (likely by the other side)", "conn", c)
-				} else {
-					c.logger.Debug("Connection failed @ recvRoutine (reading byte)", "conn", c, "err", err)
-				}
-				c.stopForError(ctx, err)
+			if err == io.EOF {
+				c.logger.Info("Connection is closed @ recvRoutine (likely by the other side)", "conn", c)
+			} else {
+				c.logger.Debug("Connection failed @ recvRoutine (reading byte)", "conn", c, "err", err)
 			}
+			c.stopForError(ctx, err)
 			break FOR_LOOP
 		}
 
