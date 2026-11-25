@@ -69,6 +69,13 @@ func (se *signerEndpoint) WaitConnection(ctx context.Context, connectionAvailabl
 	defer se.connMtx.Unlock()
 
 	select {
+	case <-se.Stopping():
+		select {
+		case conn := <-connectionAvailableCh:
+			_ = conn.Close()
+		default:
+		}
+		return ErrEndpointClosed
 	case <-ctx.Done():
 		return ctx.Err()
 	case se.conn = <-connectionAvailableCh:
