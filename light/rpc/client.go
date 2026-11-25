@@ -675,6 +675,11 @@ func (c *Client) SubscribeWS(ctx context.Context, query string) (*coretypes.Resu
 		return nil, err
 	}
 
+	unsubscribe := func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = c.next.Unsubscribe(ctx, callInfo.RemoteAddr(), query) //nolint:staticcheck
+	}
 	done := make(chan struct{})
 	if !c.Go(bctx, func(bctx context.Context) {
 		defer close(done)
@@ -696,12 +701,14 @@ func (c *Client) SubscribeWS(ctx context.Context, query string) (*coretypes.Resu
 	}) {
 		stopCancel()
 		cancel()
+		unsubscribe()
 		return nil, fmt.Errorf("light RPC client is stopping")
 	}
 
 	if !callInfo.WSConn.Go(func(context.Context) { <-done }) {
 		cancel()
 		<-done
+		unsubscribe()
 		return nil, fmt.Errorf("websocket session is stopping")
 	}
 
