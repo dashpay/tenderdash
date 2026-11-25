@@ -11,6 +11,7 @@ import (
 	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/dashpay/tenderdash/internal/pubsub"
+	tmquery "github.com/dashpay/tenderdash/internal/pubsub/query"
 	"github.com/dashpay/tenderdash/libs/log"
 	rpcclient "github.com/dashpay/tenderdash/rpc/client"
 	"github.com/dashpay/tenderdash/rpc/coretypes"
@@ -313,10 +314,48 @@ func (w *wsEvents) redoSubscriptionsAfter(ctx context.Context, d time.Duration) 
 // can wait for the writer to restart, which waits for eventListener to read.
 func (w *wsEvents) unsubscribeOrphan(ctx context.Context, query string) {
 	defer w.orphans.Done()
-	if err := w.unsubscribeUpstream(ctx, []string{query}); err != nil && ctx.Err() == nil {
+	if err := w.unsubscribeOrphanQuery(ctx, query); err != nil && ctx.Err() == nil {
 		w.Logger.Warn("failed to unsubscribe from a query forgotten during its resubscribe",
 			"query", query, "err", err)
 	}
+}
+
+// unsubscribeOrphanQuery holds changes through the canonical ownership check and send.
+func (w *wsEvents) unsubscribeOrphanQuery(ctx context.Context, query string) error {
+	canonical, err := canonicalQuery(query)
+	if err != nil {
+		// The server can interpret an invalid query as an unsubscribe-all.
+		w.Logger.Debug("skipping orphan cleanup for an invalid query", "query", query, "err", err)
+		return nil
+	}
+	if err := w.lockChanges(ctx); err != nil {
+		return err
+	}
+	defer w.unlockChanges()
+	w.mtx.RLock()
+	used := false
+	for q, sub := range w.subscriptions {
+		if len(sub.subscribers) == 0 {
+			continue
+		}
+		if owned, err := canonicalQuery(q); err == nil && owned == canonical {
+			used = true
+			break
+		}
+	}
+	w.mtx.RUnlock()
+	if used {
+		return nil
+	}
+	return w.ws.Unsubscribe(ctx, query)
+}
+
+func canonicalQuery(query string) (string, error) {
+	q, err := tmquery.New(query)
+	if err != nil {
+		return "", err
+	}
+	return q.String(), nil
 }
 
 // isErrHarmless reports an error that loses no subscription: subscribing twice,

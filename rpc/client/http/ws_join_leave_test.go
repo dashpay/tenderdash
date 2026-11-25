@@ -15,6 +15,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 
+	tmquery "github.com/dashpay/tenderdash/internal/pubsub/query"
 	rpctypes "github.com/dashpay/tenderdash/rpc/jsonrpc/types"
 )
 
@@ -26,6 +27,7 @@ type orderedUpstream struct {
 	requests   []string
 	subscribed map[string]bool
 	redial     chan struct{} // if set, a reconnect waits until it closes
+	canonical  bool
 }
 
 func (u *orderedUpstream) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
@@ -56,11 +58,27 @@ func (u *orderedUpstream) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		_ = json.Unmarshal(req.Params, &params)
 		u.mtx.Lock()
 		u.requests = append(u.requests, req.Method+" "+params.Query)
+		key := params.Query
+		valid := true
+		if u.canonical {
+			q, err := tmquery.New(key)
+			valid = err == nil
+			if valid {
+				key = q.String()
+			}
+		}
 		switch req.Method {
 		case "subscribe":
-			u.subscribed[params.Query] = true
+			if valid {
+				u.subscribed[key] = true
+			}
 		case "unsubscribe":
-			delete(u.subscribed, params.Query)
+			if valid {
+				delete(u.subscribed, key)
+			} else {
+				// A malformed unsubscribe is treated as an ID and removes all queries.
+				clear(u.subscribed)
+			}
 		}
 		u.mtx.Unlock()
 	}
@@ -128,21 +146,42 @@ func TestConcurrentSubscribeAndLastUnsubscribeKeepsUpstream(t *testing.T) {
 // forgetDuringResubscribe blocks a resubscribe of q on the stopped writer, then
 // forgets q with a cleanup that times out before reaching the upstream. The
 // reconnect waits for release; resubscribed closes once the resubscribe returns.
-func forgetDuringResubscribe(ctx context.Context, t *testing.T) (w *wsEvents, upstream *orderedUpstream,
+func forgetDuringResubscribe(ctx context.Context, t *testing.T, query, replacement string) (w *wsEvents, upstream *orderedUpstream,
 	resubscribed <-chan struct{}, release func()) {
 	t.Helper()
-	upstream = &orderedUpstream{redial: make(chan struct{})}
+	upstream = &orderedUpstream{redial: make(chan struct{}), canonical: true}
 	w = startWsEvents(ctx, t, upstream)
 	release = sync.OnceFunc(func() { close(upstream.redial) })
 	t.Cleanup(release)
-	_, err := w.Subscribe(ctx, "A", "q")
+	_, err := w.Subscribe(ctx, "A", query)
 	require.NoError(t, err)
-	require.Eventually(t, func() bool { _, s := upstream.state(); return s["q"] }, 5*time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { r, _ := upstream.state(); return slices.Contains(r, "subscribe "+query) }, 5*time.Second, time.Millisecond)
 
 	upstream.mtx.Lock()
 	require.NoError(t, upstream.conn.Close())
 	upstream.mtx.Unlock()
 	require.Eventually(t, w.ws.IsReconnecting, 5*time.Second, time.Millisecond)
+	if replacement != "" {
+		// Queue the live stream first so the upstream accepts it before the resend.
+		sending := goroutinesIn("(*WSClient).Send")
+		joined := make(chan error, 1)
+		go func() {
+			_, err := w.Subscribe(ctx, "B", replacement)
+			joined <- err
+		}()
+		require.Eventually(t, func() bool { return goroutinesIn("(*WSClient).Send") == sending+1 },
+			5*time.Second, time.Millisecond)
+		resume := release
+		release = func() {
+			resume()
+			select {
+			case err := <-joined:
+				require.NoError(t, err)
+			case <-time.After(5 * time.Second):
+				t.Fatal("replacement subscribe did not return")
+			}
+		}
+	}
 	sending := goroutinesIn("(*WSClient).Send")
 	done := make(chan struct{})
 	go func() { defer close(done); w.redoSubscriptionsAfter(ctx, 0) }()
@@ -160,12 +199,21 @@ func forgetDuringResubscribe(ctx context.Context, t *testing.T) (w *wsEvents, up
 func settleResubscribe(ctx context.Context, t *testing.T, w *wsEvents, upstream *orderedUpstream,
 	resubscribed <-chan struct{}) ([]string, map[string]bool) {
 	t.Helper()
-	<-resubscribed
-	require.Eventually(t, func() bool { return goroutinesIn("(*wsEvents).unsubscribeOrphan") == 0 },
-		5*time.Second, time.Millisecond)
-	_, err := w.Subscribe(ctx, "S", "sync")
+	select {
+	case <-resubscribed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("resubscribe did not return")
+	}
+	settled := make(chan struct{})
+	go func() { w.orphans.Wait(); close(settled) }()
+	select {
+	case <-settled:
+	case <-time.After(5 * time.Second):
+		t.Fatal("orphan cleanup did not return")
+	}
+	_, err := w.Subscribe(ctx, "S", "sync.event EXISTS")
 	require.NoError(t, err)
-	require.Eventually(t, func() bool { _, s := upstream.state(); return s["sync"] }, 5*time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { _, s := upstream.state(); return s["sync.event EXISTS"] }, 5*time.Second, time.Millisecond)
 	return upstream.state()
 }
 
@@ -174,12 +222,12 @@ func settleResubscribe(ctx context.Context, t *testing.T, w *wsEvents, upstream 
 func TestResubscribeOfForgottenQueryIsUnsubscribed(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	w, upstream, resubscribed, release := forgetDuringResubscribe(ctx, t)
+	w, upstream, resubscribed, release := forgetDuringResubscribe(ctx, t, "tm.event = 'NewBlock'", "")
 
 	release()
 	reqs, s := settleResubscribe(ctx, t, w, upstream, resubscribed)
-	require.Contains(t, reqs, "subscribe q")
-	require.False(t, s["q"], "the forgotten query stayed subscribed upstream; requests on session: %v", reqs)
+	require.Contains(t, reqs, "subscribe tm.event = 'NewBlock'")
+	require.False(t, s["tm.event = 'NewBlock'"], "the forgotten query stayed subscribed upstream; requests on session: %v", reqs)
 }
 
 // Joining a forgotten query during its resubscribe must keep the joiner's upstream
@@ -187,11 +235,11 @@ func TestResubscribeOfForgottenQueryIsUnsubscribed(t *testing.T) {
 func TestResubscribeOfForgottenQueryKeepsRejoin(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	w, upstream, resubscribed, release := forgetDuringResubscribe(ctx, t)
+	w, upstream, resubscribed, release := forgetDuringResubscribe(ctx, t, "tm.event = 'NewBlock'", "")
 	sending := goroutinesIn("(*WSClient).Send")
 	joined := make(chan error, 1)
 	go func() {
-		_, err := w.Subscribe(ctx, "B", "q")
+		_, err := w.Subscribe(ctx, "B", "tm.event = 'NewBlock'")
 		joined <- err
 	}()
 	require.Eventually(t, func() bool { return goroutinesIn("(*WSClient).Send") == sending+1 },
@@ -200,7 +248,7 @@ func TestResubscribeOfForgottenQueryKeepsRejoin(t *testing.T) {
 	release()
 	require.NoError(t, <-joined)
 	reqs, s := settleResubscribe(ctx, t, w, upstream, resubscribed)
-	require.True(t, s["q"], "the rejoined query was unsubscribed upstream; requests on session: %v", reqs)
+	require.True(t, s["tm.event = 'NewBlock'"], "the rejoined query was unsubscribed upstream; requests on session: %v", reqs)
 }
 
 func TestStopWaitsForOrphanCleanup(t *testing.T) {
@@ -212,7 +260,7 @@ func TestStopWaitsForOrphanCleanup(t *testing.T) {
 	unlock := sync.OnceFunc(w.mtx.Unlock)
 	defer unlock()
 	w.orphans.Add(1)
-	go w.unsubscribeOrphan(w.lifetime, "q")
+	go w.unsubscribeOrphan(w.lifetime, "tm.event = 'NewBlock'")
 	require.Eventually(t, func() bool { return len(w.changes) == 1 }, 5*time.Second, time.Millisecond)
 
 	cancel()
@@ -249,5 +297,33 @@ func TestStopWaitsForOrphanCleanup(t *testing.T) {
 		require.NoError(t, stopErr)
 	case <-time.After(5 * time.Second):
 		t.Fatal("Stop did not return after orphan cleanup was released")
+	}
+}
+
+func TestOrphanCleanupPreservesLiveQuery(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		forgotten string
+	}{
+		{name: "canonical_rejoin", forgotten: "tm.event='NewBlock'"},
+		{name: "malformed_query", forgotten: "tm.event ="},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			const live = "tm.event = 'NewBlock'"
+			w, upstream, resubscribed, release := forgetDuringResubscribe(ctx, t, tc.forgotten, live)
+			release()
+			reqs, state := settleResubscribe(ctx, t, w, upstream, resubscribed)
+			require.GreaterOrEqual(t, len(reqs), 2)
+			require.Equal(t, "subscribe "+live, reqs[0])
+			require.Equal(t, "subscribe "+tc.forgotten, reqs[1])
+			w.mtx.RLock()
+			owned := w.subscriptions[live] != nil && w.subscriptions[live].subscribers["B"] != nil
+			w.mtx.RUnlock()
+			require.True(t, owned, "the live query must still have a local owner")
+			require.True(t, state[live], "the live stream was removed; requests: %v", reqs)
+			require.NotContains(t, reqs, "unsubscribe "+tc.forgotten)
+		})
 	}
 }

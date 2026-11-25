@@ -309,7 +309,7 @@ func TestUnsubscribeAllDuringResubscribe(t *testing.T) {
 	defer cancel()
 	upstream := &fakeUpstream{}
 	w := startWsEvents(ctx, t, upstream)
-	for _, query := range []string{"a", "b"} {
+	for _, query := range []string{"a EXISTS", "b EXISTS"} {
 		_, err := w.Subscribe(ctx, "", query)
 		require.NoError(t, err)
 	}
@@ -317,9 +317,9 @@ func TestUnsubscribeAllDuringResubscribe(t *testing.T) {
 		5*time.Second, time.Millisecond)
 	// Only after the reconnect: unread events would stop the client noticing the drop.
 	upstream.setEvents(map[string][]string{
-		"a":     {"a", "a", "a"},
-		"b":     {"b", "b", "b"},
-		"other": {"other"},
+		"a EXISTS": {"a", "a", "a"},
+		"b EXISTS": {"b", "b", "b"},
+		"other":    {"other"},
 	})
 
 	reconnecting(t, w, upstream)
