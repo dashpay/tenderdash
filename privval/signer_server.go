@@ -50,6 +50,7 @@ func (ss *SignerServer) OnStart(ctx context.Context) error {
 
 // OnStop implements service.Service.
 func (ss *SignerServer) OnStop() {
+	ss.endpoint.interruptConnection()
 	ss.endpoint.logger.Debug("SignerServer: OnStop calling Close")
 	_ = ss.endpoint.Close()
 }
