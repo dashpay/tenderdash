@@ -25,6 +25,8 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
+const wsUnsubscribeTimeout = time.Second
+
 // KeyPathFunc builds a merkle path out of the given path and key.
 type KeyPathFunc func(path string, key []byte) (merkle.KeyPath, error)
 
@@ -695,7 +697,7 @@ func (c *Client) SubscribeWS(ctx context.Context, query string) (*coretypes.Resu
 	key, fwd := wsKey{callInfo.WSConn, query}, &wsForwarder{cancel: cancel}
 	c.setWSForwarder(key, fwd)
 	unsubscribe := func() {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), wsUnsubscribeTimeout)
 		defer cancel()
 		_ = c.next.Unsubscribe(ctx, callInfo.RemoteAddr(), query) //nolint:staticcheck
 	}
@@ -739,11 +741,15 @@ func (c *Client) SubscribeWS(ctx context.Context, query string) (*coretypes.Resu
 // UnsubscribeWS calls original client's Unsubscribe using remote address as a
 // subscriber.
 func (c *Client) UnsubscribeWS(ctx context.Context, query string) (*coretypes.ResultUnsubscribe, error) {
-	// ctx ends with the WebSocket session, which joins this call on shutdown.
+	// Bound upstream reconnect waits while preserving session cancellation.
+	ctx, cancel := context.WithTimeout(ctx, wsUnsubscribeTimeout)
+	defer cancel()
 	callInfo := rpctypes.GetCallInfo(ctx)
 	err := c.next.Unsubscribe(ctx, callInfo.RemoteAddr(), query) //nolint:staticcheck
 	// The backend forgets the subscription even on error.
-	c.retireWSForwarder(wsKey{callInfo.WSConn, query})
+	if callInfo != nil && callInfo.WSConn != nil {
+		c.retireWSForwarder(wsKey{callInfo.WSConn, query})
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -753,10 +759,14 @@ func (c *Client) UnsubscribeWS(ctx context.Context, query string) (*coretypes.Re
 // UnsubscribeAllWS calls original client's UnsubscribeAll using remote address
 // as a subscriber.
 func (c *Client) UnsubscribeAllWS(ctx context.Context) (*coretypes.ResultUnsubscribe, error) {
-	// ctx ends with the WebSocket session, which joins this call on shutdown.
+	// Bound upstream reconnect waits while preserving session cancellation.
+	ctx, cancel := context.WithTimeout(ctx, wsUnsubscribeTimeout)
+	defer cancel()
 	callInfo := rpctypes.GetCallInfo(ctx)
 	err := c.next.UnsubscribeAll(ctx, callInfo.RemoteAddr()) //nolint:staticcheck
-	c.retireWSForwarders(callInfo.WSConn)
+	if callInfo != nil && callInfo.WSConn != nil {
+		c.retireWSForwarders(callInfo.WSConn)
+	}
 	if err != nil {
 		return nil, err
 	}
