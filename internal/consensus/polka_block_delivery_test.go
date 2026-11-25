@@ -21,10 +21,9 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
-// verifyExtensionContractApp accepts a vote extension only for a (height,
-// round, block hash) it ran ProcessProposal for, as Dash Drive does: it signs
-// withdrawal transactions while processing a proposal and can verify the
-// extension of a precommit for that block and round alone.
+// verifyExtensionContractApp enforces the strict same-round contract some
+// applications require: a vote extension is accepted only for a (height,
+// round, block hash) accepted by ProcessProposal.
 type verifyExtensionContractApp struct {
 	abci.BaseApplication
 
@@ -353,6 +352,39 @@ func TestStatePolkaBlockPrecommittedNilOnATimestampMismatchIsProcessed(t *testin
 	calls, accepted, rejected := n.app.counts()
 	require.Equal(t, [3]int{1, 2, 0}, [3]int{calls, accepted, rejected})
 	require.True(t, n.sd.TriggeredTimeoutPrecommit, "precommit wait starts once every precommit counts")
+}
+
+func TestStatePolkaBlockWithDroppedProposalIsProcessedOnPrecommit(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	n := newRound1Node(ctx, t, &verifyExtensionContractApp{}, cstypes.RoundStepPropose)
+
+	// The proposer signs a different hash but the held block's part set.
+	n.blockID = forgeField(t, n.blockID, "hash")
+	n.deliverProposal(t)
+	n.blockID = n.block.BlockID(n.parts)
+	n.deliverParts(t)
+	require.Nil(t, n.sd.Proposal, "the completed block invalidates the signed proposal")
+	require.True(t, n.sd.ProposalBlock.BlockID(n.sd.ProposalBlockParts).Equals(n.blockID))
+	require.Equal(t, cstypes.RoundStepPropose, n.sd.Step)
+
+	// timeoutPropose prevotes nil; the peers' polka arrives before timeoutPrevote.
+	require.NoError(t, n.cs.ctrl.Dispatch(n.ctx, &EnterPrevoteEvent{Height: 1, Round: 1}, &n.sd))
+	n.deliverVotes(t, tmproto.PrevoteType, types.BlockID{}, n.self)
+	n.deliverVotes(t, tmproto.PrevoteType, n.blockID, n.peers...)
+	require.Equal(t, cstypes.RoundStepPrevoteWait, n.sd.Step)
+	calls, _, _ := n.app.counts()
+	require.Zero(t, calls, "the block has not been processed before precommit")
+
+	n.timeoutPrevote(t)
+	require.Equal(t, int32(-1), n.sd.LockedRound, "nil precommitted without a proposal")
+	n.deliverVotes(t, tmproto.PrecommitType, types.BlockID{}, n.self)
+	n.deliverVotes(t, tmproto.PrecommitType, n.blockID, n.peers[:2]...)
+	calls, accepted, rejected := n.app.counts()
+	require.Equal(t, [3]int{1, 2, 0}, [3]int{calls, accepted, rejected},
+		"the held polka block must be processed so peer precommits verify")
+	require.True(t, processedFor(&n.sd.RoundState, 1))
+	require.True(t, n.sd.TriggeredTimeoutPrecommit, "accepted precommits start the precommit wait")
 }
 
 // A polka block the application rejects is processed once: the precommits for
