@@ -287,7 +287,7 @@ func (w *wsEvents) redoSubscriptionsAfter(ctx context.Context, d time.Duration) 
 		// until the next reconnect, holding one of the node's per-client
 		// subscription slots. eventListener drops its events meanwhile, and
 		// subscribing to q again adopts it (ErrAlreadySubscribed is ignored).
-		// TODO(#1641): unsubscribe such a query once the send returns.
+		// Cleanup of orphaned subscriptions is tracked in #1641.
 		if err := w.ws.Subscribe(ctx, q); err != nil {
 			w.Logger.Error("failed to resubscribe", "query", q, "err", err)
 			w.mtx.Lock()
