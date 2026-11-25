@@ -230,7 +230,7 @@ require (
 	github.com/sourcegraph/go-diff v0.9.0 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
-	github.com/spf13/pflag v1.0.10 // indirect
+	github.com/spf13/pflag v1.1.0 // indirect
 	github.com/ssgreg/nlreturn/v2 v2.2.1 // indirect
 	github.com/stbenjam/no-sprintf-host-port v0.3.1 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
@@ -314,7 +314,7 @@ require (
 	github.com/libp2p/go-buffer-pool v0.1.0
 	github.com/mroth/weightedrand v1.0.0
 	github.com/oasisprotocol/curve25519-voi v0.0.0-20251114093237-2ab5a27a1729
-	github.com/oasisprotocol/oasis-core/go v0.2604.0
+	github.com/oasisprotocol/oasis-core/go v0.2605.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
 	github.com/prometheus/common v0.74.0
