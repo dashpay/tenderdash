@@ -64,7 +64,7 @@ type Client struct {
 	// backend never closes the channel of a subscriber it drops. Keys are per
 	// connection: connections sharing a remote address (as on a unix socket)
 	// share the backend subscriber, so one must not retire another's forwarder.
-	wsForwarders map[wsKey]*wsForwarder
+	wsForwarders map[rpctypes.WSRPCConnection]map[string]*wsForwarder
 }
 
 type wsKey struct {
@@ -116,7 +116,7 @@ func NewClient(logger log.Logger, next rpcclient.Client, lc LightClient, opts ..
 		lc:   lc,
 		prt:  merkle.DefaultProofRuntime(),
 
-		wsForwarders: make(map[wsKey]*wsForwarder),
+		wsForwarders: make(map[rpctypes.WSRPCConnection]map[string]*wsForwarder),
 	}
 	c.BaseService = *service.NewBaseService(logger, "Client", c)
 	for _, o := range opts {
@@ -743,7 +743,7 @@ func (c *Client) UnsubscribeWS(ctx context.Context, query string) (*coretypes.Re
 	callInfo := rpctypes.GetCallInfo(ctx)
 	err := c.next.Unsubscribe(ctx, callInfo.RemoteAddr(), query) //nolint:staticcheck
 	// The backend forgets the subscription even on error.
-	c.retireWSForwarders(callInfo.WSConn, func(q string) bool { return q == query })
+	c.retireWSForwarder(wsKey{callInfo.WSConn, query})
 	if err != nil {
 		return nil, err
 	}
@@ -756,7 +756,7 @@ func (c *Client) UnsubscribeAllWS(ctx context.Context) (*coretypes.ResultUnsubsc
 	// ctx ends with the WebSocket session, which joins this call on shutdown.
 	callInfo := rpctypes.GetCallInfo(ctx)
 	err := c.next.UnsubscribeAll(ctx, callInfo.RemoteAddr()) //nolint:staticcheck
-	c.retireWSForwarders(callInfo.WSConn, func(string) bool { return true })
+	c.retireWSForwarders(callInfo.WSConn)
 	if err != nil {
 		return nil, err
 	}
@@ -766,8 +766,13 @@ func (c *Client) UnsubscribeAllWS(ctx context.Context) (*coretypes.ResultUnsubsc
 // setWSForwarder records fwd as serving key, retiring the forwarder it replaces.
 func (c *Client) setWSForwarder(key wsKey, fwd *wsForwarder) {
 	c.wsMtx.Lock()
-	old := c.wsForwarders[key]
-	c.wsForwarders[key] = fwd
+	forwarders := c.wsForwarders[key.conn]
+	if forwarders == nil {
+		forwarders = make(map[string]*wsForwarder)
+		c.wsForwarders[key.conn] = forwarders
+	}
+	old := forwarders[key.query]
+	forwarders[key.query] = fwd
 	c.wsMtx.Unlock()
 	if old != nil {
 		old.cancel()
@@ -778,20 +783,30 @@ func (c *Client) setWSForwarder(key wsKey, fwd *wsForwarder) {
 func (c *Client) dropWSForwarder(key wsKey, fwd *wsForwarder) {
 	c.wsMtx.Lock()
 	defer c.wsMtx.Unlock()
-	if c.wsForwarders[key] == fwd {
-		delete(c.wsForwarders, key)
+	forwarders := c.wsForwarders[key.conn]
+	if forwarders[key.query] == fwd {
+		delete(forwarders, key.query)
+		if len(forwarders) == 0 {
+			delete(c.wsForwarders, key.conn)
+		}
 	}
 }
 
-// retireWSForwarders cancels the forwarders of conn's subscriptions to the
-// matching queries; each then forgets itself.
-func (c *Client) retireWSForwarders(conn rpctypes.WSRPCConnection, match func(query string) bool) {
+// retireWSForwarder cancels key's forwarder, which then forgets itself.
+func (c *Client) retireWSForwarder(key wsKey) {
 	c.wsMtx.Lock()
 	defer c.wsMtx.Unlock()
-	for key, fwd := range c.wsForwarders {
-		if key.conn == conn && match(key.query) {
-			fwd.cancel()
-		}
+	if fwd := c.wsForwarders[key.conn][key.query]; fwd != nil {
+		fwd.cancel()
+	}
+}
+
+// retireWSForwarders cancels conn's forwarders; each then forgets itself.
+func (c *Client) retireWSForwarders(conn rpctypes.WSRPCConnection) {
+	c.wsMtx.Lock()
+	defer c.wsMtx.Unlock()
+	for _, fwd := range c.wsForwarders[conn] {
+		fwd.cancel()
 	}
 }
 

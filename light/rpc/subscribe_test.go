@@ -118,7 +118,12 @@ func requireTracked(t *testing.T, c *Client, live int) {
 	t.Helper()
 	c.wsMtx.Lock()
 	defer c.wsMtx.Unlock()
-	require.Len(t, c.wsForwarders, live)
+	var tracked int
+	for _, forwarders := range c.wsForwarders {
+		require.NotEmpty(t, forwarders, "empty connection registries must be removed")
+		tracked += len(forwarders)
+	}
+	require.Equal(t, live, tracked)
 }
 
 // The backend drops a subscriber it replaces without closing its channel, so
@@ -147,6 +152,7 @@ func TestUnsubscribeWSRetiresWorkers(t *testing.T) {
 	s := newFakeWSSession(ctx, "peer:1")
 	removed := subscribeWS(t, c, next, s, 1, queryNewBlock)
 	kept := subscribeWS(t, c, next, s, 2, queryTx)
+	requireTracked(t, c, 2)
 	next.On("Unsubscribe", mock.Anything, s.remote, queryNewBlock).Return(nil).Once()
 
 	_, err := c.UnsubscribeWS(s.callCtx(3), queryNewBlock)
@@ -166,6 +172,7 @@ func TestUnsubscribeAllWSRetiresWorkers(t *testing.T) {
 		subscribeWS(t, c, next, s, 2, queryTx),
 	}
 	otherSub := subscribeWS(t, c, next, other, 3, queryNewBlock)
+	requireTracked(t, c, 3)
 	next.On("UnsubscribeAll", mock.Anything, s.remote).Return(nil).Once()
 
 	_, err := c.UnsubscribeAllWS(s.callCtx(4))
