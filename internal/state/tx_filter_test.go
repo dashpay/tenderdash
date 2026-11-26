@@ -15,7 +15,7 @@ import (
 )
 
 // TestTxFilterRandomBeacon checks that the pre-check reserves room for the last commit's beacon and
-// app hash from consensus version 2, and only then.
+// app hash from consensus version 3, and only then.
 func TestTxFilterRandomBeacon(t *testing.T) {
 	const maxBlockBytes = 3241
 	maxTxSize := maxBlockBytes - 1132
@@ -26,7 +26,7 @@ func TestTxFilterRandomBeacon(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, sm.TxPreCheckForState(state)(types.Tx(tmrand.Bytes(maxTxSize))))
 
-	state.ConsensusParams.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_2)
+	state.ConsensusParams.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_3)
 	f := sm.TxPreCheckForState(state)
 	maxTxSize -= int(types.MaxCommitRandomnessBytes)
 	require.NoError(t, f(types.Tx(tmrand.Bytes(maxTxSize))))

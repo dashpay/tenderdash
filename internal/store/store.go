@@ -626,7 +626,7 @@ func (bs *BlockStore) saveBlockToBatch(batch dbm.Batch, block *types.Block, bloc
 // canonicalLastCommit returns the commit SaveBlock stores for the previous height. Nothing signs the
 // beacon and app hash of block.LastCommit, so a proposer can fill them, and validateBlock checks them
 // only when the last block was committed with a beacon. So they are kept only when they are the ones in
-// the commit this node saved for that height; before consensus version 2 that commit has neither. The
+// the commit this node saved for that height; before consensus version 3 that commit has neither. The
 // block's parts keep them either way, as the encoding the next commit signs.
 func (bs *BlockStore) canonicalLastCommit(block *types.Block) *types.Commit {
 	commit := block.LastCommit

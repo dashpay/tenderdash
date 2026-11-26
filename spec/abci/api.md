@@ -89,8 +89,8 @@
 | quorum_hash | [bytes](#bytes) |  |  |
 | block_signature | [bytes](#bytes) |  |  |
 | threshold_vote_extensions | [tendermint.types.VoteExtension](../../proto/tendermint/types/) | repeated |  |
-| beacon | [bytes](#bytes) |  | Random beacon of the committed block: the threshold signature recovered from the prevotes of the commit round. Set from consensus version 2; empty before. |
-| app_hash | [bytes](#bytes) |  | App hash after `ApplyBlockRandomness` for the committed block and round. The commit signs it through the state ID of its block ID, which Tenderdash checks before passing it on. Set from consensus version 2; empty before. |
+| beacon | [bytes](#bytes) |  | Random beacon of the committed block: the threshold signature recovered from the prevotes of the commit round. Set from consensus version 3; empty before. |
+| app_hash | [bytes](#bytes) |  | App hash after `ApplyBlockRandomness` for the committed block and round. The commit signs it through the state ID of its block ID, which Tenderdash checks before passing it on. Set from consensus version 3; empty before. |
 
 
 
@@ -269,7 +269,7 @@ Applies the block&#39;s randomness and returns the app hash the Precommit signs.
 
 #### Usage
 
-- Used from consensus version 2 (`VersionParams.consensus_version`). Before that, Tenderdash never calls it.
+- Used from consensus version 3 (`VersionParams.consensus_version`). Before that, Tenderdash never calls it.
 - `RequestApplyBlockRandomness.beacon` is the random beacon of the block and round: the 96-byte BLS threshold
   signature recovered from the Prevotes of round `round` for the block `hash`. Tenderdash has verified it against
   the quorum&#39;s threshold public key before the call.
@@ -394,7 +394,7 @@ to attach to that vote. It may also call ExtendVote on any node after rejecting
 a commit vector, to learn the expected vector without signing or broadcasting.
 The call must be free of side effects. Threshold-recoverable extensions must be
 deterministic and match the vector accepted at commit-level VerifyVoteExtension.
-From consensus version 2, ApplyBlockRandomness runs first, but the extensions
+From consensus version 3, ApplyBlockRandomness runs first, but the extensions
 must not depend on the beacon or on the state it produced.
 See the [ExtendVote contract](methods.md#extendvote).
 
@@ -419,7 +419,7 @@ The application must persist the candidate before returning; execution results
 and events are provided through proposal processing, not ResponseFinalizeBlock.
 The response contains retention and next-block scheduling hints only.
 Use retain_height with care: pruning blocks can prevent replay and bootstrapping.
-From consensus version 2, the state to persist is that candidate with commit.beacon
+From consensus version 3, the state to persist is that candidate with commit.beacon
 applied, as ApplyBlockRandomness applies it, and its root must equal commit.app_hash.
 See the [FinalizeBlock contract](methods.md#finalizeblock) and
 [commit and apply](../consensus/consensus-happy-path.md#9-commit-and-apply).

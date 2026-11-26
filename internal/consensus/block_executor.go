@@ -222,7 +222,7 @@ func errRejectedBefore(commit *types.Commit) error {
 // its prevotes, so it cannot complete a commit built from its own precommits.
 var errBeaconNotRecovered = errors.New("random beacon of the commit round not recovered")
 
-// completeCommit gives commit, built from this node's own precommits at consensus version 2, the random
+// completeCommit gives commit, built from this node's own precommits at consensus version 3, the random
 // beacon and the app hash it carries: the beacon recovered from the prevotes of the commit round, and
 // the app hash the application returns from ApplyBlockRandomness for it. The block must be processed
 // for commit.Round.
@@ -263,7 +263,7 @@ func (c *blockExecutor) finalize(ctx context.Context, stateData *StateData, comm
 	block := stateData.ProposalBlock
 	blockParts := stateData.ProposalBlockParts
 	// The block ID the commit signs, which becomes the next header's LastBlockID. From consensus
-	// version 2 its state ID carries the app hash the commit signs, not the header's.
+	// version 3 its state ID carries the app hash the commit signs, not the header's.
 	blockID := types.BlockID{
 		Hash:          block.Hash(),
 		PartSetHeader: blockParts.Header(),

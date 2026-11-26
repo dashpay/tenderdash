@@ -170,7 +170,7 @@ func verifyLastCommit(state State, block *types.Block, lastCommit types.Verified
 }
 
 // verifyLastCommitBeacon checks the random beacon and the app hash of block.LastCommit when the last
-// block was committed at consensus version 2 or later, that is when state.LastBlockBeacon is set. They
+// block was committed at consensus version 3 or later, that is when state.LastBlockBeacon is set. They
 // must be the ones of the commit the last block was finalized with: its threshold signature covers
 // neither, and a block whose LastCommit carried others would hand block sync and light clients a
 // commit for the last block that fails verification. Before that, both fields are ignored.

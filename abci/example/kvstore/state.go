@@ -42,7 +42,7 @@ type State interface {
 
 	// GetAppHash returns app hash for the state. You need to call UpdateAppHash() beforehand.
 	GetAppHash() tmbytes.HexBytes
-	// SetAppHash replaces the app hash of the state, as the block's randomness does (consensus version 2).
+	// SetAppHash replaces the app hash of the state, as the block's randomness does (consensus version 3).
 	SetAppHash(appHash tmbytes.HexBytes)
 
 	// UpdateAppHash regenerates apphash for the state. It accepts transactions and tx results from current round.

@@ -264,7 +264,7 @@ type State struct {
 	NextCoreChainLock              *types1.CoreChainLock `protobuf:"bytes,15,opt,name=next_core_chain_lock,json=nextCoreChainLock,proto3" json:"next_core_chain_lock,omitempty"`
 	// last_block_round is the round number at which the last block was committed.
 	LastBlockRound int32 `protobuf:"varint,16,opt,name=last_block_round,json=lastBlockRound,proto3" json:"last_block_round,omitempty"`
-	// last_block_beacon is the random beacon carried by the commit of the last block, from consensus version 2.
+	// last_block_beacon is the random beacon carried by the commit of the last block, from consensus version 3.
 	// The next block's LastCommit must carry the same beacon.
 	LastBlockBeacon []byte `protobuf:"bytes,17,opt,name=last_block_beacon,json=lastBlockBeacon,proto3" json:"last_block_beacon,omitempty"`
 }

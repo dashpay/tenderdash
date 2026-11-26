@@ -269,7 +269,7 @@ func (r *BlockReplayer) replayBlocks(
 
 // replayBlock adds block at height H to the application. It returns the
 // ProcessProposal result and the app hash the application committed: from
-// consensus version 2 the one the commit signs, otherwise the header's.
+// consensus version 3 the one the commit signs, otherwise the header's.
 func (r *BlockReplayer) replayBlock(
 	ctx context.Context,
 	block *types.Block,
@@ -294,7 +294,7 @@ func (r *BlockReplayer) replayBlock(
 		return sm.CurrentRoundState{}, nil, fmt.Errorf("blockReplayer process proposal: %w", err)
 	}
 	// ucState is the ProcessProposal result, so its app hash is the header's even
-	// at consensus version 2, where the commit signs the app hash after the
+	// at consensus version 3, where the commit signs the app hash after the
 	// block's randomness is applied; that one is checked here.
 	committedAppHash, err := r.replayBlockRandomness(ctx, block, commit, height)
 	if err != nil {
@@ -323,10 +323,10 @@ func (r *BlockReplayer) replayBlock(
 	return ucState, committedAppHash, nil
 }
 
-// replayBlockRandomness applies, when block was committed at consensus version 2,
+// replayBlockRandomness applies, when block was committed at consensus version 3,
 // the commit's random beacon for the commit round and returns the app hash the
 // application reached, after checking that it is the one the commit signs. It
-// returns nil for a block committed before consensus version 2. The consensus
+// returns nil for a block committed before consensus version 3. The consensus
 // version is the one of the block's height: it can change in either direction.
 func (r *BlockReplayer) replayBlockRandomness(
 	ctx context.Context,
@@ -455,7 +455,7 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 }
 
 // publishEvents publishes the events of block, committed with commit's block ID, whose state ID
-// carries the app hash the commit signs from consensus version 2.
+// carries the app hash the commit signs from consensus version 3.
 func (r *BlockReplayer) publishEvents(
 	block *types.Block,
 	commit *types.Commit,

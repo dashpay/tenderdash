@@ -132,7 +132,7 @@ func (s *stateProviderRPC) AppHash(ctx context.Context, height uint64) (tmbytes.
 		return nil, err
 	}
 
-	// The app hash the commit signs: from consensus version 2 the one after the
+	// The app hash the commit signs: from consensus version 3 the one after the
 	// block's randomness is applied, which the application holds; before, the header's.
 	return header.CommittedAppHash()
 }
@@ -294,7 +294,7 @@ func (s *stateProviderP2P) AppHash(ctx context.Context, height uint64) (tmbytes.
 		return nil, err
 	}
 
-	// The app hash the commit signs: from consensus version 2 the one after the
+	// The app hash the commit signs: from consensus version 3 the one after the
 	// block's randomness is applied, which the application holds; before, the header's.
 	return header.CommittedAppHash()
 }
@@ -382,11 +382,11 @@ func (s *stateProviderP2P) State(ctx context.Context, height uint64) (sm.State, 
 }
 
 // setLastBlockRandomness sets, when the snapshot block lastLightBlock was committed at consensus version
-// 2, the state's LastAppHash to the app hash its commit signs, the one after the block's randomness is
+// 3, the state's LastAppHash to the app hash its commit signs, the one after the block's randomness is
 // applied and the one the application holds, and LastBlockBeacon to its commit's verified beacon. The
 // next block's LastCommit must carry both.
 //
-// The block used consensus version 2 when the next height does (state.ConsensusParams) and its header
+// The block used consensus version 3 when the next height does (state.ConsensusParams) and its header
 // commits to the same hashed parameters, the consensus version among them. Otherwise, at the activation
 // height or across a change of the other hashed parameters, the state is left as it is and the next
 // block's LastCommit beacon is not checked: the validators that committed that block did.

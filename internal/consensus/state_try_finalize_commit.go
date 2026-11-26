@@ -110,7 +110,7 @@ func (cs *TryFinalizeCommitAction) finalizeCommit(ctx context.Context, ctrl *Con
 	err := cs.blockExec.refuseUnprocessedCommit(&stateData.RoundState, seenCommit)
 	if err == nil {
 		cs.blockExec.mustEnsureProcess(ctx, &stateData.RoundState, seenCommit.Round)
-		// From consensus version 2 the commit carries the random beacon and the app hash it signs.
+		// From consensus version 3 the commit carries the random beacon and the app hash it signs.
 		if stateData.state.ConsensusParams.Version.RandomBeacon() {
 			if err := cs.blockExec.completeCommit(ctx, stateData, seenCommit); err != nil {
 				logger.Info("waiting for the random beacon of the commit round, or a peer's commit",

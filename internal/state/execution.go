@@ -113,7 +113,7 @@ type Executor interface {
 
 	// ApplyBlockRandomness asks the application to apply beacon, the random beacon of block for
 	// round, to the state ProcessProposal left for that block and round, and returns the app hash
-	// that precommits and the commit sign (consensus version 2). The block must already be processed
+	// that precommits and the commit sign (consensus version 3). The block must already be processed
 	// for round. An error means the application failed or answered with an invalid app hash.
 	ApplyBlockRandomness(ctx context.Context, block *types.Block, round int32, beacon []byte) (tmbytes.HexBytes, error)
 }
@@ -242,7 +242,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	maxGas := state.ConsensusParams.Block.MaxGas
 
 	// The commit may come from a peer, which can set its beacon and app hash: they are empty before
-	// consensus version 2, and releases before them drop them when they decode a block, so block sync
+	// consensus version 3, and releases before them drop them when they decode a block, so block sync
 	// on those releases would rebuild a block that carried them into parts the next commit does not sign.
 	// From the first block committed with a beacon, validateBlock checks both against the state.
 	if len(state.LastBlockBeacon) == 0 {
@@ -591,7 +591,7 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 // accepted commit's extension vector through VerifyCommitExtensions; FinalizeBlock does not check it.
 // See also ApplyBlock() to deliver proposal and finalize it in one step.
 //
-// From consensus version 2, blockID must name the same block as commit.BlockID, and FinalizeBlock uses
+// From consensus version 3, blockID must name the same block as commit.BlockID, and FinalizeBlock uses
 // commit.BlockID, whose state ID carries the app hash the commit signs. Before FinalizeBlock reaches the
 // application it calls ApplyBlockRandomness with the commit's beacon and round, and fails if the app hash
 // returned differs from commit.AppHash: this node has diverged from the validators that signed the
@@ -796,7 +796,7 @@ func (blockExec *BlockExecutor) ApplyBlockRandomness(
 }
 
 // VerifyBlockRandomness asks the application to apply commit's random beacon to block for the commit
-// round (consensus version 2) and checks that it reaches the app hash the commit signs. Callers run it
+// round (consensus version 3) and checks that it reaches the app hash the commit signs. Callers run it
 // after ProcessProposal of the block for the commit round and before FinalizeBlock, which runs it again:
 // the application answers a repeated call from its cache. An error wrapping ErrAppHashMismatch means
 // this node has diverged from the validators that signed the commit, so the block must not be finalized.
@@ -891,7 +891,7 @@ func (blockExec *BlockExecutor) flushMempool(
 // buildLastCommitInfo returns the CommitInfo of block.LastCommit, the commit of the block state was
 // last updated with.
 //
-// From consensus version 2 it also carries that commit's beacon and app hash. They are taken from
+// From consensus version 3 it also carries that commit's beacon and app hash. They are taken from
 // state, which holds the values the last block was finalized with: block.LastCommit carries the
 // proposer's copy, which is checked against them only when the block is validated, after
 // ProcessProposal.
@@ -959,7 +959,7 @@ func (blockExec *BlockExecutor) SetAppHashSize(size int) {
 }
 
 // execBlock sends block to the application's FinalizeBlock with commit.BlockID, the block ID the
-// commit signs: from consensus version 2 its state ID carries the app hash ApplyBlockRandomness
+// commit signs: from consensus version 3 its state ID carries the app hash ApplyBlockRandomness
 // returned, not the header's.
 func execBlock(
 	ctx context.Context,

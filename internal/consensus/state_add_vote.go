@@ -199,7 +199,7 @@ func addVoteDispatchPrevoteMw(ctrl *Controller) AddVoteMiddlewareFunc {
 			case stateData.Step == cstypes.RoundStepApplyCommit && vote.Round == stateData.CommitRound &&
 				stateData.state.ConsensusParams.Version.RandomBeacon():
 				// A commit of this node's own precommits waits for the random beacon of the commit round
-				// (consensus version 2); this prevote may have completed it.
+				// (consensus version 3); this prevote may have completed it.
 				if blockID, ok := prevotes.TwoThirdsMajority(); ok && !blockID.IsNil() {
 					_ = ctrl.Dispatch(ctx, &TryFinalizeCommitEvent{Height: height}, stateData)
 				}

@@ -33,11 +33,11 @@ type voteSigner struct {
 	queueSender   queueSender
 	wal           WALWriteFlusher
 	voteExtender  sm.VoteExtender
-	// randomness applies the round's random beacon before a precommit is signed (consensus version 2)
+	// randomness applies the round's random beacon before a precommit is signed (consensus version 3)
 	randomness blockRandomnessApplier
 
 	// finalStateIDs caches, for finalStateHeight, the state ID each non-nil precommit was signed over
-	// (consensus version 2), so this node never signs two state IDs for the same block and round:
+	// (consensus version 3), so this node never signs two state IDs for the same block and round:
 	// that is duplicate-vote evidence. Only the consensus goroutine signs votes, so it needs no lock.
 	finalStateHeight int64
 	finalStateIDs    map[precommitStateKey]tmbytes.HexBytes
@@ -109,7 +109,7 @@ func (s *voteSigner) signVote(
 	timeout := time.Second
 	if msgType == tmproto.PrecommitType && !vote.BlockID.IsNil() {
 		timeout = stateData.voteTimeout(stateData.Round)
-		// From consensus version 2 the precommit signs the state with the block's randomness applied.
+		// From consensus version 3 the precommit signs the state with the block's randomness applied.
 		// The application applies it before ExtendVote, so the extensions see that state.
 		if stateData.state.ConsensusParams.Version.RandomBeacon() {
 			stateID, err := s.finalStateID(ctx, stateData, vote.BlockID)
@@ -144,7 +144,7 @@ func (s *voteSigner) signVote(
 	return vote, nil
 }
 
-// finalStateID returns the state ID a precommit for blockID signs at consensus version 2: the hash of the
+// finalStateID returns the state ID a precommit for blockID signs at consensus version 3: the hash of the
 // block header's StateID with the app hash the application returns from ApplyBlockRandomness, given the
 // random beacon recovered from this round's prevotes for the block. blockID is the prevote majority's,
 // with the header's state ID.

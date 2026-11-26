@@ -657,7 +657,7 @@ func TestSaveBlockDropsLastCommitRandomness(t *testing.T) {
 	require.NotEmpty(t, block.LastCommit.Beacon, "saving must not change the block")
 }
 
-// TestSaveBlockKeepsSeenLastCommitRandomness checks the canonical commit from consensus version 2: it
+// TestSaveBlockKeepsSeenLastCommitRandomness checks the canonical commit from consensus version 3: it
 // keeps a beacon and app hash that match the commit this node saved for that height, and drops others.
 func TestSaveBlockKeepsSeenLastCommitRandomness(t *testing.T) {
 	beacon := bytes.Repeat([]byte{0x01}, types.SignatureSize)

@@ -52,7 +52,7 @@ func TestBlock_Header(t *testing.T) {
 				"block at height %d is invalid", block.Header.Height)
 
 			// validate StateID from last commit: the previous header's, with the app hash
-			// the commit carries from consensus version 2 (after the block's randomness)
+			// the commit carries from consensus version 3 (after the block's randomness)
 			if prevBlock != nil {
 				_, err := block.LastCommit.VerifyAppHash(&prevBlock.Header)
 				assert.NoError(t, err, "last commit state ID of block at height %d", block.Height)

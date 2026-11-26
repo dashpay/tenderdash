@@ -46,7 +46,7 @@ type Application interface {
 	VerifyVoteExtension(context.Context, *RequestVerifyVoteExtension) (*ResponseVerifyVoteExtension, error)
 	// Deliver the decided block with its txs to the Application
 	FinalizeBlock(context.Context, *RequestFinalizeBlock) (*ResponseFinalizeBlock, error)
-	// Apply the block's random beacon and return the app hash the precommit signs (consensus version 2).
+	// Apply the block's random beacon and return the app hash the precommit signs (consensus version 3).
 	ApplyBlockRandomness(context.Context, *RequestApplyBlockRandomness) (*ResponseApplyBlockRandomness, error)
 }
 
@@ -145,7 +145,7 @@ func (BaseApplication) FinalizeBlock(_ context.Context, _req *RequestFinalizeBlo
 }
 
 // ApplyBlockRandomness returns an error: an empty app hash must never pass as an answer, so applications
-// that run at consensus version 2 must implement it.
+// that run at consensus version 3 must implement it.
 func (BaseApplication) ApplyBlockRandomness(_ context.Context, _req *RequestApplyBlockRandomness) (*ResponseApplyBlockRandomness, error) {
 	return nil, ErrApplyBlockRandomnessNotImplemented
 }

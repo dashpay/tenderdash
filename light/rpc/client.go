@@ -193,7 +193,7 @@ func (c *Client) ABCIQueryWithOptions(ctx context.Context, path string, data tmb
 		return nil, err
 	}
 
-	// Validate the value proof against the trusted header. From consensus version 2
+	// Validate the value proof against the trusted header. From consensus version 3
 	// the state is the one after the block's randomness is applied, whose app hash
 	// the commit signs.
 	appHash, err := l.CommittedAppHash()

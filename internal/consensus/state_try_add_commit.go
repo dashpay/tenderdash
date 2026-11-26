@@ -47,7 +47,7 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 	stateData := stateEvent.StateData
 	commit := event.Commit
 	if !stateData.state.ConsensusParams.Version.RandomBeacon() {
-		// Before consensus version 2 a commit carries no beacon; see WithoutRandomBeacon.
+		// Before consensus version 3 a commit carries no beacon; see WithoutRandomBeacon.
 		commit = commit.WithoutRandomBeacon()
 		stripped := *event
 		stripped.Commit = commit
@@ -264,7 +264,7 @@ func verifyCommitBlock(
 	// next height compares that record against the state this block produced;
 	// they disagree, and no proposer at any round can satisfy both.
 	//
-	// From consensus version 2 the commit's state ID carries the app hash the
+	// From consensus version 3 the commit's state ID carries the app hash the
 	// commit signs instead of the header's, and the commit carries that app hash
 	// and the round's random beacon: both are checked against this block.
 	if stateData.state.ConsensusParams.Version.RandomBeacon() {
@@ -365,7 +365,7 @@ func verifyProcessedCommit(ctx context.Context, blockExec *blockExecutor, stateD
 	if err := blockExec.validate(ctx, stateData); err != nil {
 		return fmt.Errorf("+2/3 committed an invalid block: %w", err)
 	}
-	// From consensus version 2 the application applies the commit's beacon before
+	// From consensus version 3 the application applies the commit's beacon before
 	// it checks the extensions, in the order a validator signing a precommit uses.
 	// The beacon and app hash were verified against the block by verifyCommitBlock;
 	// an application that reaches another app hash has diverged.

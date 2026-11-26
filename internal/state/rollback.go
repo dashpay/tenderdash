@@ -101,7 +101,7 @@ func Rollback(bs BlockStore, ss Store) (int64, []byte, error) {
 		LastAppHash:     latestBlock.Header.AppHash,
 	}
 
-	// From consensus version 2, the commit of the rolled back block signs a state ID with the app hash
+	// From consensus version 3, the commit of the rolled back block signs a state ID with the app hash
 	// ApplyBlockRandomness returned, and the next block's LastCommit must carry its beacon and app hash.
 	// Take all three from that commit: the latest block's LastCommit.
 	rollbackParams, err := ss.LoadConsensusParams(rollbackHeight)

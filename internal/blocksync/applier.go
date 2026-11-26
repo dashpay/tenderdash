@@ -135,7 +135,7 @@ func (e *blockApplier) apply(
 	blockID := block.BlockID(blockParts)
 	partSetTime := decodeTime + e.observeSince("partset", start)
 
-	// From consensus version 2 the commit signs a state ID with the app hash after the block's
+	// From consensus version 3 the commit signs a state ID with the app hash after the block's
 	// randomness is applied, and carries that app hash and the round's random beacon: both are
 	// checked against the block, and the commit's BlockID is the block's from here on. Before, a
 	// commit carries neither.

@@ -11,7 +11,7 @@ import (
 
 // commitKey identifies a commit by what the application's extension check
 // depends on: height, round, block and extension vector, and by the random beacon
-// and app hash checked against the block from consensus version 2. Neither is
+// and app hash checked against the block from consensus version 3. Neither is
 // covered by the threshold signature, so a copy carrying others must not pass for
 // one already tried. Commits with equal keys differ at most in their quorum hash
 // and threshold block signature, which those checks do not read.

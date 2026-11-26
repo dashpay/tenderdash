@@ -57,7 +57,7 @@ func (lb LightBlock) ValidateBasic(chainID string) error {
 			return fmt.Errorf("invalid validator public-key shares: %w", err)
 		}
 	}
-	// The commit's state ID must describe the header. From consensus version 2 it
+	// The commit's state ID must describe the header. From consensus version 3 it
 	// carries the app hash the commit signs (Commit.AppHash) instead of the header's.
 	if _, err := lb.Commit.VerifyAppHash(lb.Header); err != nil {
 		return fmt.Errorf("invalid commit state id for light block: %w", err)

@@ -57,7 +57,7 @@ for details on the possible call sequences of these methods.
 * [**ProcessProposal:**](methods.md#processproposal) Executes a candidate deterministically
   and returns its status and commitments. Processing precedes the lock-based voting
   decision and can repeat when validating a commit from another round.
-* [**ApplyBlockRandomness:**](methods.md#applyblockrandomness) From consensus version 2, it hands the
+* [**ApplyBlockRandomness:**](methods.md#applyblockrandomness) From consensus version 3, it hands the
   Application the random beacon of a block and round, recovered from the Prevotes, and the Application
   applies it to the candidate state that `ProcessProposal` left for that block and round. Tenderdash calls
   it before `ExtendVote` and before signing a Precommit for the block, and may call it for rounds that

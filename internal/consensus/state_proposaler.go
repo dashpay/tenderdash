@@ -361,7 +361,7 @@ func (p *Proposaler) verifyProposalForNonValidatorSet(proposal *types.Proposal, 
 		// We received a proposal we can not check
 		return ErrUnableToVerifyProposal
 	}
-	// Hash and part set header only: from consensus version 2 the commit carries
+	// Hash and part set header only: from consensus version 3 the commit carries
 	// the state ID of the app hash it signs, not the header's.
 	if !proposal.BlockID.SameBlock(commit.BlockID) {
 		return ErrInvalidProposalForCommit

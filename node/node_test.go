@@ -856,7 +856,7 @@ func TestMaxProposalBlockSize(t *testing.T) {
 		Beacon:                  crypto.CRandBytes(bls12381.SignatureSize),
 		AppHash:                 crypto.Checksum([]byte("final_app_hash")),
 	}
-	// the last block was committed with a beacon, from consensus version 2, so the proposal keeps the
+	// the last block was committed with a beacon, from consensus version 3, so the proposal keeps the
 	// beacon and app hash of the commit
 	state.LastBlockBeacon = commit.Beacon
 

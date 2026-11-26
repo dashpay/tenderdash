@@ -117,7 +117,7 @@ func TestVoteSetRandomBeaconPrevoteMajority(t *testing.T) {
 	})
 }
 
-// TestCommitVerifyRandomBeacon checks the commit fields of consensus version 2 against the block header.
+// TestCommitVerifyRandomBeacon checks the commit fields of consensus version 3 against the block header.
 func TestCommitVerifyRandomBeacon(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -165,7 +165,7 @@ func TestCommitVerifyRandomBeacon(t *testing.T) {
 		})
 	}
 
-	t.Run("before consensus version 2 the header app hash is signed", func(t *testing.T) {
+	t.Run("before consensus version 3 the header app hash is signed", func(t *testing.T) {
 		c := makeCommit()
 		c.BlockID.StateID = f.header.StateID().Hash()
 		c.AppHash = nil
@@ -238,7 +238,7 @@ func TestBlockIDSameBlock(t *testing.T) {
 }
 
 func TestConsensusParamsConsensusVersion(t *testing.T) {
-	for version, valid := range map[int32]bool{0: true, 1: true, 2: true, 3: false, -1: false} {
+	for version, valid := range map[int32]bool{0: true, 1: true, 2: true, 3: true, 4: false, -1: false} {
 		params := DefaultConsensusParams()
 		params.Version.ConsensusVersion = version
 		err := params.ValidateConsensusParams()
@@ -247,11 +247,11 @@ func TestConsensusParamsConsensusVersion(t *testing.T) {
 		} else {
 			assert.Error(t, err, "version %d", version)
 		}
-		assert.Equal(t, version >= 2, params.Version.RandomBeacon(), "version %d", version)
+		assert.Equal(t, version >= 3, params.Version.RandomBeacon(), "version %d", version)
 	}
 }
 
-// TestVerifyAppHashIgnoresUnsignedAppHash checks the commit of a block before consensus version 2 whose
+// TestVerifyAppHashIgnoresUnsignedAppHash checks the commit of a block before consensus version 3 whose
 // app hash a proposer filled with 32 bytes that bind nothing (the size bound lets them through, and the
 // commit's signature does not cover them): the signed state ID is the header's, so the header's app hash
 // is the committed one and light blocks still validate. VerifyRandomBeacon, which needs the commit's own

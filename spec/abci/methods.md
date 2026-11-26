@@ -455,7 +455,7 @@ changed the execution context; see
   round, to learn the vector a commit of that block and round must carry; see
   [VerifyVoteExtension](#verifyvoteextension). An ABCI error or an invalid response from this
   call is fatal, as on the Precommit path.
-* From consensus version 2, Tenderdash calls [ApplyBlockRandomness](#applyblockrandomness) before
+* From consensus version 3, Tenderdash calls [ApplyBlockRandomness](#applyblockrandomness) before
   `ExtendVote`, but the extensions MUST NOT depend on the beacon or on the state `ApplyBlockRandomness`
   produced: other processes verify them against the state `ProcessProposal` left, possibly before they
   recover the round's beacon, or without ever recovering it.
@@ -579,7 +579,7 @@ contract above and [Commit handling](../consensus/consensus-commit.md).
 
 #### Usage
 
-* Used from consensus version 2 (`VersionParams.consensus_version`). Before that, Tenderdash never calls it.
+* Used from consensus version 3 (`VersionParams.consensus_version`). Before that, Tenderdash never calls it.
 * The beacon is the BLS threshold signature recovered from the Prevotes of round `round` for block `hash`.
   Every set of threshold shares recovers the same bytes, and nobody can compute them before the Prevotes exist.
   Tenderdash verifies the beacon against the quorum's threshold public key before the call.
@@ -652,7 +652,7 @@ contract above and [Commit handling](../consensus/consensus-commit.md).
   The Application must select the candidate matching the finalized block and
   the round processed last; a block hash alone does not identify a round's
   execution context. See [Commit validity depends on the application](../consensus/consensus-commit.md#commit-validity-depends-on-the-application).
-* From consensus version 2, the state to commit is the candidate state of the block for
+* From consensus version 3, the state to commit is the candidate state of the block for
   `RequestFinalizeBlock.round` with `RequestFinalizeBlock.commit.beacon` applied, as
   [ApplyBlockRandomness](#applyblockrandomness) applies it, and its Merkle root hash MUST equal
   `RequestFinalizeBlock.commit.app_hash`. Committing the candidate state without the randomness diverges

@@ -79,7 +79,7 @@ func (r *finalizeRecorder) FinalizeBlock(_ context.Context, req *abci.RequestFin
 // TestBlockSyncDropsRelayedCommitRandomness is the regression test for a block sync peer relaying an
 // honest block and its validly signed commit with a correctly sized beacon and app hash added: neither
 // is covered by the commit's hash or threshold signature, so the commit passes verification. Before
-// consensus version 2 a commit carries neither, and the applier drops both, so they are neither passed
+// consensus version 3 a commit carries neither, and the applier drops both, so they are neither passed
 // to the application nor stored as the seen commit this node serves.
 func TestBlockSyncDropsRelayedCommitRandomness(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())

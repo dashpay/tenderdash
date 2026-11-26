@@ -54,7 +54,7 @@ func recoverPrevoteBeacon(
 	return beacon
 }
 
-// TestBlockApplierRandomBeacon checks block sync at consensus version 2: the commit's beacon and app hash
+// TestBlockApplierRandomBeacon checks block sync at consensus version 3: the commit's beacon and app hash
 // are verified against the block before anything else, the application applies the beacon after
 // ProcessProposal and before the commit's extensions are checked, the block ID verified and finalized
 // is the commit's, and an application reaching another app hash stops the node.
@@ -63,7 +63,7 @@ func TestBlockApplierRandomBeacon(t *testing.T) {
 	valSet, privVals := factory.MockValidatorSet()
 	initialState := fakeInitialState(valSet)
 	initialState.ConsensusParams = *types.DefaultConsensusParams()
-	initialState.ConsensusParams.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_2)
+	initialState.ConsensusParams.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_3)
 	state := initialState.Copy()
 	blocks := statefactory.MakeBlocks(ctx, t, 2, &state, privVals, 1)
 	block := blocks[0]

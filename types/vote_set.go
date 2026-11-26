@@ -89,7 +89,7 @@ type VoteSet struct {
 	thresholdVoteExtSigs VoteExtensions // If a 2/3 majority is seen, recover the vote extension sigs
 
 	// randomBeacon makes a prevote majority for a block count only once its threshold signature,
-	// the block's random beacon for the round, is recovered (consensus version 2).
+	// the block's random beacon for the round, is recovered (consensus version 3).
 	randomBeacon bool
 }
 
@@ -114,7 +114,7 @@ func WithLogger(logger log.Logger) VoteSetOption {
 
 // WithRandomBeacon makes a prevote VoteSet recover the threshold signature of a +2/3 majority for a
 // block, as precommit VoteSets do, and count the majority only once that succeeds. The recovered
-// signature is the block's random beacon for the round (consensus version 2); see
+// signature is the block's random beacon for the round (consensus version 3); see
 // ThresholdBlockSignature. It has no effect on other vote types.
 //
 // The majority gate (QuorumVotingThresholdPower) can be below the voting power the recovery needs

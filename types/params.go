@@ -78,11 +78,11 @@ type VersionParams struct {
 	ConsensusVersion int32  `json:"consensus,string"`
 }
 
-// RandomBeacon reports whether same-block randomness is on (consensus version 2 and later): the
+// RandomBeacon reports whether same-block randomness is on (consensus version 3 and later): the
 // threshold signature recovered from a block's prevotes is its random beacon, the application applies
 // it with ApplyBlockRandomness, and precommits and the commit sign the app hash it returns.
 func (params VersionParams) RandomBeacon() bool {
-	return params.ConsensusVersion >= int32(tmproto.VersionParams_CONSENSUS_VERSION_2)
+	return params.ConsensusVersion >= int32(tmproto.VersionParams_CONSENSUS_VERSION_3)
 }
 
 // ProposerLivenessEnabled reports whether the proposer of a round that waits for

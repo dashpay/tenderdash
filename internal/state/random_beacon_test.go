@@ -2,6 +2,7 @@ package state_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
@@ -42,10 +43,10 @@ func (app *randomnessApp) FinalizeBlock(ctx context.Context, req *abci.RequestFi
 	return app.testApp.FinalizeBlock(ctx, req)
 }
 
-// TestFinalizeBlockRandomBeacon checks FinalizeBlock at consensus version 2: it applies the commit's beacon
+// TestFinalizeBlockRandomBeacon checks FinalizeBlock at consensus version 3: it applies the commit's beacon
 // before FinalizeBlock reaches the application, refuses an app hash that differs from the commit's, sends
 // and records the commit's BlockID, and keeps the commit's app hash and beacon in the new state. Before
-// consensus version 2 none of this happens.
+// consensus version 3 none of this happens.
 func TestFinalizeBlockRandomBeacon(t *testing.T) {
 	finalAppHash := crypto.Checksum([]byte("final app hash"))
 	beacon := crypto.CRandBytes(types.SignatureSize)
@@ -86,8 +87,8 @@ func TestFinalizeBlockRandomBeacon(t *testing.T) {
 		return &types.Commit{Height: block.Height, BlockID: blockID, Beacon: beacon, AppHash: appHash}
 	}
 
-	t.Run("consensus version 2", func(t *testing.T) {
-		ctx, app, blockExec, state, block, uncommittedState := setup(t, 2)
+	t.Run("consensus version 3", func(t *testing.T) {
+		ctx, app, blockExec, state, block, uncommittedState := setup(t, 3)
 		commit := commitFor(block, finalAppHash)
 		next, _, err := blockExec.FinalizeBlock(ctx, state, uncommittedState, block.BlockID(nil), block, commit,
 			types.VerifiedCommit{})
@@ -100,8 +101,8 @@ func TestFinalizeBlockRandomBeacon(t *testing.T) {
 		require.Equal(t, beacon, next.LastBlockBeacon)
 	})
 
-	t.Run("consensus version 2, the application diverged", func(t *testing.T) {
-		ctx, app, blockExec, state, block, uncommittedState := setup(t, 2)
+	t.Run("consensus version 3, the application diverged", func(t *testing.T) {
+		ctx, app, blockExec, state, block, uncommittedState := setup(t, 3)
 		otherAppHash := crypto.Checksum([]byte("other app hash"))
 		commit := commitFor(block, otherAppHash)
 		_, _, err := blockExec.FinalizeBlock(ctx, state, uncommittedState, block.BlockID(nil), block, commit,
@@ -110,20 +111,22 @@ func TestFinalizeBlockRandomBeacon(t *testing.T) {
 		require.Nil(t, app.finalizeBlockID, "the block does not reach FinalizeBlock")
 	})
 
-	t.Run("before consensus version 2", func(t *testing.T) {
-		ctx, app, blockExec, state, block, uncommittedState := setup(t, 1)
-		blockID := block.BlockID(nil)
-		next, _, err := blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block,
-			&types.Commit{Height: block.Height, BlockID: blockID}, types.VerifiedCommit{})
-		require.NoError(t, err)
-		require.Zero(t, app.randomnessCalls)
-		require.True(t, next.LastBlockID.Equals(blockID))
-		require.EqualValues(t, block.AppHash, next.LastAppHash)
-		require.Empty(t, next.LastBlockBeacon)
-	})
+	for _, version := range []int32{1, 2} {
+		t.Run(fmt.Sprintf("before consensus version 3, at version %d", version), func(t *testing.T) {
+			ctx, app, blockExec, state, block, uncommittedState := setup(t, version)
+			blockID := block.BlockID(nil)
+			next, _, err := blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block,
+				&types.Commit{Height: block.Height, BlockID: blockID}, types.VerifiedCommit{})
+			require.NoError(t, err)
+			require.Zero(t, app.randomnessCalls)
+			require.True(t, next.LastBlockID.Equals(blockID))
+			require.EqualValues(t, block.AppHash, next.LastAppHash)
+			require.Empty(t, next.LastBlockBeacon)
+		})
+	}
 }
 
-// TestVerifyLastCommitBeacon checks that, once the last block was committed at consensus version 2, the
+// TestVerifyLastCommitBeacon checks that, once the last block was committed at consensus version 3, the
 // next block's LastCommit must carry the beacon and the app hash of the commit the last block was
 // finalized with, and that both are ignored before.
 func TestVerifyLastCommitBeacon(t *testing.T) {
@@ -140,7 +143,7 @@ func TestVerifyLastCommitBeacon(t *testing.T) {
 	state = sm.State{LastBlockBeacon: beacon, LastAppHash: crypto.Checksum([]byte("other"))}
 	require.ErrorContains(t, sm.VerifyLastCommitBeacon(state, block), "LastCommit.AppHash")
 
-	// Before consensus version 2 the fields are not checked, whatever they hold.
+	// Before consensus version 3 the fields are not checked, whatever they hold.
 	require.NoError(t, sm.VerifyLastCommitBeacon(sm.State{LastAppHash: crypto.Checksum([]byte("other"))}, block))
 }
 
@@ -161,7 +164,7 @@ func (app *lastCommitInfoApp) ProcessProposal(ctx context.Context, req *abci.Req
 	return app.testApp.ProcessProposal(ctx, req)
 }
 
-// TestLastCommitInfoRandomBeacon checks that, once the last block was committed at consensus version 2,
+// TestLastCommitInfoRandomBeacon checks that, once the last block was committed at consensus version 3,
 // PrepareProposal's local_last_commit and ProcessProposal's proposed_last_commit carry the beacon and
 // app hash it was finalized with, as RequestFinalizeBlock.commit did, taken from the state and not from
 // the proposer's copy in the block; before, both stay empty.
@@ -198,7 +201,7 @@ func TestLastCommitInfoRandomBeacon(t *testing.T) {
 		return app
 	}
 
-	t.Run("consensus version 2", func(t *testing.T) {
+	t.Run("consensus version 3", func(t *testing.T) {
 		app := run(t, beacon)
 		for _, info := range []abci.CommitInfo{app.local, app.proposed} {
 			require.Equal(t, beacon, info.Beacon)
@@ -206,7 +209,7 @@ func TestLastCommitInfoRandomBeacon(t *testing.T) {
 		}
 	})
 
-	t.Run("before consensus version 2", func(t *testing.T) {
+	t.Run("before consensus version 3", func(t *testing.T) {
 		app := run(t, nil)
 		for _, info := range []abci.CommitInfo{app.local, app.proposed} {
 			require.Empty(t, info.Beacon)

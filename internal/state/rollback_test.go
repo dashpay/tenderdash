@@ -10,6 +10,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/state/mocks"
 	"github.com/dashpay/tenderdash/internal/test/factory"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 	"github.com/dashpay/tenderdash/version"
 )
@@ -157,7 +158,7 @@ func setupStateStore(t *testing.T, height int64, paramsOpts ...func(*types.Conse
 	return stateStore
 }
 
-// TestRollbackRandomBeacon checks that rolling back a block committed at consensus version 2 restores the
+// TestRollbackRandomBeacon checks that rolling back a block committed at consensus version 3 restores the
 // commit's BlockID, app hash and beacon, which the next block's header and LastCommit carry.
 func TestRollbackRandomBeacon(t *testing.T) {
 	const (
@@ -165,7 +166,7 @@ func TestRollbackRandomBeacon(t *testing.T) {
 		nextHeight int64 = 101
 	)
 	stateStore := setupStateStore(t, height, func(cp *types.ConsensusParams) {
-		cp.Version.ConsensusVersion = 2
+		cp.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_3)
 	})
 	initialState, err := stateStore.Load()
 	require.NoError(t, err)

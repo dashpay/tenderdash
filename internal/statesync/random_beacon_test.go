@@ -16,8 +16,8 @@ import (
 )
 
 // TestSetLastBlockRandomness checks the state restored from a snapshot taken at a block committed at
-// consensus version 2: its LastAppHash is the app hash the commit signs and its LastBlockBeacon the
-// commit's verified beacon. Before consensus version 2, or when the snapshot block's header does not
+// consensus version 3: its LastAppHash is the app hash the commit signs and its LastBlockBeacon the
+// commit's verified beacon. Before consensus version 3, or when the snapshot block's header does not
 // commit to the next height's parameters, the state is left as it is.
 func TestSetLastBlockRandomness(t *testing.T) {
 	ctx := context.Background()
@@ -25,7 +25,7 @@ func TestSetLastBlockRandomness(t *testing.T) {
 	const round = int32(1)
 	valSet, privVals := types.RandValidatorSet(4)
 	params := *types.DefaultConsensusParams()
-	params.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_2)
+	params.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_3)
 
 	header := &types.Header{
 		Version:            version.Consensus{Block: version.BlockProtocol, App: 1},
@@ -87,24 +87,26 @@ func TestSetLastBlockRandomness(t *testing.T) {
 			LastAppHash: crypto.Checksum([]byte("next header app hash"))}
 	}
 
-	t.Run("consensus version 2", func(t *testing.T) {
-		state := newState(2)
+	t.Run("consensus version 3", func(t *testing.T) {
+		state := newState(3)
 		require.NoError(t, setLastBlockRandomness(&state, lightBlock(beacon)))
 		require.EqualValues(t, finalAppHash, state.LastAppHash)
 		require.Equal(t, beacon, state.LastBlockBeacon)
 	})
 
 	t.Run("a beacon that does not verify", func(t *testing.T) {
-		state := newState(2)
+		state := newState(3)
 		require.ErrorIs(t, setLastBlockRandomness(&state, lightBlock(crypto.CRandBytes(types.SignatureSize))),
 			types.ErrInvalidCommitBeacon)
 	})
 
 	for name, consensusVersion := range map[string]int32{
-		"before consensus version 2": 1,
-		// The next height uses version 2, but the snapshot header commits to other hashed parameters, as at
+		"before consensus version 3": 1,
+		// Proposer liveness only: no beacon is recovered or verified.
+		"consensus version 2": 2,
+		// The next height uses version 3, but the snapshot header commits to other hashed parameters, as at
 		// the activation height.
-		"activation height": 2,
+		"activation height": 3,
 	} {
 		t.Run(name, func(t *testing.T) {
 			state := newState(consensusVersion)

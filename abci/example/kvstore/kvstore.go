@@ -479,7 +479,7 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 		time.Sleep(time.Duration(app.cfg.FinalizeBlockDelayMS) * time.Millisecond)
 	}
 
-	// From consensus version 2 the commit carries the round's random beacon and the app hash after it
+	// From consensus version 3 the commit carries the round's random beacon and the app hash after it
 	// is applied, and that is the state committed.
 	var committedAppHash tmbytes.HexBytes
 	if len(req.Commit.Beacon) > 0 {
@@ -815,7 +815,7 @@ func (app *Application) Close() error {
 
 // newHeight frees resources from previous height and starts new height.
 // finalAppHash, when set, replaces the committed state's app hash: it is the app hash after the
-// block's randomness is applied (consensus version 2).
+// block's randomness is applied (consensus version 3).
 // Caller should lock the Application.
 func (app *Application) newHeight(committedAppHash tmbytes.HexBytes, height int64, round int32, finalAppHash tmbytes.HexBytes) error {
 	// Committed round becomes new state

@@ -1519,7 +1519,7 @@ func (m *RequestProcessProposal) GetQuorumHash() []byte {
 // a commit vector, to learn the expected vector without signing or broadcasting.
 // The call must be free of side effects. Threshold-recoverable extensions must be
 // deterministic and match the vector accepted at commit-level VerifyVoteExtension.
-// From consensus version 2, ApplyBlockRandomness runs first, but the extensions
+// From consensus version 3, ApplyBlockRandomness runs first, but the extensions
 // must not depend on the beacon or on the state it produced.
 // See the [ExtendVote contract](methods.md#extendvote).
 type RequestExtendVote struct {
@@ -1736,7 +1736,7 @@ func (m *RequestVerifyVoteExtension) GetVoteExtensions() []*ExtendVoteExtension 
 // and events are provided through proposal processing, not ResponseFinalizeBlock.
 // The response contains retention and next-block scheduling hints only.
 // Use retain_height with care: pruning blocks can prevent replay and bootstrapping.
-// From consensus version 2, the state to persist is that candidate with commit.beacon
+// From consensus version 3, the state to persist is that candidate with commit.beacon
 // applied, as ApplyBlockRandomness applies it, and its root must equal commit.app_hash.
 // See the [FinalizeBlock contract](methods.md#finalizeblock) and
 // [commit and apply](../consensus/consensus-happy-path.md#9-commit-and-apply).
@@ -1843,7 +1843,7 @@ func (m *RequestFinalizeBlock) GetBlockID() *types1.BlockID {
 //
 // #### Usage
 //
-//   - Used from consensus version 2 (`VersionParams.consensus_version`). Before that, Tenderdash never calls it.
+//   - Used from consensus version 3 (`VersionParams.consensus_version`). Before that, Tenderdash never calls it.
 //   - `RequestApplyBlockRandomness.beacon` is the random beacon of the block and round: the 96-byte BLS threshold
 //     signature recovered from the Prevotes of round `round` for the block `hash`. Tenderdash has verified it against
 //     the quorum's threshold public key before the call.
@@ -3434,11 +3434,11 @@ type CommitInfo struct {
 	BlockSignature          []byte                  `protobuf:"bytes,3,opt,name=block_signature,json=blockSignature,proto3" json:"block_signature,omitempty"`
 	ThresholdVoteExtensions []*types1.VoteExtension `protobuf:"bytes,4,rep,name=threshold_vote_extensions,json=thresholdVoteExtensions,proto3" json:"threshold_vote_extensions,omitempty"`
 	// Random beacon of the committed block: the threshold signature recovered from the prevotes of
-	// the commit round. Set from consensus version 2; empty before.
+	// the commit round. Set from consensus version 3; empty before.
 	Beacon []byte `protobuf:"bytes,5,opt,name=beacon,proto3" json:"beacon,omitempty"`
 	// App hash after `ApplyBlockRandomness` for the committed block and round. The commit signs it
 	// through the state ID of its block ID, which Tenderdash checks before passing it on.
-	// Set from consensus version 2; empty before.
+	// Set from consensus version 3; empty before.
 	AppHash []byte `protobuf:"bytes,6,opt,name=app_hash,json=appHash,proto3" json:"app_hash,omitempty"`
 }
 

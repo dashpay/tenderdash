@@ -134,7 +134,7 @@ func TestApp_Hash(t *testing.T) {
 		block, err := client.Block(ctx, &blockHeight)
 		require.NoError(t, err)
 		require.Equal(t, blockHeight, block.Block.Height)
-		// The app hash the block's commit signs: the header's, or from consensus version 2
+		// The app hash the block's commit signs: the header's, or from consensus version 3
 		// the one after the block's randomness is applied.
 		commit, err := client.Commit(ctx, &blockHeight)
 		require.NoError(t, err)

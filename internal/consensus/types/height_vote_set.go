@@ -69,7 +69,7 @@ func WithLogger(logger log.Logger) HeightVoteSetOption {
 }
 
 // WithRandomBeacon makes every prevote VoteSet this HeightVoteSet constructs recover the random beacon
-// of a +2/3 majority for a block (consensus version 2); see types.WithRandomBeacon.
+// of a +2/3 majority for a block (consensus version 3); see types.WithRandomBeacon.
 func WithRandomBeacon(enabled bool) HeightVoteSetOption {
 	return func(hvs *HeightVoteSet) {
 		hvs.randomBeacon = enabled

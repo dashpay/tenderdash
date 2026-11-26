@@ -1026,9 +1026,9 @@ func TestProposalRequestsCarryLastCommitRandomness(t *testing.T) {
 // TestProposalDropsRelayedCommitRandomness is the regression test for a peer relaying a validly
 // signed commit with a correctly sized beacon and app hash added, and for a proposer putting them in
 // its block's LastCommit: neither is covered by the commit's hash or threshold signature, and both are
-// empty before consensus version 2.
+// empty before consensus version 3.
 //
-// Until the last block is committed with a beacon, from consensus version 2, the proposer drops them
+// Until the last block is committed with a beacon, from consensus version 3, the proposer drops them
 // from the commit it builds on. Releases before the beacon drop both fields when they decode a block,
 // and block sync rebuilds the parts of the block from what it decoded, so a proposal that kept them
 // could not be block synced by those releases. PrepareProposal and ProcessProposal pass the other

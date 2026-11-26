@@ -246,7 +246,7 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockSto
 		}
 		precommits := s.Votes.Precommits(s.CommitRound)
 		s.LastCommit = precommits.MakeCommit()
-		// From consensus version 2 the commit also carries the beacon and the app hash the state was
+		// From consensus version 3 the commit also carries the beacon and the app hash the state was
 		// finalized with.
 		if len(state.LastBlockBeacon) > 0 {
 			s.LastCommit.Beacon = state.LastBlockBeacon
@@ -607,7 +607,7 @@ func (s *StateData) retargetTo(blockID types.BlockID, reason retargetReason) {
 // nothing about the hash or the state ID. A Proposal that outlives the block it
 // names rejects the real block's last part over its core chain locked height.
 //
-// The state IDs are not compared: from consensus version 2 a commit or a precommit
+// The state IDs are not compared: from consensus version 3 a commit or a precommit
 // majority names the block with the state ID of the app hash ApplyBlockRandomness
 // returned, while the Proposal carries the header's, and both describe one block.
 func (s *StateData) dropStaleProposal(blockID types.BlockID, reason retargetReason) {

@@ -765,7 +765,7 @@ const (
 	// (32+2) for QuorumHash, (96+2) for Block signature.
 	MaxCommitOverheadBytes int64 = (110 + 2) + (8 + 2) + (4 + 2) + (32 + 2) + (96 + 2) + 0
 	// MaxCommitRandomnessBytes is what a commit grows by when it carries a random beacon (consensus
-	// version 2): (96+2) for Beacon, (32+2) for AppHash.
+	// version 3): (96+2) for Beacon, (32+2) for AppHash.
 	MaxCommitRandomnessBytes int64 = (96 + 2) + (32 + 2)
 )
 
@@ -797,11 +797,11 @@ type Commit struct {
 	// ThresholdVoteExtensions keeps the list of recovered threshold signatures for vote-extensions
 	ThresholdVoteExtensions tmproto.VoteExtensions `json:"threshold_vote_extensions"`
 	// Beacon is the threshold signature recovered from the prevotes of the commit round.
-	// Set from consensus version 2; empty before.
+	// Set from consensus version 3; empty before.
 	Beacon []byte `json:"beacon,omitempty"`
 	// AppHash is the result of ApplyBlockRandomness for this block and round. The precommits sign it
 	// only through BlockID.StateID, the hash of the header's state ID with this app hash: the field
-	// itself is not signed. Set from consensus version 2; empty before.
+	// itself is not signed. Set from consensus version 3; empty before.
 	AppHash tmbytes.HexBytes `json:"app_hash,omitempty"`
 
 	// Memoized in first call to corresponding method.
@@ -840,7 +840,7 @@ func (commit *Commit) ToCommitInfo() types.CommitInfo {
 	}
 }
 
-// WithoutRandomBeacon returns commit without its random beacon and app hash. Before consensus version 2
+// WithoutRandomBeacon returns commit without its random beacon and app hash. Before consensus version 3
 // both fields must be empty, but neither is covered by the commit's threshold signature, so a peer could
 // fill them; nodes drop them from commits of such heights instead of storing or passing them on. It
 // returns commit itself when both are already empty.
@@ -949,7 +949,7 @@ func (commit *Commit) ValidateBasic() error {
 
 	// Neither field is covered by the commit hash or its threshold signature, so a peer can fill them
 	// in a commit it relays. Bounding them here refuses a commit with wrongly sized ones before it is
-	// stored or passed to the application, whatever the consensus version; before consensus version 2,
+	// stored or passed to the application, whatever the consensus version; before consensus version 3,
 	// nodes also drop well-sized ones where they adopt a commit (see WithoutRandomBeacon).
 	if !validRandomBeaconSizes(commit.Beacon, commit.AppHash) {
 		return fmt.Errorf("%w: beacon of %d bytes and app hash of %d bytes, expected both empty or %d and %d bytes",
@@ -1221,7 +1221,7 @@ func (blockID BlockID) Equals(other BlockID) bool {
 }
 
 // SameBlock reports whether two BlockIDs name the same block: the same hash and part set header.
-// The state IDs may differ. From consensus version 2, proposals and prevotes carry the state ID of
+// The state IDs may differ. From consensus version 3, proposals and prevotes carry the state ID of
 // the header, while precommits and the commit carry the state ID with the app hash returned by
 // ApplyBlockRandomness, so a commit's BlockID and the BlockID derived from its block differ there.
 func (blockID BlockID) SameBlock(other BlockID) bool {

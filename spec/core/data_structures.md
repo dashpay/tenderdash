@@ -162,8 +162,8 @@ Commit proves that a quorum decided a block: it carries the threshold-recovered 
 | QuorumHash | slice of bytes (`[]byte`) | Hash of the quorum that signed the commit. | |
 | ThresholdBlockSignature | [Signature](#signature) | Threshold-recovered block signature. | At height >= 1, must be of length 96 |
 | ThresholdVoteExtensions | Array of [VoteExtension](#voteextension) | Threshold-recovered vote extensions. | No nil entries; every type must be a defined enum value |
-| Beacon | slice of bytes (`[]byte`) | Random beacon: the threshold signature recovered from the prevotes of the commit round. Set from consensus version 2; empty before. Not covered by the commit's signature. | Must be empty with an empty AppHash, or 96 bytes with a 32-byte AppHash |
-| AppHash | slice of bytes (`[]byte`) | App hash returned by `ApplyBlockRandomness` for the block and round, which the precommits sign through `BlockID.StateID`. Set from consensus version 2; empty before. Not covered by the commit's signature. | Must be empty with an empty Beacon, or 32 bytes with a 96-byte Beacon |
+| Beacon | slice of bytes (`[]byte`) | Random beacon: the threshold signature recovered from the prevotes of the commit round. Set from consensus version 3; empty before. Not covered by the commit's signature. | Must be empty with an empty AppHash, or 96 bytes with a 32-byte AppHash |
+| AppHash | slice of bytes (`[]byte`) | App hash returned by `ApplyBlockRandomness` for the block and round, which the precommits sign through `BlockID.StateID`. Set from consensus version 3; empty before. Not covered by the commit's signature. | Must be empty with an empty Beacon, or 32 bytes with a 96-byte Beacon |
 
 ## BlockIDFlag
 
@@ -398,7 +398,7 @@ parameter is absent from a particular header-hash subset.
 | Name        | Type   | Description                   | Field Number |
 |-------------|--------|-------------------------------|--------------|
 | app_version | uint64 | The ABCI application version. | 1            |
-| consensus_version | `ConsensusVersion` | Version of the consensus protocol, selecting the [proposer strategy](../consensus/proposer-selection.md). `CONSENSUS_VERSION_2` also enables [proposer liveness](../consensus/consensus-proposer-liveness.md). | 2 |
+| consensus_version | `ConsensusVersion` | Version of the consensus protocol, selecting the [proposer strategy](../consensus/proposer-selection.md). `CONSENSUS_VERSION_2` also enables [proposer liveness](../consensus/consensus-proposer-liveness.md), and `CONSENSUS_VERSION_3` adds the random beacon recovered from prevotes, with precommits signing the randomness-applied app hash. | 2 |
 
 ### SynchronyParams
 

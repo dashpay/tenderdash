@@ -59,12 +59,12 @@ func (app *randomBeaconApp) FinalizeBlock(ctx context.Context, req *abci.Request
 	return app.Application.FinalizeBlock(ctx, req)
 }
 
-// TestRandomBeaconConsensusVersion2 runs a single validator at consensus version 2 and checks the whole
+// TestRandomBeaconConsensusVersion3 runs a single validator at consensus version 3 and checks the whole
 // chain of the random beacon: the precommit signs the state ID of the app hash ApplyBlockRandomness
 // returned, which the kvstore example makes differ from the header's; ApplyBlockRandomness runs before
 // ExtendVote; the commit carries the verified beacon and that app hash; the state and the next header
 // name the commit's BlockID; and the next block, whose LastCommit carries them, validates and commits.
-func TestRandomBeaconConsensusVersion2(t *testing.T) {
+func TestRandomBeaconConsensusVersion3(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -72,7 +72,7 @@ func TestRandomBeaconConsensusVersion2(t *testing.T) {
 	require.NoError(t, err)
 	app := &randomBeaconApp{Application: kvApp}
 	params := factory.ConsensusParams(func(cp *types.ConsensusParams) {
-		cp.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_2)
+		cp.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_3)
 	})
 	cs, _ := makeState(ctx, t, makeStateArgs{validators: 1, application: app, consensusParams: params})
 	stateData := cs.GetStateData()
@@ -132,16 +132,65 @@ func TestRandomBeaconConsensusVersion2(t *testing.T) {
 	require.EqualValues(t, commit.AppHash, nextBlock.LastCommit.AppHash)
 }
 
-// TestReactorRandomBeaconConsensusVersion2 runs four validators at consensus version 2, where every
+// TestRandomBeaconOffAtConsensusVersion2 runs a single validator at consensus version 2, which has
+// proposer liveness but not the random beacon: the precommit signs the header's state ID, the commit
+// carries neither beacon nor app hash, and the application is never asked to apply randomness.
+func TestRandomBeaconOffAtConsensusVersion2(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	kvApp, err := kvstore.NewMemoryApp()
+	require.NoError(t, err)
+	app := &randomBeaconApp{Application: kvApp}
+	params := factory.ConsensusParams(func(cp *types.ConsensusParams) {
+		cp.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_2)
+	})
+	require.True(t, params.Version.ProposerLivenessEnabled())
+	require.False(t, params.Version.RandomBeacon())
+	cs, _ := makeState(ctx, t, makeStateArgs{validators: 1, application: app, consensusParams: params})
+	stateData := cs.GetStateData()
+	height, round := stateData.Height, stateData.Round
+
+	voteCh := subscribe(ctx, t, cs.eventBus, types.EventQueryVote)
+	propCh := subscribe(ctx, t, cs.eventBus, types.EventQueryCompleteProposal)
+	newRoundCh := subscribe(ctx, t, cs.eventBus, types.EventQueryNewRound)
+
+	startTestRound(ctx, cs, height, round)
+	ensureNewRound(t, newRoundCh, height, round)
+	propBlockID := ensureNewProposal(t, propCh, height, round)
+
+	prevote := ensureMessageBeforeTimeout(t, voteCh, ensureTimeout).Data().(types.EventDataVote).Vote
+	require.Equal(t, tmproto.PrevoteType, prevote.Type)
+	precommit := ensureMessageBeforeTimeout(t, voteCh, ensureTimeout).Data().(types.EventDataVote).Vote
+	require.Equal(t, tmproto.PrecommitType, precommit.Type)
+	require.True(t, precommit.BlockID.Equals(propBlockID), "the precommit signs the header's state ID")
+
+	ensureNewRound(t, newRoundCh, height+1, 0)
+	commit := cs.blockStore.LoadSeenCommit()
+	require.NotNil(t, commit)
+	require.Empty(t, commit.Beacon)
+	require.Empty(t, commit.AppHash)
+	block := cs.blockStore.LoadBlock(height)
+	require.NotNil(t, block)
+	next := cs.GetStateData()
+	require.EqualValues(t, block.AppHash, next.state.LastAppHash)
+	require.Empty(t, next.state.LastBlockBeacon)
+
+	ensureNewRound(t, newRoundCh, height+2, 0)
+	require.NotContains(t, app.recorded(), "apply_block_randomness")
+	require.Contains(t, app.recorded(), "finalize_block")
+}
+
+// TestReactorRandomBeaconConsensusVersion3 runs four validators at consensus version 3, where every
 // precommit needs the threshold signature recovered from the other validators' prevotes, and checks that
 // all of them commit the same beacon and final app hash, which verify against the block.
-func TestReactorRandomBeaconConsensusVersion2(t *testing.T) {
+func TestReactorRandomBeaconConsensusVersion3(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
 	const n = 4
 	params := factory.ConsensusParams(func(cp *types.ConsensusParams) {
-		cp.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_2)
+		cp.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_3)
 	})
 	states := makeConsensusStateWithParams(ctx, t, n, "consensus_random_beacon_test",
 		newTickerFunc(), params)
@@ -209,7 +258,7 @@ func (a *replayRandomnessApp) FinalizeBlock(_ context.Context, _ *abci.RequestFi
 	return &abci.ResponseFinalizeBlock{}, nil
 }
 
-// TestReplayBlockRandomBeacon checks that the handshake replay of a block committed at consensus version 2
+// TestReplayBlockRandomBeacon checks that the handshake replay of a block committed at consensus version 3
 // applies the commit's beacon after ProcessProposal and before the commit's extensions are checked and the
 // block is finalized, reports the commit's app hash as the one the application committed, and stops
 // before FinalizeBlock when the application reaches another app hash.
@@ -218,7 +267,7 @@ func TestReplayBlockRandomBeacon(t *testing.T) {
 	defer cancel()
 
 	params := factory.ConsensusParams(func(cp *types.ConsensusParams) {
-		cp.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_2)
+		cp.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_3)
 	})
 	state, _ := makeGenesisState(ctx, t, nil, genesisStateArgs{Params: params, Validators: 1})
 	stateStore := sm.NewStore(dbm.NewMemDB())
@@ -256,7 +305,7 @@ func TestReplayBlockRandomBeacon(t *testing.T) {
 }
 
 // TestRandomBeaconRelockNewBeacon checks that a block locked in round 0 and voted again in round 1 at
-// consensus version 2 gets the beacon of round 1: the validator's round 1 precommit signs another final
+// consensus version 3 gets the beacon of round 1: the validator's round 1 precommit signs another final
 // state ID than its round 0 precommit, and the block commits at round 1 with the round 1 beacon.
 func TestRandomBeaconRelockNewBeacon(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -264,7 +313,7 @@ func TestRandomBeaconRelockNewBeacon(t *testing.T) {
 	config := configSetup(t)
 
 	params := factory.ConsensusParams(func(cp *types.ConsensusParams) {
-		cp.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_2)
+		cp.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_3)
 	})
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, consensusParams: params})
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
@@ -394,7 +443,7 @@ func TestVoteSignerFinalStateIDCached(t *testing.T) {
 }
 
 // TestReactorRandomBeaconNonValidator runs four validators and a node outside the validator set at
-// consensus version 2. That node never votes and receives no votes: it finalizes every block from a
+// consensus version 3. That node never votes and receives no votes: it finalizes every block from a
 // peer's commit, checking the commit's beacon and applying it with ApplyBlockRandomness itself, and must
 // reach the same final app hash and state as the validators.
 func TestReactorRandomBeaconNonValidator(t *testing.T) {
@@ -409,7 +458,7 @@ func TestReactorRandomBeaconNonValidator(t *testing.T) {
 		appFunc:   newKVStoreFunc(t),
 		tickerFun: newTickerFunc(),
 		consensusParams: factory.ConsensusParams(func(cp *types.ConsensusParams) {
-			cp.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_2)
+			cp.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_3)
 			cp.Timeout.Propose = 2 * time.Second
 		}),
 	}
