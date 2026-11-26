@@ -27,15 +27,17 @@ var (
 
 // StateDataStore is a state-data store
 type StateDataStore struct {
-	mtx            sync.Mutex
-	roundState     cstypes.RoundState
-	committedState sm.State
-	metrics        *Metrics
-	logger         log.Logger
-	config         *config.ConsensusConfig
-	emitter        *eventemitter.EventEmitter
-	replayMode     bool
-	version        int64
+	mtx               sync.Mutex
+	roundState        cstypes.RoundState
+	committedState    sm.State
+	metrics           *Metrics
+	logger            log.Logger
+	config            *config.ConsensusConfig
+	emitter           *eventemitter.EventEmitter
+	replayMode        bool
+	version           int64
+	localProTxHash    types.ProTxHash
+	missingKeysQuorum string
 }
 
 // NewStateDataStore creates and returns a new state-data store
@@ -102,21 +104,50 @@ func (s *StateDataStore) update(candidate StateData) error {
 	if candidate.version != s.version {
 		return fmt.Errorf("mismatch state-data versions actual %d want %d", candidate.version, s.version)
 	}
+	readinessChanged := candidate.Height != s.roundState.Height || candidate.Validators != s.roundState.Validators
 	s.roundState = candidate.RoundState
 	if s.committedState.LastBlockHeight == 0 || s.committedState.LastBlockHeight < candidate.state.LastBlockHeight {
 		// fires the event to update committed-state in those components that have a reference with this data
 		s.emitter.Emit(committedStateUpdateEventName, candidate.state)
 	}
 	s.committedState = candidate.state
+	if readinessChanged {
+		s.reportQuorumKeyReadiness()
+	}
 	s.version++
 	return nil
 }
 
 func (s *StateDataStore) Subscribe(evsw *eventemitter.EventEmitter) {
+	evsw.AddListener(setPrivValidatorEventName, func(obj eventemitter.EventData) error {
+		s.mtx.Lock()
+		defer s.mtx.Unlock()
+		s.localProTxHash = obj.(privValidator).ProTxHash.Copy()
+		s.reportQuorumKeyReadiness()
+		return nil
+	})
 	evsw.AddListener(setReplayModeEventName, func(obj eventemitter.EventData) error {
 		s.UpdateReplayMode(obj.(bool))
 		return nil
 	})
+}
+
+// Called with s.mtx held, after installing active state or the local identity.
+func (s *StateDataStore) reportQuorumKeyReadiness() {
+	vals := s.roundState.Validators
+	if vals.IsNilOrEmpty() || len(s.localProTxHash) == 0 ||
+		!vals.HasProTxHash(s.localProTxHash) || vals.HasPublicKeys {
+		s.metrics.ValidatorMissingQuorumKeys.Set(0)
+		s.missingKeysQuorum = ""
+		return
+	}
+	s.metrics.ValidatorMissingQuorumKeys.Set(1)
+	quorum := vals.QuorumHash.String()
+	if s.missingKeysQuorum != quorum {
+		s.logger.Error("active validator is missing quorum member public keys; waiting for an application validator-set update",
+			"quorum_hash", quorum, "height", s.roundState.Height)
+		s.missingKeysQuorum = quorum
+	}
 }
 
 // StateData is a copy of the current RoundState and state.State stored in the store
