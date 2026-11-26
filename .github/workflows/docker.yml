@@ -31,7 +31,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: docker-${{ inputs.source_ref || (inputs.tag && format('refs/tags/{0}', inputs.tag)) || (github.event.pull_request.head.ref && format('refs/heads/{0}', github.event.pull_request.head.ref)) || github.ref }}
+  group: docker-${{ inputs.source_ref || (inputs.tag && format('refs/tags/{0}', inputs.tag)) || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref && format('refs/heads/{0}', github.event.pull_request.head.ref)) || github.ref }}
   cancel-in-progress: false
   queue: max
 
@@ -48,9 +48,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    outputs:
-      source_sha: ${{ steps.source.outputs.source_sha }}
-      digest: ${{ steps.verified.outputs.digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -89,6 +86,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ghcr.io/dashpay/tenderdash:sha-${{ steps.source.outputs.source_sha }}
+          # TODO: Add remaining OCI config labels here; promotion must preserve the digest.
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ steps.source.outputs.version }}

@@ -36,8 +36,8 @@ def plan(event_name, event, ref, latest_release, repo=Path(".")):
 
     if event_name not in ("release", "workflow_dispatch", "pull_request"):
         raise ValueError("Docker publication requires a release or manual event")
-    inputs = event.get("inputs", {})
-    staging_ref = inputs.get("source_ref", "")
+    inputs = event.get("inputs") or {}
+    staging_ref = inputs.get("source_ref") or ""
     if staging_ref and inputs.get("tag"):
         raise ValueError(
             "source_ref stages an image; tag requests a manual publication"
@@ -57,7 +57,7 @@ def plan(event_name, event, ref, latest_release, repo=Path(".")):
     tag = (
         release.get("tag_name", "")
         if event_name == "release"
-        else event.get("inputs", {}).get("tag", "")
+        else inputs.get("tag") or ""
     )
     if not staging_ref and not tag and ref.startswith("refs/tags/"):
         tag = ref.removeprefix("refs/tags/")

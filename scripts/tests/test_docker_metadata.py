@@ -135,6 +135,24 @@ class DockerMetadataTests(unittest.TestCase):
         self.assertEqual(result["version"], "2.0.0")
         self.assertEqual(result["tags"], ["2.0.0"])
 
+    def test_null_dispatch_inputs_use_selected_branch_or_tag(self):
+        self.git("tag", "v2.0.0")
+        for ref in ("refs/heads/dev", "refs/tags/v2.0.0"):
+            expected = self.plan(name="workflow_dispatch", tag="", ref=ref)
+            for event in (
+                {},
+                {"inputs": None},
+                {"inputs": {}},
+                {"inputs": {"source_ref": None, "tag": None}},
+            ):
+                with self.subTest(ref=ref, event=event):
+                    self.assertEqual(
+                        self.module.plan(
+                            "workflow_dispatch", event, ref, "", self.repo
+                        ),
+                        expected,
+                    )
+
     def test_invalid_missing_tag_and_unexpected_event_fail_closed(self):
         for tag in [
             "latest",
