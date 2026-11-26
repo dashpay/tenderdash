@@ -33,6 +33,7 @@ First stable release of the 2.0 line. This section covers every change since 1.8
 
 - Drive: applications built on `rs-tenderdash-abci` accept `^major.minor` of the ABCI version they link; Drive 5.1.0-rc.1 links ABCI 1.5, so it accepts Tenderdash 2.0.0 and rejects 1.8.x (ABCI 1.4.0)
 - Drive 5.1.0-rc.1 handles the commit-level `VerifyVoteExtension` call; upgrade Drive and Tenderdash together, as dashmate does
+- ABCI stays 1.5.0 with the commit-level `VerifyVoteExtension` call (#1520), because Drive, the only ABCI application, handles it from 5.1.0-rc.1; the version handshake does not check this, as an application built for ABCI 1.4 (`^1.4`) accepts 1.5.0
 - dashmate: set the Tenderdash image to `dashpay/tenderdash:2.0.0`; the configuration dashmate 5.1.0-rc.1 generates passes the new validation (`kv` indexer, no `psql-conn`, valid `[p2p]` limits), and it stops the container with a 40s grace period
 - Before activation: on a chain at consensus version 0 or 1, 2.0.0 nodes keep block protocol 14, pass the peer compatibility check of 1.8.x nodes (it compares the block protocol, not the P2P protocol) and do not send the new consensus messages, so a network upgrades node by node
 - Activation: Drive enables consensus version 2 with Platform protocol version 15, through a consensus parameter update that applies from the next height; every validator and full node must run 2.0.0 before that, and a node cannot return to 1.8.x afterwards
