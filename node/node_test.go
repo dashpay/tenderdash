@@ -251,6 +251,8 @@ func TestCreatePeerManagerSkipsConfiguredSelf(t *testing.T) {
 	selfID := types.NodeID(strings.Repeat("a", 40))
 	otherID := types.NodeID(strings.Repeat("b", 40))
 	self := fmt.Sprintf("mconn://%s@127.0.0.1:26656", selfID)
+	// The same ID under another address and in upper case is still the node itself.
+	selfElsewhere := fmt.Sprintf("tcp://%s@10.0.0.9:36656", strings.ToUpper(string(selfID)))
 	other := fmt.Sprintf("mconn://%s@127.0.0.2:26656", otherID)
 	for _, key := range []string{"p2p.bootstrap-peers", "p2p.persistent-peers"} {
 		t.Run(key, func(t *testing.T) {
@@ -258,7 +260,7 @@ func TestCreatePeerManagerSkipsConfiguredSelf(t *testing.T) {
 			// Only the other peer may count toward the persistent peer limit.
 			cfg.P2P.MaxConnections = 1
 			cfg.P2P.MaxOutgoingConnections = 1
-			peers := strings.Join([]string{self, other, self}, ",")
+			peers := strings.Join([]string{self, other, selfElsewhere}, ",")
 			if key == "p2p.bootstrap-peers" {
 				cfg.P2P.BootstrapPeers = peers
 			} else {
@@ -273,6 +275,11 @@ func TestCreatePeerManagerSkipsConfiguredSelf(t *testing.T) {
 			t.Cleanup(func() { require.NoError(t, closeManager()) })
 			require.NoError(t, err)
 			require.Equal(t, []types.NodeID{otherID}, manager.Peers())
+			wantScore := p2p.PeerScore(0)
+			if key == "p2p.persistent-peers" {
+				wantScore = p2p.PeerScorePersistent
+			}
+			require.Equal(t, wantScore, manager.Scores()[otherID])
 			require.Equal(t, otherID, manager.TryDialNext().NodeID)
 
 			lines := strings.Split(strings.TrimSpace(warnings.String()), "\n")
@@ -280,8 +287,9 @@ func TestCreatePeerManagerSkipsConfiguredSelf(t *testing.T) {
 			for _, line := range lines {
 				require.Contains(t, line, `"level":"warn"`)
 				require.Contains(t, line, key)
-				require.Contains(t, line, self)
 			}
+			require.Contains(t, lines[0], self)
+			require.Contains(t, lines[1], "10.0.0.9:36656")
 
 			selfAddr, err := p2p.ParseNodeAddress(self)
 			require.NoError(t, err)
