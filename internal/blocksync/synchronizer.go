@@ -8,7 +8,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cosmos/gogoproto/proto"
 	"github.com/jonboulle/clockwork"
 	sync "github.com/sasha-s/go-deadlock"
 
@@ -18,7 +17,6 @@ import (
 	"github.com/dashpay/tenderdash/libs/service"
 	"github.com/dashpay/tenderdash/libs/workerpool"
 	bcproto "github.com/dashpay/tenderdash/proto/tendermint/blocksync"
-	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -1021,10 +1019,12 @@ func BlockResponseFromProto(resp *bcproto.BlockResponse, peerID types.NodeID) (*
 	}, nil
 }
 
-// decodeBlock decodes a serialized tendermint.types.Block.
+// decodeBlock decodes a serialized tendermint.types.Block as consensus and the block store do (see
+// types.UnmarshalBlockProto), so block sync accepts every block they accept. It leaves blockBytes as
+// they are: the part set is cut from them, not from the decoded block.
 func decodeBlock(blockBytes []byte) (*types.Block, error) {
-	pbb := new(tmproto.Block)
-	if err := proto.Unmarshal(blockBytes, pbb); err != nil {
+	pbb, err := types.UnmarshalBlockProto(blockBytes)
+	if err != nil {
 		return nil, fmt.Errorf("cannot decode block: %w", err)
 	}
 	return types.BlockFromProto(pbb)
