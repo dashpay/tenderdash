@@ -248,7 +248,7 @@ func (r *BlockReplayer) replayBlocks(
 		}
 	}
 	if !mutateState {
-		err = r.publishEvents(block, commit.BlockID, ucState)
+		err = r.publishEvents(block, commit, ucState)
 		if err != nil {
 			return nil, err
 		}
@@ -454,14 +454,14 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 	return r.stateStore.Save(*state)
 }
 
-// publishEvents publishes the events of block, committed with the block ID blockID: the commit's,
-// whose state ID carries the app hash the commit signs from consensus version 2.
+// publishEvents publishes the events of block, committed with commit's block ID, whose state ID
+// carries the app hash the commit signs from consensus version 2.
 func (r *BlockReplayer) publishEvents(
 	block *types.Block,
-	blockID types.BlockID,
+	commit *types.Commit,
 	ucState sm.CurrentRoundState,
 ) error {
-	es := sm.NewFullEventSet(block, blockID, ucState, ucState.NextValidators)
+	es := sm.NewFullEventSet(block, commit.BlockID, ucState, ucState.NextValidators)
 	err := es.Publish(r.publisher)
 	if err != nil {
 		r.logger.Error("failed publishing event", "err", err)

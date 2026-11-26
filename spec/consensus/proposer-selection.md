@@ -47,7 +47,7 @@ strategy by `ConsensusParams.Version.ConsensusVersion`:
 | `ConsensusVersion` | Strategy | File |
 | --- | --- | --- |
 | 0 (default) | **Height-based**: the index advances once per height; the round offset is derived without being persisted | `height_proposer.go` (`heightProposerSelector`) |
-| 1 | **Height-and-round-based**: the index advances once per height and once per round | `height_round_proposer.go` (`heightRoundProposerSelector`) |
+| 1, 2 | **Height-and-round-based**: the index advances once per height and once per round. Version 2 keeps this strategy and adds [proposer liveness](./consensus-proposer-liveness.md) | `height_round_proposer.go` (`heightRoundProposerSelector`) |
 
 Changing the version is a consensus-parameter update and takes effect at the
 next height ([Validator-set and parameter changes](./consensus-alternative-flows.md#validator-set-and-parameter-changes)).

@@ -550,7 +550,8 @@ fetchers = "{{ .StateSync.Fetchers }}"
 wal-file = "{{ js .Consensus.WalPath }}"
 # wal-skip-rounds-to-last set to true will skip replaying all non-committed rounds stored in
 # WAL, increasing performance in a significant way. It should be set to false by default, as it
-# can have security side-effects.
+# can have security side-effects. It has no effect on a chain that skips the rounds of silent
+# proposers (consensus version 2), whose replay needs every round of the height.
 wal-skip-rounds-to-last = "{{ .Consensus.WalSkipRoundsToLast }}"
 
 # Legacy compatibility setting; currently unused by consensus.
@@ -565,7 +566,13 @@ create-empty-blocks-interval = "{{ .Consensus.CreateEmptyBlocksInterval }}"
 # Reactor sleep duration parameters. peer-gossip-sleep-duration also sets the
 # tick rate a lagging peer's catch-up block-part replay is metered against
 # (a fixed 500ms internal throttle): raising this above 500ms disables that
-# throttle.
+# throttle. peer-query-maj23-sleep-duration also sets how often the node
+# re-announces its round state to each peer (recovery latency after a lost
+# announcement) and paces the redelivery of votes a peer has not acknowledged:
+# one interval after a vote went out, then doubling up to 8 intervals. Raising
+# it slows stall recovery. Either duration under 1ms is run at 1ms, which only
+# prevents a busy loop: well below the defaults, peers drop this node's state
+# updates over their per-peer allowance.
 peer-gossip-sleep-duration = "{{ .Consensus.PeerGossipSleepDuration }}"
 peer-query-maj23-sleep-duration = "{{ .Consensus.PeerQueryMaj23SleepDuration }}"
 

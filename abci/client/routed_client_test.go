@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
+	clientmocks "github.com/dashpay/tenderdash/abci/client/mocks"
 	"github.com/dashpay/tenderdash/abci/server"
 	"github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/abci/types/mocks"
@@ -159,4 +160,53 @@ func TestRoutedClientGrpc(t *testing.T) {
 	_, err = client.Info(ctx, &types.RequestInfo{})
 	assert.NoError(t, err)
 
+}
+
+// A routed client picks the backends of each request by its name, so probing
+// the backends PrepareProposal goes to is not Echo: a healthy default backend
+// says nothing about a stalled proposal backend, nor a stalled default backend
+// about a healthy proposal one.
+func TestEchoRouteProbesTheBackendsOfTheMethod(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	logger := log.NewNopLogger()
+	probe := func(client abciclient.Client, method abciclient.RequestType) error {
+		ctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+		defer cancel()
+		return abciclient.EchoRoute(ctx, client, method, "probe")
+	}
+
+	client, err := abciclient.NewRoutedClient(logger, echoBackend(t, false), abciclient.Routing{
+		"PrepareProposal": {{Client: echoBackend(t, true), ClientID: "proposal"}},
+	})
+	require.NoError(t, err)
+	_, err = client.Echo(ctx, "probe")
+	require.NoError(t, err, "Echo goes to the healthy default backend")
+	assert.ErrorIs(t, probe(client, "PrepareProposal"), context.DeadlineExceeded)
+
+	client, err = abciclient.NewRoutedClient(logger, echoBackend(t, true), abciclient.Routing{
+		"PrepareProposal": {
+			{Client: echoBackend(t, false), ClientID: "proposal-1"},
+			{Client: echoBackend(t, false), ClientID: "proposal-2"},
+		},
+	})
+	require.NoError(t, err)
+	assert.NoError(t, probe(client, "PrepareProposal"))
+	assert.ErrorIs(t, probe(client, "Info"), context.DeadlineExceeded,
+		"a method with no route of its own reaches the default backend")
+}
+
+// echoBackend returns an ABCI client whose Echo answers or, stalled, waits for
+// the caller to give up.
+func echoBackend(t *testing.T, stalled bool) *clientmocks.Client {
+	backend := clientmocks.NewClient(t)
+	backend.On("Echo", mock.Anything, mock.Anything).Return(
+		func(ctx context.Context, msg string) (*types.ResponseEcho, error) {
+			if stalled {
+				<-ctx.Done()
+				return nil, ctx.Err()
+			}
+			return &types.ResponseEcho{Message: msg}, nil
+		}).Maybe()
+	return backend
 }

@@ -2,12 +2,14 @@ package statesync
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	sm "github.com/dashpay/tenderdash/internal/state"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -124,4 +126,20 @@ func TestVerifyConsensusParamsEvidenceModes(t *testing.T) {
 		require.NoError(t, verifyConsensusParams(params, params.HashConsensusParams(), 10, nil))
 		require.Error(t, verifyConsensusParams(params, tmbytes.HexBytes("untrusted hash"), 10, nil))
 	}
+}
+
+// From CONSENSUS_VERSION_2 the proposer liveness timeouts decide what a
+// validator sends to the others, so a peer handing a state-syncing node params
+// must not be able to change them unnoticed.
+func TestVerifyConsensusParamsProposerLivenessTimeouts(t *testing.T) {
+	trusted := *types.DefaultConsensusParams()
+	trusted.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_2)
+	trustedHash := trusted.HashConsensusParams()
+	require.NoError(t, verifyConsensusParams(trusted, trustedHash, 10, nil))
+
+	tampered := trusted
+	tampered.Timeout.ProposerHeartbeat = time.Hour
+	tampered.Timeout.ProposerSilence = 2 * time.Hour
+	require.NoError(t, tampered.ValidateConsensusParams(), "the tampered params are valid on their own")
+	assert.Error(t, verifyConsensusParams(tampered, trustedHash, 10, nil))
 }

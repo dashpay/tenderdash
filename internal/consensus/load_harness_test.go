@@ -118,6 +118,7 @@ type floodHarness struct {
 	stateDrops   *syncCounter
 	partDrops    *syncCounter
 	verifyErrors *syncCounter
+	budgetWaits  syncCounter
 
 	// offered counts what a background flood has sent.
 	offered offeredCounter
@@ -164,7 +165,9 @@ func newFloodHarness(ctx context.Context, t *testing.T, args floodHarnessArgs) *
 		verifyErrors: &syncCounter{},
 	}
 	if args.wallClock {
-		h.inner = newVerificationBudget(args.rate)
+		h.inner = newVerificationBudget(args.rate, withVerificationBudgetClock(&recordingBudgetClock{
+			Clock: clockwork.NewRealClock(), waits: &h.budgetWaits,
+		}))
 	} else {
 		h.inner = newVerificationBudget(args.rate, withVerificationBudgetClock(h.clock))
 	}
@@ -187,6 +190,17 @@ func newFloodHarness(ctx context.Context, t *testing.T, args floodHarnessArgs) *
 	})
 	h.cs.wal = h.wal
 	return h
+}
+
+// recordingBudgetClock counts token waits without changing the clock's behavior.
+type recordingBudgetClock struct {
+	clockwork.Clock
+	waits *syncCounter
+}
+
+func (c *recordingBudgetClock) NewTimer(d time.Duration) clockwork.Timer {
+	c.waits.Add(1)
+	return c.Clock.NewTimer(d)
 }
 
 func (h *floodHarness) stateData() StateData { return h.cs.GetStateData() }

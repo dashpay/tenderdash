@@ -20,7 +20,7 @@ The useful distinction is each branch's role:
 
 Target `dev` for ordinary integration PRs. Select another target explicitly for
 a release, hotfix or dependent change, following [RELEASES.md](RELEASES.md).
-Choose by the branch's role rather than sorting historical versioned names.
+Versioned `vX.Y-dev` branches (e.g. `v1.9-dev`) are retired; never target them.
 
 A PR that depends on another open PR can target its parent feature branch.
 Describe the dependency and keep its diff focused; after the parent lands,
@@ -165,7 +165,8 @@ work. Mark it ready for review when the change and its explanation are ready.
 Use [Conventional Commits](https://www.conventionalcommits.org/) for commit and PR
 titles, for example `fix(consensus): validate the proposal before voting`.
 Use `!` and explain migration requirements for an incompatible change. These
-summaries help readers; the actual compatibility review determines release scope.
+summaries help readers; the actual compatibility review determines release scope
+(see the [versioning policy](RELEASES.md#versioning-policy)).
 A normal development PR does not update the release version or `CHANGELOG.md`.
 
 Read the final diff, address verified findings and update the tests and PR

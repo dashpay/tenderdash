@@ -215,10 +215,10 @@ func TestServiceProbationRemainsServableBelowTip(t *testing.T) {
 	endServiceRequest(syncer.peerStore, peer, request, 100)
 	_, found := syncer.peerStore.FindPeer(1)
 	require.False(t, found, "peer is cooling")
-	_, _, servable, _, hasPeers, maxServable := syncer.stallSnapshot()
-	require.True(t, servable)
-	require.True(t, hasPeers)
-	require.EqualValues(t, 1000, maxServable)
+	st := syncer.stallSnapshot()
+	require.True(t, st.servable)
+	require.True(t, st.hasPeers)
+	require.EqualValues(t, 1000, st.maxServableHeight)
 }
 
 func TestServiceSavedCreditCannotHideNewSlowService(t *testing.T) {

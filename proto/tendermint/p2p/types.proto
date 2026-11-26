@@ -90,5 +90,9 @@ message Envelope {
     tendermint.consensus.VoteSetBits   vote_set_bits   = 28;
     tendermint.consensus.Commit        commit          = 29;
     tendermint.consensus.HasCommit     has_commit      = 30;
+
+    tendermint.consensus.ProposerHeartbeat    proposer_heartbeat     = 31;
+    tendermint.consensus.RoundSkipVote        round_skip_vote        = 32;
+    tendermint.consensus.RoundSkipCertificate round_skip_certificate = 33;
   }
 }

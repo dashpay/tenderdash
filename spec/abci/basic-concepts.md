@@ -117,7 +117,7 @@ In summary:
 ### Other methods
 
 Additionally, there is a [**Flush**](methods.md#flush) method that is called on every connection,
-and an [**Echo**](methods.md#echo) method that is just for debugging.
+and an [**Echo**](methods.md#echo) method for debugging, which a waiting proposer also uses as a readiness probe.
 
 More details on managing state across connections can be found in the section on
 [ABCI Applications](app-requirements.md).

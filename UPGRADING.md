@@ -72,7 +72,7 @@ and migration boundaries.
 
 ### ABCI: ApplyBlockRandomness and commit beacon fields
 
-The ABCI version is 1.5.0. The `Application` interface and the gRPC `ABCIApplication` service gain
+The ABCI version is 1.6.0. The `Application` interface and the gRPC `ABCIApplication` service gain
 `ApplyBlockRandomness`, which hands the application a block's random beacon from consensus version 2.
 Tenderdash calls it only once a chain moves to consensus version 2.
 
@@ -1144,7 +1144,7 @@ the compilation tag:
 
 Use `cleveldb` tag instead of `gcc` to compile Tendermint with CLevelDB or
 use `make build_c` / `make install_c` (full instructions can be found at
-<https://docs.tendermint.com/v0.35/introduction/install.html)
+<https://docs.tendermint.com/v0.35/introduction/install.html>)
 
 ## v0.31.0
 

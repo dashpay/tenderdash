@@ -861,13 +861,13 @@ func makeConsensusState(
 	configOpts ...func(*config.Config),
 ) []*State {
 	t.Helper()
-	return makeConsensusStateWithParams(ctx, t, cfg, nValidators, testName, tickerFunc, factory.ConsensusParams(), configOpts...)
+	return makeConsensusStateWithParams(ctx, t, nValidators, testName, tickerFunc, factory.ConsensusParams(), configOpts...)
 }
 
+// makeConsensusStateWithParams is makeConsensusState for a genesis with params.
 func makeConsensusStateWithParams(
 	ctx context.Context,
 	t *testing.T,
-	_cfg *config.Config,
 	nValidators int,
 	testName string,
 	tickerFunc func() TimeoutTicker,

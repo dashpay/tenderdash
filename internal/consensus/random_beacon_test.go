@@ -143,7 +143,7 @@ func TestReactorRandomBeaconConsensusVersion2(t *testing.T) {
 	params := factory.ConsensusParams(func(cp *types.ConsensusParams) {
 		cp.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_2)
 	})
-	states := makeConsensusStateWithParams(ctx, t, configSetup(t), n, "consensus_random_beacon_test",
+	states := makeConsensusStateWithParams(ctx, t, n, "consensus_random_beacon_test",
 		newTickerFunc(), params)
 	rts := setup(ctx, t, n, states, 100)
 	rts.switchToConsensus(ctx)

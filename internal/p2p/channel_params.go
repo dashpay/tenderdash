@@ -142,6 +142,8 @@ func ConsensusChannelDescriptors() map[ChannelID]*ChannelDescriptor {
 			RecvMessageCapacity: maxMsgSize,
 			RecvBufferCapacity:  128,
 			Name:                "state",
+			// Round-state messages are re-announced periodically.
+			DropOnFullPeerQueue: true,
 		},
 		ConsensusDataChannel: {
 			// TODO: Consider a split between gossiping current block and catchup
@@ -208,7 +210,10 @@ func ResolveChannelID(msg proto.Message) ChannelID {
 	case *consensus.NewRoundStep, *consensus.NewValidBlock,
 		*consensus.HasCommit,
 		*consensus.HasVote,
-		*consensus.VoteSetMaj23:
+		*consensus.VoteSetMaj23,
+		*consensus.ProposerHeartbeat,
+		*consensus.RoundSkipVote,
+		*consensus.RoundSkipCertificate:
 		return ConsensusStateChannel
 	// pex
 	case *p2pproto.PexRequest,

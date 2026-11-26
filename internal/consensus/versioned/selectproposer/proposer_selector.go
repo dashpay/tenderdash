@@ -59,6 +59,7 @@ func NewProposerSelector(cp types.ConsensusParams, valSet *types.ValidatorSet, v
 	switch cp.Version.ConsensusVersion {
 	case int32(tmtypes.VersionParams_CONSENSUS_VERSION_0):
 		return NewHeightProposerSelector(valSet, valsetHeight, bs, logger)
+	// Version 2 adds proposer heartbeats and keeps the version 1 rotation.
 	case int32(tmtypes.VersionParams_CONSENSUS_VERSION_1), int32(tmtypes.VersionParams_CONSENSUS_VERSION_2):
 		return NewHeightRoundProposerSelector(valSet, valsetHeight, valsetRound, bs, logger)
 	default:

@@ -12,12 +12,14 @@ The consensus WAL (`internal/consensus/wal.go`; file layout in
 | Record | Written by | Durability |
 | -------- | ------------ | ------------ |
 | `msgInfo` — proposal, block part, vote or commit, with the peer id and receive time | `walMiddleware` (`internal/consensus/msg_handlers.go`) | peer messages `Write` (buffered); the node's own messages `WriteSync` (fsync), **panic** on failure |
+| `msgInfo` — round skip certificate, once verified and news | `AddRoundSkipCertificateAction.Execute` | `Write`; a failure is only logged |
 | `timeoutInfo` — every tock | `State.receiveRoutine` | `Write` |
 | `EventDataRoundState` — every step change | `EventPublisher.PublishNewRoundStepEvent` | `Write` |
 | `EndHeightMessage{h}` | `ApplyCommitAction.Execute`, after `SaveBlock` and before `FinalizeBlock` | `WriteSync`, **panic** on failure |
 
 `verificationBudgetMiddleware` wraps `walMiddleware`, so a message dropped
-for budget reasons leaves no WAL record. Before signing a proposal or a vote
+for budget reasons leaves no WAL record. Proposer heartbeats and round skip
+votes are never written (`livenessMessage`). Before signing a proposal or a vote
 the WAL is flushed and fsynced (`EnterProposeAction.Execute`,
 `voteSigner.signVote`) so that replay reproduces the same message for the
 private validator's double-sign protection. A failed sync stops the vote
@@ -59,10 +61,13 @@ ticker and, unless `doWALCatchup` was disabled by block sync, runs
 - the WAL must **not** contain `#ENDHEIGHT h` for the current height;
 - it must contain `#ENDHEIGHT h − 1` (`0` at `InitialHeight`);
 - every record after it is replayed through `readReplayMessage`: step
-  events are only logged, `msgInfo`s are dispatched with `fromReplay` (no
+  events are only logged (except as below), `msgInfo`s are dispatched with `fromReplay` (no
   peer budgets, no evictions), tocks go through `handleTimeout`. With
   `WalSkipRoundsToLast` a replayed proposal for a later round advances the
-  round directly;
+  round directly; on `CONSENSUS_VERSION_2` chains that skip rounds the setting
+  is ignored, and a replayed `Propose` step event re-enters the recorded round
+  and propose step (`State.replaySkipsRounds`, `State.readReplayMessage`;
+  [Recovery](./consensus-proposer-liveness.md#recovery));
 - replay mode: the node does not propose (`EnterProposeAction.Execute`) and
   skips timeliness checks (`isValidForPrevote`), but it may still attempt to
   sign votes: replayed messages drive the normal actions, and neither

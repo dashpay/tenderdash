@@ -311,6 +311,23 @@ func (cli *routedClient) Echo(ctx context.Context, msg string) (*types.ResponseE
 	return result.(*types.ResponseEcho), err
 }
 
+// EchoRoute sends Echo to each backend that requests of method go to: those
+// configured for method, or the default backend if there are none. Echo is
+// routed by its own name, so on its own it says nothing about the backends
+// another request reaches.
+func (cli *routedClient) EchoRoute(ctx context.Context, method RequestType, msg string) error {
+	clients, ok := cli.routing[method]
+	if !ok {
+		clients = []ClientInfo{cli.defaultClient}
+	}
+	for _, client := range clients {
+		if err := EchoRoute(ctx, client.Client, method, msg); err != nil {
+			return fmt.Errorf("%s backend %s: %w", method, client.ClientID, err)
+		}
+	}
+	return nil
+}
+
 func (cli *routedClient) Info(ctx context.Context, req *types.RequestInfo) (*types.ResponseInfo, error) {
 	result, err := cli.delegate(ctx, req)
 	return result.(*types.ResponseInfo), err
