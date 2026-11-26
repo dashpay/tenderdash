@@ -39,6 +39,8 @@ type wsEvents struct {
 	listenerDone chan struct{}
 	// orphans tracks unsubscribeOrphan calls; Stop joins them.
 	orphans sync.WaitGroup
+	// resubscribe holds at most one pending resubscribe after an RPC error.
+	resubscribe chan struct{}
 	// resubscribeDelay gives Tendermint time to restart after an RPC error.
 	resubscribeDelay time.Duration
 }
@@ -63,6 +65,7 @@ func newWsEvents(remote string) (*wsEvents, error) {
 		Logger:        log.NewNopLogger(),
 		subscriptions: make(map[string]*wsSubscription),
 		changes:       make(chan struct{}, 1),
+		resubscribe:   make(chan struct{}, 1),
 
 		resubscribeDelay: time.Second,
 	}
@@ -94,8 +97,8 @@ func (w *wsEvents) Start(ctx context.Context) error {
 }
 
 // Stop waits for the websocket client, which joins reconnect callbacks, to shut
-// down with the context passed to Start, then joins the event loop and pending
-// unsubscribes from forgotten queries.
+// down with the context passed to Start, then joins the event loop with its
+// resubscribes, and pending unsubscribes from forgotten queries.
 func (w *wsEvents) Stop() error {
 	err := w.ws.Stop()
 	w.stopListener()
@@ -362,8 +365,27 @@ func isErrHarmless(err error) bool {
 		strings.Contains(err.Error(), pubsub.ErrSubscriptionNotFound.Error())
 }
 
+// resubscriber runs the resubscribes eventListener requests. They run apart, as
+// eventListener must keep reading: a send can wait for the writer to restart,
+// which waits for the reader to hand eventListener a response.
+func (w *wsEvents) resubscriber(ctx context.Context, done chan<- struct{}) {
+	defer close(done)
+	for {
+		select {
+		case <-w.resubscribe:
+			w.redoSubscriptionsAfter(ctx, w.resubscribeDelay)
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
 func (w *wsEvents) eventListener(ctx context.Context, done chan<- struct{}) {
 	defer close(done)
+	ctx, cancel := context.WithCancel(ctx)
+	resubscriberDone := make(chan struct{})
+	go w.resubscriber(ctx, resubscriberDone)
+	defer func() { cancel(); <-resubscriberDone }()
 	for {
 		select {
 		case resp, ok := <-w.ws.ResponsesCh:
@@ -378,9 +400,11 @@ func (w *wsEvents) eventListener(ctx context.Context, done chan<- struct{}) {
 				}
 				w.Logger.Error("WS error", "err", resp.Error.Error())
 				// Other errors, such as max subscriptions per client reached or
-				// Tendermint exited, need a retry. Resubscribe after a delay to give
-				// Tendermint time to restart (if crashed).
-				w.redoSubscriptionsAfter(ctx, w.resubscribeDelay)
+				// Tendermint exited, need a retry; one pending covers them all.
+				select {
+				case w.resubscribe <- struct{}{}:
+				default:
+				}
 				continue
 			}
 
