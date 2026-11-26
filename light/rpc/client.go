@@ -683,6 +683,13 @@ func (c *Client) SubscribeWS(ctx context.Context, query string) (*coretypes.Resu
 	if !c.IsRunning() {
 		return nil, fmt.Errorf("light RPC client is not running")
 	}
+	// Join the entire transaction, including rollback after either admission fails.
+	transactionDone := make(chan struct{})
+	if !c.Go(c.serviceCtx, func(context.Context) { <-transactionDone }) {
+		return nil, fmt.Errorf("light RPC client is stopping")
+	}
+	defer close(transactionDone)
+
 	bctx, cancel := context.WithCancel(c.serviceCtx)
 
 	callInfo := rpctypes.GetCallInfo(ctx)
