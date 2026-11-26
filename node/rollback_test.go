@@ -214,7 +214,10 @@ func TestFullNodeReleasesCoreRPCClient(t *testing.T) {
 			n, _ := rollbackTestNode(ctx, t, nil, fullNode)
 			require.Equal(t, before+1, coreRPCWorkers(), "the full node did not create its client")
 			run(ctx, cancel, t, n)
-			require.Equal(t, before, coreRPCWorkers(), "the Dash Core RPC client outlived the node")
+			// WaitForShutdown returns once the dispatcher calls Done, which can
+			// precede the goroutine's exit by a moment.
+			require.Eventually(t, func() bool { return coreRPCWorkers() == before }, time.Second, 5*time.Millisecond,
+				"the Dash Core RPC client outlived the node")
 		})
 	}
 }
