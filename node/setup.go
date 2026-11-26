@@ -34,10 +34,8 @@ import (
 	"github.com/dashpay/tenderdash/internal/state/indexer"
 	"github.com/dashpay/tenderdash/internal/store"
 	"github.com/dashpay/tenderdash/libs/log"
-	tmnet "github.com/dashpay/tenderdash/libs/net"
 	"github.com/dashpay/tenderdash/libs/service"
 	"github.com/dashpay/tenderdash/privval"
-	tmgrpc "github.com/dashpay/tenderdash/privval/grpc"
 	"github.com/dashpay/tenderdash/types"
 	"github.com/dashpay/tenderdash/version"
 
@@ -465,66 +463,6 @@ func makeSeedNodeInfo(
 	return nodeInfo, nodeInfo.Validate()
 }
 
-func createAndStartPrivValidatorSocketClient(
-	ctx context.Context,
-	listenAddr, chainID string,
-	quorumHash crypto.QuorumHash,
-	logger log.Logger,
-) (types.PrivValidator, error) {
-
-	pve, err := privval.NewSignerListener(listenAddr, logger)
-	if err != nil {
-		return nil, fmt.Errorf("starting validator listener: %w", err)
-	}
-
-	pvsc, err := privval.NewSignerClient(ctx, pve, chainID)
-	if err != nil {
-		return nil, fmt.Errorf("starting validator client: %w", err)
-	}
-
-	// try to get a pubkey from private validate first time
-	_, err = pvsc.GetPubKey(ctx, quorumHash)
-	if err != nil {
-		return nil, fmt.Errorf("can't get pubkey: %w", err)
-	}
-
-	const (
-		timeout = 100 * time.Millisecond
-		maxTime = 5 * time.Second
-		retries = int(maxTime / timeout)
-	)
-	pvscWithRetries := privval.NewRetrySignerClient(ctx, pvsc, retries, timeout, logger)
-
-	return pvscWithRetries, nil
-}
-
-func createAndStartPrivValidatorGRPCClient(
-	ctx context.Context,
-	cfg *config.Config,
-	chainID string,
-	quorumHash crypto.QuorumHash,
-	logger log.Logger,
-) (types.PrivValidator, error) {
-	pvsc, err := tmgrpc.DialRemoteSigner(
-		ctx,
-		cfg.PrivValidator,
-		chainID,
-		logger,
-		cfg.Instrumentation.Prometheus,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to start private validator: %w", err)
-	}
-
-	// try to get a pubkey from private validate first time
-	_, err = pvsc.GetPubKey(ctx, quorumHash)
-	if err != nil {
-		return nil, fmt.Errorf("can't get pubkey: %w", err)
-	}
-
-	return pvsc, nil
-}
-
 func makeDefaultPrivval(conf *config.Config) (*privval.FilePV, error) {
 	if conf.Mode == config.ModeValidator {
 		pval, err := privval.LoadOrGenFilePV(conf.PrivValidator.KeyFile(), conf.PrivValidator.StateFile())
@@ -539,31 +477,10 @@ func makeDefaultPrivval(conf *config.Config) (*privval.FilePV, error) {
 
 // createPrivval creates and returns new PrivVal based on provided config.
 func createPrivval(ctx context.Context, logger log.Logger, conf *config.Config, genDoc *types.GenesisDoc) (types.PrivValidator, error) {
+	if err := conf.PrivValidator.ValidateBasic(); err != nil {
+		return nil, err
+	}
 	switch {
-	case conf.PrivValidator.ListenAddr != "": // Generic tendermint privval
-		protocol, _ := tmnet.ProtocolAndAddress(conf.PrivValidator.ListenAddr)
-		// FIXME: we should return un-started services and
-		// then start them later.
-		if protocol == "grpc" {
-			privValidator, err := createAndStartPrivValidatorGRPCClient(ctx, conf, genDoc.ChainID, genDoc.QuorumHash, logger)
-			if err != nil {
-				return nil, fmt.Errorf("error with private validator grpc client: %w", err)
-			}
-			return privValidator, nil
-		}
-
-		privValidator, err := createAndStartPrivValidatorSocketClient(
-			ctx,
-			conf.PrivValidator.ListenAddr,
-			genDoc.ChainID,
-			genDoc.QuorumHash,
-			logger,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("error with private validator socket client: %w", err)
-		}
-		return privValidator, nil
-
 	case conf.PrivValidator.CoreRPCHost != "": // DASH Core Privval
 		if conf.Mode != config.ModeValidator {
 			return nil, fmt.Errorf("cannot initialize PrivValidator: this node is NOT a validator")
@@ -614,8 +531,6 @@ func createAndStartPrivValidatorDashCoreClient(
 	if err != nil {
 		return nil, fmt.Errorf("failed to start private validator: %w", err)
 	}
-
-	// pvsc := privval.NewRetrySignerClient(ctx, dashcoreSignerClient, 3, 2*time.Second, logger)
 
 	// try to ping Core from private validator first time to make sure connection works
 	err = pvsc.Ping(ctx)

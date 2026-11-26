@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"net"
 	"testing"
 	"time"
 
@@ -32,5 +33,23 @@ func TestValidateFinalizeHold(t *testing.T) {
 		"perturbed":    func(_ *Testnet, n *Node) { n.Perturbations = []Perturbation{PerturbationRestart} },
 	} {
 		require.Error(t, held(edit), name)
+	}
+}
+
+func TestValidatePrivvalProtocol(t *testing.T) {
+	ip, network, err := net.ParseCIDR("10.0.0.1/24")
+	require.NoError(t, err)
+	testnet := Testnet{IP: network}
+	for _, protocol := range []Protocol{ProtocolFile, ProtocolDashCore, ProtocolTCP, ProtocolUNIX, ProtocolGRPC} {
+		t.Run(string(protocol), func(t *testing.T) {
+			node := Node{Name: "node", IP: ip, Mode: ModeFull, Database: "goleveldb", PrivvalProtocol: protocol}
+			node.Testnet = &testnet
+			err := node.Validate(testnet)
+			if protocol == ProtocolFile || protocol == ProtocolDashCore {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, "invalid privval protocol")
+			}
+		})
 	}
 }

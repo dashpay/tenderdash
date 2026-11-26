@@ -26,11 +26,8 @@ type PrivValidatorType uint8
 const (
 	MockSignerClient      = PrivValidatorType(0x00) // mock signer
 	FileSignerClient      = PrivValidatorType(0x01) // signer client via file
-	RetrySignerClient     = PrivValidatorType(0x02) // signer client with retry via socket
-	SignerSocketClient    = PrivValidatorType(0x03) // signer client via socket
 	ErrorMockSignerClient = PrivValidatorType(0x04) // error mock signer
-	SignerGRPCClient      = PrivValidatorType(0x05) // signer client via gRPC
-	DashCoreRPCClient     = PrivValidatorType(0x06) // signer client via gRPC
+	DashCoreRPCClient     = PrivValidatorType(0x06) // signer client via Dash Core RPC
 )
 
 // PrivValidator defines the functionality of a local Tendermint validator
@@ -439,8 +436,7 @@ type ErroringMockPV struct {
 var ErroringMockPVErr = errors.New("erroringMockPV always returns an error")
 
 // ErrSigningNotSupported is what a PrivValidator that cannot sign a kind of
-// message at all returns, or matches with errors.Is, for example a remote signer
-// asked for a proposer heartbeat. Asking again does not help.
+// message at all returns, or matches with errors.Is. Asking again does not help.
 var ErrSigningNotSupported = errors.New("the signer does not support signing this message")
 
 // GetPubKey Implements PrivValidator.

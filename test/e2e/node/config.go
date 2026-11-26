@@ -22,8 +22,6 @@ type Config struct {
 	RetainBlocks     int64                        `toml:"retain_blocks"`
 	ValidatorUpdates map[string]map[string]string `toml:"validator_update"`
 	PrivValServer    string                       `toml:"privval_server"`
-	PrivValKey       string                       `toml:"privval_key"`
-	PrivValState     string                       `toml:"privval_state"`
 	KeyType          string                       `toml:"key_type"`
 	// ProposeNextBlockImmediately makes every FinalizeBlock response ask Tenderdash
 	// to propose the next height without waiting for transactions.
@@ -78,6 +76,8 @@ func LoadConfig(file string) (*Config, error) {
 // validation here, instead relying on Testnet.Validate() to handle it.
 func (cfg Config) Validate() error {
 	switch {
+	case cfg.PrivValServer != "" && cfg.PrivValServerType != "dashcore":
+		return errors.New("privval_server_type must be dashcore")
 	case cfg.ChainID == "":
 		return errors.New("chain_id parameter is required")
 	case cfg.Listen == "" && cfg.Protocol != "builtin":

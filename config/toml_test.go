@@ -1,12 +1,14 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -151,4 +153,18 @@ func TestGeneratedConfigShowsUnsafeNoFsyncOffWithWarning(t *testing.T) {
 	require.Contains(t, rendered, "unsafe-no-fsync = false")
 	require.Contains(t, rendered, "Never enable it on a node whose data matters")
 	require.False(t, DefaultConfig().UnsafeNoFsync, "the default must be durable writes")
+}
+
+func TestGeneratedConfigOmitsRemoteSigner(t *testing.T) {
+	var buf bytes.Buffer
+	require.NoError(t, configTemplate.Execute(&buf, DefaultConfig()))
+	v := viper.New()
+	v.SetConfigType("toml")
+	require.NoError(t, v.ReadConfig(&buf))
+	for _, key := range []string{"laddr", "client-certificate-file", "client-key-file", "root-ca-file"} {
+		require.False(t, v.IsSet("priv-validator."+key), key)
+	}
+	require.True(t, v.IsSet("priv-validator.core-rpc-host"))
+	require.True(t, v.IsSet("priv-validator.key-file"))
+	require.True(t, v.IsSet("priv-validator.state-file"))
 }

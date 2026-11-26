@@ -148,6 +148,9 @@ func (cfg *Config) ValidateBasic() error {
 		}
 	}
 
+	if err := cfg.PrivValidator.ValidateBasic(); err != nil {
+		errs = multierror.Append(errs, fmt.Errorf("error in [priv-validator] section: %w", err))
+	}
 	if err := cfg.RPC.ValidateBasic(); err != nil {
 		errs = multierror.Append(errs, fmt.Errorf("error in [rpc] section: %w", err))
 	}
@@ -384,19 +387,8 @@ type PrivValidatorConfig struct {
 	// Path to the JSON file containing the last sign state of a validator
 	State string `mapstructure:"state-file"`
 
-	// TCP or UNIX socket address for Tendermint to listen on for
-	// connections from an external PrivValidator process
-	ListenAddr string `mapstructure:"laddr"`
-
-	// Client certificate generated while creating needed files for secure connection.
-	// If a remote validator address is provided but no certificate, the connection will be insecure
-	ClientCertificate string `mapstructure:"client-certificate-file"`
-
-	// Client key generated while creating certificates for secure connection
-	ClientKey string `mapstructure:"client-key-file"`
-
-	// Path Root Certificate Authority used to sign both client and server certificates
-	RootCA string `mapstructure:"root-ca-file"`
+	// DeprecatedListenAddr is decoded only to reject configs selecting the removed signer.
+	DeprecatedListenAddr string `mapstructure:"laddr"`
 
 	// RPC port for Tendermint to query for
 	// an external PrivValidator process
@@ -422,21 +414,6 @@ func DefaultPrivValidatorConfig() *PrivValidatorConfig {
 	}
 }
 
-// ClientKeyFile returns the full path to the priv_validator_key.json file
-func (cfg *PrivValidatorConfig) ClientKeyFile() string {
-	return rootify(cfg.ClientKey, cfg.RootDir)
-}
-
-// ClientCertificateFile returns the full path to the priv_validator_key.json file
-func (cfg *PrivValidatorConfig) ClientCertificateFile() string {
-	return rootify(cfg.ClientCertificate, cfg.RootDir)
-}
-
-// CertificateAuthorityFile returns the full path to the priv_validator_key.json file
-func (cfg *PrivValidatorConfig) RootCAFile() string {
-	return rootify(cfg.RootCA, cfg.RootDir)
-}
-
 // KeyFile returns the full path to the priv_validator_key.json file
 func (cfg *PrivValidatorConfig) KeyFile() string {
 	return rootify(cfg.Key, cfg.RootDir)
@@ -447,17 +424,12 @@ func (cfg *PrivValidatorConfig) StateFile() string {
 	return rootify(cfg.State, cfg.RootDir)
 }
 
-func (cfg *PrivValidatorConfig) AreSecurityOptionsPresent() bool {
-	switch {
-	case cfg.RootCA == "":
-		return false
-	case cfg.ClientKey == "":
-		return false
-	case cfg.ClientCertificate == "":
-		return false
-	default:
-		return true
+// ValidateBasic rejects configuration selecting an unsupported signer.
+func (cfg *PrivValidatorConfig) ValidateBasic() error {
+	if cfg != nil && cfg.DeprecatedListenAddr != "" {
+		return errors.New("priv-validator.laddr: the socket and gRPC remote signer has been removed; use core-rpc-host or the file PV")
 	}
+	return nil
 }
 
 //-----------------------------------------------------------------------------

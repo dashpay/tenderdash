@@ -7,22 +7,8 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
-// EndpointTimeoutError occurs when endpoint times out.
-type EndpointTimeoutError struct{}
-
-// Implement the net.Error interface.
-func (e EndpointTimeoutError) Error() string   { return "endpoint connection timed out" }
-func (e EndpointTimeoutError) Timeout() bool   { return true }
-func (e EndpointTimeoutError) Temporary() bool { return true }
-
-// Socket errors.
-var (
-	ErrConnectionTimeout  = EndpointTimeoutError{}
-	ErrNoConnection       = errors.New("endpoint is not connected")
-	ErrReadTimeout        = errors.New("endpoint read timed out")
-	ErrUnexpectedResponse = errors.New("empty response")
-	ErrWriteTimeout       = errors.New("endpoint write timed out")
-)
+// ErrUnexpectedResponse indicates an empty Dash Core signing response.
+var ErrUnexpectedResponse = errors.New("empty response")
 
 // RemoteSignerError allows (remote) validators to include meaningful error
 // descriptions in their reply.

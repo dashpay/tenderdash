@@ -221,3 +221,23 @@ func WriteConfigVals(dir string, vals map[string]string) error {
 	cfile := filepath.Join(dir, "config.toml")
 	return os.WriteFile(cfile, []byte(data), 0600)
 }
+
+func TestParseConfigRemovedRemoteSigner(t *testing.T) {
+	for _, addr := range []string{"", "tcp://127.0.0.1:1234", "unix:///tmp/signer.sock", "grpc://127.0.0.1:1234"} {
+		t.Run(addr, func(t *testing.T) {
+			viper.Reset()
+			t.Cleanup(viper.Reset)
+			viper.SetConfigType("toml")
+			require.NoError(t, viper.ReadConfig(strings.NewReader(fmt.Sprintf(`[priv-validator]
+laddr = %q
+core-rpc-host = "127.0.0.1:19998"
+`, addr))))
+			_, err := ParseConfig(cfg.DefaultConfig().SetRoot(t.TempDir()))
+			if addr == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, "remote signer has been removed")
+			}
+		})
+	}
+}

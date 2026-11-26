@@ -83,6 +83,10 @@ func newDefaultNode(
 	cfg *config.Config,
 	logger log.Logger,
 ) (service.Service, error) {
+	if err := cfg.PrivValidator.ValidateBasic(); err != nil {
+		return nil, err
+	}
+
 	nodeKey, err := types.LoadOrGenNodeKey(cfg.NodeKeyFile())
 	if err != nil {
 		return nil, fmt.Errorf("failed to load or gen node key %s: %w", cfg.NodeKeyFile(), err)

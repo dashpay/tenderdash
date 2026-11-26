@@ -307,8 +307,6 @@ require (
 	github.com/google/orderedcode v0.0.1
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
-	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
-	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/jonboulle/clockwork v0.5.0
 	github.com/libp2p/go-buffer-pool v0.1.0

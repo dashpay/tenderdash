@@ -9,6 +9,17 @@ Tenderdash Core can be configured via a TOML file in
 command-line flags. For most users, the options in the `##### main base configuration options #####` are intended to be modified while config options
 further below are intended for advance power users.
 
+## Private validator migration
+
+Tenderdash v3 validators support the file PV and the Dash Core signer. Configure
+`[priv-validator] core-rpc-host` for Dash Core; validators leave it empty to use
+the file PV. Full nodes still require `core-rpc-host` for light-client verification.
+The socket and gRPC remote signer and `--priv-validator-laddr` flag are removed.
+A non-empty `[priv-validator] laddr` stops startup with a migration error, even
+when `core-rpc-host` is set. Remove it after selecting a supported signer.
+An empty `laddr` and the obsolete `client-certificate-file`, `client-key-file`,
+and `root-ca-file` keys are ignored and can be deleted.
+
 ## Options
 
 The default configuration file create by `tenderdash init` has all
@@ -102,21 +113,10 @@ key-file = "config/priv_validator_key.json"
 # Path to the JSON file containing the last sign state of a validator
 state-file = "data/priv_validator_state.json"
 
-# TCP or UNIX socket address for Tenderdash to listen on for
-# connections from an external PrivValidator process
-# when the listenAddr is prefixed with grpc instead of tcp it will use the gRPC Client
-laddr = ""
-
-# Path to the client certificate generated while creating needed files for secure connection.
-# If a remote validator address is provided but no certificate, the connection will be insecure
-client-certificate-file = ""
-
-# Client key generated while creating certificates for secure connection
-client-key-file = ""
-
-# Path to the Root Certificate Authority used to sign both client and server certificates
-root-ca-file = ""
-
+# Dash Core RPC endpoint; validators can leave empty to use the file PV
+core-rpc-host = ""
+core-rpc-username = "rpcuser"
+core-rpc-password = "rpcpassword"
 
 #######################################################################
 ###                 Advanced Configuration Options                  ###

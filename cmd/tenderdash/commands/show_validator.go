@@ -10,10 +10,8 @@ import (
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/internal/jsontypes"
 	"github.com/dashpay/tenderdash/libs/log"
-	tmnet "github.com/dashpay/tenderdash/libs/net"
 	tmos "github.com/dashpay/tenderdash/libs/os"
 	"github.com/dashpay/tenderdash/privval"
-	tmgrpc "github.com/dashpay/tenderdash/privval/grpc"
 )
 
 // MakeShowValidatorCommand constructs a command to show the validator info.
@@ -27,47 +25,22 @@ func MakeShowValidatorCommand(conf *config.Config, logger log.Logger) *cobra.Com
 				err    error
 				bctx   = cmd.Context()
 			)
-			//TODO: remove once gRPC is the only supported protocol
-			protocol, _ := tmnet.ProtocolAndAddress(conf.PrivValidator.ListenAddr)
-			switch protocol {
-			case "grpc":
-				pvsc, err := tmgrpc.DialRemoteSigner(
-					bctx,
-					conf.PrivValidator,
-					conf.ChainID(),
-					logger,
-					conf.Instrumentation.Prometheus,
-				)
-				if err != nil {
-					return fmt.Errorf("can't connect to remote validator %w", err)
-				}
+			keyFilePath := conf.PrivValidator.KeyFile()
+			if !tmos.FileExists(keyFilePath) {
+				return fmt.Errorf("private validator file %s does not exist", keyFilePath)
+			}
 
-				ctx, cancel := context.WithTimeout(bctx, ctxTimeout)
-				defer cancel()
+			pv, err := privval.LoadFilePV(keyFilePath, conf.PrivValidator.StateFile())
+			if err != nil {
+				return err
+			}
 
-				_, err = pvsc.GetProTxHash(ctx)
-				if err != nil {
-					return fmt.Errorf("can't get proTxHash: %w", err)
-				}
-			default:
+			ctx, cancel := context.WithTimeout(bctx, ctxTimeout)
+			defer cancel()
 
-				keyFilePath := conf.PrivValidator.KeyFile()
-				if !tmos.FileExists(keyFilePath) {
-					return fmt.Errorf("private validator file %s does not exist", keyFilePath)
-				}
-
-				pv, err := privval.LoadFilePV(keyFilePath, conf.PrivValidator.StateFile())
-				if err != nil {
-					return err
-				}
-
-				ctx, cancel := context.WithTimeout(bctx, ctxTimeout)
-				defer cancel()
-
-				_, err = pv.GetProTxHash(ctx)
-				if err != nil {
-					return fmt.Errorf("can't get proTxHash: %w", err)
-				}
+			_, err = pv.GetProTxHash(ctx)
+			if err != nil {
+				return fmt.Errorf("can't get proTxHash: %w", err)
 			}
 
 			bz, err := jsontypes.Marshal(pubKey)

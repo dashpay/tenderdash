@@ -18,7 +18,6 @@ type DashCoreMockSignerServer struct {
 }
 
 func NewDashCoreMockSignerServer(
-	_endpoint *SignerDialerEndpoint,
 	chainID string,
 	quorumHash crypto.QuorumHash,
 	privVal types.PrivValidator,

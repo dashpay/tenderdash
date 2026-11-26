@@ -192,27 +192,6 @@ install_abcidump:
 .PHONY: install_abcidump
 
 ###############################################################################
-###				Privval Server                              ###
-###############################################################################
-
-build_privval_server:
-	@go build -mod=readonly -o $(BUILDDIR)/ -i ./cmd/priv_val_server/...
-.PHONY: build_privval_server
-
-generate_test_cert:
-	# generate self signing ceritificate authority
-	@certstrap init --common-name "root CA" --expires "20 years"
-	# generate server cerificate
-	@certstrap request-cert -cn server -ip 127.0.0.1
-	# self-sign server cerificate with rootCA
-	@certstrap sign server --CA "root CA"
-	# generate client cerificate
-	@certstrap request-cert -cn client -ip 127.0.0.1
-	# self-sign client cerificate with rootCA
-	@certstrap sign client --CA "root CA"
-.PHONY: generate_test_cert
-
-###############################################################################
 ###                              Distribution                               ###
 ###############################################################################
 

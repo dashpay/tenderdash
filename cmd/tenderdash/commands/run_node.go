@@ -30,12 +30,6 @@ func AddNodeFlags(cmd *cobra.Command, conf *cfg.Config) {
 	// mode flags
 	cmd.Flags().String("mode", conf.Mode, "node mode (full | validator | seed)")
 
-	// priv val flags
-	cmd.Flags().String(
-		"priv-validator-laddr",
-		conf.PrivValidator.ListenAddr,
-		"socket address to listen on for connections from external priv-validator process")
-
 	// node flags
 
 	cmd.Flags().BytesHexVar(

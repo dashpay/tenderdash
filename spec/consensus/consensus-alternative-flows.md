@@ -385,10 +385,6 @@ counts from `StartTime`. Other rounds `≥ 1` never wait. On
   deadline): logged; no vote/proposal and **no retry** within the step
   (`voteSigner.signAddVote`, `Proposaler.Create`). A failed round skip vote is
   retried after another silence timeout.
-- **Remote signers** (socket, gRPC) cannot sign proposer heartbeats or round
-  skip votes (`RemoteSignerError` 501, `types.ErrSigningNotSupported`): a
-  validator using one sends neither, so its waiting rounds are skipped
-  ([Signers](./consensus-proposer-liveness.md#signers)).
 - **Observers and liveness messages:** a node without the validators' key
   shares neither verifies nor relays heartbeats and skip votes; it verifies
   and applies round skip certificates against the quorum public key.

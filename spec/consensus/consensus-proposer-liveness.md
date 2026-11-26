@@ -280,13 +280,6 @@ Two gossip handlers run per peer at the `PeerQueryMaj23SleepDuration` cadence
 (`privval/dash_core_signer_client.go`) sign heartbeats and skip votes
 (`SignProposerHeartbeat`, `SignRoundSkipVote` of the `PrivValidator`
 interface, `types/priv_validator.go`).
-The socket and gRPC remote signers (`privval/signer_client.go`,
-`privval/grpc/client.go`) return `RemoteSignerError` code 501, which matches
-`types.ErrSigningNotSupported`. A validator behind such a signer sends no
-heartbeats, so validators skip its waiting rounds after the silence timeout,
-and it signs no skip votes; it still counts others' votes and applies
-certificates.
-
 ## Parameters
 
 `TimeoutParams.ProposerHeartbeat` (field 7) and `ProposerSilence` (field 8)

@@ -575,7 +575,7 @@ func TestProposerLivenessSeenHeartbeats(t *testing.T) {
 }
 
 // unsupportedHeartbeatSigner refuses every heartbeat as a request it cannot
-// sign at all, as remote signers do.
+// sign at all.
 type unsupportedHeartbeatSigner struct {
 	types.PrivValidator
 	attempts atomic.Int32
@@ -585,7 +585,7 @@ func (pv *unsupportedHeartbeatSigner) SignProposerHeartbeat(
 	context.Context, string, btcjson.LLMQType, crypto.QuorumHash, *tmproto.ProposerHeartbeat,
 ) error {
 	pv.attempts.Add(1)
-	return fmt.Errorf("remote signer: %w", types.ErrSigningNotSupported)
+	return fmt.Errorf("unsupported signer: %w", types.ErrSigningNotSupported)
 }
 
 func TestProposerLivenessUnsupportedSigner(t *testing.T) {

@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"os"
 	"reflect"
@@ -355,5 +356,42 @@ func TestConsensusConfig_VerificationRateLimitValidation(t *testing.T) {
 		require.Error(t, cfg.ValidateBasic(), "verification-rate-limit=%v must be rejected", tooSlow)
 	}
 	cfg.VerificationRateLimit = MinVerificationRateLimit
+	require.NoError(t, cfg.ValidateBasic())
+}
+
+func TestPrivValidatorLegacyConfig(t *testing.T) {
+	for _, addr := range []string{"", "tcp://127.0.0.1:1234", "unix:///tmp/signer.sock", "grpc://127.0.0.1:1234", "127.0.0.1:1234"} {
+		for _, core := range []string{"", "127.0.0.1:19998"} {
+			t.Run(addr+"/"+core, func(t *testing.T) {
+				v := viper.New()
+				v.SetConfigType("toml")
+				require.NoError(t, v.ReadConfig(bytes.NewBufferString(fmt.Sprintf(`[priv-validator]
+laddr = %q
+core-rpc-host = %q
+client-certificate-file = "unused.crt"
+client-key-file = "unused.key"
+root-ca-file = "unused-ca.crt"
+`, addr, core))))
+				cfg := DefaultConfig()
+				require.NoError(t, v.Unmarshal(cfg))
+				err := cfg.ValidateBasic()
+				if addr != "" {
+					require.ErrorContains(t, err, "remote signer has been removed")
+					require.ErrorContains(t, err, "priv-validator.laddr")
+					require.ErrorContains(t, err, "core-rpc-host")
+					require.ErrorContains(t, err, "file PV")
+					return
+				}
+				require.NoError(t, err)
+				require.Equal(t, core, cfg.PrivValidator.CoreRPCHost)
+			})
+		}
+	}
+}
+
+func TestSeedConfigWithoutPrivateValidator(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Mode = ModeSeed
+	cfg.PrivValidator = nil
 	require.NoError(t, cfg.ValidateBasic())
 }

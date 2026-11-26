@@ -44,7 +44,7 @@ perturb = ["disconnect"]
 database = "goleveldb"
 persist_interval = 0
 perturb = ["restart"]
-privval_protocol = "tcp"
+privval_protocol = "dashcore"
 seeds = ["seed01"]
 block_sync = "v0"
 
@@ -53,7 +53,7 @@ database = "goleveldb"
 seeds = ["seed01"]
 persist_interval = 3
 perturb = ["kill"]
-privval_protocol = "grpc"
+privval_protocol = "dashcore"
 block_sync = "v0"
 retain_blocks = 10
 
@@ -63,7 +63,7 @@ database = "goleveldb"
 persistent_peers = ["validator01"]
 perturb = ["pause"]
 block_sync = "v0"
-privval_protocol = "tcp"
+privval_protocol = "dashcore"
 
 [node.validator05]
 block_sync = "v0"
