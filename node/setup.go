@@ -258,22 +258,28 @@ func createPeerManager(
 	}
 
 	peers := []p2p.NodeAddress{}
-	for _, p := range tmstrings.SplitAndTrimEmpty(cfg.P2P.PersistentPeers, ",", " ") {
-		address, err := p2p.ParseNodeAddress(p)
-		if err != nil {
-			return nil, func() error { return nil }, fmt.Errorf("invalid peer address %q: %w", p, err)
+	for _, list := range []struct {
+		key        string
+		addresses  string
+		persistent bool
+	}{
+		{key: "p2p.persistent-peers", addresses: cfg.P2P.PersistentPeers, persistent: true},
+		{key: "p2p.bootstrap-peers", addresses: cfg.P2P.BootstrapPeers},
+	} {
+		for _, entry := range tmstrings.SplitAndTrimEmpty(list.addresses, ",", " ") {
+			address, err := p2p.ParseNodeAddress(entry)
+			if err != nil {
+				return nil, func() error { return nil }, fmt.Errorf("invalid peer address %q: %w", entry, err)
+			}
+			if address.NodeID == nodeID {
+				logger.Warn("skipping own node ID in configured peers", "config_key", list.key, "address", address.String())
+				continue
+			}
+			peers = append(peers, address)
+			if list.persistent {
+				options.PersistentPeers = append(options.PersistentPeers, address.NodeID)
+			}
 		}
-
-		peers = append(peers, address)
-		options.PersistentPeers = append(options.PersistentPeers, address.NodeID)
-	}
-
-	for _, p := range tmstrings.SplitAndTrimEmpty(cfg.P2P.BootstrapPeers, ",", " ") {
-		address, err := p2p.ParseNodeAddress(p)
-		if err != nil {
-			return nil, func() error { return nil }, fmt.Errorf("invalid peer address %q: %w", p, err)
-		}
-		peers = append(peers, address)
 	}
 
 	peerDB, err := dbProvider(&config.DBContext{ID: "peerstore", Config: cfg})

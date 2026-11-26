@@ -1,6 +1,7 @@
 package node
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -244,6 +245,70 @@ func TestNodeDelayedStart(t *testing.T) {
 
 	startTime := tmtime.Now()
 	assert.Equal(t, true, startTime.After(n.GenesisDoc().GenesisTime))
+}
+
+func TestCreatePeerManagerSkipsConfiguredSelf(t *testing.T) {
+	selfID := types.NodeID(strings.Repeat("a", 40))
+	otherID := types.NodeID(strings.Repeat("b", 40))
+	self := fmt.Sprintf("mconn://%s@127.0.0.1:26656", selfID)
+	other := fmt.Sprintf("mconn://%s@127.0.0.2:26656", otherID)
+	for _, key := range []string{"p2p.bootstrap-peers", "p2p.persistent-peers"} {
+		t.Run(key, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			// Only the other peer may count toward the persistent peer limit.
+			cfg.P2P.MaxConnections = 1
+			cfg.P2P.MaxOutgoingConnections = 1
+			peers := strings.Join([]string{self, other, self}, ",")
+			if key == "p2p.bootstrap-peers" {
+				cfg.P2P.BootstrapPeers = peers
+			} else {
+				cfg.P2P.PersistentPeers = peers
+			}
+
+			var warnings bytes.Buffer
+			logger, err := log.NewLogger(log.LogLevelWarn, &warnings)
+			require.NoError(t, err)
+			manager, closeManager, err := createPeerManager(t.Context(), cfg,
+				func(*config.DBContext) (dbm.DB, error) { return dbm.NewMemDB(), nil }, selfID, p2p.NopMetrics(), logger)
+			t.Cleanup(func() { require.NoError(t, closeManager()) })
+			require.NoError(t, err)
+			require.Equal(t, []types.NodeID{otherID}, manager.Peers())
+			require.Equal(t, otherID, manager.TryDialNext().NodeID)
+
+			lines := strings.Split(strings.TrimSpace(warnings.String()), "\n")
+			require.Len(t, lines, 2)
+			for _, line := range lines {
+				require.Contains(t, line, `"level":"warn"`)
+				require.Contains(t, line, key)
+				require.Contains(t, line, self)
+			}
+
+			selfAddr, err := p2p.ParseNodeAddress(self)
+			require.NoError(t, err)
+			added, err := manager.Add(selfAddr)
+			require.ErrorContains(t, err, "can't add self")
+			require.False(t, added)
+		})
+	}
+}
+
+func TestCreatePeerManagerRejectsMalformedConfiguredPeer(t *testing.T) {
+	selfID := types.NodeID(strings.Repeat("a", 40))
+	malformed := fmt.Sprintf("%s@127.0.0.1:65536", selfID)
+	for _, key := range []string{"p2p.bootstrap-peers", "p2p.persistent-peers"} {
+		t.Run(key, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			if key == "p2p.bootstrap-peers" {
+				cfg.P2P.BootstrapPeers = malformed
+			} else {
+				cfg.P2P.PersistentPeers = malformed
+			}
+			_, closeManager, err := createPeerManager(t.Context(), cfg,
+				func(*config.DBContext) (dbm.DB, error) { return dbm.NewMemDB(), nil }, selfID, p2p.NopMetrics(), log.NewNopLogger())
+			t.Cleanup(func() { require.NoError(t, closeManager()) })
+			require.ErrorContains(t, err, "invalid peer address")
+		})
+	}
 }
 
 func TestGetRouterConfigAllowlistOnlyFilters(t *testing.T) {
