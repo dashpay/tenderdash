@@ -38,12 +38,10 @@ func TestBlockResponseRefusesPaddedCommitBeacon(t *testing.T) {
 
 	response := func(beacon, appHash []byte) (*BlockResponse, error) {
 		t.Helper()
-		pbBlock, err := block.ToProto()
-		require.NoError(t, err)
 		pbCommit := seen.ToProto()
 		pbCommit.Beacon = beacon
 		pbCommit.AppHash = appHash
-		bz, err := (&bcproto.BlockResponse{Block: pbBlock, Commit: pbCommit}).Marshal()
+		bz, err := (&bcproto.BlockResponse{Block: blockBytes(t, block), Commit: pbCommit}).Marshal()
 		require.NoError(t, err)
 		var decoded bcproto.BlockResponse
 		require.NoError(t, decoded.Unmarshal(bz))
@@ -109,15 +107,13 @@ func TestBlockSyncDropsRelayedCommitRandomness(t *testing.T) {
 	applier := newBlockApplier(blockExec, blockStore, applierWithState(state))
 
 	block, _, _, seen := makeNextBlock(ctx, t, state, privVals[0], 1, types.NewCommit(0, 0, types.BlockID{}, nil, nil))
-	pbBlock, err := block.ToProto()
-	require.NoError(t, err)
 	pbCommit := seen.ToProto()
 	pbCommit.Beacon = crypto.CRandBytes(types.SignatureSize)
 	pbCommit.AppHash = crypto.CRandBytes(crypto.DefaultAppHashSize)
-	resp, err := BlockResponseFromProto(&bcproto.BlockResponse{Block: pbBlock, Commit: pbCommit}, "peer")
+	resp, err := BlockResponseFromProto(&bcproto.BlockResponse{Block: blockBytes(t, block), Commit: pbCommit}, "peer")
 	require.NoError(t, err, "a correctly sized beacon and app hash pass the size bound")
 
-	require.NoError(t, applier.Apply(ctx, resp.Block, resp.Commit))
+	require.NoError(t, applier.ApplyBytes(ctx, resp.BlockBytes, resp.Commit))
 	require.Equal(t, seen.ToCommitInfo(), app.commit)
 	stored := blockStore.LoadSeenCommitAt(1)
 	require.Empty(t, stored.Beacon)
