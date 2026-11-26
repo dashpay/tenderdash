@@ -115,7 +115,12 @@ func (s *heightProposerSelector) proposerFromStore(height int64) error {
 			// quorum rotation happened - we select 1st validator as proposer, and don't rotate
 			// NOTE: We use index 1 due to bug in original code that causes first validator to never propose.
 			// We need to preserve the original bad behavior to avoid breaking consensus
-			proposer = s.valSet.GetByIndex(1).ProTxHash
+			// A one-member set has no index 1, so it wraps to its only validator.
+			size := s.valSet.Size()
+			if size == 0 {
+				return fmt.Errorf("cannot select a proposer at height %d: empty validator set", height)
+			}
+			proposer = s.valSet.GetByIndex(int32(1 % size)).ProTxHash
 			indexIncrement = 0
 
 			s.logger.Debug("quorum rotation detected, setting proposer to 1st validator",
