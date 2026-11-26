@@ -370,7 +370,7 @@ func dialParamsFromURL(pURL *parsedURL) (string, string) {
 
 func makeHTTPDialer(protocol, addr string) func(context.Context, string, string) (net.Conn, error) {
 	return func(ctx context.Context, _, _ string) (net.Conn, error) {
-		return net.DialTimeout(protocol, addr, 10*time.Second)
+		return (&net.Dialer{Timeout: 10 * time.Second}).DialContext(ctx, protocol, addr)
 	}
 }
 

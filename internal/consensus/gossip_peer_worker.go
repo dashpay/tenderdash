@@ -3,13 +3,13 @@ package consensus
 import (
 	"context"
 	"runtime/debug"
-	"sync/atomic"
 	"time"
 
 	"github.com/jonboulle/clockwork"
 
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/libs/service"
 )
 
 // minGossipSleepDuration is the shortest cadence a gossip handler runs at,
@@ -56,24 +56,21 @@ type gossipHandlerFunc func(ctx context.Context, appState StateData)
 type gossipHandler struct {
 	sleepDuration time.Duration
 	handlerFunc   func(ctx context.Context, appState StateData)
-	stoppedCh     chan struct{}
 }
 
 func newGossipHandler(fn gossipHandlerFunc, sleep time.Duration) gossipHandler {
 	return gossipHandler{
 		sleepDuration: sleep,
 		handlerFunc:   fn,
-		stoppedCh:     make(chan struct{}),
 	}
 }
 
 type peerGossipWorker struct {
+	service.BaseService
 	clock          clockwork.Clock
 	logger         log.Logger
 	handlers       []gossipHandler
-	running        atomic.Bool
 	stateDataStore *StateDataStore
-	stopCh         chan struct{}
 }
 
 func newPeerGossipWorker(
@@ -92,10 +89,9 @@ func newPeerGossipWorker(
 		optimistic: true,
 		clock:      clock,
 	}
-	return &peerGossipWorker{
+	worker := &peerGossipWorker{
 		clock:          clock,
 		logger:         logger,
-		stopCh:         make(chan struct{}),
 		stateDataStore: state.stateDataStore,
 		handlers: []gossipHandler{
 			newGossipHandler(
@@ -133,35 +129,24 @@ func newPeerGossipWorker(
 			),
 		},
 	}
+	worker.BaseService = *service.NewBaseService(lifecycleTraceLogger{logger}, "PeerGossipWorker", worker)
+	return worker
 }
 
-func (g *peerGossipWorker) IsRunning() bool {
-	return g.running.Load()
-}
+// lifecycleTraceLogger logs BaseService lifecycle events at Trace: a peer gossip
+// worker starts and stops with every peer connection.
+type lifecycleTraceLogger struct{ log.Logger }
 
-func (g *peerGossipWorker) Start(ctx context.Context) error {
-	g.running.Store(true)
+func (l lifecycleTraceLogger) Info(msg string, keyVals ...interface{}) { l.Trace(msg, keyVals...) }
+
+func (g *peerGossipWorker) OnStart(ctx context.Context) error {
 	for _, handler := range g.handlers {
-		go g.runHandler(ctx, handler)
+		g.Go(ctx, func(ctx context.Context) { g.runHandler(ctx, handler) })
 	}
 	return nil
 }
 
-func (g *peerGossipWorker) Stop() {
-	if !g.running.Swap(false) {
-		return
-	}
-	g.logger.Trace("peer gossip worker stopping")
-	close(g.stopCh)
-	g.Wait()
-}
-
-func (g *peerGossipWorker) Wait() {
-	for _, hd := range g.handlers {
-		<-hd.stoppedCh
-		g.logger.Trace("peer gossip worker stopped")
-	}
-}
+func (g *peerGossipWorker) OnStop() {}
 
 // runGossipHandler invokes a gossip handler, converting a panic into a logged
 // error. Handlers load historical records at heights chosen by the peer they
@@ -186,13 +171,8 @@ func (g *peerGossipWorker) runHandler(ctx context.Context, hd gossipHandler) {
 		timer.Reset(hd.sleepDuration)
 		select {
 		case <-timer.Chan():
-		case <-g.stopCh:
-			g.logger.Trace("peer gossip worker got stop signal")
-			close(hd.stoppedCh)
-			return
 		case <-ctx.Done():
 			g.logger.Trace("peer gossip worker got stop signal via context.Done")
-			close(hd.stoppedCh)
 			return
 		}
 	}
