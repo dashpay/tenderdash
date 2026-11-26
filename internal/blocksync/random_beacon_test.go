@@ -102,7 +102,7 @@ func TestBlockApplierRandomBeacon(t *testing.T) {
 			types.VerifiedCommit{}).Once().Return(state, nil, nil)
 
 		applier := newBlockApplier(exec, store, applierWithState(initialState))
-		require.NoError(t, applier.Apply(ctx, block, commit))
+		require.NoError(t, applier.Apply(ctx, block, blockBytes(t, block), commit))
 	})
 
 	t.Run("refuses a commit whose beacon does not verify", func(t *testing.T) {
@@ -111,7 +111,7 @@ func TestBlockApplierRandomBeacon(t *testing.T) {
 		commit := makeCommit()
 		commit.Beacon = signedCommit.ThresholdBlockSignature
 		applier := newBlockApplier(exec, store, applierWithState(initialState))
-		require.ErrorIs(t, applier.Apply(ctx, block, commit), types.ErrInvalidCommitBeacon)
+		require.ErrorIs(t, applier.Apply(ctx, block, blockBytes(t, block), commit), types.ErrInvalidCommitBeacon)
 	})
 
 	t.Run("stops when the application reaches another app hash", func(t *testing.T) {
@@ -120,6 +120,6 @@ func TestBlockApplierRandomBeacon(t *testing.T) {
 		commit := makeCommit()
 		expectApply(exec, commit, crypto.Checksum([]byte("diverged")))
 		applier := newBlockApplier(exec, store, applierWithState(initialState))
-		require.Panics(t, func() { _ = applier.Apply(ctx, block, commit) })
+		require.Panics(t, func() { _ = applier.Apply(ctx, block, blockBytes(t, block), commit) })
 	})
 }
