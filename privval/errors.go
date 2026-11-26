@@ -23,7 +23,7 @@ type RemoteSignerError struct {
 const remoteSignerNotImplemented = 501
 
 func (e *RemoteSignerError) Error() string {
-	return fmt.Sprintf("signerEndpoint returned error #%d: %s", e.Code, e.Description)
+	return fmt.Sprintf("signer returned error #%d: %s", e.Code, e.Description)
 }
 
 // Is reports a request the signer cannot serve at all as

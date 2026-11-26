@@ -280,6 +280,7 @@ Two gossip handlers run per peer at the `PeerQueryMaj23SleepDuration` cadence
 (`privval/dash_core_signer_client.go`) sign heartbeats and skip votes
 (`SignProposerHeartbeat`, `SignRoundSkipVote` of the `PrivValidator`
 interface, `types/priv_validator.go`).
+
 ## Parameters
 
 `TimeoutParams.ProposerHeartbeat` (field 7) and `ProposerSilence` (field 8)

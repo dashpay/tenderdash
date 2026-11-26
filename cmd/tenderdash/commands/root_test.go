@@ -19,6 +19,21 @@ import (
 	tmos "github.com/dashpay/tenderdash/libs/os"
 )
 
+// The removed key is not in the config template; an environment override must
+// still be rejected rather than ignored.
+func TestParseConfigRemovedRemoteSignerFromEnv(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	viper.SetEnvPrefix("TM")
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
+	viper.AutomaticEnv()
+	t.Setenv("TM_PRIV_VALIDATOR_LADDR", "tcp://127.0.0.1:1234")
+	viper.SetConfigType("toml")
+	require.NoError(t, viper.ReadConfig(strings.NewReader("[priv-validator]\ncore-rpc-host = \"127.0.0.1:19998\"\n")))
+	_, err := ParseConfig(cfg.DefaultConfig().SetRoot(t.TempDir()))
+	require.ErrorContains(t, err, "remote signer has been removed")
+}
+
 func TestParseConfigLegacyPostgreSQLSetting(t *testing.T) {
 	for _, tc := range []struct {
 		name        string

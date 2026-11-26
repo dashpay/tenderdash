@@ -15,7 +15,7 @@ import (
 )
 
 // MakeShowValidatorCommand constructs a command to show the validator info.
-func MakeShowValidatorCommand(conf *config.Config, logger log.Logger) *cobra.Command {
+func MakeShowValidatorCommand(conf *config.Config, _ log.Logger) *cobra.Command {
 	return &cobra.Command{
 		Use:   "show-validator",
 		Short: "Show this node's validator info",
