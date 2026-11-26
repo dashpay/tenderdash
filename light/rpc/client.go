@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/dashpay/dashd-go/btcjson"
+	sync "github.com/sasha-s/go-deadlock"
 
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"
@@ -57,7 +58,21 @@ type Client struct {
 	// callerOwnsNext records that next was already running when this client
 	// started. Lifecycle hooks never overlap, so OnStart's write precedes OnDrain.
 	callerOwnsNext bool
+
+	wsMtx sync.Mutex
+	// wsForwarders holds the forwarder of each WebSocket subscription; the
+	// backend never closes the channel of a subscriber it drops. Keys are per
+	// connection: connections sharing a remote address (as on a unix socket)
+	// share the backend subscriber, so one must not retire another's forwarder.
+	wsForwarders map[wsKey]*wsForwarder
 }
+
+type wsKey struct {
+	conn  rpctypes.WSRPCConnection
+	query string
+}
+
+type wsForwarder struct{ cancel context.CancelFunc }
 
 var _ rpcclient.Client = (*Client)(nil)
 
@@ -100,6 +115,8 @@ func NewClient(logger log.Logger, next rpcclient.Client, lc LightClient, opts ..
 		next: next,
 		lc:   lc,
 		prt:  merkle.DefaultProofRuntime(),
+
+		wsForwarders: make(map[wsKey]*wsForwarder),
 	}
 	c.BaseService = *service.NewBaseService(logger, "Client", c)
 	for _, o := range opts {
@@ -675,6 +692,8 @@ func (c *Client) SubscribeWS(ctx context.Context, query string) (*coretypes.Resu
 		return nil, err
 	}
 
+	key, fwd := wsKey{callInfo.WSConn, query}, &wsForwarder{cancel: cancel}
+	c.setWSForwarder(key, fwd)
 	unsubscribe := func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -683,6 +702,7 @@ func (c *Client) SubscribeWS(ctx context.Context, query string) (*coretypes.Resu
 	done := make(chan struct{})
 	if !c.Go(bctx, func(bctx context.Context) {
 		defer close(done)
+		defer c.dropWSForwarder(key, fwd)
 		defer cancel()
 		defer stopCancel()
 		for {
@@ -699,6 +719,7 @@ func (c *Client) SubscribeWS(ctx context.Context, query string) (*coretypes.Resu
 			}
 		}
 	}) {
+		c.dropWSForwarder(key, fwd)
 		stopCancel()
 		cancel()
 		unsubscribe()
@@ -719,7 +740,10 @@ func (c *Client) SubscribeWS(ctx context.Context, query string) (*coretypes.Resu
 // subscriber.
 func (c *Client) UnsubscribeWS(ctx context.Context, query string) (*coretypes.ResultUnsubscribe, error) {
 	// ctx ends with the WebSocket session, which joins this call on shutdown.
-	err := c.next.Unsubscribe(ctx, rpctypes.GetCallInfo(ctx).RemoteAddr(), query) //nolint:staticcheck
+	callInfo := rpctypes.GetCallInfo(ctx)
+	err := c.next.Unsubscribe(ctx, callInfo.RemoteAddr(), query) //nolint:staticcheck
+	// The backend forgets the subscription even on error.
+	c.retireWSForwarders(callInfo.WSConn, func(q string) bool { return q == query })
 	if err != nil {
 		return nil, err
 	}
@@ -730,11 +754,45 @@ func (c *Client) UnsubscribeWS(ctx context.Context, query string) (*coretypes.Re
 // as a subscriber.
 func (c *Client) UnsubscribeAllWS(ctx context.Context) (*coretypes.ResultUnsubscribe, error) {
 	// ctx ends with the WebSocket session, which joins this call on shutdown.
-	err := c.next.UnsubscribeAll(ctx, rpctypes.GetCallInfo(ctx).RemoteAddr()) //nolint:staticcheck
+	callInfo := rpctypes.GetCallInfo(ctx)
+	err := c.next.UnsubscribeAll(ctx, callInfo.RemoteAddr()) //nolint:staticcheck
+	c.retireWSForwarders(callInfo.WSConn, func(string) bool { return true })
 	if err != nil {
 		return nil, err
 	}
 	return &coretypes.ResultUnsubscribe{}, nil
+}
+
+// setWSForwarder records fwd as serving key, retiring the forwarder it replaces.
+func (c *Client) setWSForwarder(key wsKey, fwd *wsForwarder) {
+	c.wsMtx.Lock()
+	old := c.wsForwarders[key]
+	c.wsForwarders[key] = fwd
+	c.wsMtx.Unlock()
+	if old != nil {
+		old.cancel()
+	}
+}
+
+// dropWSForwarder forgets fwd unless a replacement already took its key.
+func (c *Client) dropWSForwarder(key wsKey, fwd *wsForwarder) {
+	c.wsMtx.Lock()
+	defer c.wsMtx.Unlock()
+	if c.wsForwarders[key] == fwd {
+		delete(c.wsForwarders, key)
+	}
+}
+
+// retireWSForwarders cancels the forwarders of conn's subscriptions to the
+// matching queries; each then forgets itself.
+func (c *Client) retireWSForwarders(conn rpctypes.WSRPCConnection, match func(query string) bool) {
+	c.wsMtx.Lock()
+	defer c.wsMtx.Unlock()
+	for key, fwd := range c.wsForwarders {
+		if key.conn == conn && match(key.query) {
+			fwd.cancel()
+		}
+	}
 }
 
 // XXX: Copied from rpc/core/env.go
