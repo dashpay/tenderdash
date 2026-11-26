@@ -28,7 +28,7 @@ snapshot_interval = 500
 
 # A full node needs the Dash Core privval protocol even though it never signs:
 # without it the node builds its light-client core client from a validator key it
-# does not have. networks/ci.toml carries the same gap.
+# does not have.
 [node.full01]
 mode = "full"
 state_sync = "rpc"
