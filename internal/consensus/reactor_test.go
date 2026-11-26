@@ -9,11 +9,12 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	dbm "github.com/cometbft/cometbft-db"
 	"github.com/fortytw2/leaktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
+	dbm "github.com/dashpay/tenderdash/libs/db"
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
 	"github.com/dashpay/tenderdash/abci/example/kvstore"
@@ -75,6 +76,20 @@ func setup(
 	size int,
 ) *reactorTestSuite {
 	t.Helper()
+	return setupWithChannels(ctx, t, numNodes, states, size, nil)
+}
+
+// setupWithChannels is setup with each node's reactor given the channels
+// wrap returns for it, if wrap is set.
+func setupWithChannels(
+	ctx context.Context,
+	t *testing.T,
+	numNodes int,
+	states []*State,
+	size int,
+	wrap func(nodeID types.NodeID, chID p2p.ChannelID, ch p2p.Channel) p2p.Channel,
+) *reactorTestSuite {
+	t.Helper()
 
 	privProTxHashes := make([]crypto.ProTxHash, len(states))
 	for i, state := range states {
@@ -98,18 +113,23 @@ func setup(
 
 	chCreator := func(nodeID types.NodeID) p2p.ChannelCreator {
 		return func(_ctx context.Context, desc *p2p.ChannelDescriptor) (p2p.Channel, error) {
+			var ch p2p.Channel
 			switch desc.ID {
 			case p2p.ConsensusStateChannel:
-				return rts.stateChannels[nodeID], nil
+				ch = rts.stateChannels[nodeID]
 			case p2p.ConsensusDataChannel:
-				return rts.dataChannels[nodeID], nil
+				ch = rts.dataChannels[nodeID]
 			case p2p.ConsensusVoteChannel:
-				return rts.voteChannels[nodeID], nil
+				ch = rts.voteChannels[nodeID]
 			case p2p.VoteSetBitsChannel:
-				return rts.voteSetBitsChannels[nodeID], nil
+				ch = rts.voteSetBitsChannels[nodeID]
 			default:
 				return nil, fmt.Errorf("invalid channel; %v", desc.ID)
 			}
+			if wrap != nil {
+				ch = wrap(nodeID, desc.ID, ch)
+			}
+			return ch, nil
 		}
 	}
 
@@ -833,4 +853,18 @@ func TestReactorPeerDownDeletesPeerStateSynchronously(t *testing.T) {
 	require.False(t, ok,
 		"peerDown must delete the peer state before returning, so a fast reconnect cannot reuse it")
 	require.False(t, ps.IsRunning(), "peerDown must stop the peer state before returning")
+}
+
+func TestReactorRejectsConsensusHandoffAfterShutdown(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cs, _ := makeState(ctx, t, makeStateArgs{})
+	rts := setup(ctx, t, 1, []*State{cs}, 32)
+	for _, r := range rts.reactors {
+		r.Stop()
+		r.Wait()
+		r.SwitchToConsensus(ctx, cs.GetStateData().state, false, 0)
+		require.False(t, cs.IsRunning(), "handoff started consensus after reactor shutdown")
+		require.True(t, r.WaitSync(), "rejected handoff changed sync state")
+	}
 }

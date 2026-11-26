@@ -12,7 +12,7 @@ For detailed instructions on how to set up a node using Dashmate, please refer t
 
 ## From Binary
 
-To download pre-built binaries, see the [releases page](https://github.com/dashevo/tenderdash/releases).
+To download pre-built binaries, see the [releases page](https://github.com/dashpay/tenderdash/releases).
 
 ## From Source
 
@@ -47,7 +47,8 @@ Get the source code:
   git submodule update
   ```
 
-The default `master` branch tracks the latest stable release.
+Check out the release tag required by your network before building.
+Development branches may contain changes that are not compatible with a deployed network.
 
 Build:
 
@@ -67,7 +68,7 @@ The latest Tenderdash is now installed. You can verify the installation by
 running:
 
 ```sh
-tendermint version
+tenderdash version
 ```
 
 
@@ -90,8 +91,8 @@ GOOS=linux GOARCH=arm  make
 To start a one-node blockchain with a simple in-process application:
 
 ```sh
-tendermint init validator
-tendermint start --proxy-app=kvstore
+tenderdash init validator
+tenderdash start --proxy-app=kvstore
 ```
 
 ## Reinstall
@@ -102,12 +103,8 @@ If you already have Tenderdash installed, and you make updates, simply
 make install
 ```
 
-To upgrade, run:
-
-```sh
-git pull origin master
-make install
-```
+To upgrade, fetch and check out the release tag required by your network, then
+run `make install`. Coordinate consensus and application upgrades with the network.
 
 ## Compile with CLevelDB support
 

@@ -51,6 +51,12 @@ func (m *Envelope) Wrap(pb proto.Message) error {
 		m.Sum = &Envelope_Commit{Commit: msg}
 	case *consensus.HasCommit:
 		m.Sum = &Envelope_HasCommit{HasCommit: msg}
+	case *consensus.ProposerHeartbeat:
+		m.Sum = &Envelope_ProposerHeartbeat{ProposerHeartbeat: msg}
+	case *consensus.RoundSkipVote:
+		m.Sum = &Envelope_RoundSkipVote{RoundSkipVote: msg}
+	case *consensus.RoundSkipCertificate:
+		m.Sum = &Envelope_RoundSkipCertificate{RoundSkipCertificate: msg}
 	case *statesync.SnapshotsRequest:
 		m.Sum = &Envelope_SnapshotsRequest{SnapshotsRequest: msg}
 	case *statesync.SnapshotsResponse:
@@ -117,6 +123,12 @@ func (m *Envelope) Unwrap() (proto.Message, error) {
 		return msg.Commit, nil
 	case *Envelope_HasCommit:
 		return msg.HasCommit, nil
+	case *Envelope_ProposerHeartbeat:
+		return msg.ProposerHeartbeat, nil
+	case *Envelope_RoundSkipVote:
+		return msg.RoundSkipVote, nil
+	case *Envelope_RoundSkipCertificate:
+		return msg.RoundSkipCertificate, nil
 	case *Envelope_SnapshotsRequest:
 		return msg.SnapshotsRequest, nil
 	case *Envelope_SnapshotsResponse:

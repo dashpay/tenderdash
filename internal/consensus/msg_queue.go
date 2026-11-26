@@ -99,7 +99,7 @@ type chanMsgSender struct {
 }
 
 func (s *chanMsgSender) send(ctx context.Context, msg Message, peerID types.NodeID) error {
-	mi := msgInfo{msg, peerID, tmtime.Now()}
+	mi := msgInfo{Msg: msg, PeerID: peerID, ReceiveTime: tmtime.Now(), ConnID: peerConnIDFromCtx(ctx)}
 	usePeerQueue := peerQueueFromCtx(ctx)
 	ch := s.peerQueue
 	if peerID == "" && !usePeerQueue {
@@ -232,6 +232,12 @@ func (q *msgInfoQueue) purgePeer(peerID types.NodeID) {
 // purged cannot create or revive a lane.
 func (q *msgInfoQueue) admitPeer(peerID types.NodeID) uint64 {
 	return q.lanes.admit(peerID)
+}
+
+// peerConnected reports whether peerID is currently connected. It takes only
+// the lanes' leaf lock, so the consensus goroutine may call it at any time.
+func (q *msgInfoQueue) peerConnected(peerID types.NodeID) bool {
+	return q.lanes.connected(peerID)
 }
 
 // settlePeerMsg reports that the consensus goroutine has finished with the peer

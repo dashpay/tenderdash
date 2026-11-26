@@ -4,7 +4,7 @@ order: 4
 
 # Metrics
 
-Tendermint can report and serve the Prometheus metrics, which in their turn can
+Tenderdash can report and serve the Prometheus metrics, which in their turn can
 be consumed by Prometheus collector(s).
 
 This functionality is disabled by default.
@@ -43,7 +43,7 @@ The following metrics are available:
 | consensus_step_duration                 | Histogram | step            | Histogram of durations for each step in the consensus protocol                                                                             |
 | consensus_block_gossip_receive_latency  | Histogram |                 | Histogram of time taken to receive a block in seconds, measure between when a new block is first discovered to when the block is completed |
 | consensus_block_gossip_parts_received   | Counter   | matches_current | Number of block parts received by the node                                                                                                 |
-| consensus_block_sync_apply_stage_duration | Histogram | stage         | Time a block spent in each stage of the block sync applier, in ms: partset, verify_commit, verify_block, save, exec, and wait (idle time between blocks) |
+| consensus_block_sync_apply_stage_duration | Histogram | stage         | Time a block spent in each stage of the block sync applier, in ms: decode, partset, verify_commit, verify_block, save, exec, and wait (idle time between blocks) |
 | consensus_quorum_prevote_delay          | Gauge     |                 | Interval in seconds between the proposal timestamp and the timestamp of the earliest prevote that achieved a quorum                        |
 | consensus_full_prevote_delay            | Gauge     |                 | Interval in seconds between the proposal timestamp and the timestamp of the latest prevote in a round where all validators voted           |
 | consensus_proposal_timestamp_difference | Histogram |                 | Difference between the timestamp in the proposal message and the local time of the validator at the time it received the message           |
@@ -57,10 +57,15 @@ The following metrics are available:
 | consensus_block_part_proof_drops        | Counter   |                 | Peer block parts dropped before proof verification because the sender's invalid-proof allowance was spent                                  |
 | consensus_state_channel_drops           | Counter   |                 | State and VoteSetBits channel messages dropped over the per-peer or node-wide ceiling                                                       |
 | consensus_proposal_verify_failures      | Counter   |                 | Peer proposals whose signature failed verification                                                                                         |
+| consensus_commit_verify_failures        | Counter   | reason          | Commits (from peers, block sync or this node's own precommits) refused by verification; reason is quorum_hash, extension_count, extensions_rejected, invalid_signature, budget or other |
 | consensus_peer_vote_verify_latency_seconds | Histogram |              | Seconds an accepted peer vote spent from being queued by the reactor to being added to the vote set                                        |
 | consensus_verification_budget_saturation | Gauge    |                 | Fraction of the node-wide verification budget still available at a peer-message check (1.0 full/idle, 0.0 drained/under pressure)          |
 | consensus_peer_lane_active_count        | Gauge     |                 | Number of per-peer lanes currently holding queued messages and taking turns in the scheduler                                              |
 | consensus_peer_lane_max_depth           | Gauge     |                 | Largest number of messages queued in any single peer lane                                                                                 |
+| consensus_proposer_heartbeats_sent      | Counter   |                 | Proposer heartbeats this node signed and broadcast while waiting for transactions as proposer (consensus version 2)                        |
+| consensus_proposer_heartbeats_received  | Counter   |                 | New, verified proposer heartbeats accepted for the round this node waits in                                                                |
+| consensus_proposer_silences             | Counter   |                 | Rounds in which the proposer went silent while this validator waited for transactions                                                      |
+| consensus_round_skips                   | Counter   |                 | Rounds this node moved past on a round skip certificate from +2/3 of the validators (by default; configuration can change the threshold) |
 | evidence_pool_num_evidence              | Gauge     |                 | Number of evidence in the evidence pool                                                                                                    |
 | evidence_pool_dropped_evidence              | Counter   | reason          | Inbound gossip evidence refused before verification, labeled by reason (structural, oversized, already_known, height_window, node_budget, peer_budget) |
 | p2p_peers                               | Gauge     |                 | Number of peers node's connected to                                                                                                        |

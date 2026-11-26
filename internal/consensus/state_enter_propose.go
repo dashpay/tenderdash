@@ -52,10 +52,14 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 
 	proTxHash := dash.MustProTxHashFromContext(ctx)
 	isProposer := stateData.isProposer(proTxHash)
+	// A verified commit for a held block is applied right after this step.
+	// Proposing would replace the block's ProcessProposal result with a
+	// PrepareProposal one, and applying would have to process the round again.
+	applyingCommit := stateData.Commit != nil && stateData.holdsProposalBlock(stateData.Commit.BlockID)
 
 	// If this validator is the proposer of this round, and the previous block time is later than
 	// our local clock time, wait to propose until our local clock time has passed the block time.
-	if isProposer {
+	if isProposer && !applyingCommit {
 		pwt := proposerWaitTime(tmtime.Now(), stateData.state.LastBlockTime)
 		if pwt > 0 {
 			c.logger.Debug("enter propose: latest block is newer, sleeping",
@@ -94,6 +98,10 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 			"proposer_proTxHash", prop.ProTxHash.ShortString(),
 			"node_proTxHash", proTxHash.ShortString(),
 			"step", stateData.Step)
+		return nil
+	}
+	if applyingCommit {
+		logger.Debug("enter propose step; our turn to propose but applying a held commit, not proposing")
 		return nil
 	}
 	// In replay mode, we don't propose blocks.

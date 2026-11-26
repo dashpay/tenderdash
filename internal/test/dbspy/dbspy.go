@@ -3,7 +3,7 @@
 // fsync.
 package dbspy
 
-import dbm "github.com/cometbft/cometbft-db"
+import dbm "github.com/dashpay/tenderdash/libs/db"
 
 // DB counts the syncing and non-syncing writes made through it.
 type DB struct {

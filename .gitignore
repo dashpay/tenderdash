@@ -25,12 +25,6 @@ addrbook.json
 artifacts/*
 build/*
 coverage.txt
-docs/.vuepress/dist
-docs/_build
-docs/dist
-docs/node_modules/
-docs/spec
-docs/.vuepress/public/rpc
 index.html.md
 libs/pubsub/query/fuzz_test/output
 profile\.out
@@ -64,3 +58,15 @@ proto/spec/**/*.pb.go
 *.gz
 *.dvi
 .gocache
+
+# Legacy local VuePress output
+/docs/.vuepress/
+/docs/node_modules/
+/docs/_build/
+/docs/dist/
+/docs/spec/
+
+# Generated mdBook sources and HTML
+/book/src/
+/book/book/
+__pycache__/

@@ -2,6 +2,7 @@ package blocksync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -17,6 +18,7 @@ import (
 type (
 	errBlockFetch struct {
 		peerID types.NodeID
+		connID uint64
 		height int64
 		err    error
 	}
@@ -28,38 +30,62 @@ func (e *errBlockFetch) Error() string {
 
 // blockFetchJobHandler requests for a block by height from the peer, if the peer responds to the block in time, then the job
 // will return it, otherwise the job will return an error
-func blockFetchJobHandler(client client.BlockClient, peer PeerData, height int64) workerpool.JobHandler {
+func blockFetchJobHandler(blockClient client.BlockClient, peer PeerData, height int64) workerpool.JobHandler {
 	return func(ctx context.Context) workerpool.Result {
-		promise, err := client.GetBlock(ctx, height, peer.peerID)
+		observation := peer.service.request()
+		size := 0
+		defer func() { observation.complete(size) }()
+		ctx = client.WithBlockRequestObserver(ctx, observation)
+		promise, err := blockClient.GetBlock(ctx, height, peer.peerID)
 		if err != nil {
-			return errorResult(peer.peerID, height, err)
+			return errorResult(peer, height, err)
 		}
 		protoResp, err := promise.Await()
+		responder := peer
+		responder.connID = attributedConn(peer.connID, observation, err)
 		if err != nil {
-			return errorResult(peer.peerID, height, err)
+			return errorResult(responder, height, err)
 		}
 		resp, err := BlockResponseFromProto(protoResp, peer.peerID)
 		if err != nil {
-			return errorResult(peer.peerID, height, err)
+			return errorResult(responder, height, err)
 		}
 		err = resp.Validate()
 		if err != nil {
-			return errorResult(peer.peerID, height, err)
+			return errorResult(responder, height, err)
 		}
-		if resp.Block.Height != height {
-			return errorResult(peer.peerID, height,
-				fmt.Errorf("peer sent block at height %d, requested height %d", resp.Block.Height, height))
+		if resp.Height != height {
+			return errorResult(responder, height,
+				fmt.Errorf("peer sent block at height %d, requested height %d", resp.Height, height))
 		}
+		resp.ConnID = responder.connID
+		size = protoResp.Size()
 		return workerpool.Result{Value: resp}
 	}
 }
 
-func errorResult(peerID types.NodeID, height int64, err error) workerpool.Result {
+// attributedConn returns the generation a request's outcome is attributed to: the
+// connection that delivered the response, or the reservation's when there is none.
+// A timeout can race a late delivery, so only an answer may read the delivered one;
+// that keeps a report's generation independent of how the race fell.
+func attributedConn(reserved uint64, request *serviceRequest, awaitErr error) uint64 {
+	var missing *client.ErrBlockNotFound
+	if awaitErr != nil && !errors.As(awaitErr, &missing) {
+		return reserved
+	}
+	if delivered := request.deliveredConnID(); delivered != 0 {
+		return delivered
+	}
+	return reserved
+}
+
+func errorResult(peer PeerData, height int64, err error) workerpool.Result {
 	return workerpool.Result{
 		Err: &errBlockFetch{
 			err:    err,
 			height: height,
-			peerID: peerID,
+			peerID: peer.peerID,
+			connID: peer.connID,
 		},
 	}
 }
@@ -102,7 +128,6 @@ func (p *jobGenerator) nextJob(ctx context.Context) (*workerpool.Job, error) {
 	if err != nil {
 		return nil, err
 	}
-	p.peerStore.Update(peer.peerID, ResetMonitor(), AddNumPending(1))
 	return workerpool.NewJob(blockFetchJobHandler(p.client, peer, height)), nil
 }
 
@@ -144,7 +169,7 @@ func (p *jobGenerator) getPeer(ctx context.Context, height int64) (PeerData, err
 		if ctx.Err() != nil {
 			return PeerData{}, ctx.Err()
 		}
-		peer, found := p.peerStore.FindPeer(height)
+		peer, found := p.peerStore.reservePeer(height)
 		if found {
 			return peer, nil
 		}

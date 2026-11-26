@@ -98,7 +98,12 @@ type MConnection struct {
 	doneSendRoutine chan struct{}
 
 	// Closing quitRecvRouting will cause the recvRouting to eventually quit.
+	// doneRecvRoutine is closed when the recvRoutine actually quits.
 	quitRecvRoutine chan struct{}
+	doneRecvRoutine chan struct{}
+
+	// peerInputErr is a malformed authenticated frame, recorded before Stop.
+	peerInputErr atomic.Pointer[error]
 
 	stopSignal <-chan struct{}
 
@@ -199,6 +204,13 @@ func NewMConnection(
 	return mconn
 }
 
+type errorContextKey struct{}
+
+// Start preserves the caller's context for error notification after I/O stops.
+func (c *MConnection) Start(ctx context.Context) error {
+	return c.BaseService.Start(context.WithValue(ctx, errorContextKey{}, ctx))
+}
+
 // OnStart implements BaseService
 func (c *MConnection) OnStart(ctx context.Context) error {
 	c.flushTimer = timer.NewThrottleTimer("flush", c.config.FlushThrottle)
@@ -207,6 +219,7 @@ func (c *MConnection) OnStart(ctx context.Context) error {
 	c.quitSendRoutine = make(chan struct{})
 	c.doneSendRoutine = make(chan struct{})
 	c.quitRecvRoutine = make(chan struct{})
+	c.doneRecvRoutine = make(chan struct{})
 	c.stopSignal = ctx.Done()
 	c.setRecvLastMsgAt(time.Now())
 	go c.sendRoutine(ctx)
@@ -293,6 +306,9 @@ func (c *MConnection) stopForError(ctx context.Context, r interface{}) {
 
 	if atomic.CompareAndSwapUint32(&c.errored, 0, 1) {
 		if c.onError != nil {
+			if parent, ok := ctx.Value(errorContextKey{}).(context.Context); ok {
+				ctx = parent
+			}
 			c.onError(ctx, r)
 		}
 	}
@@ -470,6 +486,7 @@ func (c *MConnection) sendPacketMsg(ctx context.Context) bool {
 // Blocks depending on how the connection is throttled.
 // Otherwise, it never blocks.
 func (c *MConnection) recvRoutine(ctx context.Context) {
+	defer close(c.doneRecvRoutine) // runs last, after _recover
 	defer c._recover(ctx)
 
 	protoReader := protoio.NewDelimitedReader(c.bufConnReader, c._maxPacketMsgSize)
@@ -507,6 +524,10 @@ FOR_LOOP:
 		_n, err := protoReader.ReadMsg(&packet)
 		c.recvMonitor.Update(_n)
 		if err != nil {
+			if errors.Is(err, protoio.ErrMalformedMsg) {
+				// Before Stop makes teardown observable; see PeerInputError.
+				c.peerInputErr.Store(&err)
+			}
 			// stopServices was invoked and we are shutting down
 			// receiving is excpected to fail since we will close the connection
 			select {
@@ -545,9 +566,19 @@ FOR_LOOP:
 			// received" timestamp above, so we can ignore
 			// this message
 		case *tmp2p.Packet_PacketMsg:
+			if pkt.PacketMsg.ChannelID < 0 || pkt.PacketMsg.ChannelID > math.MaxUint16 {
+				// Outside ChannelID's range, so no conforming sender produced it, unlike
+				// a channel this build does not know. Recorded before Stop; see
+				// PeerInputError.
+				err := fmt.Errorf("%w: channel ID %d out of range", protoio.ErrMalformedMsg, pkt.PacketMsg.ChannelID)
+				c.peerInputErr.Store(&err)
+				c.logger.Debug("Connection failed @ recvRoutine", "conn", c, "err", err)
+				c.stopForError(ctx, err)
+				break FOR_LOOP
+			}
 			channelID := ChannelID(pkt.PacketMsg.ChannelID)
 			channel, ok := c.channelsIdx[channelID]
-			if pkt.PacketMsg.ChannelID < 0 || pkt.PacketMsg.ChannelID > math.MaxUint8 || !ok || channel == nil {
+			if pkt.PacketMsg.ChannelID > math.MaxUint8 || !ok || channel == nil {
 				err := fmt.Errorf("unknown channel %X", pkt.PacketMsg.ChannelID)
 				c.logger.Debug("Connection failed @ recvRoutine", "conn", c, "err", err)
 				c.stopForError(ctx, err)
@@ -631,6 +662,13 @@ type ChannelDescriptor struct {
 	//
 	// If zero, enqueue operations will not time out.
 	EnqueueTimeout time.Duration
+
+	// DropOnFullPeerQueue drops an outbound message, instead of waiting, when
+	// the recipient peer's queue is full, so one slow peer cannot stall the
+	// channel for every other peer. Use only for channels whose messages are
+	// repeated or advisory. Messages dropped because the queue is full are
+	// counted; drops for a closed queue are logged at debug.
+	DropOnFullPeerQueue bool
 }
 
 func (chDesc ChannelDescriptor) FillDefaults() (filled ChannelDescriptor) {
@@ -807,4 +845,19 @@ func mustWrapPacket(pb proto.Message) *tmp2p.Packet {
 	}
 
 	return &msg
+}
+
+// PeerInputError waits for the receive routine to exit and returns the
+// malformed-frame failure it recorded, or nil. The failure is recorded before
+// the connection stops, so it survives losing the first-error race to another
+// failure. Call it only after Start; it returns once Stop closes the connection.
+func (c *MConnection) PeerInputError() error {
+	if c.doneRecvRoutine == nil {
+		return nil // never started
+	}
+	<-c.doneRecvRoutine
+	if err := c.peerInputErr.Load(); err != nil {
+		return *err
+	}
+	return nil
 }

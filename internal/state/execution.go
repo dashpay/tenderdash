@@ -17,6 +17,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/mempool"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmstate "github.com/dashpay/tenderdash/proto/tendermint/state"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -102,6 +103,11 @@ type Executor interface {
 		lastCommit types.VerifiedCommit,
 	) (State, error)
 
+	// VerifyVoteExtension asks the application to verify vote extensions: those
+	// of one validator's precommit when vote.ValidatorProTxHash is set, or a
+	// commit's threshold-recovered vector, after ProcessProposal of its block,
+	// when it is empty. It returns ErrVoteExtensionRejected on REJECT and
+	// panics if the ABCI call itself fails.
 	VerifyVoteExtension(ctx context.Context, vote *types.Vote) error
 }
 
@@ -354,7 +360,9 @@ func deterministicPrepareProposalHashes(request *abci.RequestPrepareProposal, re
 	return crypto.Checksum(reqBytes), crypto.Checksum(respBytes)
 }
 
-// ProcessProposal sends the proposal to ABCI App and verifies the response
+// ProcessProposal sends the proposal to ABCI App and verifies the response.
+// With verify, the block is validated against state before the app sees it,
+// and against the app's response afterwards; a failure returns ErrInvalidBlock.
 func (blockExec *BlockExecutor) ProcessProposal(
 	ctx context.Context,
 	block *types.Block,
@@ -363,8 +371,16 @@ func (blockExec *BlockExecutor) ProcessProposal(
 	verify bool,
 	lastCommit types.VerifiedCommit,
 ) (CurrentRoundState, error) {
-	version := block.Version.ToProto()
 	stages := blockExec.metrics.startStages()
+	// The app may fail, rather than reject, on a block that does not continue
+	// state, and consensus treats such a failure as fatal.
+	if verify {
+		if err := blockExec.ValidateBlock(ctx, state, block, lastCommit); err != nil {
+			return CurrentRoundState{}, ErrInvalidBlock{fmt.Errorf("validate block before ProcessProposal: %w", err)}
+		}
+		stages.done("process_proposal_prevalidate")
+	}
+	version := block.Version.ToProto()
 	resp, err := blockExec.appClient.ProcessProposal(ctx, &abci.RequestProcessProposal{
 		Hash:               block.Header.Hash(),
 		Height:             block.Header.Height,
@@ -384,7 +400,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		QuorumHash:            state.Validators.QuorumHash,
 	})
 	if err != nil {
-		return CurrentRoundState{}, err
+		return CurrentRoundState{}, fmt.Errorf("ProcessProposal abci method: %w", err)
 	}
 	if resp.IsStatusUnknown() {
 		return CurrentRoundState{}, fmt.Errorf("ProcessProposal responded with status %s", resp.Status.String())
@@ -442,12 +458,17 @@ func (blockExec *BlockExecutor) ValidateBlock(
 	block *types.Block,
 	lastCommit types.VerifiedCommit,
 ) error {
-	hash := block.Hash()
-	if _, ok := blockExec.cache[hash.String()]; ok {
+	key, err := validationCacheKey(block)
+	if err != nil {
+		return err
+	}
+	// The key does not cover state, so a hit counts only for a block that still
+	// continues state.
+	if _, ok := blockExec.cache[key]; ok && validateBlockPosition(state, block) == nil {
 		return nil
 	}
 
-	err := validateBlock(state, block, lastCommit, blockExec.metrics)
+	err = validateBlock(state, block, lastCommit, blockExec.metrics)
 	if err != nil {
 		return err
 	}
@@ -457,8 +478,24 @@ func (blockExec *BlockExecutor) ValidateBlock(
 		return err
 	}
 
-	blockExec.cache[hash.String()] = struct{}{}
+	blockExec.cache[key] = struct{}{}
 	return nil
+}
+
+// validationCacheKey identifies the block content ValidateBlock checks: the
+// block hash, which covers the data and evidence, and in full the header, the
+// last commit and the chain lock, which the hash covers only in part.
+func validationCacheKey(block *types.Block) (string, error) {
+	hash := block.Hash() // fills the header's data, evidence and commit hashes
+	uncovered, err := (&tmproto.Block{
+		Header:        *block.Header.ToProto(),
+		LastCommit:    block.LastCommit.ToProto(),
+		CoreChainLock: block.CoreChainLock.ToProto(),
+	}).Marshal()
+	if err != nil {
+		return "", fmt.Errorf("encode block for validation cache: %w", err)
+	}
+	return hash.String() + hex.EncodeToString(crypto.Checksum(uncovered)), nil
 }
 
 // VerifyCommit verifies commit against state.Validators as the commit for the
@@ -503,11 +540,11 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 		)
 	}
 
-	// ValidateBlock above normally verifies block.LastCommit, but it short-circuits
-	// on its per-height cache, which is keyed on the block hash alone and so says
-	// nothing about the state the earlier validation ran against. That is why this
-	// second verification exists. lastCommit's proof is safe to skip on instead:
-	// it names the verified data itself, not a block hash.
+	// ValidateBlock above normally verifies block.LastCommit, but a hit on its
+	// cache re-checks only the block's position against state, not whether
+	// LastCommit verifies against it. That is why this second verification
+	// exists. lastCommit's proof is safe to skip on instead: it names
+	// the verified data itself, not a block hash.
 	if block.Height > state.InitialHeight {
 		if err := verifyLastCommit(state, block, lastCommit, blockExec.metrics); err != nil {
 			return err
@@ -525,7 +562,7 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 			uncommittedState.NextConsensusParams.HashConsensusParams(), block.NextConsensusHash,
 		)
 	}
-	return validateCoreChainLock(block, state)
+	return nil
 }
 
 // FinalizeBlock validates the block against the state, fires the relevant events,
@@ -534,7 +571,9 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 //
 // It takes a blockID to avoid recomputing the parts hash.
 //
-// CONTRACT: The block was already delivered to the ABCI app using either PrepareProposal or ProcessProposal.
+// CONTRACT: The block was already delivered to the ABCI app using either PrepareProposal or ProcessProposal,
+// and uncommittedState is the result of the latest such call, for commit.Round. The application must have
+// accepted commit's extension vector through VerifyCommitExtensions; FinalizeBlock does not check it.
 // See also ApplyBlock() to deliver proposal and finalize it in one step.
 
 func (blockExec *BlockExecutor) FinalizeBlock(
@@ -620,8 +659,10 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 }
 
 // ApplyBlock validates the block against the state, executes it against the app using ProcessProposal ABCI request,
-// fires the relevant events, finalizes with FinalizeBlock, and saves the new state and responses.
-// It returns the new state.
+// asks the app to accept the commit's extension vector (VerifyCommitExtensions), fires the relevant events,
+// finalizes with FinalizeBlock, and saves the new state and responses.
+// It returns the new state. A rejected vector returns an error wrapping ErrCommitExtensionsRejected before
+// FinalizeBlock, with nothing finalized or saved.
 // It's the only function that needs to be called
 // from outside this package to process and commit an entire block.
 // It takes a blockID to avoid recomputing the parts hash.
@@ -641,9 +682,30 @@ func (blockExec *BlockExecutor) ApplyBlock(
 	if err != nil {
 		return state, err
 	}
+	if err := VerifyCommitExtensions(ctx, blockExec, commit); err != nil {
+		return state, err
+	}
 	// Replay never proposes, so the response hints are not needed here.
 	state, _, err = blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, commit, lastCommit)
 	return state, err
+}
+
+// VerifyCommitExtensions asks the application to accept commit's
+// threshold-recovered extension vector. Callers run it after ProcessProposal of
+// the committed block and before saving or finalizing it. The canonical vote it
+// sends has an empty ValidatorProTxHash, which tells the application that this
+// is a commit rather than one validator's precommit.
+func VerifyCommitExtensions(ctx context.Context, executor Executor, commit *types.Commit) error {
+	vote, err := commit.GetCanonicalVote()
+	if err != nil {
+		return fmt.Errorf("invalid commit extensions at height %d round %d block %X: %w",
+			commit.Height, commit.Round, commit.BlockID.Hash, err)
+	}
+	if err := executor.VerifyVoteExtension(ctx, vote); err != nil {
+		return fmt.Errorf("commit extensions rejected at height %d round %d block %X: %w: %w",
+			commit.Height, commit.Round, commit.BlockID.Hash, ErrCommitExtensionsRejected, err)
+	}
+	return nil
 }
 
 // ExtendVote gets vote-extensions from ABCI and updates vote.VoteExtensions with this value
@@ -688,7 +750,7 @@ func (blockExec *BlockExecutor) VerifyVoteExtension(ctx context.Context, vote *t
 	}
 
 	if !resp.IsOK() {
-		return errors.New("invalid vote extension")
+		return ErrVoteExtensionRejected
 	}
 
 	return nil
@@ -787,6 +849,14 @@ func (state State) Update(
 	return newState, nil
 }
 
+// AppReady reports whether the application backends that build a block
+// answer, as a proposer checks before telling validators it could propose. A
+// routed ABCI client may send PrepareProposal to other backends than Echo, so
+// those are the ones probed.
+func (blockExec *BlockExecutor) AppReady(ctx context.Context) error {
+	return abciclient.EchoRoute(ctx, blockExec.appClient, "PrepareProposal", "proposer heartbeat")
+}
+
 // SetAppHashSize ...
 func (blockExec *BlockExecutor) SetAppHashSize(size int) {
 	blockExec.appHashSize = size
@@ -805,8 +875,9 @@ func execBlock(
 	if err != nil {
 		return nil, err
 	}
-	blockID := block.BlockID(nil)
-	protoBlockID := blockID.ToProto()
+	// The commit's block ID, not block.BlockID(nil): the block may have been
+	// committed with parts that re-encoding it does not reproduce.
+	protoBlockID := commit.BlockID.ToProto()
 
 	responseFinalizeBlock, err := appConn.FinalizeBlock(
 		ctx,

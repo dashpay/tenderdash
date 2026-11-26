@@ -1,5 +1,8 @@
 # RFC 016: Node Architecture
 
+> Inherited design record. This proposal provides design context, not a guarantee
+> of current behavior. See the [current protocol specification](../../spec/README.md).
+
 ## Changelog
 
 - April 8, 2022: Initial draft (@cmwaters)
@@ -7,9 +10,9 @@
 
 ## Abstract
 
-The `node` package is the entry point into the Tendermint codebase, used both by the command line and programatically to create the nodes that make up a network. The package has suffered the most from the evolution of the codebase, becoming bloated as developers clipped on their bits of code here and there to get whatever feature they wanted working.
+The `node` package is the entry point into the Tenderdash codebase, used both by the command line and programatically to create the nodes that make up a network. The package has suffered the most from the evolution of the codebase, becoming bloated as developers clipped on their bits of code here and there to get whatever feature they wanted working.
 
-The decisions made at the node level have the biggest impact to simplifying the protocols within them, unlocking better internal designs and making Tendermint more intuitive to use and easier to understand from the outside. Work, in minor increments, has already begun on this section of the codebase. This document exists to spark forth the necessary discourse in a few related areas that will help the team to converge on the long term makeup of the node.
+The decisions made at the node level have the biggest impact to simplifying the protocols within them, unlocking better internal designs and making Tenderdash more intuitive to use and easier to understand from the outside. Work, in minor increments, has already begun on this section of the codebase. This document exists to spark forth the necessary discourse in a few related areas that will help the team to converge on the long term makeup of the node.
 
 ## Discussion
 
@@ -17,7 +20,7 @@ The following is a list of points of discussion around the architecture of the n
 
 ### Dependency Tree
 
-The node object is currently stuffed with every component that possibly exists within Tendermint. In the constructor, all objects are built and interlaid with one another in some awkward dance. My guiding principle is that the node should only be made up of the components that it wants to have direct control of throughout its life. The node is a service which currently has the purpose of starting other services up in a particular order and stopping them all when commanded to do so. However, there are many services which are not direct dependents i.e. the mempool and evidence services should only be working when the consensus service is running. I propose to form more of a hierarchical structure of dependents which forces us to be clear about the relations that one component has to the other. More concretely, I propose the following dependency tree:
+The node object is currently stuffed with every component that possibly exists within Tenderdash. In the constructor, all objects are built and interlaid with one another in some awkward dance. My guiding principle is that the node should only be made up of the components that it wants to have direct control of throughout its life. The node is a service which currently has the purpose of starting other services up in a particular order and stopping them all when commanded to do so. However, there are many services which are not direct dependents i.e. the mempool and evidence services should only be working when the consensus service is running. I propose to form more of a hierarchical structure of dependents which forces us to be clear about the relations that one component has to the other. More concretely, I propose the following dependency tree:
 
 ![node dependency tree](./images/node-dependency-tree.svg)
 
@@ -29,7 +32,7 @@ An alternative model and one that perhaps better suits the latter of these dimen
 
 ### Coordination of State Advancing Mechanisms
 
-Advancement of state in Tendermint is simply defined in heights: If the node is at height n, how does it get to height n + 1 and so on. Based on this definition we have three components that help a node to advance in height: consensus, statesync and blocksync. The way these components behave currently is very tightly coupled to one another with references passed back and forth. My guiding principle is that each of these should be able to operate completely independently of each other, e.g. a node should be able to run solely blocksync indefinitely. There have been several ideas suggested towards improving this flow. I've been leaning strongly towards a centralized system, whereby an orchestrator (in this case the node) decides what services to start and stop.
+Advancement of state in Tenderdash is simply defined in heights: If the node is at height n, how does it get to height n + 1 and so on. Based on this definition we have three components that help a node to advance in height: consensus, statesync and blocksync. The way these components behave currently is very tightly coupled to one another with references passed back and forth. My guiding principle is that each of these should be able to operate completely independently of each other, e.g. a node should be able to run solely blocksync indefinitely. There have been several ideas suggested towards improving this flow. I've been leaning strongly towards a centralized system, whereby an orchestrator (in this case the node) decides what services to start and stop.
 In a decentralized message passing system, individual services make their decision based upon a "global" shared state i.e. if my height is less that 10 below the average peer height, I as consensus, should stop (knowing that blocksync has the same condition for starting). As the example illustrates, each mechanism will still need to be aware of the presence of other mechanisms.
 
 Both centralized and decentralized systems rely on the communication of the nodes current height and a judgement on the height of the head of the chain. The latter, working out the head of the chain, is quite a difficult challenge as their is nothing preventing the node from acting maliciously and providing a different height. Currently both blocksync, consensus (and to a certain degree statesync), have parallel systems where peers communicate their height. This could be streamlined with the consensus (or even the p2p layer), broadcasting peer heights and either the node or the other state advancing mechanisms acting accordingly.
@@ -48,7 +51,7 @@ The block executor is an important component that is currently used by both cons
 ### The Interprocess communication systems: RPC, P2P, ABCI, and Events
 
 The schematic supplied above shows the relations between the different services, the node, the block executor, and the storage layer. Represented as colored dots are the components responsible for different roles of interprocess communication (IPC). These components permeate throughout the code base, seeping into most services. What can provide powerful functionality on one hand can also become a twisted vine, creating messy corner cases and convoluting the protocols themselves. A lot of the thinking around
-how we want our IPC systens to function has been summarised in this [RFC](./rfc-002-ipc-ecosystem.md). In this section, I'd like to focus the reader on the relation between the IPC and the node structure. An issue that has frequently risen is that the RPC has control of the components where it strikes me as being more logical for the component to dictate the information that is emitted/available and the knobs it wishes to expose. The RPC is also inextricably tied to the node instance and has situations where it is passed pointers directly to the storage engine and other components.
+how we want our IPC systens to function has been summarised in this [RFC](https://github.com/tendermint/tendermint/blob/7cdf560173dee6773b80d1c574a06489d4c394fe/docs/rfc/rfc-002-ipc-ecosystem.md). In this section, I'd like to focus the reader on the relation between the IPC and the node structure. An issue that has frequently risen is that the RPC has control of the components where it strikes me as being more logical for the component to dictate the information that is emitted/available and the knobs it wishes to expose. The RPC is also inextricably tied to the node instance and has situations where it is passed pointers directly to the storage engine and other components.
 
 I am currently convinced of the approach that the p2p layer takes and would like to see other IPC components follow suit. This would mean that the RPC and events system would be constructed in the node yet would pass the adequate methods to register endpoints and topics to the sub components. For example,
 

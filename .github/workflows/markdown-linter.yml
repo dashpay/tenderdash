@@ -8,15 +8,20 @@ on:
   push:
     branches:
       - master
-      - v[0-9]+.[0-9]+-dev
+      - dev
 
 permissions:
   contents: read
   statuses: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
     name: Super linter
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7
@@ -29,10 +34,10 @@ jobs:
         # upstream, frozen at v7 since 2024-08-29; its v7 coordinates are affected
         # by CVE-2026-25761 (command injection via crafted filenames) with no fix
         # ever backported). Pinned by commit SHA per supply-chain policy.
-        uses: super-linter/super-linter@4ce20838b8ab83717e78138c5b3a1407148e0918 # v8.7.0
+        uses: super-linter/super-linter@2da136927bd4a73596db63044b504547c62cb854 # v9.0.0
         env:
           VALIDATE_ALL_CODEBASE: true
-          DEFAULT_BRANCH: master
+          DEFAULT_BRANCH: ${{ github.base_ref || github.ref_name }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VALIDATE_MD: true
           VALIDATE_OPENAPI: true

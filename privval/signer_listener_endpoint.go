@@ -77,7 +77,13 @@ func (sl *SignerListenerEndpoint) OnStart(ctx context.Context) error {
 	go sl.serviceLoop(ctx)
 	go sl.pingLoop(ctx)
 
-	sl.connectRequestCh <- struct{}{}
+	// serviceLoop exits on cancellation (e.g. Stop during startup) and may never
+	// take this request. Returning nil keeps the successful-start path, so OnStop
+	// still releases the listener and ticker.
+	select {
+	case sl.connectRequestCh <- struct{}{}:
+	case <-ctx.Done():
+	}
 
 	return nil
 }

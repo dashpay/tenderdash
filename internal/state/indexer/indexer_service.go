@@ -170,7 +170,7 @@ func KVSinkEnabled(sinks []EventSink) bool {
 // IndexingEnabled returns the given eventSinks is supporting the indexing services.
 func IndexingEnabled(sinks []EventSink) bool {
 	for _, sink := range sinks {
-		if sink.Type() == KV || sink.Type() == PSQL {
+		if sink.Type() == KV {
 			return true
 		}
 	}

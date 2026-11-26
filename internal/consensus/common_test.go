@@ -15,10 +15,11 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	dbm "github.com/cometbft/cometbft-db"
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	dbm "github.com/dashpay/tenderdash/libs/db"
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
 	"github.com/dashpay/tenderdash/abci/example/kvstore"
@@ -860,8 +861,22 @@ func makeConsensusState(
 	configOpts ...func(*config.Config),
 ) []*State {
 	t.Helper()
+	return makeConsensusStateWithParams(ctx, t, nValidators, testName, tickerFunc, factory.ConsensusParams(), configOpts...)
+}
 
-	genDoc, privVals := factory.RandGenesisDoc(nValidators, factory.ConsensusParams())
+// makeConsensusStateWithParams is makeConsensusState for a genesis with params.
+func makeConsensusStateWithParams(
+	ctx context.Context,
+	t *testing.T,
+	nValidators int,
+	testName string,
+	tickerFunc func() TimeoutTicker,
+	params *types.ConsensusParams,
+	configOpts ...func(*config.Config),
+) []*State {
+	t.Helper()
+
+	genDoc, privVals := factory.RandGenesisDoc(nValidators, params)
 	css := make([]*State, nValidators)
 	logger := consensusLogger(t)
 
@@ -1192,6 +1207,7 @@ type mockTicker struct {
 }
 
 func (m *mockTicker) Start(context.Context) error { return nil }
+func (m *mockTicker) Wait()                       {}
 func (m *mockTicker) Stop()                       {}
 func (m *mockTicker) IsRunning() bool             { return false }
 

@@ -1,7 +1,9 @@
 package consensus
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
@@ -245,7 +247,7 @@ func (r *BlockReplayer) replayBlocks(
 		}
 	}
 	if !mutateState {
-		err = r.publishEvents(block, ucState)
+		err = r.publishEvents(block, commit, ucState)
 		if err != nil {
 			return nil, err
 		}
@@ -274,12 +276,25 @@ func (r *BlockReplayer) replayBlock(
 	height int64,
 ) (sm.CurrentRoundState, error) {
 	r.logger.Info("Replay: applying block", "height", height)
+	// The persisted state can be ahead of this block by a quorum rotation.
+	if !bytes.Equal(state.Validators.QuorumHash, commit.QuorumHash) {
+		validators, err := r.stateStore.LoadValidators(height, r.store)
+		if err != nil {
+			return sm.CurrentRoundState{}, fmt.Errorf("blockReplayer load validators at height %d: %w", height, err)
+		}
+		state.Validators = validators
+	}
 	// Extra check to ensure the app was not changed in a way it shouldn't have.
 	// The replayer holds no proof for block.LastCommit.
 	ucState, err := r.blockExec.ProcessProposal(ctx, block, commit.Round, state, false,
 		types.VerifiedCommit{})
 	if err != nil {
 		return sm.CurrentRoundState{}, fmt.Errorf("blockReplayer process proposal: %w", err)
+	}
+	// Pre-upgrade stores may contain unchecked extensions. Rejecting them must stop
+	// replay before FinalizeBlock, even though the commit is already persisted.
+	if err := sm.VerifyCommitExtensions(ctx, r.blockExec, commit); err != nil {
+		return sm.CurrentRoundState{}, commitExtensionsReplayError(block, commit, err)
 	}
 	// We emit events for the index services at the final block due to the sync issue when
 	// the node shutdown during the block committing status.
@@ -312,11 +327,23 @@ func (r *BlockReplayer) syncStateAt(
 	// proof for block.LastCommit, so it verifies every block in full.
 	state, err := blockExec.ApplyBlock(ctx, state, meta.BlockID, block, seenCommit,
 		types.VerifiedCommit{})
+	if errors.Is(err, sm.ErrCommitExtensionsRejected) {
+		return sm.State{}, commitExtensionsReplayError(block, seenCommit, err)
+	}
 	if err != nil {
 		return sm.State{}, err
 	}
 	r.nBlocks++
 	return state, nil
+}
+
+// commitExtensionsReplayError gives a refusal of commit's extensions during
+// handshake catch-up the operator's remedy, the same on every replay path.
+func commitExtensionsReplayError(block *types.Block, commit *types.Commit, err error) error {
+	return fmt.Errorf(
+		"blockReplayer verify commit extensions at height %d round %d block %X; roll back or re-sync the node: %w",
+		block.Height, commit.Round, block.Hash(), err,
+	)
 }
 
 func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, state *sm.State) error {
@@ -393,10 +420,10 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 
 func (r *BlockReplayer) publishEvents(
 	block *types.Block,
+	commit *types.Commit,
 	ucState sm.CurrentRoundState,
 ) error {
-	blockID := block.BlockID(nil)
-	es := sm.NewFullEventSet(block, blockID, ucState, ucState.NextValidators)
+	es := sm.NewFullEventSet(block, commit.BlockID, ucState, ucState.NextValidators)
 	err := es.Publish(r.publisher)
 	if err != nil {
 		r.logger.Error("failed publishing event", "err", err)

@@ -27,6 +27,7 @@ const (
 	EnterPrevoteWaitType
 	EnterPrecommitWaitType
 	AddVoteType
+	AddRoundSkipCertificateType
 )
 
 var (
@@ -74,6 +75,7 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo], prop
 		eventPublisher: cs.eventPublisher,
 	}
 	ctrl := &Controller{}
+	candidates := &commitCandidates{connected: cs.msgInfoQueue.peerConnected}
 	ctrl.actions = map[EventType]ActionHandler{
 		EnterNewRoundType: &EnterNewRoundAction{
 			logger:         cs.logger,
@@ -97,6 +99,7 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo], prop
 			eventPublisher:  cs.eventPublisher,
 			statsQueue:      statsQueue,
 			partProofBudget: newBlockPartProofBudget(),
+			candidates:      candidates,
 		},
 		ProposalCompletedType: &ProposalCompletedAction{logger: cs.logger},
 		AddVoteType:           newAddVoteAction(cs, ctrl, statsQueue),
@@ -124,6 +127,7 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo], prop
 			peerErrorQueue:     cs.peerErrorQueue,
 			metrics:            cs.metrics,
 			verificationBudget: cs.verificationBudget,
+			candidates:         candidates,
 		},
 		AddCommitType: &AddCommitAction{
 			eventPublisher:  cs.eventPublisher,
@@ -143,6 +147,7 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo], prop
 			logger:     cs.logger,
 			blockExec:  cs.blockExecutor,
 			blockStore: cs.blockStore,
+			metrics:    cs.metrics,
 		},
 		EnterPrevoteWaitType: &EnterPrevoteWaitAction{
 			logger:         cs.logger,
@@ -153,6 +158,12 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo], prop
 			logger:         cs.logger,
 			scheduler:      cs.roundScheduler,
 			eventPublisher: cs.eventPublisher,
+		},
+		AddRoundSkipCertificateType: &AddRoundSkipCertificateAction{
+			logger:         cs.logger,
+			eventPublisher: cs.eventPublisher,
+			metrics:        cs.metrics,
+			wal:            wal,
 		},
 	}
 	subscribeActions(cs.emitter, ctrl.actions)

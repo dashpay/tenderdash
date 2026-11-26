@@ -1,0 +1,42 @@
+# This testnet is run by CI. It checks that block sync survives a slow local
+# application (TestBlockSync_FinalizeHold).
+#
+# A genesis validator and three full nodes serve blocks to a late full node.
+# State sync is disabled, so every full node block-syncs from genesis. The late
+# node's application blocks inside its first FinalizeBlock for longer than the
+# 60-second block-sync stall timeout while its networking keeps running. A
+# single genesis validator enters consensus directly, which keeps the serving
+# nodes independent of multi-validator block-sync startup.
+
+abci_protocol = "builtin"
+# Only the priority queue exports the sent block-request bytes the test checks.
+queue_type = "priority"
+log_level = "info"
+initial_state = '{} { "key":"initial01","value":"a"}{"key":"initial02","value":"b"}{"key":"initial03","value":"c"}'
+# Bound block production rather than block delivery: a lone validator proposing
+# without delay outruns the nodes that follow it in consensus.
+create_empty_blocks_interval = "1s"
+# Small blocks keep transfer volume low, so the sources are never throttled;
+# they also keep TestApp_TxTooBig's 1%-of-a-block transactions small.
+max_block_size = 8192
+max_evidence_size = 1024
+
+[node.validator01]
+
+[node.full01]
+mode = "full"
+privval_protocol = "dashcore"
+
+[node.full02]
+mode = "full"
+privval_protocol = "dashcore"
+
+[node.full03]
+mode = "full"
+privval_protocol = "dashcore"
+
+[node.slowapply]
+mode = "full"
+privval_protocol = "dashcore"
+start_at = 100
+finalize_hold = "65s"

@@ -1,5 +1,8 @@
 # ADR 077: Configurable Block Retention
 
+> Inherited design record. This proposal provides design context, not a guarantee
+> of current behavior. See the [current protocol specification](../../spec/README.md).
+
 ## Changelog
 
 - 2020-03-23: Initial draft (@erikgrinaker)
@@ -14,7 +17,7 @@
 
 ## Context
 
-Currently, all Tendermint nodes contain the complete sequence of blocks from genesis up to some height (typically the latest chain height). This will no longer be true when the following features are released:
+Currently, all Tenderdash nodes contain the complete sequence of blocks from genesis up to some height (typically the latest chain height). This will no longer be true when the following features are released:
 
 - [Block pruning](https://github.com/tendermint/tendermint/issues/3652): removes historical blocks and associated data (e.g. validator sets) up to some height, keeping only the most recent blocks.
 
@@ -52,7 +55,7 @@ message ResponseCommit {
 }
 ```
 
-Upon ABCI `Commit`, which finalizes execution of a block in the state machine, Tendermint removes all data for heights lower than `retain_height`. This allows the state machine to control block retention, which is preferable since only it can determine the significance of historical blocks. By default (i.e. with `retain_height=0`) all historical blocks are retained.
+Upon ABCI `Commit`, which finalizes execution of a block in the state machine, Tenderdash removes all data for heights lower than `retain_height`. This allows the state machine to control block retention, which is preferable since only it can determine the significance of historical blocks. By default (i.e. with `retain_height=0`) all historical blocks are retained.
 
 Removed data includes not only blocks, but also headers, commit info, consensus params, validator sets, and so on. In the first iteration this will be done synchronously, since the number of heights removed for each run is assumed to be small (often 1) in the typical case. It can be made asynchronous at a later time if this is shown to be necessary.
 
@@ -74,7 +77,7 @@ The returned `retain_height` would be the lowest height that satisfies:
 
 - Local config: archive nodes may want to retain more or all blocks, e.g. via a local config option `min-retain-blocks`. There may also be a need to vary rentention for other nodes, e.g. sentry nodes which do not need historical blocks.
 
-![Cosmos SDK block retention diagram](img/block-retention.png)
+The retention height is the earliest height required by any of these constraints.
 
 ## Status
 
@@ -96,7 +99,7 @@ Accepted
 
 ### Neutral
 
-- Reduced block retention requires application changes, and cannot be controlled directly in Tendermint.
+- Reduced block retention requires application changes, and cannot be controlled directly in Tenderdash.
 
 - Application-specified block retention may set a lower bound on disk space requirements for all nodes.
 

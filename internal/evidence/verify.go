@@ -80,10 +80,12 @@ func (evpool *Pool) verify(ctx context.Context, evidence types.Evidence) (bool, 
 
 		if err := ev.ValidateABCI(val, valSet, evTime); err != nil {
 			ev.GenerateABCI(val, valSet, evTime)
-			if addErr := evpool.addPendingEvidence(ctx, ev); addErr != nil {
-				evpool.logger.Error("adding pending duplicate vote evidence failed", "err", addErr)
-			} else {
-				evpool.rememberIdentity(ev, verified)
+			if evpool.Enabled() {
+				if addErr := evpool.addPendingEvidence(ctx, ev); addErr != nil {
+					evpool.logger.Error("adding pending duplicate vote evidence failed", "err", addErr)
+				} else {
+					evpool.rememberIdentity(ev, verified)
+				}
 			}
 			return verified, err
 		}

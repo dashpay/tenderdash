@@ -1,5 +1,8 @@
 # RFC 017: ABCI++ Vote Extension Propagation
 
+> Inherited design record. This proposal provides design context, not a guarantee
+> of current behavior. See the [current protocol specification](../../spec/README.md).
+
 ## Changelog
 
 - 11-Apr-2022: Initial draft (@sergio-mena).
@@ -16,30 +19,30 @@ date, this is easy to do, but when a validator needs to catch up this is far fro
 cannot be retrieved from the blockchain.
 
 This RFC presents and compares the different options to address this problem, which have been proposed
-in several discussions by the Tendermint Core team.
+in discussions by the original upstream team.
 
 ## Document Structure
 
 The RFC is structured as follows. In the [Background](#background) section,
 subsections [Problem Description](#problem-description) and [Cases to Address](#cases-to-address)
 explain the problem at hand from a high level perspective, i.e., abstracting away from the current
-Tendermint implementation. In contrast, subsection
+Tenderdash implementation. In contrast, subsection
 [Current Catch-up Mechanisms](#current-catch-up-mechanisms) delves into the details of the current
-Tendermint code.
+Tenderdash code.
 
 In the [Discussion](#discussion) section, subsection [Solutions Proposed](#solutions-proposed) is also
 worded abstracting away from implementation details, whilst subsections
 [Feasibility of the Proposed Solutions](#feasibility-of-the-proposed-solutions) and
 [Current Limitations and Possible Implementations](#current-limitations-and-possible-implementations)
-analize the viability of one of the proposed solutions in the context of Tendermint's architecture
+analize the viability of one of the proposed solutions in the context of Tenderdash's architecture
 based on reactors. Finally, [Formalization Work](#formalization-work) briefly discusses the work
 still needed demonstrate the correctness of the chosen solution.
 
 The high level subsections are aimed at readers who are familiar with consensus algorithms, in
-particular with the one described in the Tendermint (white paper), but who are not necessarily
-acquainted with the details of the Tendermint codebase. The other subsections, which go into
+particular with the one described in the Tendermint white paper, but who are not necessarily
+acquainted with the details of the Tenderdash codebase. The other subsections, which go into
 implementation details, are best understood by engineers with deep knowledge of the implementation of
-Tendermint's blocksync and consensus reactors.
+Tenderdash's blocksync and consensus reactors.
 
 ## Background
 
@@ -48,7 +51,7 @@ Tendermint's blocksync and consensus reactors.
 This document assumes that all validators have equal voting power for the sake of simplicity. This is done
 without loss of generality.
 
-There are two types of votes in Tendermint: *prevotes* and *precommits*. Votes can be `nil` or refer to
+There are two types of votes in Tenderdash: *prevotes* and *precommits*. Votes can be `nil` or refer to
 a proposed block. This RFC focuses on precommits,
 also known as *precommit votes*. In this document we sometimes call them simply *votes*.
 
@@ -130,7 +133,7 @@ discussions and need to be addressed. They are (roughly) ordered from easiest to
     persisted, either in the WAL (in the form of received precommit messages), or in the latest
     extended commit, the only way that vote extensions needed to start the next height could be lost
     forever would be if all validators crashed and never recovered (e.g. disk corruption).
-    Since a *correct* node MUST eventually recover, this violates Tendermint's assumption of more than
+    Since a *correct* node MUST eventually recover, this violates Tenderdash's assumption of more than
     *2n<sub>h</sub>/3* correct validators for every height *h*.
 
     No problem to solve here.
@@ -214,7 +217,7 @@ discussions and need to be addressed. They are (roughly) ordered from easiest to
     | *valset<sub>h</sub>* &cap; *L<sub>h<sub>p</sub></sub>*  | *< n<sub>h</sub>/3*
 
     If this property does not hold for a particular height *h*, where
-    *h<sub>s</sub> ≤ h < h<sub>p</sub>*, Tendermint could not have progressed beyond *h* and
+    *h<sub>s</sub> ≤ h < h<sub>p</sub>*, Tenderdash could not have progressed beyond *h* and
     therefore no full node could have reached *h<sub>p</sub>* (a contradiction).
 
     These lagging nodes in *L<sub>h<sub>p</sub></sub>* need to catch up. They have to obtain the
@@ -238,12 +241,12 @@ them converge into case (h).
 
 ### Current Catch-up Mechanisms
 
-We now briefly describe the current catch-up mechanisms in the reactors concerned in Tendermint.
+We now briefly describe the current catch-up mechanisms in the reactors concerned in Tenderdash.
 
 #### Statesync
 
 Full nodes optionally run statesync just after starting, when they start from scratch.
-If statesync succeeds, an Application snapshot is installed, and Tendermint jumps from height 0 directly
+If statesync succeeds, an Application snapshot is installed, and Tenderdash jumps from height 0 directly
 to the height the Application snapshop represents, without applying the block of any previous height.
 Some light blocks are received and stored in the block store for running light-client verification of
 all the skipped blocks. Light blocks are incomplete blocks, typically containing the header and the
@@ -271,7 +274,7 @@ itself as caught up and switches to the consensus reactor.
 #### Consensus Reactor
 
 The consensus reactor runs the full Tendermint algorithm. For a validator this means it has to
-propose blocks, and send/receive prevote/precommit messages, as mandated by Tendermint, before it can
+propose blocks, and send/receive prevote/precommit messages, as mandated by Tenderdash, before it can
 decide and move on to the next height.
 
 If a full node that is running the consensus reactor falls behind at height *h*, when a peer node
@@ -297,7 +300,7 @@ These are the solutions proposed in discussions leading up to this RFC.
       can now remove (i.e., censor) vote extensions from precommit messages at will.
     - Further, there is no point anymore in the spec requiring the Application to accept a vote extension
       passed via `VerifyVoteExtension` to consider a precommit message valid in its entirety. Remember
-      this behavior of `VerifyVoteExtension` is adding a constraint to Tendermint's conditions for
+      this behavior of `VerifyVoteExtension` is adding a constraint to Tenderdash's conditions for
       liveness.
       In this situation, it is better and simpler to just drop the vote extension rejected by the
       Application via `VerifyVoteExtension`, but still consider the precommit vote itself valid as long
@@ -378,10 +381,10 @@ These are the solutions proposed in discussions leading up to this RFC.
 - **Solution 3.** *Require extended commits to be available at switching time*.
 
     This one is more involved than all previous solutions, and builds on an idea present in Solution 2:
-    vote extensions are actually not needed for Tendermint to make progress as long as the
+    vote extensions are actually not needed for Tenderdash to make progress as long as the
     validator is *certain* it is late.
 
-    We define two modes. The first is denoted *catch-up mode*, and Tendermint only calls
+    We define two modes. The first is denoted *catch-up mode*, and Tenderdash only calls
     `FinalizeBlock` for each height when in this mode. The second is denoted *consensus mode*, in
     which the validator considers itself up to date and fully participates in consensus and calls
     `PrepareProposal`/`ProcessProposal`, `ExtendVote`, and `VerifyVoteExtension`, before calling
@@ -426,18 +429,18 @@ extensions will *always* be available when calling `PrepareProposal` at height *
 This level of guarantees is probably not strong enough for vote extensions to be useful for some
 important use cases that motivated them in the first place, e.g., encrypted mempool transactions.
 
-Solution 1, while being simple in that the changes needed in the current Tendermint codebase would
+Solution 1, while being simple in that the changes needed in the current Tenderdash codebase would
 be rather small, is changing the block format, and would therefore require all blockchains using
 Tendermint v0.35 or earlier to hard-fork when upgrading to v0.36.
 
 Since Solution 2 can be attacked, one might prefer Solution 3, even if it is more involved
 to implement. Further, we must elaborate on how we can turn Solution 3, described in abstract
 terms in the previous section, into a concrete implementation compatible with the current
-Tendermint codebase.
+Tenderdash codebase.
 
 ### Current Limitations and Possible Implementations
 
-The main limitations affecting the current version of Tendermint are the following.
+The main limitations affecting the current version of Tenderdash are the following.
 
 - The current version of the blocksync reactor does not use the full
   [light client verification](https://github.com/tendermint/tendermint/blob/4743a7ad0/spec/light-client/README.md)
@@ -455,7 +458,7 @@ its outcomes are compatible with that effort.
 
 In subsection [Cases to Address](#cases-to-address), we concluded that we can focus on
 solving case (h) in theoretical terms.
-However, as the current Tendermint version does not yet support switching back to blocksync once a
+However, as the current Tenderdash version does not yet support switching back to blocksync once a
 node has switched to consensus, we need to split case (h) into two cases. When a full node needs to
 catch up...
 
@@ -558,7 +561,7 @@ Then, we need to handle two new situations, roughly equivalent to cases (h.1) an
 A formalization work to show or prove the correctness of the different use cases and solutions
 presented here (and any other that may be found) needs to be carried out.
 A question that needs a precise answer is how many extended commits (one?, two?) a node needs
-to keep in persistent memory when implementing Solution 3 described above without Tendermint's
+to keep in persistent memory when implementing Solution 3 described above without Tenderdash's
 current limitations.
 Another important invariant we need to prove formally is that the set of vote extensions
 required to make progress will always be held somewhere in the network.

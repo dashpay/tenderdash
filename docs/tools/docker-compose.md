@@ -8,13 +8,13 @@ With Docker Compose, you can spin up local testnets with a single command.
 
 ## Requirements
 
-1. [Install tendermint](../introduction/install.md)
+1. [Install Tenderdash](../introduction/install.md)
 2. [Install docker](https://docs.docker.com/engine/installation/)
 3. [Install docker-compose](https://docs.docker.com/compose/install/)
 
 ## Build
 
-Build the `tendermint` binary and, optionally, the `dashpay/tenderdash:localnode`
+Build the `tenderdash` binary and, optionally, the `dashpay/tenderdash:localnode`
 docker image.
 
 Note the binary will be mounted into the container so it can be updated without
@@ -59,7 +59,7 @@ make localnet-start
 ## Configuration
 
 The `make localnet-start` creates files for a 4-node testnet in `./build` by
-calling the `tendermint testnet` command.
+calling the `tenderdash testnet` command.
 
 The `./build` directory is mounted to the `/tendermint` mount point to attach
 the binary and config files to the container.
@@ -79,10 +79,10 @@ Adding 4 more nodes is required in order to fully utilize the config files that 
 ```yml
   node3: # bump by 1 for every node
     container_name: node3 # bump by 1 for every node
-    image: "tendermint/localnode"
+    image: "dashpay/tenderdash:localnode"
     environment:
       - ID=3
-      - LOG=${LOG:-tendermint.log}
+      - LOG=${LOG:-tenderdash.log}
     ports:
       - "26663-26664:26656-26657" # Bump 26663-26664 by one for every node
     volumes:
@@ -101,7 +101,7 @@ rm -rf ./build/node*
 
 ## Configuring ABCI containers
 
-To use your own ABCI applications with 4-node setup edit the [docker-compose.yaml](https://github.com/tendermint/tendermint/blob/v0.35.x/docker-compose.yml) file and add image to your ABCI application.
+To use your own ABCI applications with 4-node setup edit the [docker-compose.yaml](../../docker-compose.yml) file and add image to your ABCI application.
 
 ```yml
  abci0:
@@ -150,7 +150,7 @@ To use your own ABCI applications with 4-node setup edit the [docker-compose.yam
 
 ```
 
-Override the [command](https://github.com/tendermint/tendermint/blob/v0.35.x/networks/local/localnode/Dockerfile#L12) in each node to connect to it's ABCI.
+Override the [command](../../networks/local/localnode/Dockerfile#L12) in each node to connect to it's ABCI.
 
 ```yml
   node0:
@@ -160,7 +160,7 @@ Override the [command](https://github.com/tendermint/tendermint/blob/v0.35.x/net
       - "26656-26657:26656-26657"
     environment:
       - ID=0
-      - LOG=$${LOG:-tendermint.log}
+      - LOG=$${LOG:-tenderdash.log}
     volumes:
       - ./build:/tendermint:Z
     command: node --proxy-app=tcp://abci0:26658
@@ -173,7 +173,7 @@ Similarly do for node1, node2 and node3 then [run testnet](#run-a-testnet).
 
 ## Logging
 
-Log is saved under the attached volume, in the `tendermint.log` file. If the
+Log is saved under the attached volume, in the `tenderdash.log` file. If the
 `LOG` environment variable is set to `stdout` at start, the log is not saved,
 but printed on the screen.
 

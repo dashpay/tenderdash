@@ -1,5 +1,8 @@
 # RFC 018: BLS Signature Aggregation Exploration
 
+> Inherited design record. This proposal provides design context, not a guarantee
+> of current behavior. See the [current protocol specification](../../spec/README.md).
+
 ## Changelog
 
 - 01-April-2022: Initial draft (@williambanfield).
@@ -177,7 +180,7 @@ the `ed25519` library verification time grew steadily with the number of signatu
 whereas the bls library verification time remains constant. This is because the
 number of operations used to verify a signature does not grow at all with the
 number of signatures included in the aggregate signature (as long as the signers
-signed over the same message data as is the case in Tendermint).
+signed over the same message data as is the case in Tenderdash).
 
 It is worth noting that this would also represent a _degredation_ in signature
 verification time for chains with small validator sets. When batch verifying
@@ -191,8 +194,8 @@ check an aggregated signature from 1024 validators versus our ed25519 library's
 #### Reduce Light-Client Verification Time
 
 The light client aims to be a faster and lighter-weight way to verify that a 
-block was voted on by a Tendermint network. The light client fetches
-Tendermint block headers and commit signatures, performing public key
+block was voted on by a Tenderdash network. The light client fetches
+Tenderdash block headers and commit signatures, performing public key
 verification to ensure that the associated validator set signed the block.
 Reducing the size of the commit signature would allow the light client to fetch
 block data more quickly.
@@ -255,7 +258,7 @@ I cannot find support listed for Google Cloud, although perhaps it exists.
 ## Feasibility of implementation
 
 This section outlines the various hurdles that would exist to implementing BLS
-signature aggregation into Tendermint. It aims to demonstrate that we _could_
+signature aggregation into Tenderdash. It aims to demonstrate that we _could_
 implement BLS signatures but that it would incur risk and require breaking changes for a
 reasonably unclear benefit.
 
@@ -342,7 +345,7 @@ Generating an aggregated signature requires guarding against what is called
 a [rogue key attack][bls-ietf-terms]. A rogue key attack is one in which a
 malicious actor can craft an _aggregate_ key that can produce signatures that
 appear to include a signature from a private key that the malicious actor
-does not actually know. In Tendermint terms, this would look like a Validator
+does not actually know. In Tenderdash terms, this would look like a Validator
 producing a vote signed by both itself and some other validator where the other
 validator did not actually produce the vote itself.
 
@@ -359,7 +362,7 @@ of the public key generated using the associated private key. Everyone receiving
 the public key and associated proof-of-possession can easily verify the
 signature and be sure the entity owns the private key.
 
-This PoP scheme suits the Tendermint use case quite well since
+This PoP scheme suits the Tenderdash use case quite well since
 validator keys change infrequently so the associated PoPs would not be onerous
 to produce, verify, and store. Using this scheme allows signature verification
 to proceed more quickly, since all signatures are over identical data and
@@ -391,10 +394,10 @@ Backwards compatibility is an important consideration for signature verification
 Specifically, it is important to consider whether chains using current versions
 of IBC would be able to interact with chains adopting BLS.
 
-Because the `Block` shared by IBC and Tendermint is produced and parsed using
+Because the `Block` shared by IBC and Tenderdash is produced and parsed using
 protobuf, new structures can be added to the Block without breaking the
 ability of legacy users to parse the new structure. Breaking changes between
-current users of IBC and new Tendermint blocks only occur if data that is
+current users of IBC and new Tenderdash blocks only occur if data that is
 relied upon by the current users is no longer included in the current fields.
 
 For the case of BLS aggregated signatures, a new `AggregatedSignature` field
@@ -420,7 +423,7 @@ At the moment, there is one candidate, `blst`, that appears to be the most
 mature and well vetted. While this library is undergoing continuing auditing
 and is supported by funds from the Ethereum foundation, adopting a new cryptographic
 library presents some serious risks. Namely, if the support for the library were
-to be discontinued, Tendermint may become saddled with the requirement of supporting
+to be discontinued, Tenderdash may become saddled with the requirement of supporting
 a very complex piece of software or force a massive ecosystem-wide migration away
 from BLS signatures. 
 
@@ -457,7 +460,7 @@ and urges users to take caution before using it in production.
 
 ### Added complexity to light client verification
 
-Implementing BLS signature aggregation in Tendermint would pose issues for the
+Implementing BLS signature aggregation in Tenderdash would pose issues for the
 light client. The light client currently validates a subset of the signatures
 on a block when performing the verification algorithm. This is no longer possible
 with an aggregated signature. Aggregated signature verification is all-or-nothing.
@@ -480,8 +483,8 @@ cost of adding complexity to the light client.
 
 ### Added complexity to evidence handling
 
-Implementing BLS signature aggregation in Tendermint would add complexity to
-the evidence handling within Tendermint. Currently, the light client can submit
+Implementing BLS signature aggregation in Tenderdash would add complexity to
+the evidence handling within Tenderdash. Currently, the light client can submit
 evidence of a fork attempt to the chain. This evidence consists of the set of
 validators that double-signed, including their public keys, with the conflicting
 block.
@@ -496,19 +499,19 @@ the public keys, we cannot verify the signature at all. These keys would be
 retrievable. Any party that wanted to create a fork would want to convince a
 network that its fork is legitimate, so it would need to gossip the public keys.
 This does not hamper the feasibility of implementing BLS signature aggregation
-into Tendermint, but does represent yet another piece of added complexity to
+into Tenderdash, but does represent yet another piece of added complexity to
 the associated protocols.
 
 ## Open Questions
 
-* *Q*: Can you aggregate Ed25519 signatures in Tendermint?
+* *Q*: Can you aggregate Ed25519 signatures in Tenderdash?
   * There is a suggested scheme in github issue [7892][suggested-ed25519-agg],
 but additional rigor would be required to fully verify its correctness.
 
 ## Current Consideration
 
 Adopting a signature aggregation scheme presents some serious risks and costs
-to the Tendermint project. It requires multiple backwards-incompatible changes
+to the Tenderdash project. It requires multiple backwards-incompatible changes
 to the code, namely a change in the structure of the block and a new backwards-incompatible
 signature and key type. It risks adding a new signature type for which new attack
 types are still being discovered _and_ for which no industry standard, battle-tested

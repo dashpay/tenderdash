@@ -1,5 +1,8 @@
 # ADR D001: Inter validator set messaging
 
+> Inherited design record. This proposal provides design context, not a guarantee
+> of current behavior. See the [current protocol specification](../../spec/README.md).
+
 ## Changelog <!-- omit in toc -->
 
 * 2021-09-29: Initial version of the document
@@ -96,7 +99,7 @@ Validator node connection slots.
 This scenario is very similar to Scenario 1. However, instead of passing addresses of all Validators that are members of
 a Validator Set, only quorum ID is passed.
 
-This solution requires Tendermint to determine Validators addresses, effectively re-implementing logic already done in
+This solution requires Tenderdash to determine Validators addresses, effectively re-implementing logic already done in
 the ABCI App.
 
 ### Scenario 3: Rotate on Tenderdash
@@ -104,7 +107,7 @@ the ABCI App.
 ABCI application can send the whole master node list and quorum list to Tenderdash and
 potentially rotate on its side. However, it would split the responsibility for
 Validator Set rotation between multiple components. It would also require
-much more additional implementation. It would be better to keep the current Tendermint
+much more additional implementation. It would be better to keep the current Tenderdash
 design and concept being a logic-less consensus library and keep all business logic in
 the ABCI application.
 
@@ -147,7 +150,7 @@ tcp://<node_id>@<address>:<port>
 
 where:
 
-* `<node_id>` - node ID (can be generated based on node P2P public key, see [p2p.PubKeyToID](https://github.com/dashevo/tenderdash/blob/20d1f91c0adb29d1b5d03a945b17513a368759e4/p2p/key.go#L45))
+* `<node_id>` - node ID (can be generated based on node P2P public key, see [p2p.PubKeyToID](https://github.com/dashpay/tenderdash/blob/20d1f91c0adb29d1b5d03a945b17513a368759e4/p2p/key.go#L45))
 * `<address>` - IP address of the validator node
 * `<port>` - p2p port number of the validator node
 

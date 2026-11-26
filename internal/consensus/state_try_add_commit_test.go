@@ -11,6 +11,7 @@ import (
 
 	"github.com/dashpay/tenderdash/dash"
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -77,7 +78,7 @@ func TestHandleCommitVerifyErrorClassification(t *testing.T) {
 				metrics:        NopMetrics(),
 			}
 
-			action.handleCommitVerifyError(tc.err, peerID, tc.fromReplay)
+			action.handleCommitVerifyError(tc.err, peerID, 0, tc.fromReplay)
 
 			if !tc.wantEvict {
 				require.Empty(t, queue.ch, "peer must not be evicted for %v", tc.err)
@@ -131,7 +132,7 @@ func TestHandleCommitVerifyErrorRecordsPeerVerificationBudgetDrop(t *testing.T) 
 			metrics.VerificationBudgetDrops = counter
 			action := &TryAddCommitAction{metrics: metrics}
 
-			action.handleCommitVerifyError(tc.verificationErr, tc.peerID, tc.fromReplay)
+			action.handleCommitVerifyError(tc.verificationErr, tc.peerID, 0, tc.fromReplay)
 
 			require.Equal(t, tc.wantDrops, counter.value)
 		})
@@ -144,7 +145,7 @@ func TestHandleCommitVerifyErrorRecordsPeerVerificationBudgetDrop(t *testing.T) 
 func TestHandleCommitVerifyErrorNilQueue(t *testing.T) {
 	action := &TryAddCommitAction{metrics: NopMetrics()}
 	assert.NotPanics(t, func() {
-		action.handleCommitVerifyError(types.ErrInvalidCommitSignature{}, "peer", false)
+		action.handleCommitVerifyError(types.ErrInvalidCommitSignature{}, "peer", 0, false)
 	})
 }
 
@@ -156,7 +157,7 @@ func TestHandleCommitVerifyErrorQueueFull(t *testing.T) {
 
 	action := &TryAddCommitAction{peerErrorQueue: queue, metrics: NopMetrics()}
 	assert.NotPanics(t, func() {
-		action.handleCommitVerifyError(types.ErrInvalidCommitSignature{}, "peer", false)
+		action.handleCommitVerifyError(types.ErrInvalidCommitSignature{}, "peer", 0, false)
 	})
 	assert.Len(t, queue.ch, 1, "the pre-existing report must be preserved")
 }
@@ -265,20 +266,21 @@ func TestCommitVerifyFailureReasonSeparatesTheClasses(t *testing.T) {
 	}{
 		{"stale validator set", types.ErrInvalidCommitQuorumHash{}, "quorum_hash"},
 		{"vote extension mismatch", types.ErrVoteExtensionCountMismatch{}, "extension_count"},
+		{"application rejected extensions", sm.ErrCommitExtensionsRejected, "extensions_rejected"},
 		{"forged threshold signature", types.ErrInvalidCommitSignature{}, "invalid_signature"},
 		{"local shed", types.ErrVerificationBudgetExhausted, "budget"},
 		{"unclassified", errors.New("something else"), "other"},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, commitVerifyFailureReason(tc.err))
+			assert.Equal(t, tc.want, CommitVerifyFailureReason(tc.err))
 		})
 		// Every one of these reaches handleCommitVerifyError wrapped by
 		// readyToApplyCommit. Matching on the bare error would put all of them in
 		// "other", and the counter would read zero while the condition fires.
 		t.Run(tc.name+" wrapped", func(t *testing.T) {
 			wrapped := fmt.Errorf("error verifying commit: %w", tc.err)
-			assert.Equal(t, tc.want, commitVerifyFailureReason(wrapped))
+			assert.Equal(t, tc.want, CommitVerifyFailureReason(wrapped))
 		})
 	}
 }

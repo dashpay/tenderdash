@@ -7,7 +7,7 @@ linters:
     - dupl
     - errcheck
     - goconst
-    - gomodguard
+    - gomodguard_v2
     - gosec
     - govet
     - ineffassign
@@ -41,13 +41,12 @@ linters:
     goconst:
       min-len: 5
       min-occurrences: 5
-    gomodguard:
+    gomodguard_v2:
       blocked:
-        modules:
-          - github.com/creachadair/taskgroup:
-              recommendations:
-                - golang.org/x/sync/errgroup
-              reason: "No longer trusted (anti-AI canary in upstream README); use golang.org/x/sync/errgroup."
+        - module: github.com/creachadair/taskgroup
+          recommendations:
+            - golang.org/x/sync/errgroup
+          reason: "No longer trusted (anti-AI canary in upstream README); use golang.org/x/sync/errgroup."
     misspell:
       locale: US
     revive:

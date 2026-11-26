@@ -79,7 +79,8 @@ func getSize(v interface{}) (int, bool) {
 type byteReader struct {
 	reader    io.Reader
 	buf       []byte
-	bytesRead int // keeps track of bytes read via ReadByte()
+	bytesRead int   // keeps track of bytes read via ReadByte()
+	err       error // last error from the underlying reader
 }
 
 func newByteReader(r io.Reader) *byteReader {
@@ -93,6 +94,7 @@ func (r *byteReader) ReadByte() (byte, error) {
 	n, err := r.reader.Read(r.buf)
 	r.bytesRead += n
 	if err != nil {
+		r.err = err
 		return 0x00, err
 	}
 	return r.buf[0], nil

@@ -614,7 +614,7 @@ func (ls LightStore) TraceTo(lightBlock LightBlock) (LightBlock, LightStore)
     - returns a **trusted** lightblock `root` from the lightstore with a height
       less than `lightBlock`
     - returns a lightstore that contains lightblocks that constitute a
-      [verification trace](TODOlinkToDetectorSpecOnceThere) from
+      [verification trace](../detection/detection_003_reviewed.md#tmbc-skip-trace1) from
       `root` to `lightBlock` (including `lightBlock`)
 
 ### Inputs
@@ -929,7 +929,7 @@ For [IBC][ibc-rs] there are two additional challenges:
 
 1. it might be that some "older" header is needed, that is,
 *targetHeight < lightStore.LatestVerified()*.  The
-[supervisor](../supervisor/supervisor.md) checks whether it is in this
+[supervisor](../supervisor/supervisor_001_draft.md) checks whether it is in this
 case by calling `LatestPrevious` and `MinVerified` and if so it calls
 `Backwards`. All these functions are specified below.
 
@@ -1035,7 +1035,7 @@ func Backwards (primary PeerID, root LightBlock, targetHeight Height)
 
 [[lightclient]] The light client ADR [77d2651 on Dec 27, 2019].
 
-[RPC]: https://docs.tendermint.com/master/rpc/
+[RPC]: ../../rpc/README.md
 
 [block]: https://github.com/tendermint/spec/blob/d46cd7f573a2c6a2399fcab2cde981330aa63f37/spec/core/data_structures.md
 
@@ -1050,7 +1050,7 @@ func Backwards (primary PeerID, root LightBlock, targetHeight Height)
 [TMBC-SOUND-DISTR-POSS-COMMIT-link]: #tmbc-sound-distr-poss-commit1
 
 [lightclient]: https://github.com/interchainio/tendermint-rs/blob/e2cb9aca0b95430fca2eac154edddc9588038982/docs/architecture/adr-002-lite-client.md
-[attack-detector]: https://github.com/tendermint/spec/blob/master/rust-spec/lightclient/detection/detection_001_reviewed.md
+[attack-detector]: ../detection/detection_001_reviewed.md
 [fullnode]: https://github.com/tendermint/spec/blob/master/spec/blockchain/fullnode.md
 
 [ibc-rs]:https://github.com/informalsystems/ibc-rs

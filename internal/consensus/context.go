@@ -14,6 +14,7 @@ const (
 	verificationBudgetCtx
 	voteVerificationCtx
 	peerLaneSessionCtx
+	peerConnIDCtx
 )
 
 // ctxWithPeerQueue adds a key into the context with true value
@@ -54,6 +55,22 @@ func ctxWithPeerLaneSession(ctx context.Context, session uint64) context.Context
 func peerLaneSessionFromCtx(ctx context.Context) (uint64, bool) {
 	session, ok := ctx.Value(peerLaneSessionCtx).(uint64)
 	return session, ok
+}
+
+// ctxWithPeerConnID carries the generation of the sender's connection that
+// delivered a message (p2p.Envelope.ConnID), so a peer error raised for it later
+// can be fenced to that connection. Zero binds nothing.
+func ctxWithPeerConnID(ctx context.Context, connID uint64) context.Context {
+	if connID == 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, peerConnIDCtx, connID)
+}
+
+// peerConnIDFromCtx returns the connection generation the context carries, or zero.
+func peerConnIDFromCtx(ctx context.Context) uint64 {
+	connID, _ := ctx.Value(peerConnIDCtx).(uint64)
+	return connID
 }
 
 // msgInfoWithCtx puts msgInfo into the context

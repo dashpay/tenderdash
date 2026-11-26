@@ -137,12 +137,15 @@ type Metrics struct {
 	//metrics:Number of State and VoteSetBits channel messages dropped over the per-peer or node-wide ceiling.
 	StateChannelDrops metrics.Counter
 
-	// CommitVerifyFailures is the number of peer commits refused by verification,
-	// labeled by the class of refusal. Every class is logged at debug so that a
-	// flood cannot amplify, which leaves a node whose validator set has gone stale
-	// refusing every commit and finalizing nothing without saying so; a sustained
-	// rate here is what makes that alertable.
-	//metrics:Number of peer commits refused by verification labeled by the class of refusal.
+	// CommitVerifyFailures is the number of commits refused by verification,
+	// labeled by the class of refusal: commits from peers in consensus and block
+	// sync, and the commit built from this node's own precommits. Refused peer
+	// commits are logged at debug so that a flood cannot amplify, which leaves a
+	// node whose validator set has gone stale refusing every commit and
+	// finalizing nothing without saying so; a sustained rate here is what makes
+	// that alertable. A refused own commit is logged at error: the application
+	// disagrees with this node's own votes.
+	//metrics:Number of commits (from peers, block sync or this node's own precommits) refused by verification labeled by the class of refusal.
 	CommitVerifyFailures metrics.Counter `metrics_labels:"reason"`
 
 	// ProposalVerifyFailures is the number of peer proposals whose signature did
@@ -215,6 +218,26 @@ type Metrics struct {
 	// between blocks, which is block fetching holding the sync back.
 	//metrics:Time spent in each stage of applying a block during block sync, in milliseconds.
 	BlockSyncApplyStageDuration metrics.Histogram `metrics_labels:"stage" metrics_buckettype:"exprange" metrics_bucketsizes:"0.01, 1000, 12"`
+
+	// ProposerHeartbeatsSent is the number of heartbeats this node signed and
+	// broadcast while it was the proposer of a round that waits for transactions.
+	//metrics:Number of proposer heartbeats this node sent.
+	ProposerHeartbeatsSent metrics.Counter
+
+	// ProposerHeartbeatsReceived is the number of new, verified heartbeats this
+	// node accepted from the proposer of the round it waits in.
+	//metrics:Number of proposer heartbeats this node accepted.
+	ProposerHeartbeatsReceived metrics.Counter
+
+	// ProposerSilences is the number of rounds in which this validator stopped
+	// hearing from the proposer while waiting for transactions.
+	//metrics:Number of rounds in which the proposer went silent while this validator waited for transactions.
+	ProposerSilences metrics.Counter
+
+	// RoundSkips is the number of rounds this node moved past on a certificate
+	// that +2/3 of the validators voted to skip.
+	//metrics:Number of rounds skipped on a certificate from +2/3 of the validators.
+	RoundSkips metrics.Counter
 }
 
 // ObserveBlockSyncStage records the time a block spent in one stage of the
@@ -226,8 +249,8 @@ func (m *Metrics) ObserveBlockSyncStage(stage string, d time.Duration) {
 // RecordConsMetrics uses for recording the block related metrics during fast-sync.
 //
 // blockSize is the size of the serialized block in bytes. It is passed in rather
-// than derived from block, because callers on the block sync path have already
-// serialized the block and recomputing it there is expensive.
+// than derived from block, because callers on the block sync path already hold
+// the serialized block and serializing it again there is expensive.
 func (m *Metrics) RecordConsMetrics(block *types.Block, blockSize int64) {
 	m.NumTxs.Set(float64(len(block.Data.Txs)))
 	m.TotalTxs.Add(float64(len(block.Data.Txs)))

@@ -5,10 +5,11 @@ import (
 	"errors"
 	"testing"
 
-	dbm "github.com/cometbft/cometbft-db"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
+	dbm "github.com/dashpay/tenderdash/libs/db"
 
 	abcitypes "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/config"
@@ -18,8 +19,6 @@ import (
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/proto/tendermint/state"
 	"github.com/dashpay/tenderdash/types"
-
-	_ "github.com/lib/pq" // for the psql sink
 )
 
 const (
@@ -84,29 +83,35 @@ func TestReIndexEventCheckHeight(t *testing.T) {
 func TestLoadEventSink(t *testing.T) {
 	testCases := []struct {
 		sinks   []string
-		connURL string
 		loadErr bool
 	}{
-		{[]string{}, "", true},
-		{[]string{"NULL"}, "", true},
-		{[]string{"KV"}, "", false},
-		{[]string{"KV", "KV"}, "", true},
-		{[]string{"PSQL"}, "", true},         // true because empty connect url
-		{[]string{"PSQL"}, "wrongUrl", true}, // true because wrong connect url
-		// skip to test PSQL connect with correct url
-		{[]string{"UnsupportedSinkType"}, "wrongUrl", true},
+		{[]string{}, true},
+		{[]string{"NULL"}, true},
+		{[]string{"KV"}, false},
+		{[]string{"KV", "KV"}, true},
+		{[]string{"PSQL"}, true},
+		{[]string{"UnsupportedSinkType"}, true},
 	}
 
 	for _, tc := range testCases {
 		cfg := config.TestConfig()
 		cfg.TxIndex.Indexer = tc.sinks
-		cfg.TxIndex.PsqlConn = tc.connURL
 		_, err := loadEventSinks(cfg)
 		if tc.loadErr {
 			require.Error(t, err)
 		} else {
 			require.NoError(t, err)
 		}
+	}
+}
+
+func TestReindexRejectsPostgreSQL(t *testing.T) {
+	for _, indexers := range [][]string{{"psql"}, {"PSQL"}, {"null", "psql"}, {"kv", "psql"}} {
+		conf := config.TestConfig().SetRoot(t.TempDir())
+		conf.TxIndex.Indexer = indexers
+		sinks, err := loadEventSinks(conf)
+		require.ErrorContains(t, err, "PostgreSQL event indexing has been removed")
+		require.Nil(t, sinks)
 	}
 }
 

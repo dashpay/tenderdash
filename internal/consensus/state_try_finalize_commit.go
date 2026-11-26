@@ -19,13 +19,15 @@ func (e *TryFinalizeCommitEvent) GetType() EventType {
 	return TryFinalizeCommitType
 }
 
-// TryFinalizeCommitAction ...
-// If we have the block AND +2/3 commits for it, finalize.
+// TryFinalizeCommitAction finalizes the height when this node holds the block
+// and +2/3 precommits for it, unless the application rejects the commit built
+// from those precommits.
 type TryFinalizeCommitAction struct {
 	logger log.Logger
 	// create and execute blocks
 	blockExec  *blockExecutor
 	blockStore sm.BlockStore
+	metrics    *Metrics
 }
 
 // Execute ...
@@ -60,7 +62,10 @@ func (cs *TryFinalizeCommitAction) Execute(ctx context.Context, stateEvent State
 	return nil
 }
 
-// Increment height and goto cstypes.RoundStepNewHeight
+// finalizeCommit applies the commit built from this node's own precommits, which
+// moves to the next height. If the application rejects that commit, nothing is
+// persisted and the node stays in RoundStepApplyCommit until a peer's commit
+// arrives.
 func (cs *TryFinalizeCommitAction) finalizeCommit(ctx context.Context, ctrl *Controller, stateData *StateData, height int64) {
 	logger := cs.logger.With("height", height)
 
@@ -97,5 +102,21 @@ func (cs *TryFinalizeCommitAction) finalizeCommit(ctx context.Context, ctrl *Con
 
 	precommits := stateData.Votes.Precommits(stateData.CommitRound)
 	seenCommit := precommits.MakeCommit()
+	// The application must accept the extensions before the block is saved.
+	// This commit is built from precommits this node verified itself, so a
+	// rejection means the application disagrees with its own votes. Nothing is
+	// persisted and the node stays at this height, where a peer's commit can
+	// still finish it; a panic would only restart into the same commit.
+	err := cs.blockExec.refuseUnprocessedCommit(&stateData.RoundState, seenCommit)
+	if err == nil {
+		cs.blockExec.mustEnsureProcess(ctx, &stateData.RoundState, seenCommit.Round)
+		err = cs.blockExec.verifyCommitExtensions(ctx, &stateData.RoundState, seenCommit)
+	}
+	if err != nil {
+		cs.metrics.CommitVerifyFailures.With("reason", CommitVerifyFailureReason(err)).Add(1)
+		logger.Error("application rejected the commit of this node's own precommits; waiting for a peer's commit",
+			"commit_round", seenCommit.Round, "error", err)
+		return
+	}
 	_ = ctrl.Dispatch(ctx, &ApplyCommitEvent{Commit: seenCommit}, stateData)
 }

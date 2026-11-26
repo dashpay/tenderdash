@@ -1,0 +1,16 @@
+[book]
+authors = ["Dash Core Group"]
+language = "en"
+src = "src"
+title = "Tenderdash Documentation"
+description = "Tenderdash node operation, application development, and protocol specifications"
+
+[build]
+build-dir = "book"
+create-missing = false
+
+[output.html]
+default-theme = "navy"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/dashpay/tenderdash"
+additional-js = ["mermaid.min.js", "mermaid-init.js"]

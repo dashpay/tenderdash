@@ -10,11 +10,12 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	dbm "github.com/cometbft/cometbft-db"
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/fortytw2/leaktest"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
+	dbm "github.com/dashpay/tenderdash/libs/db"
 
 	clientmocks "github.com/dashpay/tenderdash/abci/client/mocks"
 	abci "github.com/dashpay/tenderdash/abci/types"
@@ -22,6 +23,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto"
 	dashcore "github.com/dashpay/tenderdash/dash/core"
 
+	"github.com/dashpay/tenderdash/internal/evidence"
 	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/internal/proxy"
 	sm "github.com/dashpay/tenderdash/internal/state"
@@ -224,6 +226,15 @@ func setup(
 }
 
 func TestReactor_Sync(t *testing.T) {
+	for _, limits := range [][2]int64{{1000, 1000}, {0, 1000}, {1000, 0}} {
+		t.Run(fmt.Sprintf("evidence_%d_to_%d", limits[0], limits[1]), func(t *testing.T) {
+			testReactorSync(t, limits[0], limits[1])
+		})
+	}
+}
+
+func testReactorSync(t *testing.T, before, after int64) {
+	t.Helper()
 	if testing.Short() {
 		t.Skip("skipping test in short mode")
 	}
@@ -233,6 +244,32 @@ func TestReactor_Sync(t *testing.T) {
 
 	const snapshotHeight = 7
 	rts := setup(ctx, t, nil, nil, nil, 100)
+	local := sm.State{
+		Validators:      types.NewEmptyValidatorSet(),
+		ConsensusParams: *types.DefaultConsensusParams(),
+	}
+	local.ConsensusParams.Evidence.MaxBytes = before
+	rts.stateStore.On("Load").Unset()
+	rts.stateStore.On("Load").Return(local, nil)
+	pool := evidence.NewPool(
+		log.NewNopLogger(),
+		dbm.NewMemDB(),
+		rts.stateStore,
+		rts.blockStore,
+		evidence.NopMetrics(),
+		nil,
+	)
+	require.NoError(t, pool.Start(local))
+	defer pool.Close()
+	hookCalled := false
+	rts.reactor.postSyncHook = func(ctx context.Context, restored sm.State) error {
+		pool.Update(ctx, restored, nil)
+		require.Equal(t, after, pool.State().ConsensusParams.Evidence.MaxBytes)
+		require.Equal(t, restored.LastBlockHeight, pool.State().LastBlockHeight)
+		hookCalled = true
+		return nil
+	}
+
 	chain := buildLightBlockChain(ctx, t, 1, 10, time.Now(), rts.privVal)
 	registerMockCoreQuorums(t, rts.dashcoreClient, chain)
 	// app accepts any snapshot
@@ -282,7 +319,7 @@ func TestReactor_Sync(t *testing.T) {
 
 	go handleChunkRequests(ctx, t, rts.chunkOutCh, rts.chunkInCh, closeCh, appHash, []byte("abc"))
 
-	go handleConsensusParamsRequest(ctx, t, rts.paramsOutCh, rts.paramsInCh, closeCh)
+	go handleConsensusParamsRequest(ctx, t, rts.paramsOutCh, rts.paramsInCh, closeCh, after)
 
 	// update the config to use the p2p provider
 	rts.reactor.cfg.UseP2P = true
@@ -291,6 +328,7 @@ func TestReactor_Sync(t *testing.T) {
 	// Run state sync
 	_, err := rts.reactor.Sync(ctx)
 	require.NoError(t, err)
+	require.True(t, hookCalled)
 
 	// The sync metrics must survive the completed sync (the syncer is dropped
 	// by syncComplete, but its final values are snapshotted first), so /status
@@ -310,6 +348,7 @@ func TestReactor_ChunkRequest_InvalidRequest(t *testing.T) {
 
 	rts.chunkInCh <- p2p.Envelope{
 		From:      types.NodeID("aa"),
+		ConnID:    7,
 		ChannelID: ChunkChannel,
 		Message:   &ssproto.SnapshotsRequest{},
 	}
@@ -319,6 +358,7 @@ func TestReactor_ChunkRequest_InvalidRequest(t *testing.T) {
 	require.Empty(t, rts.chunkOutCh)
 	require.Contains(t, response.Err.Error(), "received unknown message")
 	require.Equal(t, types.NodeID("aa"), response.NodeID)
+	require.Equal(t, uint64(7), response.ConnID, "the report must name the sending connection")
 }
 
 func TestReactor_ChunkRequest(t *testing.T) {
@@ -868,9 +908,13 @@ func handleConsensusParamsRequest(
 	t *testing.T,
 	receiving, sending chan p2p.Envelope,
 	closeCh chan struct{},
+	evidenceLimits ...int64,
 ) {
 	t.Helper()
 	params := types.DefaultConsensusParams()
+	if len(evidenceLimits) > 0 {
+		params.Evidence.MaxBytes = evidenceLimits[0]
+	}
 	paramsProto := params.ToProto()
 	for {
 		select {
@@ -1075,9 +1119,14 @@ func handleChunkRequests(
 	}
 }
 
+// testLightBlockConnID is the connection generation every light block response in
+// these tests arrives on.
+const testLightBlockConnID = uint64(7)
+
 func newLBMessage(peerID types.NodeID, lb *tmproto.LightBlock) p2p.Envelope {
 	return p2p.Envelope{
 		From:      peerID,
+		ConnID:    testLightBlockConnID,
 		ChannelID: LightBlockChannel,
 		Message: &ssproto.LightBlockResponse{
 			LightBlock: lb,
@@ -1279,6 +1328,79 @@ func recordPeerErrors(mtx *sync.Mutex, reported *[]p2p.PeerError) func(*reactorT
 			*reported = append(*reported, pe)
 			return nil
 		}
+	}
+}
+
+// TestReactor_Backfill_ReportsFenceToDeliveringConnection pins that every refusal of a
+// response names the connection that delivered it. Without a generation, the peer
+// manager evicts whichever connection is live: verification lags fetching, so that
+// can be a replacement that never sent the refused block.
+func TestReactor_Backfill_ReportsFenceToDeliveringConnection(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
+	for _, tc := range []struct {
+		name   string
+		tamper func(*types.LightBlock)
+		wantIn string
+	}{
+		{
+			name:   "undecodable response",
+			tamper: func(lb *types.LightBlock) { lb.ValidatorSet.QuorumType = outOfRangeQuorumType },
+			wantIn: "unsupported quorum type",
+		},
+		{
+			name: "fails basic validation",
+			tamper: func(lb *types.LightBlock) {
+				lb.Commit.BlockID.Hash = make([]byte, len(lb.Commit.BlockID.Hash))
+			},
+			wantIn: "received invalid light block",
+		},
+		{
+			name: "header misses the trusted hash",
+			tamper: func(lb *types.LightBlock) {
+				// Outside the state ID, so the commit still binds to the new header.
+				lb.ProposedAppVersion++
+				lb.Commit.BlockID.Hash = lb.Hash()
+			},
+			wantIn: "Expected hash",
+		},
+		{
+			name: "forged threshold block signature",
+			tamper: func(lb *types.LightBlock) {
+				forged := make([]byte, len(lb.Commit.ThresholdBlockSignature))
+				copy(forged, lb.Commit.ThresholdBlockSignature)
+				forged[0] ^= 0xFF
+				lb.Commit.ThresholdBlockSignature = forged
+			},
+			wantIn: "invalid commit signatures",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			var (
+				mtx      sync.Mutex
+				reported []p2p.PeerError
+			)
+			_, _, err := backfillTamperedBlock(ctx, t, tc.tamper, recordPeerErrors(&mtx, &reported))
+			require.Error(t, err)
+
+			mtx.Lock()
+			defer mtx.Unlock()
+
+			matched := 0
+			for _, pe := range reported {
+				if strings.Contains(pe.Err.Error(), tc.wantIn) {
+					matched++
+				}
+				require.Equal(t, testLightBlockConnID, pe.ConnID,
+					"report must be fenced to the delivering connection: %v", pe.Err)
+			}
+			require.NotZero(t, matched, "the refusal must be reported: got %v", reported)
+		})
 	}
 }
 

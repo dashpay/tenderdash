@@ -7,12 +7,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/internal/p2p/client"
 	"github.com/dashpay/tenderdash/internal/p2p/client/mocks"
+	p2pmocks "github.com/dashpay/tenderdash/internal/p2p/mocks"
 	statefactory "github.com/dashpay/tenderdash/internal/state/test/factory"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	tmrequire "github.com/dashpay/tenderdash/internal/test/require"
@@ -104,9 +107,65 @@ func (suite *BlockFetchJobTestSuite) TestExecuteHeightMismatch() {
 	suite.requireError("peer sent block at height 6, requested height 5", res.Err)
 }
 
+// TestExecuteCarriesPeerConnection pins that a job's outcome stays attributed to the
+// connection generation the peer was reserved under, including a timeout, which has
+// no response envelope to take a generation from.
+func (suite *BlockFetchJobTestSuite) TestExecuteCarriesPeerConnection() {
+	ctx := context.Background()
+	const connID = uint64(7)
+	peer := suite.peer
+	peer.connID = connID
+
+	suite.client.
+		On("GetBlock", mock.Anything, int64(2), peer.peerID).
+		Once().
+		Return(suite.getBlockReturnFunc(suite.promiseResolve(2)), nil)
+	res := blockFetchJobHandler(suite.client, peer, 2)(ctx)
+	suite.Require().NoError(res.Err)
+	suite.Require().Equal(connID, res.Value.(*BlockResponse).ConnID)
+
+	suite.client.
+		On("GetBlock", mock.Anything, int64(3), peer.peerID).
+		Once().
+		Return(suite.getBlockReturnFunc(suite.promiseReject(client.ErrPeerNotResponded)), nil)
+	res = blockFetchJobHandler(suite.client, peer, 3)(ctx)
+	bfErr := &errBlockFetch{}
+	suite.Require().ErrorAs(res.Err, &bfErr)
+	suite.Require().Equal(connID, bfErr.connID)
+}
+
+// TestAttributedConn pins that a report's generation does not depend on how a timeout
+// raced a late delivery: the delivered generation counts only for an answer.
+func TestAttributedConn(t *testing.T) {
+	const reserved, delivered = uint64(3), uint64(9)
+	for _, tc := range []struct {
+		name      string
+		delivered uint64
+		awaitErr  error
+		want      uint64
+	}{
+		{"answered", delivered, nil, delivered},
+		{"answered that the block is missing", delivered, &client.ErrBlockNotFound{Height: 1}, delivered},
+		{"timed out while a delivery raced it", delivered, client.ErrPeerNotResponded, reserved},
+		{"timed out", 0, client.ErrPeerNotResponded, reserved},
+		{"answered through a client reporting no connection", 0, nil, reserved},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			request := newPeerData("peer", 1, 10).service.request()
+			request.Delivered(tc.delivered)
+			require.Equal(t, tc.want, attributedConn(reserved, request, tc.awaitErr))
+		})
+	}
+}
+
 func TestBlockResponseValidate(t *testing.T) {
-	block := func(h int64) *types.Block {
-		return &types.Block{Header: types.Header{Height: h}}
+	// a block at height h, as a response holds it
+	block := func(h int64) BlockResponse {
+		return BlockResponse{Height: h, BlockBytes: blockBytes(t, &types.Block{Header: types.Header{Height: h}})}
+	}
+	withCommit := func(resp BlockResponse, commit *types.Commit) BlockResponse {
+		resp.Commit = commit
+		return resp
 	}
 	commit := func(h int64) *types.Commit {
 		return &types.Commit{Height: h}
@@ -128,17 +187,17 @@ func TestBlockResponseValidate(t *testing.T) {
 		},
 		{
 			name:    "block, nil commit",
-			resp:    BlockResponse{Block: block(10)},
+			resp:    block(10),
 			wantErr: "a block without a commit at height 10",
 		},
 		{
 			name:    "height mismatch",
-			resp:    BlockResponse{Block: block(10), Commit: commit(11)},
+			resp:    withCommit(block(10), commit(11)),
 			wantErr: "heights don't match",
 		},
 		{
 			name: "valid",
-			resp: BlockResponse{Block: block(10), Commit: commit(10)},
+			resp: withCommit(block(10), commit(10)),
 		},
 	}
 	for _, tc := range testCases {
@@ -215,8 +274,8 @@ func (suite *BlockFetchJobTestSuite) TestGeneratorNextJobWaitForPeerAndPushBackH
 		resp2 := res2.Value.(*BlockResponse)
 		return suite.Equal(suite.peer.peerID, resp1.PeerID) &&
 			suite.Equal(suite.peer.peerID, resp2.PeerID) &&
-			suite.Contains([]int64{5, 9}, resp1.Block.Height) &&
-			suite.Contains([]int64{5, 9}, resp2.Block.Height)
+			suite.Contains([]int64{5, 9}, resp1.Height) &&
+			suite.Contains([]int64{5, 9}, resp2.Height)
 	}, 10*time.Millisecond, 5*time.Millisecond)
 }
 
@@ -361,4 +420,59 @@ func (suite *BlockFetchJobTestSuite) TestJobGeneratorPushBackOrdersLowestFirst()
 	// duplicates are still skipped across a batch
 	jobGen.pushBack(20, 40, 20)
 	suite.Require().Equal([]int64{20, 30, 40}, jobGen.pushedBack)
+}
+
+// A valid answer just before the deadline must not win every subsequent height
+// merely because success clears the hard-failure counter.
+func (suite *BlockFetchJobTestSuite) TestSlowSuccessPrefersAnotherPeer() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	clock := clockwork.NewFakeClock()
+	sent := make(chan p2p.Envelope, 1)
+	responses := make(chan p2p.Envelope, 1)
+	channel := p2pmocks.NewChannel(suite.T())
+	channel.On("Send", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		sent <- args.Get(1).(p2p.Envelope)
+	}).Return(nil)
+	channel.On("Receive", mock.Anything).Return(p2p.NewChannelIterator(responses))
+	blockClient := client.New(map[p2p.ChannelID]*p2p.ChannelDescriptor{
+		p2p.BlockSyncChannel: {ID: p2p.BlockSyncChannel, Name: "blocksync"},
+	}, func(context.Context, *p2p.ChannelDescriptor) (p2p.Channel, error) { return channel, nil }, client.WithClock(clock))
+	consumed := make(chan error, 1)
+	go func() {
+		consumed <- blockClient.Consume(ctx, client.ConsumerParams{
+			ReadChannels: []p2p.ChannelID{p2p.BlockSyncChannel}, Handler: droppedRequestHandler{},
+		})
+	}()
+	defer func() { cancel(); suite.Require().NoError(<-consumed) }()
+	syncer := NewSynchronizer(1, blockClient, nil, WithClock(clock))
+	syncer.AddPeer(newPeerData("slow", 1, 100))
+	syncer.AddPeer(newPeerData("fast", 1, 100))
+	peer, ok := syncer.peerStore.FindPeer(1)
+	suite.Require().True(ok)
+	suite.Require().Equal(types.NodeID("slow"), peer.peerID)
+	syncer.peerStore.Update(peer.peerID, AddNumPending(1))
+	done := make(chan workerpool.Result, 1)
+	go func() { done <- blockFetchJobHandler(blockClient, peer, 1)(ctx) }()
+	request := <-sent
+	wait, stop := context.WithTimeout(ctx, time.Second)
+	defer stop()
+	suite.Require().NoError(clock.BlockUntilContext(wait, 1))
+	clock.Advance(59 * time.Second)
+	responses <- p2p.Envelope{From: peer.peerID, ChannelID: p2p.BlockSyncChannel,
+		Attributes: map[string]string{client.ResponseIDAttribute: request.Attributes[client.RequestIDAttribute]},
+		Message:    suite.responses[0]}
+	select {
+	case result := <-done:
+		suite.Require().NoError(result.Err)
+	case <-time.After(time.Second):
+		suite.FailNow("valid response did not complete")
+	}
+	syncer.peerStore.Update(peer.peerID, AddNumPending(-1), ResetFailures())
+	selected, ok := syncer.peerStore.FindPeer(2)
+	suite.Require().True(ok)
+	suite.Require().Equal(types.NodeID("fast"), selected.peerID,
+		"slow success must reduce future preference without disconnecting the source")
+	suite.Require().True(syncer.peerStore.HasPeerForHeight(2))
+	suite.Require().Equal(2, syncer.peerStore.Len())
 }

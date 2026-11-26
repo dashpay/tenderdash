@@ -1,5 +1,8 @@
 # ADR 073: Adopt LibP2P
 
+> Inherited design record. This proposal provides design context, not a guarantee
+> of current behavior. See the [current protocol specification](../../spec/README.md).
+
 ## Changelog
 
 - 2021-11-02: Initial Draft (@tychoish)
@@ -11,7 +14,7 @@ Proposed.
 ## Context
 
 
-As part of the 0.35 development cycle, the Tendermint team completed
+As part of the upstream 0.35 development cycle, the original team completed
 the first phase of the work described in ADRs 61 and 62, which included a
 large scale refactoring of the reactors and the p2p message
 routing. This replaced the switch and many of the other legacy
@@ -19,7 +22,7 @@ components without breaking protocol or network-level
 interoperability and left the legacy connection/socket handling code.
 
 Following the release, the team has reexamined the state of the code
-and the design, as well as Tendermint's requirements. The notes
+and the design, as well as Tenderdash's requirements. The notes
 from that process are available in the [P2P Roadmap
 RFC][rfc].
 
@@ -37,8 +40,8 @@ systems while also achieving many of our broader objectives.
 
 LibP2P is a thoroughly-specified implementation of a peer-to-peer
 networking stack, designed specifically for systems such as
-ours. Adopting LibP2P as the basis of Tendermint will allow the
-Tendermint team to focus more of their time on other differentiating
+ours. Adopting LibP2P as the basis of Tenderdash will allow the
+Tenderdash team to focus more of their time on other differentiating
 aspects of the system, and make it possible for the ecosystem as a
 whole to take advantage of tooling and efforts of the LibP2P
 platform.
@@ -46,21 +49,21 @@ platform.
 ## Alternative Approaches
 
 As discussed in the [P2P Roadmap RFC][rfc], the primary alternative would be to
-continue development of Tendermint's home-grown peer-to-peer
-layer. While that would give the Tendermint team maximal control
+continue development of Tenderdash's home-grown peer-to-peer
+layer. While that would give the Tenderdash team maximal control
 over the peer system, the current design is unexceptional on its
 own merits, and the prospective maintenance burden for this system
 exceeds our tolerances for the medium term.
 
-Tendermint can and should differentiate itself not on the basis of
+Tenderdash can and should differentiate itself not on the basis of
 its networking implementation or peer management tools, but providing
 a consistent operator experience, a battle-tested consensus algorithm,
 and an ergonomic user experience.
 
 ## Decision
 
-Tendermint will adopt libp2p during the 0.37 development cycle,
-replacing the bespoke Tendermint P2P stack. This will remove the
+The upstream proposal targeted libp2p adoption during its 0.37 development cycle,
+replacing the bespoke Tenderdash P2P stack. This will remove the
 `Endpoint`, `Transport`, `Connection`, and `PeerManager` abstractions
 and leave the reactors, `p2p.Router` and `p2p.Channel`
 abstractions.
@@ -132,21 +135,21 @@ revisit that possibility later if there is a demonstrated need.
 
 Because the routers and all current P2P libraries are `internal`
 packages and not part of the public API, the only changes to the public
-API surface area of Tendermint will be different configuration
+API surface area of Tenderdash will be different configuration
 file options, replacing the current P2P options with options relevant
 to libp2p.
 
 However, it will not be possible to run a network with both networking
-stacks active at once, so the upgrade to the version of Tendermint
+stacks active at once, so the upgrade to the version of Tenderdash
 will need to be coordinated between all nodes of the network. This is
-consistent with the expectations around upgrades for Tendermint moving
+consistent with the expectations around upgrades for Tenderdash moving
 forward, and will help manage both the complexity of the project and
 the implementation timeline.
 
 ## Open Questions
 
 - What is the role of Protocol Labs in the implementation of libp2p in
-  tendermint, both during the initial implementation and on an ongoing
+  Tenderdash, both during the initial implementation and on an ongoing
   basis thereafter?
 
 - Should all P2P traffic for a given node be pushed to a single topic,
@@ -155,7 +158,7 @@ the implementation timeline.
   topics can a libp2p network support? Is there testing that validates
   the capabilities?
 
-- Tendermint presently provides a very coarse QoS-like functionality
+- Tenderdash presently provides a very coarse QoS-like functionality
   using priorities based on message-type.
   This intuitively/theoretically ensures that evidence and consensus
   messages don't get starved by blocksync/statesync messages. It's
@@ -180,11 +183,11 @@ the implementation timeline.
 - What are the security and protocol implications of tracking
   information from peer heartbeats and exposing that to reactors?
 
-- How much (or how little) configuration can Tendermint provide for
+- How much (or how little) configuration can Tenderdash provide for
   libp2p, particularly on the first release?
 
   - In general, we should not support byo-functionality for libp2p
-	components within Tendermint, and reduce the configuration surface
+	components within Tenderdash, and reduce the configuration surface
 	area, as much as possible.
 
 - What are the best ways to provide request/response semantics for
@@ -197,7 +200,7 @@ the implementation timeline.
 
 ### Positive
 
-- Reduce the maintenance burden for the Tendermint Core team by
+- Reduce the maintenance burden for the Tenderdash Core team by
   removing a large swath of legacy code that has proven to be
   difficult to modify safely.
 
@@ -205,17 +208,17 @@ the implementation timeline.
   peer management system (p2p) and stack.
 
 - Provide users with a more stable peer and networking system,
-  Tendermint can improve operator experience and network stability.
+  Tenderdash can improve operator experience and network stability.
 
 ### Negative
 
 - By deferring to library implementations for peer management and
-  networking, Tendermint loses some flexibility for innovating at the
-  peer and networking level. However, Tendermint should be innovating
+  networking, Tenderdash loses some flexibility for innovating at the
+  peer and networking level. However, Tenderdash should be innovating
   primarily at the consensus layer, and libp2p does not preclude
   optimization or development in the peer layer.
 
-- Libp2p is a large dependency and Tendermint would become dependent
+- Libp2p is a large dependency and Tenderdash would become dependent
   upon Protocol Labs' release cycle and prioritization for bug
   fixes. If this proves onerous, it's possible to maintain a vendor
   fork of relevant components as needed.
@@ -230,6 +233,6 @@ the implementation timeline.
 - [ADR 62: P2P Architecture][adr62]
 - [P2P Roadmap RFC][rfc]
 
-[adr61]: ./adr-061-p2p-refactor-scope.md
-[adr62]: ./adr-062-p2p-architecture.md
-[rfc]: ../rfc/rfc-000-p2p-roadmap.rst
+[adr61]: https://github.com/tendermint/tendermint/blob/7cdf560173dee6773b80d1c574a06489d4c394fe/docs/architecture/adr-061-p2p-refactor-scope.md
+[adr62]: https://github.com/tendermint/tendermint/blob/7cdf560173dee6773b80d1c574a06489d4c394fe/docs/architecture/adr-062-p2p-architecture.md
+[rfc]: https://github.com/tendermint/tendermint/blob/7cdf560173dee6773b80d1c574a06489d4c394fe/docs/rfc/rfc-000-p2p-roadmap.rst

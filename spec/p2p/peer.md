@@ -1,12 +1,12 @@
 # Peers
 
-This document explains how Tendermint Peers are identified and how they connect to one another.
+This document explains how Tenderdash Peers are identified and how they connect to one another.
 
-For details on peer discovery, see the [peer exchange (PEX) doc](https://github.com/tendermint/tendermint/blob/master/docs/tendermint-core/pex/README.md).
+For details on peer discovery, see the [peer exchange (PEX) doc](./messages/pex.md).
 
 ## Peer Identity
 
-Tendermint peers are expected to maintain long-term persistent identities in the form of a public key.
+Tenderdash peers are expected to maintain long-term persistent identities in the form of a public key.
 Each peer has an ID defined as `peer.ID == peer.PubKey.Address()`, where `Address` uses the scheme defined in `crypto` package.
 
 A single peer ID can have multiple IP addresses associated with it, but a node
@@ -21,15 +21,15 @@ corresponding to `<ID>`. This prevents man-in-the-middle attacks on the peer lay
 
 All p2p connections use TCP.
 Upon establishing a successful TCP connection with a peer,
-two handshakes are performed: one for authenticated encryption, and one for Tendermint versioning.
+two handshakes are performed: one for authenticated encryption, and one for Tenderdash versioning.
 Both handshakes have configurable timeouts (they should complete quickly).
 
 ### Authenticated Encryption Handshake
 
-Tendermint implements the Station-to-Station protocol
+Tenderdash implements the Station-to-Station protocol
 using X25519 keys for Diffie-Helman key-exchange and chacha20poly1305 for encryption.
 
-Previous versions of this protocol (0.32 and below) suffered from malleability attacks whereas an active man
+Upstream Tendermint versions of this protocol (0.32 and below) suffered from malleability attacks whereas an active man
 in the middle attacker could compromise confidentiality as described in [Prime, Order Please!
 Revisiting Small Subgroup and Invalid Curve Attacks on
 Protocols using Diffie-Hellman](https://eprint.iacr.org/2019/526.pdf).
@@ -80,9 +80,9 @@ an optional whitelist which can be managed through the ABCI app -
 if the whitelist is enabled and the peer does not qualify, the connection is
 terminated.
 
-### Tendermint Version Handshake
+### Tenderdash Version Handshake
 
-The Tendermint Version Handshake allows the peers to exchange their NodeInfo:
+The Tenderdash Version Handshake allows the peers to exchange their NodeInfo:
 
 ```golang
 type NodeInfo struct {

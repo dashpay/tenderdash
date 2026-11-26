@@ -57,6 +57,16 @@ type PrivValidator interface {
 	SignProposal(
 		ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash,
 		proposal *tmproto.Proposal) (tmbytes.HexBytes, error)
+	// SignProposerHeartbeat signs a heartbeat this validator sends while it is the
+	// proposer of a round that waits for transactions, and sets its signature.
+	SignProposerHeartbeat(
+		ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash,
+		heartbeat *tmproto.ProposerHeartbeat) error
+	// SignRoundSkipVote signs this validator's vote to skip a round whose
+	// proposer went silent, and sets its signature.
+	SignRoundSkipVote(
+		ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash,
+		vote *tmproto.RoundSkipVote) error
 
 	ExtractIntoValidator(ctx context.Context, quorumHash crypto.QuorumHash) *Validator
 }
@@ -332,6 +342,50 @@ func (pv *MockPV) SignProposal(
 	return signID, nil
 }
 
+// SignProposerHeartbeat Implements PrivValidator.
+func (pv *MockPV) SignProposerHeartbeat(
+	_ctx context.Context,
+	chainID string,
+	quorumType btcjson.LLMQType,
+	quorumHash crypto.QuorumHash,
+	heartbeat *tmproto.ProposerHeartbeat,
+) error {
+	sig, err := pv.signWithQuorumKey(quorumHash, ProposerHeartbeatSignItem(chainID, heartbeat, quorumType, quorumHash))
+	if err != nil {
+		return fmt.Errorf("mock private validator could not sign proposer heartbeat: %w", err)
+	}
+	heartbeat.Signature = sig
+	return nil
+}
+
+// SignRoundSkipVote Implements PrivValidator.
+func (pv *MockPV) SignRoundSkipVote(
+	_ctx context.Context,
+	chainID string,
+	quorumType btcjson.LLMQType,
+	quorumHash crypto.QuorumHash,
+	vote *tmproto.RoundSkipVote,
+) error {
+	sig, err := pv.signWithQuorumKey(quorumHash, RoundSkipSignItem(chainID, vote.Height, vote.Round, quorumType, quorumHash))
+	if err != nil {
+		return fmt.Errorf("mock private validator could not sign round skip vote: %w", err)
+	}
+	vote.Signature = sig
+	return nil
+}
+
+// signWithQuorumKey signs signItem with the key share for quorumHash.
+func (pv *MockPV) signWithQuorumKey(quorumHash crypto.QuorumHash, signItem SignItem) ([]byte, error) {
+	pv.mtx.Lock()
+	defer pv.mtx.Unlock()
+
+	quorumKeys, ok := pv.PrivateKeys[quorumHash.String()]
+	if !ok {
+		return nil, fmt.Errorf("no key for quorum hash %v", quorumHash)
+	}
+	return quorumKeys.PrivKey.SignDigest(signItem.SignHash)
+}
+
 func (pv *MockPV) UpdatePrivateKey(
 	_ctx context.Context,
 	privateKey crypto.PrivKey,
@@ -384,6 +438,11 @@ type ErroringMockPV struct {
 
 var ErroringMockPVErr = errors.New("erroringMockPV always returns an error")
 
+// ErrSigningNotSupported is what a PrivValidator that cannot sign a kind of
+// message at all returns, or matches with errors.Is, for example a remote signer
+// asked for a proposer heartbeat. Asking again does not help.
+var ErrSigningNotSupported = errors.New("the signer does not support signing this message")
+
 // GetPubKey Implements PrivValidator.
 func (pv *ErroringMockPV) GetPubKey(_ctx context.Context, _quorumHash crypto.QuorumHash) (crypto.PubKey, error) {
 	return nil, ErroringMockPVErr
@@ -404,6 +463,26 @@ func (pv *ErroringMockPV) SignProposal(
 	_proposal *tmproto.Proposal,
 ) (tmbytes.HexBytes, error) {
 	return nil, ErroringMockPVErr
+}
+
+// SignProposerHeartbeat Implements PrivValidator.
+func (pv *ErroringMockPV) SignProposerHeartbeat(
+	_ctx context.Context, _chainID string,
+	_quorumType btcjson.LLMQType,
+	_quorumHash crypto.QuorumHash,
+	_heartbeat *tmproto.ProposerHeartbeat,
+) error {
+	return ErroringMockPVErr
+}
+
+// SignRoundSkipVote Implements PrivValidator.
+func (pv *ErroringMockPV) SignRoundSkipVote(
+	_ctx context.Context, _chainID string,
+	_quorumType btcjson.LLMQType,
+	_quorumHash crypto.QuorumHash,
+	_vote *tmproto.RoundSkipVote,
+) error {
+	return ErroringMockPVErr
 }
 
 // NewErroringMockPV returns a MockPV that fails on each signing request. Again, for testing only.

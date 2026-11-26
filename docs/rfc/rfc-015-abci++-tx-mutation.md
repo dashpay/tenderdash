@@ -1,5 +1,8 @@
 # RFC 015: ABCI++ TX Mutation
 
+> Inherited design record. This proposal provides design context, not a guarantee
+> of current behavior. See the [current protocol specification](../../spec/README.md).
+
 ## Changelog
 
 - 23-Feb-2022: Initial draft (@williambanfield).
@@ -31,14 +34,14 @@ peer nodes will learn about them.
 
 ### What systems would be affected by adding transaction replacement?
 
-The 'transaction' is a central building block of a Tendermint blockchain, so adding
-a mechanism for transaction replacement would require changes to many aspects of Tendermint.
+The 'transaction' is a central building block of a Tenderdash blockchain, so adding
+a mechanism for transaction replacement would require changes to many aspects of Tenderdash.
 
 The following is a rough list of the functionality that this mechanism would affect:
 
 #### Transaction indexing
 
-Tendermint's indexer stores transactions and transaction results using the hash of the executed
+Tenderdash's indexer stores transactions and transaction results using the hash of the executed
 transaction [as the key][tx-result-index] and the ABCI results and transaction bytes as the value.
 
 To allow transaction replacement, the replaced transactions would need to stored as well in the
@@ -56,7 +59,7 @@ that a replaced transaction was included by replacement in the block.
 
 #### RPC-based transaction query parameters and results
 
-Tendermint's RPC allows clients to retrieve information about transactions via the
+Tenderdash's RPC allows clients to retrieve information about transactions via the
 `/tx_search` and `/tx` RPC endpoints.
 
 RPC query results containing replaced transactions would need to be updated to include
@@ -66,13 +69,13 @@ which clients could proceed to query individually.
 
 #### Mempool transaction removal
 
-Additional logic would need to be added to the Tendermint mempool to clear out replaced
-transactions after each block is executed. Tendermint currently removes executed transactions
+Additional logic would need to be added to the Tenderdash mempool to clear out replaced
+transactions after each block is executed. Tenderdash currently removes executed transactions
 from the mempool, so this would be a pretty straightforward change.
 
 ## Discussion
 
-### What value may be added to Tendermint by introducing transaction replacement?
+### What value may be added to Tenderdash by introducing transaction replacement?
 
 Transaction replacement would would enable applications to aggregate or disaggregate transactions.
 
@@ -90,8 +93,8 @@ of a multi-part transaction.
 ### Drawbacks to transaction replacement
 
 Transaction replacement would require updating and shimming many of the places that
-Tendermint records and exposes information about executed transactions. While
-systems within Tendermint could be updated to account for transaction replacement,
+Tenderdash records and exposes information about executed transactions. While
+systems within Tenderdash could be updated to account for transaction replacement,
 such a system would leave new issues and rough edges.
 
 #### No way of guaranteeing correct replacement
@@ -105,7 +108,7 @@ information of its constituent transactions, in which case, nothing is really ga
 
 #### Replacement transactions not signed by submitter
 
-Abstractly, Tendermint simply views transactions as a ball of bytes and therefore
+Abstractly, Tenderdash simply views transactions as a ball of bytes and therefore
 should be fine with replacing one for another. However, many applications require
 that transactions submitted to the chain be signed by some private key to authenticate
 and authorize the transaction. Replaced transactions could not be signed by the
@@ -137,7 +140,7 @@ and not execute or propose it it in later blocks.
 ### Transaction tracking implementations
 
 This section discusses possible ways to flesh out the implementation of transaction replacement.
-Specifically, this section proposes a few alternative ways that Tendermint blockchains could
+Specifically, this section proposes a few alternative ways that Tenderdash blockchains could
 track and store transaction replacements.
 
 #### Include transaction replacements in the block
@@ -159,10 +162,10 @@ message Replacement {
 ```
 
 Applications executing `PrepareProposal` would return the list of replacements and
-Tendermint would include an encoding of these replacements in the block that is gossiped
+Tenderdash would include an encoding of these replacements in the block that is gossiped
 and committed.
 
-Tendermint's transaction indexing would include a new mapping for each replaced transaction
+Tenderdash's transaction indexing would include a new mapping for each replaced transaction
 key to the committed transaction.
 Transaction inclusion proofs would be updated to include these additional new transaction
 keys in the Merkle tree and queries for transaction hashes that were replaced would return
@@ -172,7 +175,7 @@ transaction that replaced it.
 Block validation of gossiped blocks would be updated to check that each of the
 `included_txs_key` matches the hash of some transaction in the proposed block.
 
-Implementing the changes described in this section would allow Tendermint to gossip
+Implementing the changes described in this section would allow Tenderdash to gossip
 and index transaction replacements as part of block propagation. These changes would
 still require the application to certify that the replacements were valid. This
 validation may be performed in one of two ways:
@@ -212,14 +215,14 @@ field described in ABCI++. This new bookkeeping transaction could be used by the
 application to determine which transactions to clear from the mempool in future calls
 to `CheckTx`.
 
-The meaning of any transaction in the block is completely opaque to Tendermint,
+The meaning of any transaction in the block is completely opaque to Tenderdash,
 so applications performing this style of replacement would not be able to have the replacement
-reflected in any most of Tendermint's transaction tracking mechanisms, such as transaction indexing
+reflected in any most of Tenderdash's transaction tracking mechanisms, such as transaction indexing
 and the `/tx` endpoint.
 
 #### Application defined Tx Keys
 
-Tendermint currently uses cryptographic hashes, SHA256, as a key for each transaction.
+Tenderdash currently uses cryptographic hashes, SHA256, as a key for each transaction.
 As noted in the section on systems that would require changing, this key is used
 to identify the transaction in the mempool, in the indexer, and within the RPC system.
 
@@ -238,13 +241,13 @@ It is worth noting that something like this would be possible without `secondary
 An application wishing to implement a system like this one could define a replacement
 transaction, as discussed in the section on application-defined transaction replacement,
 and use a custom [ABCI event type][abci-event-type] to communicate that the replacement should
-be indexed within Tendermint's ABCI event indexing.
+be indexed within Tenderdash's ABCI event indexing.
 
 ### Complexity to value-add tradeoff
 
 It is worth remarking that adding a system like this may introduce a decent amount
-of new complexity into Tendermint. An approach that leaves much of the replacement
-logic to Tendermint would require altering the core transaction indexing and querying
+of new complexity into Tenderdash. An approach that leaves much of the replacement
+logic to Tenderdash would require altering the core transaction indexing and querying
 data. In many of the cases listed, a system for transaction replacement is possible
 without explicitly defining it as part of `PrepareProposal`. Since applications
 can now add transactions during `PrepareProposal` they can and should leverage this

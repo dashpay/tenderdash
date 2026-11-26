@@ -2,6 +2,7 @@ package consensus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	"github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/state/mocks"
 	"github.com/dashpay/tenderdash/internal/test/factory"
@@ -151,6 +153,21 @@ func (suite *PrevoterTestSuite) TestDo() {
 	}
 }
 
+// TestDoPanicsOnProcessProposalFailure pins the panic text for a ProcessProposal
+// error that is neither a rejection nor an invalid block.
+func (suite *PrevoterTestSuite) TestDoPanicsOnProcessProposalFailure() {
+	ctx := context.Background()
+	validStateData := suite.makeValidStateData()
+	stateData := StateData{state: validStateData.state, RoundState: validStateData.RoundState}
+	suite.mockExecutor.
+		On("ProcessProposal", ctx, mock.Anything, int32(0), mock.Anything, true, types.VerifiedCommit{}).
+		Once().
+		Return(sm.CurrentRoundState{}, errors.New("ProcessProposal abci method: client has stopped"))
+	suite.PanicsWithValue("process proposal: ProcessProposal abci method: client has stopped", func() {
+		_ = suite.prevoter.Do(ctx, &stateData)
+	})
+}
+
 func (suite *PrevoterTestSuite) TestCheckProposalBlock() {
 	testCases := []struct {
 		modifier func(stateData *StateData)
@@ -192,6 +209,75 @@ func (suite *PrevoterTestSuite) TestCheckProposalBlock() {
 				tc.modifier(&stateData)
 			}
 			suite.Equal(tc.want, suite.prevoter.checkProposalBlock(stateData.RoundState))
+		})
+	}
+}
+
+func (suite *PrevoterTestSuite) TestDoProposerProTxHash() {
+	for _, tc := range []struct {
+		name       string
+		round      int32
+		polRound   int32
+		wrong      bool
+		pol        bool
+		otherBlock bool
+		wantVote   bool
+	}{
+		{name: "new block round zero", polRound: -1, wantVote: true},
+		{name: "new block later round", round: 1, polRound: -1, wantVote: true},
+		{name: "wrong proposer round zero", polRound: -1, wrong: true},
+		{name: "predecessor capture", round: 1, polRound: -1, wrong: true},
+		{name: "reproposal retains original proposer", round: 1, polRound: 0, wrong: true, pol: true, wantVote: true},
+		{name: "claimed POL without votes", round: 1, polRound: 0, wrong: true},
+		{name: "POL for another block", round: 1, polRound: 0, wrong: true, pol: true, otherBlock: true},
+	} {
+		suite.Run(tc.name, func() {
+			suite.SetupTest()
+			stateData := suite.makeValidStateData()
+			stateData.Round = tc.round
+			stateData.Proposal.Round = tc.round
+			stateData.Proposal.POLRound = tc.polRound
+			proposer, err := stateData.ProposerSelector.GetProposer(stateData.Height, tc.round)
+			suite.Require().NoError(err)
+			stateData.ProposalBlock.ProposerProTxHash = proposer.ProTxHash
+			if tc.wrong {
+				index, _ := suite.valSet.GetByProTxHash(proposer.ProTxHash)
+				size := int32(suite.valSet.Size())
+				stateData.ProposalBlock.ProposerProTxHash = suite.valSet.GetByIndex((index + size - 1) % size).ProTxHash
+			}
+			stateData.ProposalBlockParts, err = stateData.ProposalBlock.MakePartSet(types.BlockPartSizeBytes)
+			suite.Require().NoError(err)
+			stateData.Proposal.BlockID = stateData.ProposalBlock.BlockID(stateData.ProposalBlockParts)
+			if tc.pol {
+				stateData.Votes = suite.makeHeightVoteSetMaj23(stateData, tc.polRound)
+			}
+			if tc.otherBlock {
+				// Keep the POL for the original block while proposing a different complete identity.
+				stateData.ProposalBlock.ProposedAppVersion++
+				stateData.ProposalBlockParts, err = stateData.ProposalBlock.MakePartSet(types.BlockPartSizeBytes)
+				suite.Require().NoError(err)
+				stateData.Proposal.BlockID = stateData.ProposalBlock.BlockID(stateData.ProposalBlockParts)
+			}
+			rejectBeforeProcess := tc.wrong && tc.polRound == -1
+			if !rejectBeforeProcess {
+				suite.mockExecutor.On("ProcessProposal", mock.Anything, mock.Anything, tc.round,
+					mock.Anything, true, types.VerifiedCommit{}).Once().Return(sm.CurrentRoundState{}, nil)
+				suite.mockExecutor.On("ValidateBlockWithRoundState", mock.Anything, mock.Anything,
+					mock.Anything, mock.Anything, mock.Anything).Once().Return(nil)
+			}
+			wantBlockID := types.BlockID{}
+			if tc.wantVote {
+				wantBlockID = stateData.Proposal.BlockID
+			}
+			suite.mockWAL.On("FlushAndSync").Return(nil)
+			suite.mockQueueSender.On("send", mock.Anything, mock.MatchedBy(func(msg *VoteMessage) bool {
+				return msg.Vote.Type == tmproto.PrevoteType && msg.Vote.BlockID.Equals(wantBlockID)
+			}), types.NodeID("")).Once().Return(nil)
+			suite.Require().NoError(suite.prevoter.Do(context.Background(), &stateData))
+			if rejectBeforeProcess {
+				suite.mockExecutor.AssertNotCalled(suite.T(), "ProcessProposal", mock.Anything, mock.Anything,
+					mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+			}
 		})
 	}
 }
@@ -300,15 +386,16 @@ func (suite *PrevoterTestSuite) makeValidStateData() StateData {
 	}
 	block := &types.Block{
 		Header: types.Header{
-			Time:           now,
-			ValidatorsHash: []byte{1, 2, 3, 4},
+			Time:              now,
+			ValidatorsHash:    []byte{1, 2, 3, 4},
+			ProposerProTxHash: suite.valSet.Proposer().ProTxHash,
 		},
 		Data: types.Data{
 			Txs: types.Txs{[]byte{1}, []byte{2}},
 		},
 		LastCommit: &types.Commit{},
 	}
-	validBlockID := types.BlockID{Hash: block.Hash()}
+	validBlockID := block.BlockID(nil)
 	validRoundState := cstypes.RoundState{
 		Height:        1000,
 		ProposalBlock: block,
@@ -323,8 +410,34 @@ func (suite *PrevoterTestSuite) makeValidStateData() StateData {
 		Validators: suite.valSet,
 		Votes:      cstypes.NewHeightVoteSet("test-chain", 1000, suite.valSet),
 	}
+	selector, err := selectproposer.NewHeightRoundProposerSelector(suite.valSet.Copy(), 1000, 0, nil, suite.logger)
+	suite.Require().NoError(err)
+	validRoundState.ProposerSelector = selector
 	return StateData{
 		state:      validState,
 		RoundState: validRoundState,
 	}
+}
+
+func (suite *PrevoterTestSuite) TestCompleteLockedBlockIdentity() {
+	for _, polRound := range []int32{-1, 0} {
+		suite.Run(fmt.Sprintf("POL round %d", polRound), func() {
+			sd := suite.makeValidStateData()
+			sd.Round, sd.LockedRound, sd.Proposal.POLRound = 2, 1, polRound
+			sd.Votes = suite.makeHeightVoteSetMaj23(sd, 0)
+			sd.LockedBlock = &types.Block{Header: sd.ProposalBlock.Header, Data: sd.ProposalBlock.Data, LastCommit: sd.ProposalBlock.LastCommit}
+			sd.LockedBlock.CoreChainLockedHeight++
+			suite.Equal(sd.ProposalBlock.Hash(), sd.LockedBlock.Hash())
+			suite.False(suite.prevoter.shouldVoteBeSent(sd.RoundState), "a matching legacy hash does not release a different lock")
+		})
+	}
+}
+
+func (suite *PrevoterTestSuite) TestCompletePolkaIdentity() {
+	sd := suite.makeValidStateData()
+	sd.Round, sd.Proposal.POLRound = 1, 0
+	sd.Votes = suite.makeHeightVoteSetMaj23(sd, 0)
+	sd.ProposalBlock.CoreChainLockedHeight++
+	suite.Equal(sd.Proposal.BlockID.Hash, sd.ProposalBlock.Hash())
+	suite.False(suite.prevoter.checkPrevoteMaj23(sd.RoundState), "the polka must attest the complete proposed value")
 }

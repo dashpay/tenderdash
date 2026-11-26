@@ -151,6 +151,9 @@ func (cfg *Config) ValidateBasic() error {
 	if err := cfg.RPC.ValidateBasic(); err != nil {
 		errs = multierror.Append(errs, fmt.Errorf("error in [rpc] section: %w", err))
 	}
+	if err := cfg.P2P.ValidateBasic(); err != nil {
+		errs = multierror.Append(errs, fmt.Errorf("error in [p2p] section: %w", err))
+	}
 	if err := cfg.Mempool.ValidateBasic(); err != nil {
 		errs = multierror.Append(errs, fmt.Errorf("error in [mempool] section: %w", err))
 	}
@@ -159,6 +162,9 @@ func (cfg *Config) ValidateBasic() error {
 	}
 	if err := cfg.Consensus.ValidateBasic(); err != nil {
 		errs = multierror.Append(errs, fmt.Errorf("error in [consensus] section: %w", err))
+	}
+	if err := cfg.TxIndex.ValidateBasic(); err != nil {
+		errs = multierror.Append(errs, fmt.Errorf("error in [tx-index] section: %w", err))
 	}
 	if err := cfg.Instrumentation.ValidateBasic(); err != nil {
 		errs = multierror.Append(errs, fmt.Errorf("error in [instrumentation] section: %w", err))
@@ -764,11 +770,12 @@ type P2PConfig struct { //nolint: maligned
 	UPNP bool `mapstructure:"upnp"`
 
 	// MaxConnections defines the maximum number of connected peers (inbound and
-	// outbound).
+	// outbound); 0 uses the default. Read it through EffectiveMaxConnections.
 	MaxConnections uint16 `mapstructure:"max-connections"`
 
 	// MaxOutgoingConnections defines the maximum number of outgoing connections. It must
-	// not exceed MaxConnections; 0 means all connections can be outgoing.
+	// not exceed MaxConnections; 0 uses half of MaxConnections, rounded down. At
+	// MaxConnections = 1 that is 0, which leaves outgoing without a separate cap.
 	MaxOutgoingConnections uint16 `mapstructure:"max-outgoing-connections"`
 
 	// MaxIncomingConnectionAttempts rate limits the number of incoming connection
@@ -838,32 +845,49 @@ func DefaultP2PConfig() *P2PConfig {
 	}
 }
 
+// EffectiveMaxConnections returns the connection limit the node enforces, which is
+// the default when max-connections is 0.
+func (cfg *P2PConfig) EffectiveMaxConnections() uint16 {
+	if cfg.MaxConnections == 0 {
+		return DefaultP2PConfig().MaxConnections
+	}
+	return cfg.MaxConnections
+}
+
 // ValidateBasic performs basic validation (checking param bounds, etc.) and
 // returns an error if any check fails.
 func (cfg *P2PConfig) ValidateBasic() error {
 	if cfg.FlushThrottleTimeout < 0 {
-		return errors.New("flush-throttle-timeout can't be negative")
+		return fmt.Errorf("flush-throttle-timeout must be a non-negative duration, got %s",
+			cfg.FlushThrottleTimeout)
 	}
-	if cfg.MaxPacketMsgPayloadSize < 0 {
-		return errors.New("max-packet-msg-payload-size can't be negative")
+	if cfg.MaxPacketMsgPayloadSize <= 0 {
+		// Zero would make MConnection emit empty, non-final fragments forever.
+		return fmt.Errorf("max-packet-msg-payload-size must be > 0, got %d",
+			cfg.MaxPacketMsgPayloadSize)
 	}
 	if cfg.SendRate < 0 {
-		return errors.New("send-rate can't be negative")
+		return fmt.Errorf("send-rate must be >= 0 bytes/second, got %d", cfg.SendRate)
 	}
 	if cfg.RecvRate < 0 {
-		return errors.New("recv-rate can't be negative")
+		return fmt.Errorf("recv-rate must be >= 0 bytes/second, got %d", cfg.RecvRate)
 	}
-	if cfg.MaxOutgoingConnections > cfg.MaxConnections {
-		return errors.New("max-outgoing-connections cannot be larger than max-connections")
+	maxConnections := cfg.EffectiveMaxConnections()
+	if cfg.MaxOutgoingConnections > maxConnections {
+		return fmt.Errorf("max-outgoing-connections must be <= effective max-connections (%d), got %d",
+			maxConnections, cfg.MaxOutgoingConnections)
 	}
 	if cfg.MaxIncomingConnectionTime < 0 {
-		return errors.New("max-incoming-connection-time can't be negative")
+		return fmt.Errorf("max-incoming-connection-time must be a non-negative duration (0 disables it), got %s",
+			cfg.MaxIncomingConnectionTime)
 	}
 	if cfg.IncomingConnectionWindow < 1*time.Millisecond {
-		return errors.New("incoming-connection-window must be set to at least 1ms")
+		return fmt.Errorf("incoming-connection-window must be at least 1ms, got %s;"+
+			" omit the key to use the default of %s",
+			cfg.IncomingConnectionWindow, DefaultP2PConfig().IncomingConnectionWindow)
 	}
 	if cfg.AllowlistOnly && strings.TrimSpace(cfg.PersistentPeers) == "" && strings.TrimSpace(cfg.BootstrapPeers) == "" {
-		return errors.New("allowlist-only requires at least one of persistent-peers or bootstrap-peers")
+		return errors.New("allowlist-only requires at least one of persistent-peers or bootstrap-peers to be set")
 	}
 	return nil
 }
@@ -901,6 +925,8 @@ type MempoolConfig struct {
 	// Do not remove invalid transactions from the cache (default: false)
 	// Set to true if it's not possible for any invalid transaction to become
 	// valid again in the future.
+	// When true, resubmitting a rejected transaction over RPC returns the
+	// CheckTx result that rejected it, as long as it stays in the cache.
 	KeepInvalidTxsInCache bool `mapstructure:"keep-invalid-txs-in-cache"`
 
 	// Maximum size of a single transaction
@@ -1121,7 +1147,8 @@ type ConsensusConfig struct {
 	RootDir string `mapstructure:"home"`
 	WalPath string `mapstructure:"wal-file"`
 	walFile string // overrides WalPath if set
-	// Use "true" to skip the rounds to the last during WAL replay messages
+	// Use "true" to skip the rounds to the last during WAL replay messages.
+	// Ignored on a chain that skips the rounds of silent proposers.
 	WalSkipRoundsToLast bool `mapstructure:"wal-skip-rounds-to-last"`
 
 	// EmptyBlocks mode and possible interval between empty blocks
@@ -1140,7 +1167,18 @@ type ConsensusConfig struct {
 	// tick then already exceeds the gap it is meant to enforce. Lowering it
 	// does not shrink the gap — it only fits more ticks (and so more sends of
 	// a multi-part block) into that same fixed window before it applies.
-	PeerGossipSleepDuration     time.Duration `mapstructure:"peer-gossip-sleep-duration"`
+	//
+	// Either duration under 1ms is run at 1ms, which only prevents a busy loop:
+	// well below the defaults, peers drop this node's state updates over their
+	// per-peer allowance.
+	PeerGossipSleepDuration time.Duration `mapstructure:"peer-gossip-sleep-duration"`
+	// PeerQueryMaj23SleepDuration is the cadence of the per-peer majority-claim
+	// gossip and of the repairs paced against it: round state re-announces
+	// (which bound how long a peer's view of this node stays stale after a lost
+	// announcement), round skip certificate and round vote resends, and the
+	// redelivery of votes a peer has not acknowledged (one interval after a
+	// vote went out, then doubling up to 8 intervals). Raising it to cut
+	// majority-claim chatter slows stall recovery.
 	PeerQueryMaj23SleepDuration time.Duration `mapstructure:"peer-query-maj23-sleep-duration"`
 
 	// PeerVoteRateLimit bounds the per-second token budget a single peer may
@@ -1354,12 +1392,21 @@ type TxIndexConfig struct {
 	// Options:
 	//   1) "null" (default) - no indexer services.
 	//   2) "kv" - a simple indexer backed by key-value storage (see DBBackend)
-	//   3) "psql" - the indexer services backed by PostgreSQL.
 	Indexer []string `mapstructure:"indexer"`
+}
 
-	// The PostgreSQL connection configuration, the connection format:
-	// postgresql://<user>:<password>@<host>:<port>/<db>?<opts>
-	PsqlConn string `mapstructure:"psql-conn"`
+// ValidateBasic checks that every configured indexer is supported.
+func (cfg *TxIndexConfig) ValidateBasic() error {
+	for _, indexer := range cfg.Indexer {
+		switch strings.ToLower(indexer) {
+		case "kv", "null":
+		case "psql":
+			return errors.New(`PostgreSQL event indexing has been removed; set tx-index.indexer to ["kv"] or ["null"]`)
+		default:
+			return fmt.Errorf("unsupported event sink type %q; use \"kv\" or \"null\"", indexer)
+		}
+	}
+	return nil
 }
 
 // DefaultTxIndexConfig returns a default configuration for the transaction indexer.

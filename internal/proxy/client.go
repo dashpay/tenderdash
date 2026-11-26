@@ -182,6 +182,13 @@ func (app *proxyClient) Echo(ctx context.Context, msg string) (r *types.Response
 	return app.client.Echo(ctx, msg)
 }
 
+// EchoRoute passes the probe on to the client it wraps, which may send
+// requests of method to other backends than Echo (see abciclient.EchoRoute).
+func (app *proxyClient) EchoRoute(ctx context.Context, method abciclient.RequestType, msg string) (err error) {
+	defer addTimeSample(app.metrics.MethodTiming.With("method", "echo", "type", "sync"))(&err)
+	return abciclient.EchoRoute(ctx, app.client, method, msg)
+}
+
 func (app *proxyClient) Info(ctx context.Context, req *types.RequestInfo) (r *types.ResponseInfo, err error) {
 	defer addTimeSample(app.metrics.MethodTiming.With("method", "info", "type", "sync"))(&err)
 	return app.client.Info(ctx, req)

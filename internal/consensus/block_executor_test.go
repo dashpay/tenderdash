@@ -153,11 +153,10 @@ func (suite *BlockExecutorTestSuite) TestProcess() {
 		ResultsHash: []byte("4321"),
 	}
 	testCases := []struct {
-		header          types.Header
-		crs             sm.CurrentRoundState
-		wantCRS         sm.CurrentRoundState
-		mustNotBeCalled bool
-		wantErr         string
+		header  types.Header
+		crs     sm.CurrentRoundState
+		wantCRS sm.CurrentRoundState
+		wantErr string
 	}{
 		{
 			crs: sm.CurrentRoundState{
@@ -201,8 +200,7 @@ func (suite *BlockExecutorTestSuite) TestProcess() {
 				AppHash:     []byte("1234"),
 				ResultsHash: []byte("4321"),
 			},
-			wantCRS:         processProposalCRS,
-			mustNotBeCalled: true,
+			wantCRS: processProposalCRS,
 		},
 	}
 	for i, tc := range testCases {
@@ -216,27 +214,99 @@ func (suite *BlockExecutorTestSuite) TestProcess() {
 				},
 				state: sm.State{},
 			}
-			if !tc.mustNotBeCalled {
-				var wantErr error
-				if tc.wantErr != "" {
-					wantErr = errors.New(tc.wantErr)
-				}
-				suite.mockBlockExec.
-					On(
-						"ProcessProposal",
-						mock.Anything,
-						stateData.ProposalBlock,
-						round,
-						stateData.state,
-						true,
-						types.VerifiedCommit{},
-					).
-					Once().
-					Return(tc.wantCRS, wantErr)
+			var wantErr error
+			if tc.wantErr != "" {
+				wantErr = errors.New(tc.wantErr)
 			}
+			suite.mockBlockExec.
+				On(
+					"ProcessProposal",
+					mock.Anything,
+					stateData.ProposalBlock,
+					round,
+					stateData.state,
+					true,
+					types.VerifiedCommit{},
+				).
+				Once().
+				Return(tc.wantCRS, wantErr)
 			err := suite.blockExec.ensureProcess(ctx, &stateData.RoundState, round)
 			tmrequire.Error(suite.T(), tc.wantErr, err)
 			require.Equal(suite.T(), tc.wantCRS, stateData.CurrentRoundState)
+		})
+	}
+}
+
+func (suite *BlockExecutorTestSuite) TestConcurrentCommittedStateUpdate() {
+	ctx := context.Background()
+	state := sm.State{InitialHeight: 1}
+	suite.blockExec.setCommittedState(state)
+	block := &types.Block{Header: types.Header{Height: 1}}
+	suite.mockBlockExec.On("CreateProposalBlock", mock.Anything, int64(1), int32(0),
+		state, mock.Anything, mock.Anything, uint64(0)).
+		Return(block, sm.CurrentRoundState{}, nil)
+	suite.mockBlockExec.On("ProcessProposal", mock.Anything, block, int32(0),
+		state, true, types.VerifiedCommit{}).
+		Return(sm.CurrentRoundState{}, nil)
+
+	stop, done := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				suite.blockExec.setCommittedState(state)
+			}
+		}
+	}()
+	defer func() {
+		close(stop)
+		<-done
+	}()
+
+	for range 100 {
+		rs := cstypes.RoundState{Height: 1, ProposalBlock: block}
+		got, err := suite.blockExec.create(ctx, &rs, 0)
+		suite.Require().NoError(err)
+		suite.Require().Same(block, got)
+		suite.Require().NoError(suite.blockExec.ensureProcess(ctx, &rs, 0))
+	}
+}
+
+func (suite *BlockExecutorTestSuite) TestProcessExactBlock() {
+	for _, kind := range []string{"different hash", "same hash", "different parts"} {
+		suite.Run(kind, func() {
+			ctx := context.Background()
+			block := &types.Block{Header: types.Header{Height: 1, ValidatorsHash: []byte("validators")}, LastCommit: &types.Commit{}}
+			parts, err := block.MakePartSet(types.BlockPartSizeBytes)
+			suite.Require().NoError(err)
+			rs := cstypes.RoundState{Height: 1, ProposalBlock: block, ProposalBlockParts: parts}
+			crs := sm.CurrentRoundState{Base: sm.State{InitialHeight: 1}, Params: sm.RoundParams{Source: sm.ProcessProposalSource}}
+			suite.mockBlockExec.On("ProcessProposal", ctx, block, int32(0), sm.State{}, true, types.VerifiedCommit{}).Once().Return(crs, nil)
+			suite.Require().NoError(suite.blockExec.ensureProcess(ctx, &rs, 0))
+			suite.Require().True(processedFor(&rs, 0))
+			suite.Require().NoError(suite.blockExec.ensureProcess(ctx, &rs, 0), "unchanged block and round reuse the result")
+
+			replacement := &types.Block{Header: block.Header, LastCommit: block.LastCommit}
+			partSize := types.BlockPartSizeBytes
+			switch kind {
+			case "different hash":
+				replacement.ProposedAppVersion++
+			case "same hash":
+				replacement.CoreChainLockedHeight++
+			case "different parts":
+				partSize = 16
+			}
+			replacementParts, err := replacement.MakePartSet(partSize)
+			suite.Require().NoError(err)
+			suite.Require().False(block.BlockID(parts).Equals(replacement.BlockID(replacementParts)))
+			rs.ProposalBlock, rs.ProposalBlockParts = replacement, replacementParts
+			suite.Require().False(processedFor(&rs, 0), "equal execution outputs do not identify the processed proposal")
+			suite.mockBlockExec.On("ProcessProposal", ctx, replacement, int32(0), sm.State{}, true, types.VerifiedCommit{}).Once().Return(crs, nil)
+			suite.Require().NoError(suite.blockExec.ensureProcess(ctx, &rs, 0))
+			suite.Require().True(processedFor(&rs, 0))
 		})
 	}
 }

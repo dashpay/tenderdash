@@ -1,14 +1,17 @@
 # RFC 008: Don't Panic
 
+> Inherited design record. This proposal provides design context, not a guarantee
+> of current behavior. See the [current protocol specification](../../spec/README.md).
+
 ## Changelog
 
 - 2021-12-17: initial draft (@tychoish)
 
 ## Abstract
 
-Today, the Tendermint core codebase has panics in a number of cases as
+Today, the Tenderdash core codebase has panics in a number of cases as
 a response to exceptional situations. These panics complicate testing,
-and might make tendermint components difficult to use as a library in
+and might make tenderdash components difficult to use as a library in
 some circumstances. This document outlines a project of converting
 panics to errors and describes the situations where its safe to
 panic.
@@ -20,13 +23,13 @@ for truly exceptional situations (e.g. memory errors, data corruption,
 processes initialization); however, because they resemble exceptions
 in other languages, it can be easy to over use them in the
 implementation of software architectures. This certainly happened in
-the history of Tendermint, and as we embark on the project of
+the history of Tenderdash, and as we embark on the project of
 stabilizing the package, we find ourselves in the right moment to
 reexamine our use of panics, and largely where panics happen in the
 code base.
 
 There are still some situations where panics are acceptable and
-desireable, but it's important that Tendermint, as a project, comes to
+desireable, but it's important that Tenderdash, as a project, comes to
 consensus--perhaps in the text of this document--on the situations
 where it is acceptable to panic.
 
@@ -54,7 +57,7 @@ vanishingly slim.
 
 #### Data Corruption
 
-If Tendermint code encounters an inconsistency that could be
+If Tenderdash code encounters an inconsistency that could be
 attributed to data corruption or a logical impossibility it is safer
 to panic and crash the process than continue to attempt to make
 progress in these situations.
@@ -119,7 +122,7 @@ In **no** other situation is it acceptable for the code to panic:
   panic directly.
 
 The goal of this increased "panic rigor" is to ensure that any escaped
-panic is reflects a fixable bug in Tendermint.
+panic is reflects a fixable bug in Tenderdash.
 
 ### Removing Panics
 

@@ -3,11 +3,13 @@ package state_test
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 
-	dbm "github.com/cometbft/cometbft-db"
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/stretchr/testify/require"
+
+	dbm "github.com/dashpay/tenderdash/libs/db"
 
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"
@@ -241,6 +243,8 @@ type testApp struct {
 	ValidatorSetUpdate *abci.ValidatorSetUpdate
 	// ProposeNextBlockImmediately is returned from FinalizeBlock.
 	ProposeNextBlockImmediately bool
+	// ProcessProposalCalls counts ProcessProposal requests.
+	ProcessProposalCalls atomic.Int32
 }
 
 var _ abci.Application = (*testApp)(nil)
@@ -282,6 +286,7 @@ func (app *testApp) PrepareProposal(_ context.Context, req *abci.RequestPrepareP
 }
 
 func (app *testApp) ProcessProposal(_ context.Context, req *abci.RequestProcessProposal) (*abci.ResponseProcessProposal, error) {
+	app.ProcessProposalCalls.Add(1)
 	resTxs := factory.ExecTxResults(types.NewTxs(req.Txs))
 	if resTxs == nil {
 		return &abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_REJECT}, nil

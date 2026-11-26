@@ -5,9 +5,10 @@ import (
 	"errors"
 	"fmt"
 
-	dbm "github.com/cometbft/cometbft-db"
 	"github.com/cosmos/gogoproto/proto"
 	"github.com/google/orderedcode"
+
+	dbm "github.com/dashpay/tenderdash/libs/db"
 
 	abci "github.com/dashpay/tenderdash/abci/types"
 	selectproposer "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
@@ -113,7 +114,7 @@ type Store interface {
 	Close() error
 }
 
-// dbStore wraps a db (github.com/cometbft/cometbft-db)
+// dbStore wraps a db (github.com/dashpay/tenderdash/libs/db)
 type dbStore struct {
 	db     dbm.DB
 	logger log.Logger

@@ -269,9 +269,11 @@ func TestP2PConfigValidateBasic(t *testing.T) {
 	}
 
 	for _, fieldName := range fieldsToTest {
-		reflect.ValueOf(cfg).Elem().FieldByName(fieldName).SetInt(-1)
+		field := reflect.ValueOf(cfg).Elem().FieldByName(fieldName)
+		valid := field.Int() // restore a valid value: zero is not valid for every field
+		field.SetInt(-1)
 		assert.Error(t, cfg.ValidateBasic())
-		reflect.ValueOf(cfg).Elem().FieldByName(fieldName).SetInt(0)
+		field.SetInt(valid)
 	}
 
 	cfg.AllowlistOnly = true
