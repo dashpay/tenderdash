@@ -98,15 +98,46 @@ for their actual diff; a documentation-only preparation does not prove a
 network upgrade safe.
 
 Publish tags only at the reviewed release commit. Existing tags are immutable.
-A draft GitHub release is reviewable; publishing it triggers Docker image work.
+A draft GitHub release is reviewable. Immediately after creating or reusing it,
+dispatch `.github/workflows/docker.yml` from a ref containing this workflow with
+`source_ref=refs/tags/TAG`, for example:
+
+```sh
+gh workflow run docker.yml --ref dev -f source_ref=refs/tags/v2.0.0
+```
+
+Drafts do not emit release events. Wait for staging to succeed and record its
+source SHA and digest before publication. The release commit/tag must also
+contain the new Docker workflow and metadata helper: `release: published` runs
+the workflow at that tag, even when staging was dispatched from `dev`.
 The signed-artifact helper verifies the exact tag/SHA and creates Linux amd64
 and arm64 binaries with detached GPG signatures, tarballs, `SHA256SUMS`, and
 `SOURCE_COMMIT`. Archives include the reviewed root license and any root NOTICE,
 plus the local database license, provenance and NOTICE when present in that
 source revision. It does not upload, overwrite assets, or select a release.
 
-Docker publication binds the release tag to its exact source SHA and passes the
-version explicitly to the build. Prereleases publish their complete version only.
+Docker staging also runs for same-repository PRs into `master` whose head branch
+starts with `release_`. This explicit convention identifies release candidates
+without granting every PR into `master` registry writes; fork PRs are excluded.
+It builds the PR head SHA, not GitHub's synthetic merge. A merged release may have
+a different SHA, so the post-draft dispatch is still required. Manual staging
+accepts a full SHA or `refs/heads/...` or `refs/tags/...` in `source_ref`, mutually
+exclusive with `tag`. Tags supply the version; SHA/branch sources use their
+`TMVersionDefault`. Staging always builds both Linux architectures and pushes only
+`ghcr.io/dashpay/tenderdash:sha-<full SHA>`, with no Docker Hub writes, version tags
+or aliases. Maintainers must allow this repository's Actions token to write the
+GHCR package and choose its visibility/retention policy; retain staged digests
+until promotion completes. Private staging is supported through `packages: read`.
+
+On `release: published`, Docker publication resolves the tag's peeled commit and
+finds its GHCR SHA tag. It pins the digest before verifying both platform configs:
+OCI revision must equal that commit, and version/build options must match the
+release. A missing, unreadable or incompatible staged image falls back to a build
+from the exact release tag with its explicit version, as does a failed promotion.
+A matching image is copied
+to Docker Hub using `docker buildx imagetools create`, preserving its digest;
+promotion transfers registry content but does not compile it again. The workflow
+checks the resulting digest. Prereleases publish their complete version only.
 A separate serialized promotion step updates `latest`, major and minor aliases
 only for the current GitHub latest stable release, and never below a higher stable
 version already tagged. API failures stop promotion. An older-line release keeps

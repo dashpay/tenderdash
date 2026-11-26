@@ -1,13 +1,19 @@
 ---
 name: Docker
-# Build & Push rebuilds the Tenderdash docker image every time a release is
-# published and pushes the image to https://hub.docker.com/r/dashpay/tenderdash
+# Stage release candidates in GHCR; publish verified digests to Docker Hub.
 on:
+  pull_request:
+    branches: [master]
   workflow_dispatch:
     inputs:
       tag:
         type: string
         description: "Existing release tag to build (empty uses the selected branch/tag)"
+        required: false
+
+      source_ref:
+        type: string
+        description: "Stage only: full source SHA or refs/heads/... or refs/tags/... (exclusive with tag)"
         required: false
 
       platforms:
@@ -22,22 +28,110 @@ on:
     types:
       - published
 
-# Docker Hub auth uses repository secrets; GITHUB_TOKEN only needs to read the repo.
-permissions:
-  contents: read
+permissions: {}
+
+concurrency:
+  group: docker-${{ inputs.source_ref || (inputs.tag && format('refs/tags/{0}', inputs.tag)) || (github.event.pull_request.head.ref && format('refs/heads/{0}', github.event.pull_request.head.ref)) || github.ref }}
+  cancel-in-progress: false
+  queue: max
 
 jobs:
+  # release_* is the explicit release-branch convention, not every PR to master.
+  stage:
+    if: >-
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.base.ref == 'master' &&
+       startsWith(github.event.pull_request.head.ref, 'release_') &&
+       github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'workflow_dispatch' && inputs.source_ref != '')
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      source_sha: ${{ steps.source.outputs.source_sha }}
+      digest: ${{ steps.verified.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate Docker publication contract
+        run: python3 -B -m unittest discover -s scripts/tests -p test_docker_metadata.py
+      - name: Resolve candidate source and version
+        id: source
+        env:
+          LATEST_RELEASE_TAG: pending
+        run: python3 scripts/docker-metadata.py
+      - name: Checkout candidate separately from workflow tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ steps.source.outputs.source_sha }}
+          path: build-source
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1  # v4.4.0
+        with:
+          platforms: all
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+      - name: Login to GHCR staging
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550  # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Stage both architectures without release tags
+        id: image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
+        with:
+          context: ./build-source
+          file: ./build-source/DOCKER/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/dashpay/tenderdash:sha-${{ steps.source.outputs.source_sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.source.outputs.version }}
+            org.opencontainers.image.revision=${{ steps.source.outputs.source_sha }}
+            org.dashpay.tenderdash.build-options=${{ steps.source.outputs.build_options }}
+          cache-from: type=gha,scope=docker-stage
+          cache-to: type=gha,scope=docker-stage,mode=max
+          build-args: |
+            TENDERMINT_BUILD_OPTIONS=${{ steps.source.outputs.build_options }}
+            VERSION=${{ steps.source.outputs.version }}
+      # TODO: Verify GHCR package access and cross-registry promotion in GitHub Actions.
+      - name: Verify staged platforms and labels by digest
+        id: verified
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          VERSION: ${{ steps.source.outputs.version }}
+          BUILD_OPTIONS: ${{ steps.source.outputs.build_options }}
+          DIGEST: ${{ steps.image.outputs.digest }}
+        run: python3 scripts/docker-metadata.py --resolve-staged --require-staged --digest "$DIGEST"
+      - name: Record staged digest
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          DIGEST: ${{ steps.verified.outputs.digest }}
+        run: |
+          echo "Staged source: $SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "ghcr.io/dashpay/tenderdash@$DIGEST" >> "$GITHUB_STEP_SUMMARY"
+
   build:
+    if: github.event_name != 'pull_request' && inputs.source_ref == ''
+    permissions:
+      contents: read
+      packages: read
     runs-on: ubuntu-26.04
     outputs:
       source_sha: ${{ steps.source.outputs.source_sha }}
-      digest: ${{ steps.docker_build.outputs.digest }}
+      digest: ${{ steps.promoted.outputs.digest || steps.docker_build.outputs.digest }}
     env:
       PLATFORMS: ${{ github.event_name == 'release' && 'linux/amd64,linux/arm64' || github.event.inputs.platforms }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Validate Docker publication contract
         run: python3 -B -m unittest discover -s scripts/tests -p test_docker_metadata.py
@@ -48,28 +142,68 @@ jobs:
           LATEST_RELEASE_TAG: pending
         run: python3 scripts/docker-metadata.py
 
-      - name: Checkout resolved source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          ref: ${{ steps.source.outputs.source_sha }}
-          fetch-depth: 0
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1  # v4.4.0
-        with:
-          platforms: all
-
-      - name: Set up Docker Build
+      - name: Set up Buildx for registry operations
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+        with:
+          driver: docker
+
+      - name: Login to GHCR for staged image lookup
+        if: github.event_name == 'release'
+        continue-on-error: true
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550  # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve and verify staged release digest
+        if: github.event_name == 'release'
+        id: staged
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          VERSION: ${{ steps.source.outputs.version }}
+          BUILD_OPTIONS: ${{ steps.source.outputs.build_options }}
+        run: python3 scripts/docker-metadata.py --resolve-staged
 
       - name: Login to DockerHub
-        if: ${{ github.event_name != 'pull_request' }}
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550  # v4.8.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Publish exact staged digest to Docker Hub
+        if: steps.staged.outputs.digest != ''
+        id: promoted
+        continue-on-error: true
+        env:
+          DIGEST: ${{ steps.staged.outputs.digest }}
+          VERSION: ${{ steps.source.outputs.version }}
+        run: |
+          docker buildx imagetools create --tag "dashpay/tenderdash:$VERSION" "ghcr.io/dashpay/tenderdash@$DIGEST"
+          published=$(docker buildx imagetools inspect "dashpay/tenderdash:$VERSION" --format '{{.Manifest.Digest}}')
+          test "$published" = "$DIGEST"
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout resolved source
+        if: steps.promoted.outcome != 'success'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ steps.source.outputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up QEMU
+        if: steps.promoted.outcome != 'success'
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1  # v4.4.0
+        with:
+          platforms: all
+
+      - name: Set up builder after QEMU for source builds
+        if: steps.promoted.outcome != 'success'
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+
       - name: Set Docker tags and labels
+        if: steps.promoted.outcome != 'success'
         id: docker_meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
         with:
@@ -83,6 +217,7 @@ jobs:
       # We build some dependencies and libraries separately. Layers are cached
       # on Docker Hub, as Github caches are not available for other branches.
       - name: Build and cache image with dependencies
+        if: steps.promoted.outcome != 'success'
         id: docker_bls
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
         with:
@@ -100,13 +235,14 @@ jobs:
             VERSION=${{ steps.source.outputs.version }}
 
       - name: Publish to Docker Hub
+        if: steps.promoted.outcome != 'success'
         id: docker_build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
         with:
           context: .
           file: ./DOCKER/Dockerfile
           platforms: ${{ env.PLATFORMS }}
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.docker_meta.outputs.tags }}
           labels: ${{ steps.docker_meta.outputs.labels }}
           cache-from: |
@@ -116,11 +252,17 @@ jobs:
           build-args: |
             TENDERMINT_BUILD_OPTIONS=${{ steps.source.outputs.build_options }}
             VERSION=${{ steps.source.outputs.version }}
-      - name: Show Docker image digest
-        run: echo ${{ steps.docker_build.outputs.digest }}
+      - name: Record published digest and build path
+        env:
+          DIGEST: ${{ steps.promoted.outputs.digest || steps.docker_build.outputs.digest }}
+          METHOD: ${{ steps.promoted.outcome == 'success' && 'staged promotion' || 'source build' }}
+        run: |
+          echo "Docker Hub ($METHOD): dashpay/tenderdash@$DIGEST" >> "$GITHUB_STEP_SUMMARY"
 
   # Serialize alias checks/writes without replacing pending release promotions.
   promote-aliases:
+    permissions:
+      contents: read
     if: github.event_name == 'release'
     needs: build
     runs-on: ubuntu-26.04
@@ -133,6 +275,7 @@ jobs:
         with:
           ref: ${{ needs.build.outputs.source_sha }}
           fetch-depth: 0
+          persist-credentials: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550  # v4.8.0
         with:
