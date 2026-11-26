@@ -255,7 +255,7 @@ func (p *http) validatorSet(ctx context.Context, height *int64, proposer types.P
 		return nil, provider.ErrBadLightBlock{Reason: fmt.Errorf("validator response did not provide a threshold public key")}
 	}
 
-	valSet := types.NewValidatorSet(vals, thresholdPubKey, quorumType, quorumHash, false, nil)
+	valSet := types.NewValidatorSetCheckPublicKeys(vals, thresholdPubKey, quorumType, quorumHash, nil)
 
 	if valSet == nil || valSet.IsNilOrEmpty() {
 		return nil, provider.ErrBadLightBlock{Reason: fmt.Errorf("retrieved nil or empty validator set")}

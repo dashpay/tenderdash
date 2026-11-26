@@ -477,3 +477,20 @@ func TestPruneStates(t *testing.T) {
 		})
 	}
 }
+
+func TestStoreReloadRecomputesPublicKeyAvailability(t *testing.T) {
+	vals, _ := types.RandValidatorSet(3)
+	vals.HasPublicKeys = false // A snapshot written before key availability was recomputed.
+	store := sm.NewStore(dbm.NewMemDB())
+	state := makeRandomStateFromValidatorSet(vals, 2, 2, nil)
+	require.NoError(t, store.Save(state))
+	loaded, err := store.Load()
+	require.NoError(t, err)
+	require.True(t, loaded.Validators.HasPublicKeys)
+	require.True(t, loaded.LastValidators.HasPublicKeys)
+	historical, err := store.LoadValidators(2, mockBlockStoreForProposerSelector(t, 2, 2, vals))
+	require.NoError(t, err)
+	require.True(t, historical.HasPublicKeys)
+	require.Equal(t, vals.Hash(), historical.Hash())
+	require.Equal(t, vals.Proposer().ProTxHash, historical.Proposer().ProTxHash)
+}

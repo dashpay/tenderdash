@@ -391,15 +391,11 @@ func MakeGenesisState(genDoc *types.GenesisDoc) (State, error) {
 		validatorSet = types.NewValidatorSet(nil, nil, genDoc.QuorumType, nil, false, valParams)
 	} else {
 		validators := make([]*types.Validator, len(genDoc.Validators))
-		hasAllPublicKeys := true
 		for i, val := range genDoc.Validators {
 			validators[i] = types.NewValidatorDefaultVotingPower(val.PubKey, val.ProTxHash)
-			if val.PubKey == nil {
-				hasAllPublicKeys = false
-			}
 		}
-		validatorSet = types.NewValidatorSet(
-			validators, genDoc.ThresholdPublicKey, genDoc.QuorumType, genDoc.QuorumHash, hasAllPublicKeys, valParams,
+		validatorSet = types.NewValidatorSetCheckPublicKeys(
+			validators, genDoc.ThresholdPublicKey, genDoc.QuorumType, genDoc.QuorumHash, valParams,
 		)
 	}
 
