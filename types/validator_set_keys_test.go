@@ -45,3 +45,25 @@ func TestValidatorSetFromProtoRecomputesPublicKeyAvailability(t *testing.T) {
 		require.Equal(t, complete.Hash(), restored.Hash())
 	}
 }
+
+func TestValidatorSetFromProtoIgnoresWireKeyFlag(t *testing.T) {
+	complete, _ := RandValidatorSet(3)
+
+	missing := complete.Copy()
+	missing.Validators[0].PubKey = nil
+	wire, err := missing.ToProto()
+	require.NoError(t, err)
+	wire.HasPublicKeys = true
+	restored, err := ValidatorSetFromProto(wire)
+	require.NoError(t, err)
+	require.False(t, restored.HasPublicKeys, "a missing share is not hidden by the wire flag")
+
+	other, _ := RandValidatorSet(3)
+	mismatched := complete.Copy()
+	mismatched.Validators[0].PubKey = other.Validators[0].PubKey
+	wire, err = mismatched.ToProto()
+	require.NoError(t, err)
+	wire.HasPublicKeys = false
+	_, err = ValidatorSetFromProto(wire)
+	require.Error(t, err, "complete shares that do not match the threshold key are rejected")
+}

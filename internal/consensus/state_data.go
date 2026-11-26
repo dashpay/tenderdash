@@ -134,10 +134,18 @@ func (s *StateDataStore) Subscribe(evsw *eventemitter.EventEmitter) {
 
 // Called with s.mtx held, after installing active state or the local identity.
 func (s *StateDataStore) reportQuorumKeyReadiness() {
+	if s.metrics == nil || s.logger == nil {
+		return
+	}
 	vals := s.roundState.Validators
 	if vals.IsNilOrEmpty() || len(s.localProTxHash) == 0 ||
 		!vals.HasProTxHash(s.localProTxHash) || vals.HasPublicKeys {
 		s.metrics.ValidatorMissingQuorumKeys.Set(0)
+		if s.missingKeysQuorum != "" && vals != nil && vals.HasPublicKeys &&
+			vals.QuorumHash.String() == s.missingKeysQuorum {
+			s.logger.Info("quorum member public keys restored",
+				"quorum_hash", s.missingKeysQuorum, "height", s.roundState.Height)
+		}
 		s.missingKeysQuorum = ""
 		return
 	}
