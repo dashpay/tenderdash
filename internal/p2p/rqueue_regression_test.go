@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"context"
+	"net"
 	"strconv"
 	"testing"
 	"time"
@@ -13,6 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	tmsync "github.com/dashpay/tenderdash/internal/libs/sync"
+	"github.com/dashpay/tenderdash/internal/p2p/conn"
+	dbm "github.com/dashpay/tenderdash/libs/db"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -141,13 +144,20 @@ func TestSimpleQueueConcurrentChannelRegistration(t *testing.T) {
 
 func simpleQueueTestRouter(t *testing.T, ctx context.Context, metrics *Metrics) *Router {
 	t.Helper()
-	r, err := NewRouter(log.NewNopLogger(), metrics, nil, nil,
+	db := dbm.NewMemDB()
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+	manager, err := NewPeerManager(ctx, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", db, PeerManagerOptions{})
+	require.NoError(t, err)
+	transport := NewMConnTransport(log.NewNopLogger(), conn.DefaultMConnConfig(), nil, MConnTransportOptions{})
+	r, err := NewRouter(log.NewNopLogger(), metrics, nil, manager,
 		func() *types.NodeInfo {
 			return &types.NodeInfo{Channels: tmsync.NewConcurrentSlice[uint16]()}
-		}, &MemoryTransport{}, nil,
+		}, transport, &Endpoint{Protocol: MConnProtocol, IP: net.IPv4(127, 0, 0, 1)},
 		RouterOptions{QueueType: queueTypeSimplePriority})
 	require.NoError(t, err)
-	require.NoError(t, r.setupQueueFactory(ctx))
+	// OpenChannel requires a running router.
+	require.NoError(t, r.Start(ctx))
+	t.Cleanup(func() { r.Stop(); r.Wait() })
 	return r
 }
 

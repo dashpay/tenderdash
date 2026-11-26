@@ -60,7 +60,7 @@ func TestRouterWaitDrainsAcceptedConnection(t *testing.T) {
 }
 
 func TestSimpleQueueClosedDrainsDeliveryCallback(t *testing.T) {
-	q := newSimplePriorityQueue(context.Background(), 0)
+	q := newSimplePriorityQueue(context.Background(), 0, NopMetrics(), func(ChannelID) uint { return 0 })
 	entered, release := make(chan struct{}), make(chan struct{})
 	defer func() { close(release); q.close(); <-q.closed() }()
 	envelope := Envelope{Message: &p2pproto.PexRequest{}}
