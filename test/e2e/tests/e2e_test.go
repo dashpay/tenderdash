@@ -23,6 +23,7 @@ const maxBlocks = 500
 func init() {
 	// This can be used to manually specify a testnet manifest and/or node to
 	// run tests against. The testnet must have been started by the runner first.
+	// os.Setenv("E2E_MANIFEST", "networks/dashcore.toml")
 	// os.Setenv("E2E_NODE", "validator01")
 }
 
