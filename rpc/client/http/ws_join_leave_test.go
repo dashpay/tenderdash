@@ -23,9 +23,16 @@ type orderedUpstream struct {
 	conn       *websocket.Conn
 	requests   []string
 	subscribed map[string]bool
+	redial     chan struct{} // if set, a reconnect waits until it closes
 }
 
 func (u *orderedUpstream) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+	u.mtx.Lock()
+	redial := u.conn != nil && u.redial != nil
+	u.mtx.Unlock()
+	if redial {
+		<-u.redial
+	}
 	conn, err := (&websocket.Upgrader{}).Upgrade(rw, r, nil)
 	if err != nil {
 		return
@@ -114,4 +121,82 @@ func TestConcurrentSubscribeAndLastUnsubscribeKeepsUpstream(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 	reqs, s := upstream.state()
 	require.True(t, s["q"], "upstream unsubscribed q while B still needs it; requests on session: %v", reqs)
+}
+
+// forgetDuringResubscribe blocks a resubscribe of q on the stopped writer, then
+// forgets q with a cleanup that times out before reaching the upstream. The
+// reconnect waits for release; resubscribed closes once the resubscribe returns.
+func forgetDuringResubscribe(ctx context.Context, t *testing.T) (w *wsEvents, upstream *orderedUpstream,
+	resubscribed <-chan struct{}, release func()) {
+	t.Helper()
+	upstream = &orderedUpstream{redial: make(chan struct{})}
+	w = startWsEvents(ctx, t, upstream)
+	release = sync.OnceFunc(func() { close(upstream.redial) })
+	t.Cleanup(release)
+	_, err := w.Subscribe(ctx, "A", "q")
+	require.NoError(t, err)
+	require.Eventually(t, func() bool { _, s := upstream.state(); return s["q"] }, 5*time.Second, time.Millisecond)
+
+	upstream.mtx.Lock()
+	require.NoError(t, upstream.conn.Close())
+	upstream.mtx.Unlock()
+	require.Eventually(t, w.ws.IsReconnecting, 5*time.Second, time.Millisecond)
+	sending := goroutinesIn("(*WSClient).Send")
+	done := make(chan struct{})
+	go func() { defer close(done); w.redoSubscriptionsAfter(ctx, 0) }()
+	require.Eventually(t, func() bool { return goroutinesIn("(*WSClient).Send") == sending+1 },
+		5*time.Second, time.Millisecond)
+
+	cleanupCtx, cancelCleanup := context.WithTimeout(ctx, 10*time.Millisecond)
+	defer cancelCleanup()
+	require.ErrorIs(t, w.UnsubscribeAll(cleanupCtx, "A"), context.DeadlineExceeded)
+	return w, upstream, done, release
+}
+
+// settleResubscribe waits for the resubscribe and the unsubscribes it started,
+// then for a later request to reach the upstream, and returns the session state.
+func settleResubscribe(ctx context.Context, t *testing.T, w *wsEvents, upstream *orderedUpstream,
+	resubscribed <-chan struct{}) ([]string, map[string]bool) {
+	t.Helper()
+	<-resubscribed
+	require.Eventually(t, func() bool { return goroutinesIn("(*wsEvents).unsubscribeOrphan") == 0 },
+		5*time.Second, time.Millisecond)
+	_, err := w.Subscribe(ctx, "S", "sync")
+	require.NoError(t, err)
+	require.Eventually(t, func() bool { _, s := upstream.state(); return s["sync"] }, 5*time.Second, time.Millisecond)
+	return upstream.state()
+}
+
+// A query forgotten while its resubscribe was being sent must be unsubscribed
+// afterwards, or it holds one of the node's per-client subscription slots.
+func TestResubscribeOfForgottenQueryIsUnsubscribed(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w, upstream, resubscribed, release := forgetDuringResubscribe(ctx, t)
+
+	release()
+	reqs, s := settleResubscribe(ctx, t, w, upstream, resubscribed)
+	require.Contains(t, reqs, "subscribe q")
+	require.False(t, s["q"], "the forgotten query stayed subscribed upstream; requests on session: %v", reqs)
+}
+
+// Joining a forgotten query during its resubscribe must keep the joiner's upstream
+// subscription.
+func TestResubscribeOfForgottenQueryKeepsRejoin(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w, upstream, resubscribed, release := forgetDuringResubscribe(ctx, t)
+	sending := goroutinesIn("(*WSClient).Send")
+	joined := make(chan error, 1)
+	go func() {
+		_, err := w.Subscribe(ctx, "B", "q")
+		joined <- err
+	}()
+	require.Eventually(t, func() bool { return goroutinesIn("(*WSClient).Send") == sending+1 },
+		5*time.Second, time.Millisecond)
+
+	release()
+	require.NoError(t, <-joined)
+	reqs, s := settleResubscribe(ctx, t, w, upstream, resubscribed)
+	require.True(t, s["q"], "the rejoined query was unsubscribed upstream; requests on session: %v", reqs)
 }

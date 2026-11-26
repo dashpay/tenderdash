@@ -14,6 +14,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dashpay/tenderdash/internal/pubsub"
 	"github.com/dashpay/tenderdash/rpc/coretypes"
 	rpctypes "github.com/dashpay/tenderdash/rpc/jsonrpc/types"
 	"github.com/dashpay/tenderdash/types"
@@ -28,6 +29,8 @@ type fakeUpstream struct {
 	conn       *websocket.Conn
 	subscribes []string
 	others     []string // non-subscribe requests on any connection, as "method query"
+	// unsubscribeErr, if set, is the reply to every unsubscribe.
+	unsubscribeErr error
 }
 
 func (u *fakeUpstream) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
@@ -55,7 +58,13 @@ func (u *fakeUpstream) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		u.mtx.Lock()
 		if req.Method != "subscribe" {
 			u.others = append(u.others, strings.TrimSpace(req.Method+" "+params.Query))
+			replyErr := u.unsubscribeErr
 			u.mtx.Unlock()
+			if req.Method == "unsubscribe" && replyErr != nil {
+				if err := conn.WriteJSON(req.MakeError(replyErr)); err != nil {
+					return
+				}
+			}
 			continue
 		}
 		u.subscribes = append(u.subscribes, params.Query)
@@ -133,7 +142,7 @@ func (u *fakeUpstream) subscribesOnCurrentConnection() []string {
 	return append([]string(nil), u.subscribes...)
 }
 
-func startWsEvents(ctx context.Context, t *testing.T, upstream *fakeUpstream) *wsEvents {
+func startWsEvents(ctx context.Context, t *testing.T, upstream http.Handler) *wsEvents {
 	t.Helper()
 	srv := httptest.NewServer(upstream)
 	t.Cleanup(srv.Close)
@@ -370,6 +379,31 @@ func TestFailedResubscribeKeepsReplacedSubscription(t *testing.T) {
 	w.mtx.RLock()
 	defer w.mtx.RUnlock()
 	require.Same(t, replacement, w.subscriptions["q"])
+}
+
+// A leave and the cleanup of a query forgotten during its resubscribe can both
+// unsubscribe it. The second gets "subscription not found", which loses nothing,
+// so it must not hold the event loop for a resubscribe.
+func TestSubscriptionNotFoundDoesNotResubscribe(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	upstream := &fakeUpstream{
+		events:         map[string][]string{"q": {"q"}},
+		unsubscribeErr: pubsub.ErrSubscriptionNotFound,
+	}
+	srv := httptest.NewServer(upstream)
+	t.Cleanup(srv.Close)
+	w, err := newWsEvents(srv.URL)
+	require.NoError(t, err)
+	w.resubscribeDelay = time.Hour // a resubscribe would hold the event loop
+	require.NoError(t, w.Start(ctx))
+	t.Cleanup(func() { requireStopReturns(t, w) })
+
+	_, err = w.Subscribe(ctx, "", "a")
+	require.NoError(t, err)
+	require.NoError(t, w.Unsubscribe(ctx, "", "a"))
+	// The upstream handles requests in order, so this event follows the error.
+	requireEvent(t, upstream.subscribe(ctx, t, w, "q"), "q")
 }
 
 // Every UnsubscribeAll gets a fresh signal: repeating it must not panic, and a
