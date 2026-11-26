@@ -72,7 +72,7 @@ and migration boundaries.
 
 ### ABCI: ApplyBlockRandomness and commit beacon fields
 
-The ABCI version is 1.5.0. The `Application` interface and the gRPC `ABCIApplication` service gain
+The ABCI version is 1.6.0. The `Application` interface and the gRPC `ABCIApplication` service gain
 `ApplyBlockRandomness`, which hands the application a block's random beacon from consensus version 2.
 This release never calls it, at any consensus version.
 

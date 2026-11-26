@@ -102,12 +102,14 @@ undecodable block → error (`addProposalBlockPart`). Parts with invalid Merkle
 proofs are charged to the sender's `blockPartProofBudget` and dropped
 silently once it is exhausted (`internal/consensus/block_part_budget.go`).
 
-### Application rejects the block, or the header does not match
+### Block is invalid, application rejects it, or the header does not match
 
-`ProcessProposal` returning `REJECT` (`sm.ErrBlockRejected`), or a
-well-formed `ACCEPT` whose contents disagree with the block — header
-mismatch / invalid `LastCommit` / invalid chain lock (`sm.ErrInvalidBlock`)
-— → nil prevote (`prevoter.handleError`). A failed `ProcessProposal` clears
+`BlockExecutor.ProcessProposal` first validates the block against the
+committed state (`ValidateBlock`); a block that fails is never sent to the
+application. That failure (`sm.ErrInvalidBlock`), the application returning
+`REJECT` (`sm.ErrBlockRejected`), or a well-formed `ACCEPT` whose contents
+disagree with the block — header mismatch / invalid `LastCommit`
+(`sm.ErrInvalidBlock`) — → nil prevote (`prevoter.handleError`). A failed `ProcessProposal` clears
 `CurrentRoundState`, so no round counts as processed until a later call
 succeeds (`blockExecutor.ensureProcess`). Any **other** error **panics**
 the node: transport failure, `UNKNOWN` status, or a malformed response — an
@@ -289,9 +291,15 @@ and `addVoteErrorMw` (`internal/consensus/state_add_vote.go`).
 - Timeliness is checked **only at prevote time**, against the proposal's
   receive time (`ProposalReceiveTime` = enqueue time of the
   `ProposalMessage`, `chanMsgSender.send`), with the window of
-  `checkTimely` (rule P-Timely). It is skipped in replay mode and for a
-  block that is the node's `ValidBlock`, so re-proposals of an already
-  polka'd block are not re-judged.
+  `checkTimely` (rule P-Timely). It is skipped for a block that is the
+  node's `ValidBlock`, so re-proposals of an already polka'd block are not
+  re-judged. In replay mode the receive time is the time of the proposal's
+  WAL entry, and only a proposal received too early fails. The entry is never
+  earlier than the receipt, so replay refuses only what the node refused when
+  it received the proposal, not always all of it. That time also becomes
+  `ValidBlockRecvTime` for a block made valid during replay, which decides
+  whether the node re-proposes it after a restart
+  (`Proposaler.checkValidBlock`), and feeds `ProposalTimestampDifference`.
 - Timeliness governs re-proposal (`Proposaler.checkValidBlock`).
 - Metric `ProposalTimestampDifference{is_timely}` is recorded for proposals
   with `POLRound = -1` (`Proposaler.proposalTimestampDifferenceMetric`).
@@ -345,7 +353,7 @@ counts from `StartTime`. Other rounds `≥ 1` never wait. On
 - Header fields: `CoreChainLockedHeight`; optional `CoreChainLock` in the
   block (and `CoreChainLockUpdate` in the proposal, not signed).
 - `ValidateBlockChainLock` (prevote) and `validateCoreChainLock`
-  (`ValidateBlockWithRoundState`): with a lock, the header height equals the
+  (`validateBlock`, before the application call): with a lock, the header height equals the
   lock's and exceeds `state.LastCoreChainLockedBlockHeight`; without one, it
   equals it.
 - `Proposaler.Set` rejects `proposal.CoreChainLockedHeight` below the

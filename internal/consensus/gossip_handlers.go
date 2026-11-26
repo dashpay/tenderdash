@@ -2,6 +2,8 @@ package consensus
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/cosmos/gogoproto/proto"
 
@@ -12,6 +14,40 @@ import (
 	tmcons "github.com/dashpay/tenderdash/proto/tendermint/consensus"
 	"github.com/dashpay/tenderdash/types"
 )
+
+// roundStateGossipHandler re-announces this node's round state to the peer:
+// its height, round and step and, when the round has block parts, which of
+// them it holds. Those announcements are otherwise sent once, on a state
+// change, and never acknowledged, so one lost after the channel accepted it —
+// to a full router queue or the peer's state-channel allowance — would leave
+// the peer gossiping for the round it last heard of until the next change, and
+// the step this node is in may be waiting on exactly the votes, proposal or
+// block parts the peer is holding back. A repeated round step is ignored by a
+// peer whose picture is current; a repeated NewValidBlock re-applies it, which
+// also corrects, within a pass, a stale copy that landed after a newer one
+// (see PeerState.ApplyNewValidBlockMessage). A failed send is left to the next
+// pass.
+func roundStateGossipHandler(logger log.Logger, send func(context.Context, proto.Message) error) gossipHandlerFunc {
+	return func(ctx context.Context, stateData StateData) {
+		for _, msg := range roundStateMessages(stateData.RoundState) {
+			if err := send(ctx, msg); err != nil {
+				logger.Debug("refreshing round state for peer failed", "msg_type", fmt.Sprintf("%T", msg), "err", err)
+				return
+			}
+		}
+	}
+}
+
+// roundStateMessages returns what a peer needs to rebuild this node's round
+// picture: the round step and, if the round has block parts, which of them it
+// holds.
+func roundStateMessages(rs cstypes.RoundState) []proto.Message {
+	msgs := []proto.Message{rs.NewRoundStepMessage()}
+	if rs.ProposalBlockParts != nil {
+		msgs = append(msgs, rs.NewValidBlockMessage())
+	}
+	return msgs
+}
 
 func queryMaj23GossipHandler(ps *PeerState, gossiper Gossiper) gossipHandlerFunc {
 	return func(ctx context.Context, stateData StateData) {
@@ -68,12 +104,15 @@ func roundSkipGossipHandler(
 // transactions in this node's round, which a skip certificate began, or is in
 // a round this node has left.
 //
-// Vote gossip takes a vote as the peer's once the channel takes it, so one
-// lost after that is not sent again. On a chain that skips rounds, a peer
-// that lost the votes of its round can be left in it for good: a waiting
-// round has no timeout and its proposer's heartbeats keep arriving, and the
-// prevote and precommit steps start their timeouts only on votes. Votes are
-// picked at random, so over the passes the peer gets each one this node has.
+// Vote gossip takes a vote as the peer's once the channel takes it; one lost
+// after that is offered again only after a redelivery interval, then with
+// backoff (see PeerState.ReofferUnackedVotes), and a later round's votes are
+// not offered to a peer in an earlier round at all. On a chain that skips
+// rounds, a peer that lost the votes of its round waits all that time: a
+// waiting round has no timeout and its proposer's heartbeats keep arriving,
+// and the prevote and precommit steps start their timeouts only on votes.
+// Votes are picked at random, so over the passes the peer gets each one this
+// node has.
 //
 // A peer waiting in this node's round, after round 0, is sent the round's
 // prevotes: one ends the wait (see StateData.waitsAfterRoundSkip). A peer in a
@@ -172,8 +211,11 @@ func votesAndCommitGossipHandler(
 	ps *PeerState,
 	blockStore sm.BlockStore,
 	gossiper Gossiper,
+	commitResendInterval time.Duration,
 ) gossipHandlerFunc {
 	return func(ctx context.Context, stateData StateData) {
+		// Before the round state is read: a re-offered commit is sent this pass.
+		ps.ReofferUnackedCommit(commitResendInterval)
 		rs := stateData.RoundState
 		prs := ps.GetRoundState()
 		isValidator := stateData.isValidator(ps.GetProTxHash())

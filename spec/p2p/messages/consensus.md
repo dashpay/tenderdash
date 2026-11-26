@@ -56,7 +56,11 @@ and the block part.
 
 NewRoundStep is sent for every step transition during the core consensus algorithm execution.
 It is used in the gossip part of the Tenderdash protocol to inform peers about a current
-height/round/step a process is in.
+height/round/step a process is in. It is also sent to each peer when the peer connects and
+then periodically, at the `peer-query-maj23-sleep-duration` cadence, so that a peer whose
+copy was lost in transit learns the current step without waiting for the next transition.
+A receiver ignores a copy that does not advance the height, round or step it already holds
+for the sender.
 
 | Name                     | Type   | Description                            | Field Number |
 |--------------------------|--------|----------------------------------------|--------------|
@@ -72,7 +76,9 @@ NewValidBlock advertises a block-part download target: its height, round,
 part-set header, and the parts the node already holds. `is_commit` identifies a
 commit target. Consensus emits this event for a current-round polka or a verified
 commit even when the proposal or complete block is not held. It is a gossip
-announcement, not proof that the sender has processed a valid proposal.
+announcement, not proof that the sender has processed a valid proposal. While the
+node holds block parts for its round, the periodic per-peer NewRoundStep described
+above is followed by a NewValidBlock for the same height and round.
 See [valid-block bookkeeping](../../consensus/consensus-alternative-flows.md#valid-block-bookkeeping)
 and [commit handling](../../consensus/consensus-commit.md).
 

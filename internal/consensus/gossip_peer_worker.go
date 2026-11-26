@@ -8,8 +8,48 @@ import (
 
 	"github.com/jonboulle/clockwork"
 
+	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/libs/log"
 )
+
+// minGossipSleepDuration is the shortest cadence a gossip handler runs at,
+// whatever the config says. A handler sleeping for zero runs back to back,
+// spinning a goroutine per handler per peer, and config validation runs only
+// on the CLI path, so the reactor holds a floor itself. It stops the spin and
+// nothing more: well below the defaults the handlers still offer peers more
+// than their state-channel allowance admits (see peerStateRateLimit), and the
+// excess is dropped there. 1ms is the floor incoming-connection-window uses
+// too; the test config runs at 5ms.
+const minGossipSleepDuration = time.Millisecond
+
+// gossipCadence is how often each peer's gossip handlers run, floored at
+// minGossipSleepDuration. The reactor derives it from the config once and
+// every consumer of these settings reads it from there.
+type gossipCadence struct {
+	// gossip is PeerGossipSleepDuration: votes, commits and block parts.
+	gossip time.Duration
+	// queryMaj23 is PeerQueryMaj23SleepDuration: majority claims, round state,
+	// skip certificates and vote resends.
+	queryMaj23 time.Duration
+}
+
+// flooredGossipCadence returns the configured cadences, each raised to
+// minGossipSleepDuration if shorter, warning once per raised setting.
+func flooredGossipCadence(logger log.Logger, cfg *config.ConsensusConfig) gossipCadence {
+	return gossipCadence{
+		gossip:     flooredGossipSleep(logger, "peer-gossip-sleep-duration", cfg.PeerGossipSleepDuration),
+		queryMaj23: flooredGossipSleep(logger, "peer-query-maj23-sleep-duration", cfg.PeerQueryMaj23SleepDuration),
+	}
+}
+
+func flooredGossipSleep(logger log.Logger, key string, configured time.Duration) time.Duration {
+	if configured >= minGossipSleepDuration {
+		return configured
+	}
+	logger.Warn("gossip sleep duration below the minimum, gossiping at the minimum instead",
+		"key", key, "configured", configured, "minimum", minGossipSleepDuration)
+	return minGossipSleepDuration
+}
 
 type gossipHandlerFunc func(ctx context.Context, appState StateData)
 
@@ -41,6 +81,7 @@ func newPeerGossipWorker(
 	ps *PeerState,
 	state *State,
 	msgSender *p2pMsgSender,
+	cadence gossipCadence,
 ) *peerGossipWorker {
 	clock := clockwork.NewRealClock()
 	gossiper := msgGossiper{
@@ -58,33 +99,37 @@ func newPeerGossipWorker(
 		stateDataStore: state.stateDataStore,
 		handlers: []gossipHandler{
 			newGossipHandler(
-				votesAndCommitGossipHandler(ps, state.blockStore, &gossiper),
-				state.config.PeerGossipSleepDuration,
+				votesAndCommitGossipHandler(ps, state.blockStore, &gossiper, cadence.queryMaj23),
+				cadence.gossip,
 			),
 			newGossipHandler(
 				dataGossipHandler(ps, logger, state.blockStore, &gossiper),
-				state.config.PeerGossipSleepDuration,
+				cadence.gossip,
 			),
 			newGossipHandler(
 				queryMaj23GossipHandler(ps, &gossiper),
-				state.config.PeerQueryMaj23SleepDuration,
+				cadence.queryMaj23,
+			),
+			newGossipHandler(
+				roundStateGossipHandler(logger, msgSender.send),
+				cadence.queryMaj23,
 			),
 			// A certificate is resent at the majority-claim cadence: a peer
 			// behind waits for nothing else, and one that applied it stops
 			// being sent it as soon as it announces its new round.
 			newGossipHandler(
 				roundSkipGossipHandler(ps, logger, msgSender.send),
-				state.config.PeerQueryMaj23SleepDuration,
+				cadence.queryMaj23,
 			),
 			// So is a vote of its round, or of a later round +2/3 voted in, to
 			// a peer that waits in this node's round, or is in a round this
-			// node left: a vote lost after the channel took it is not sent
-			// again, and the peer may have no timeout to fall back on. It
-			// stops once the peer announces the propose step, or this node's
-			// round.
+			// node left: ordinary gossip re-offers a lost vote only after a
+			// redelivery interval, never one of a later round, and the peer
+			// may have no timeout to fall back on. It stops once the peer
+			// announces the propose step, or this node's round.
 			newGossipHandler(
 				roundVoteResendGossipHandler(ps, logger, msgSender.send),
-				state.config.PeerQueryMaj23SleepDuration,
+				cadence.queryMaj23,
 			),
 		},
 	}

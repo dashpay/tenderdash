@@ -406,8 +406,11 @@ validation and reuse rules are in
 
 `ensureProcess` processes the held block for the round being checked unless the
 same block/round result is already current. It runs before the prevote lock rules,
-so a locked validator can process another block and still prevote nil. A
-well-formed application rejection or block/header mismatch produces a nil prevote;
+so a locked validator can process another block and still prevote nil. A block
+that does not validate against Tenderdash's committed state (for example a wrong
+height, chain ID or last block ID) is never sent to the application and produces
+a nil prevote, as do a well-formed application rejection and a block/header
+mismatch with the application's answer;
 unknown status, malformed results and transport errors are fatal on this path.
 See the exact [prevote decision](../consensus/consensus-transitions.md#prevote-decision-prevoterdo).
 
