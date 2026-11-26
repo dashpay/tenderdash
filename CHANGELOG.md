@@ -1,12 +1,12 @@
 ## [2.0.0] - 2026-11-26
 
-First stable release of the 2.0 line. This section covers every change since 1.8.2; the `2.0.0-dev.N` sections below list the same changes per prerelease. See [UPGRADING.md](UPGRADING.md) for the full upgrade instructions.
+First stable release of the 2.0 line. This section covers every change since 1.8.2; the `2.0.0-dev.N` sections below list the same changes per prerelease. Breaking Changes and Migration Notes are the complete list; [UPGRADING.md](UPGRADING.md) has detailed steps for selected changes.
 
 ### Breaking Changes
 
 - Consensus: new `CONSENSUS_VERSION_2` (proposer liveness and round skipping); once a chain enables it, only nodes running 2.0.0 or later can follow it, so every node must upgrade before activation (#1572)
 - ABCI: Tenderdash calls `VerifyVoteExtension` for the vote extensions of a commit, with an empty `validator_pro_tx_hash`, after `ProcessProposal` and before it saves the block; an application that does not return `ACCEPT` for a valid commit stops block production, so deploy application support first (#1520)
-- RPC: `broadcast_tx*` return the original `CheckTx` rejection, not "Tx already exists in cache", for resubmitted invalid transactions when `keep-invalid-txs-in-cache` is enabled (#1530)
+- RPC: `broadcast_tx`, `broadcast_tx_sync` and `broadcast_tx_commit` return the original `CheckTx` rejection, not "tx already exists in cache", for resubmitted invalid transactions when `keep-invalid-txs-in-cache` is enabled (#1530)
 - RPC: `broadcast_evidence` returns `ErrEvidenceDisabled` while the committed `evidence.max_bytes` is zero (#1547)
 
 ### Migration Notes
@@ -18,11 +18,13 @@ First stable release of the 2.0 line. This section covers every change since 1.8
 - `consensus.wal-skip-rounds-to-last` has no effect on a chain at consensus version 2 (#1572)
 - `consensus.peer-query-maj23-sleep-duration` (default 2s) also paces round state re-announcements and the redelivery of votes and commits a peer has not acknowledged; raising it slows recovery from lost consensus messages (#1598, #1599, #1624)
 - When a peer's outbound queue is full, consensus state-channel messages to that peer are dropped instead of blocking delivery to other peers; drops are counted in `p2p_router_channel_queue_dropped_msgs` with `ch_id="32"` (#1625)
-- New metrics `consensus_commit_verify_failures`, `consensus_proposer_heartbeats_sent`, `consensus_proposer_heartbeats_received`, `consensus_proposer_silences` and `consensus_round_skips`; new `consensus_block_sync_apply_stage_duration` stage `decode` and `state_block_apply_stage_duration` stage `process_proposal_prevalidate` (#1520, #1572, #1595, #1616)
+- New metrics `consensus_proposer_heartbeats_sent`, `consensus_proposer_heartbeats_received`, `consensus_proposer_silences` and `consensus_round_skips`; new `consensus_block_sync_apply_stage_duration` stage `decode` and `state_block_apply_stage_duration` stage `process_proposal_prevalidate` (#1572, #1595, #1616)
+- `consensus_commit_verify_failures` gains `reason="extensions_rejected"` and also counts commits refused in block sync and the commit built from the node's own precommits (#1520)
 - ABCI: Tenderdash may call `ProcessProposal` again at the same height, for another round or for the same round and block, and finalizes only the round processed last; `ExtendVote` must be free of side effects and return the vote extensions that commit-level `VerifyVoteExtension` accepts (#1520)
-- ABCI: `ExtendVote` responses with `DEFAULT` vote extensions are rejected with a clear error; they previously crashed the signer or produced votes peers rejected (#1565)
+- ABCI: on a chain at consensus version 2, a proposer that waits for transactions sends heartbeats only while the application answers `Echo`, on every backend that receives `PrepareProposal`, within the heartbeat interval; otherwise the other validators skip its idle rounds (#1572)
+- ABCI: an `ExtendVote` response with `DEFAULT` vote extensions makes the node panic with a clear error before it signs the vote; such a response previously crashed the signer or produced votes peers rejected (#1565)
 - Go API: `types.PrivValidator` gains `SignProposerHeartbeat` and `SignRoundSkipVote`; signer implementations outside this repository must add them (#1572)
-- Go API: exported database APIs use Tenderdash's own `libs/db` interfaces; custom providers must update imports and `Batch`/`Iterator` return types (#1551)
+- Go API: exported database APIs use Tenderdash's own `libs/db` interfaces; custom providers must update imports and `Batch`/`Iterator` return types (#1551, #1566)
 - Go API: services embedding `libs/service.BaseService` get an `OnStart` context that is cancelled before `OnStop`; callers must `Stop` then `Wait` before releasing resources, and `TimeoutTicker` implementations must provide `Wait` (#1513)
 - Go API: the generated type `blocksync.BlockResponse.Block` is `[]byte` (the serialized block) instead of `*types.Block`; the wire format is unchanged (#1595)
 - The Go module path stays `github.com/dashpay/tenderdash`, so Go tooling does not resolve `v2.x` tags; Go consumers pin commit pseudo-versions
@@ -39,7 +41,7 @@ First stable release of the 2.0 line. This section covers every change since 1.8
 
 - ABCI 1.5.0 (was 1.4.0): consensus params add `CONSENSUS_VERSION_2` and the `proposer_heartbeat`/`proposer_silence` timeouts (#1572)
 - P2P protocol 11 (was 10): new `ProposerHeartbeat`, `RoundSkipVote` and `RoundSkipCertificate` state-channel messages, sent only on chains at consensus version 2 (#1572)
-- Block protocol stays 14: no block, vote or commit format changes; `BlockResponse.block` changes from an embedded block message to its bytes, which is the same encoding on the wire (#1595)
+- Block protocol stays 14: no block, vote or commit format changes; `BlockResponse.block` changes from an embedded block message to its bytes, which is the same encoding on the wire (#1595); at consensus version 2 the proposer liveness timeouts are hashed into the header's `ConsensusHash`, which is unchanged at versions 0 and 1 (#1572)
 
 ### Features
 
@@ -75,7 +77,7 @@ First stable release of the 2.0 line. This section covers every change since 1.8
 
 ### Refactor
 
-- Own GoLevelDB and memory database adapters (#1551)
+- Own GoLevelDB and memory database adapters (#1551, #1566)
 - Remove the PostgreSQL event sink (#1553)
 
 ### Documentation
@@ -120,12 +122,12 @@ First stable release of the 2.0 line. This section covers every change since 1.8
 - Pin Docker workflow actions to commit SHAs and restrict token permissions (#1589)
 - Replace Janitor with native PR concurrency (#1592)
 - Migrate proto lint to buf-action (#1561)
-- Pin golangci-lint to v2.14.0 and migrate to gomodguard_v2 (#1524)
+- Migrate the golangci-lint configuration to gomodguard_v2 (#1524)
 - Check Markdown links on every PR and fix dead links (#1609)
 - Run Claudius reviews after green tests, on push or label (#1512, #1516, #1525, #1526)
 - Align the PR template with the TL;DR / user story / scenario structure (#1529)
 - Let PR Hygiene post its verdicts to the dashboard (#1634)
-- Update CI actions and PR Hygiene pins (#1505, #1508, #1510, #1511, #1514, #1517, #1518, #1519, #1521, #1522, #1528, #1533, #1557, #1571, #1611, #1612, #1632, #1633, #1635, #1636)
+- Update CI actions and PR Hygiene pins (#1505, #1508, #1510, #1511, #1514, #1517, #1518, #1519, #1521, #1528, #1533, #1557, #1571, #1611, #1612, #1632, #1633, #1635, #1636)
 
 ## [2.0.0-dev.3] - 2026-11-17
 
