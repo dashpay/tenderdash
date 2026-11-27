@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -434,6 +436,53 @@ func TestStatePolkaBlockRetryIgnoresStaleTarget(t *testing.T) {
 			require.Nil(t, n.cs.blockExecutor.polkaRetryC(), "a stale retry is dropped")
 		})
 	}
+}
+
+// A retry armed while replaying the intact part of a torn WAL survives the
+// repair: the replay that follows it sees only duplicates, which cannot arm the
+// retry again, and the started node processes the block.
+func TestStatePolkaBlockRetrySurvivesWALRepair(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	n := newRound1Node(ctx, t, &verifyExtensionContractApp{transientFailures: 1}, cstypes.RoundStepPrevote)
+	require.NoError(t, n.sd.Save())
+
+	// The WAL of a node that saw the polka, precommitted nil on the prevote-wait
+	// timeout and then received the block, torn after its last record.
+	walFile := n.cs.config.WalFile()
+	require.NoError(t, os.MkdirAll(filepath.Dir(walFile), 0o700))
+	f, err := os.Create(walFile)
+	require.NoError(t, err)
+	enc := NewWALEncoder(f)
+	write := func(msg WALMessage) {
+		require.NoError(t, enc.Encode(&TimedWALMessage{Time: tmtime.Now(), Msg: msg}))
+	}
+	peer := types.NodeID("aa00000000000000000000000000000000000000")
+	write(EndHeightMessage{Height: 0})
+	write(msgInfo{Msg: &VoteMessage{Vote: n.vote(t, n.self, tmproto.PrevoteType, types.BlockID{})}, PeerID: peer})
+	for _, vs := range n.peers {
+		write(msgInfo{Msg: &VoteMessage{Vote: n.vote(t, vs, tmproto.PrevoteType, n.blockID)}, PeerID: peer})
+	}
+	write(timeoutInfo{Height: 1, Round: 1, Step: cstypes.RoundStepPrevoteWait})
+	for i := 0; i < int(n.parts.Total()); i++ {
+		write(msgInfo{Msg: &BlockPartMessage{Height: 1, Round: 1, Part: n.parts.GetPart(i)}, PeerID: peer})
+	}
+	_, err = f.Write([]byte{0, 0, 0, 0}) // a checksum with no length after it
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	require.NoError(t, n.cs.Start(n.ctx))
+	defer func() {
+		n.cs.Stop()
+		n.cs.Wait()
+	}()
+	require.FileExists(t, walFile+".CORRUPTED", "the torn WAL is repaired")
+	require.Eventually(t, func() bool {
+		sd := n.cs.GetStateData()
+		return processedFor(&sd.RoundState, 1)
+	}, 5*time.Second, 10*time.Millisecond, "the retry armed before the repair processes the block")
+	calls, _, _ := n.app.counts()
+	require.Equal(t, 2, calls, "one failure while replaying, one success on the retry")
 }
 
 // A polka block that arrives in the precommit step is processed for the round
