@@ -228,7 +228,7 @@ func (c *blockExecutor) tryPolkaBlock(ctx context.Context, rs *cstypes.RoundStat
 	if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, sm.ErrBlockRejected) ||
 		errors.As(err, &sm.ErrInvalidBlock{}) || errors.Is(err, sm.ErrMalformedResponse) ||
 		errors.Is(err, abciclient.ErrClientStopped) {
-		c.logger.Error("cannot process the round's polka block; precommits for it will be rejected",
+		c.logger.Error("cannot process the round's polka block; not retrying",
 			"height", rs.Height, "round", rs.Round, "hash", blockID.Hash, "error", err)
 		return
 	}

@@ -362,7 +362,9 @@ func deterministicPrepareProposalHashes(request *abci.RequestPrepareProposal, re
 // ProcessProposal sends the proposal to ABCI App and verifies the response.
 // With verify, the block is validated against state before the app sees it,
 // and against the app's response afterwards; a failure returns ErrInvalidBlock.
-// A response breaking the protocol returns an error wrapping ErrMalformedResponse.
+// An UNKNOWN status, a response failing its own validation (e.g. an app hash of
+// the wrong size) or tx results not matching the transactions return an error
+// wrapping ErrMalformedResponse.
 func (blockExec *BlockExecutor) ProcessProposal(
 	ctx context.Context,
 	block *types.Block,

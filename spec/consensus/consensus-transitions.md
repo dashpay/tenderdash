@@ -411,8 +411,8 @@ Rules, in evaluation order:
    in the panic class, not the nil-prevote class: `UNKNOWN` status, an
    `AppHash` of the wrong size (`ResponseProcessProposal.Validate`), or
    `tx_results` not matching the transactions (`validateExecTxResults`) are
-   returned by `BlockExecutor.ProcessProposal` as plain errors before the
-   `ErrInvalidBlock` wrapper is reached. Note that `ProcessProposal` runs
+   returned by `BlockExecutor.ProcessProposal` wrapping `ErrMalformedResponse`,
+   not `ErrInvalidBlock`. Note that `ProcessProposal` runs
    **before** the lock rules, so a locked validator still processes a
    different proposal and then prevotes nil.
 7. **P-Lock-NoPOL** (paper line 22–24). `POLRound == -1`: prevote the block
