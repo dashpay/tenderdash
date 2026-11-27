@@ -20,6 +20,8 @@ jobs:
   # No checkout, no PR code. The inventory token is an environment secret, so
   # only jobs that declare this environment receive it. Without the token (fork
   # PRs) or on any API error the action falls back and every part stays hosted.
+  # The environment must have no reviewers, wait timer, custom protection rules
+  # or branch policy that excludes refs/pull/*/merge; those stall or fail it.
   select-runner:
     runs-on: ubuntu-26.04
     timeout-minutes: 5
@@ -76,6 +78,10 @@ jobs:
             go.mod
             go.sum
             Makefile
+
+      # get-diff-action leaves a remote whose URL embeds the job token.
+      - name: Remove get-diff-action remote
+        run: git remote remove get-diff-action || true
 
       - uses: actions/setup-go@v7.1.0
         if: env.GIT_DIFF
