@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	mrand "math/rand"
 	"net"
@@ -20,14 +21,19 @@ import (
 // wsOptions carries optional settings for a websocket connection.
 type wsOptions struct {
 	MaxReconnectAttempts uint          // maximum attempts to reconnect
+	HandshakeTimeout     time.Duration // deadline for dialing and the WebSocket handshake
 	ReadWait             time.Duration // deadline for any read op
 	WriteWait            time.Duration // deadline for any write op
 	PingPeriod           time.Duration // frequency with which pings are sent
 }
 
+// errClientStopped reports a send to a client that has shut down.
+var errClientStopped = errors.New("websocket client stopped")
+
 // defaultWSOptions are the default websocket connection settings.
 var defaultWSOptions = wsOptions{
 	MaxReconnectAttempts: 10, // first: 2 sec, last: 17 min.
+	HandshakeTimeout:     10 * time.Second,
 	WriteWait:            10 * time.Second,
 	ReadWait:             0,
 	PingPeriod:           0,
@@ -65,11 +71,19 @@ type WSClient struct { //nolint: maligned
 	protocol string
 
 	wg sync.WaitGroup
+	// reconnectDone closes when reconnectRoutine exits; no workers start after that.
+	reconnectDone  chan struct{}
+	closeResponses sync.Once
+	// callbacks tracks running onReconnect calls. Only reconnectRoutine adds to it.
+	callbacks sync.WaitGroup
 
 	mtx          sync.RWMutex
 	reconnecting bool
 	nextReqID    int
 	// sentIDs        map[types.JSONRPCIntID]bool // IDs of the requests currently in flight
+
+	// Time allowed to dial the server and finish the WebSocket handshake.
+	handshakeTimeout time.Duration
 
 	// Time allowed to write a message to the server. 0 means block until operation succeeds.
 	writeWait time.Duration
@@ -101,6 +115,7 @@ func NewWS(remoteAddr, endpoint string) (*WSClient, error) {
 		DialerContext:        dialFn,
 		Endpoint:             endpoint,
 		maxReconnectAttempts: opts.MaxReconnectAttempts,
+		handshakeTimeout:     opts.HandshakeTimeout,
 		readWait:             opts.ReadWait,
 		writeWait:            opts.WriteWait,
 		pingPeriod:           opts.PingPeriod,
@@ -113,7 +128,8 @@ func NewWS(remoteAddr, endpoint string) (*WSClient, error) {
 
 // OnReconnect sets the callback, which will be called every time after
 // successful reconnect.
-// Could only be set before Start.
+// Could only be set before Start. The callback must return once the context passed
+// to Start ends, and must not call Stop, which joins it and would never return.
 func (c *WSClient) OnReconnect(cb func()) {
 	c.onReconnect = cb
 }
@@ -127,7 +143,7 @@ func (c *WSClient) String() string {
 // service routines run until ctx terminates. To wait for the client to exit
 // after ctx ends, call Stop.
 func (c *WSClient) Start(ctx context.Context) error {
-	if err := c.dial(); err != nil {
+	if err := c.dial(ctx); err != nil {
 		return err
 	}
 
@@ -141,21 +157,40 @@ func (c *WSClient) Start(ctx context.Context) error {
 	// channel is unbuffered.
 	c.backlog = make(chan rpctypes.RPCRequest, 1)
 
+	c.reconnectDone = make(chan struct{})
+	c.closeResponses = sync.Once{}
 	c.startReadWriteRoutines(ctx)
 	go c.reconnectRoutine(ctx)
 
 	return nil
 }
 
-// Stop blocks until the client is shut down and returns nil.
+// Stop blocks until the client is shut down and returns nil. It does not end the
+// client: shutdown follows the context passed to Start, or running out of
+// reconnect attempts. After either, it waits for running OnReconnect callbacks, and
+// for a write in progress, which ends at its write deadline. It is safe to call
+// repeatedly and concurrently, and returns immediately if the client never started.
 //
 // TODO(creachadair): This method exists for compatibility with the original
 // service plumbing. Give it a better name (e.g., Wait).
 func (c *WSClient) Stop() error {
-	// only close user-facing channels when we can't write to them
-	c.wg.Wait()
-	close(c.ResponsesCh)
+	if c.reconnectDone == nil {
+		return nil
+	}
+	<-c.reconnectDone
+	c.callbacks.Wait()
+	c.closeResponsesCh()
 	return nil
+}
+
+// closeResponsesCh joins the workers and closes ResponsesCh once. Only close
+// user-facing channels when we can't write to them. Callers must ensure that no
+// more workers can start.
+func (c *WSClient) closeResponsesCh() {
+	c.closeResponses.Do(func() {
+		c.wg.Wait()
+		close(c.ResponsesCh)
+	})
 }
 
 // IsReconnecting returns true if the client is reconnecting right now.
@@ -166,8 +201,8 @@ func (c *WSClient) IsReconnecting() bool {
 }
 
 // Send the given RPC request to the server. Results will be available on
-// ResponsesCh, errors, if any, on ErrorsCh. Will block until send succeeds or
-// ctx.Done is closed.
+// ResponsesCh, errors, if any, on ErrorsCh. Will block until send succeeds, ctx.Done
+// is closed or the client has shut down.
 func (c *WSClient) Send(ctx context.Context, request rpctypes.RPCRequest) error {
 	select {
 	case c.send <- request:
@@ -178,6 +213,8 @@ func (c *WSClient) Send(ctx context.Context, request rpctypes.RPCRequest) error 
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	case <-c.reconnectDone:
+		return errClientStopped
 	}
 }
 
@@ -200,13 +237,24 @@ func (c *WSClient) nextRequestID() int {
 	return id
 }
 
-func (c *WSClient) dial() error {
+// dial connects to the server. The handshake obeys deadlines but not cancellation,
+// so ending ctx closes the connection to interrupt it.
+func (c *WSClient) dial(ctx context.Context) error {
+	stopWatching := func() bool { return true }
 	dialer := &websocket.Dialer{
-		NetDialContext: c.DialerContext,
-		Proxy:          http.ProxyFromEnvironment,
+		NetDialContext: func(dialCtx context.Context, network, addr string) (net.Conn, error) {
+			conn, err := c.DialerContext(dialCtx, network, addr)
+			if err == nil {
+				stopWatching = context.AfterFunc(ctx, func() { _ = conn.Close() })
+			}
+			return conn, err
+		},
+		Proxy:            http.ProxyFromEnvironment,
+		HandshakeTimeout: c.handshakeTimeout,
 	}
+	defer func() { stopWatching() }()
 	rHeader := http.Header{}
-	conn, _, err := dialer.Dial(c.protocol+"://"+c.Address+c.Endpoint, rHeader) //nolint:nolintlint,bodyclose
+	conn, _, err := dialer.DialContext(ctx, c.protocol+"://"+c.Address+c.Endpoint, rHeader) //nolint:nolintlint,bodyclose
 	if err != nil {
 		return err
 	}
@@ -244,13 +292,17 @@ func (c *WSClient) reconnect(ctx context.Context) error {
 		case <-timer.C:
 		}
 
-		err := c.dial()
+		err := c.dial(ctx)
 		if err != nil {
 			c.Logger.Error("failed to redial", "err", err)
 		} else {
 			c.Logger.Info("reconnected")
 			if c.onReconnect != nil {
-				go c.onReconnect()
+				c.callbacks.Add(1)
+				go func() {
+					defer c.callbacks.Done()
+					c.onReconnect()
+				}()
 			}
 			return nil
 		}
@@ -260,6 +312,15 @@ func (c *WSClient) reconnect(ctx context.Context) error {
 		if attempt > c.maxReconnectAttempts {
 			return fmt.Errorf("reached maximum reconnect attempts: %w", err)
 		}
+	}
+}
+
+// requestReconnect reports a worker's failure. After ctx ends nothing may be left
+// to receive it, and Stop is waiting for the worker.
+func (c *WSClient) requestReconnect(ctx context.Context, err error) {
+	select {
+	case c.reconnectAfter <- err:
+	case <-ctx.Done():
 	}
 }
 
@@ -292,6 +353,7 @@ func (c *WSClient) processBacklog() error {
 }
 
 func (c *WSClient) reconnectRoutine(ctx context.Context) {
+	defer close(c.reconnectDone)
 	for {
 		select {
 		case <-ctx.Done():
@@ -301,10 +363,7 @@ func (c *WSClient) reconnectRoutine(ctx context.Context) {
 			c.wg.Wait()
 			if err := c.reconnect(ctx); err != nil {
 				c.Logger.Error("failed to reconnect", "err", err, "original_err", originalError)
-				if err = c.Stop(); err != nil {
-					c.Logger.Error("failed to stop conn", "error", err)
-				}
-
+				c.closeResponsesCh()
 				return
 			}
 			// drain reconnectAfter
@@ -312,6 +371,7 @@ func (c *WSClient) reconnectRoutine(ctx context.Context) {
 			for {
 				select {
 				case <-ctx.Done():
+					_ = c.conn.Close() // no worker will own the new connection
 					return
 				case <-c.reconnectAfter:
 				default:
@@ -354,7 +414,7 @@ func (c *WSClient) writeRoutine(ctx context.Context) {
 			}
 			if err := c.conn.WriteJSON(request); err != nil {
 				c.Logger.Error("failed to send request", "err", err)
-				c.reconnectAfter <- err
+				c.requestReconnect(ctx, err)
 				// add request to the backlog, so we don't lose it
 				c.backlog <- request
 				return
@@ -367,7 +427,7 @@ func (c *WSClient) writeRoutine(ctx context.Context) {
 			}
 			if err := c.conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 				c.Logger.Error("failed to write ping", "err", err)
-				c.reconnectAfter <- err
+				c.requestReconnect(ctx, err)
 				return
 			}
 		case <-c.readRoutineQuit:
@@ -407,7 +467,7 @@ func (c *WSClient) readRoutine(ctx context.Context) {
 
 			c.Logger.Error("failed to read response", "err", err)
 			close(c.readRoutineQuit)
-			c.reconnectAfter <- err
+			c.requestReconnect(ctx, err)
 			return
 		}
 

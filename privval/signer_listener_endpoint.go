@@ -74,8 +74,8 @@ func (sl *SignerListenerEndpoint) OnStart(ctx context.Context) error {
 	sl.pingInterval = time.Duration(sl.signerEndpoint.timeoutReadWrite.Milliseconds()*2/3) * time.Millisecond
 	sl.pingTimer = time.NewTicker(sl.pingInterval)
 
-	go sl.serviceLoop(ctx)
-	go sl.pingLoop(ctx)
+	sl.Go(ctx, sl.serviceLoop)
+	sl.Go(ctx, sl.pingLoop)
 
 	// serviceLoop exits on cancellation (e.g. Stop during startup) and may never
 	// take this request. Returning nil keeps the successful-start path, so OnStop
@@ -90,6 +90,8 @@ func (sl *SignerListenerEndpoint) OnStart(ctx context.Context) error {
 
 // OnStop implements service.Service
 func (sl *SignerListenerEndpoint) OnStop() {
+	// A request can hold instanceMtx across signer I/O; interrupt it first.
+	sl.interruptConnection()
 	sl.instanceMtx.Lock()
 	defer sl.instanceMtx.Unlock()
 	_ = sl.Close()
@@ -98,7 +100,6 @@ func (sl *SignerListenerEndpoint) OnStop() {
 	if sl.listener != nil {
 		if err := sl.listener.Close(); err != nil {
 			sl.logger.Error("Closing Listener", "err", err)
-			sl.listener = nil
 		}
 	}
 
@@ -147,6 +148,12 @@ func (sl *SignerListenerEndpoint) ensureConnection(ctx context.Context, maxWait 
 	if sl.GetAvailableConnection(sl.connectionAvailableCh) {
 		return nil
 	}
+	sl.liveMtx.Lock()
+	interrupted := sl.interrupted
+	sl.liveMtx.Unlock()
+	if interrupted {
+		return ErrEndpointClosed
+	}
 
 	// block until connected or timeout
 	sl.logger.Info("SignerListener: Blocking for connection")
@@ -155,7 +162,7 @@ func (sl *SignerListenerEndpoint) ensureConnection(ctx context.Context, maxWait 
 }
 
 func (sl *SignerListenerEndpoint) acceptNewConnection() (net.Conn, error) {
-	if !sl.IsRunning() || sl.listener == nil {
+	if sl.listener == nil {
 		return nil, fmt.Errorf("endpoint is closing")
 	}
 
@@ -194,6 +201,7 @@ func (sl *SignerListenerEndpoint) serviceLoop(ctx context.Context) {
 					select {
 					case sl.connectionAvailableCh <- conn:
 					case <-ctx.Done():
+						_ = conn.Close()
 						return
 					}
 				}

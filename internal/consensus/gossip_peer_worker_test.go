@@ -1,8 +1,9 @@
 package consensus
 
 import (
+	"bytes"
 	"context"
-	"sync/atomic"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/libs/eventemitter"
 	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/libs/service"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -35,10 +37,9 @@ func TestPeerGossipWorker(t *testing.T) {
 				handlerCalledCh <- struct{}{}
 			}, 1*time.Second),
 		},
-		running:        atomic.Bool{},
 		stateDataStore: NewStateDataStore(NopMetrics(), logger, cfg.Consensus, emitter),
-		stopCh:         make(chan struct{}),
 	}
+	pg.BaseService = *service.NewBaseService(logger, "PeerGossipWorker", &pg)
 	require.False(t, pg.IsRunning())
 	err := pg.Start(ctx)
 	require.NoError(t, err)
@@ -48,8 +49,37 @@ func TestPeerGossipWorker(t *testing.T) {
 	}
 	defer cancel()
 	pg.Stop()
+	pg.Wait()
 	require.False(t, pg.IsRunning())
 	close(handlerCalledCh)
+}
+
+func TestPeerGossipWorkerWaitDrainsHandler(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	entered, release := make(chan struct{}), make(chan struct{})
+	cs, _ := makeState(ctx, t, makeStateArgs{})
+	pg := &peerGossipWorker{
+		clock: clockwork.NewRealClock(), logger: log.NewNopLogger(), stateDataStore: cs.stateDataStore,
+		handlers: []gossipHandler{newGossipHandler(func(context.Context, StateData) { close(entered); <-release }, time.Hour)},
+	}
+	pg.BaseService = *service.NewBaseService(pg.logger, t.Name(), pg)
+	require.NoError(t, pg.Start(ctx))
+	<-entered
+	pg.Stop()
+	done := make(chan struct{})
+	go func() { pg.Wait(); close(done) }()
+	select {
+	case <-done:
+		t.Error("Wait returned before gossip handler finished")
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("gossip handler did not drain")
+	}
 }
 
 // A handler whose sleep is zero runs back to back, spinning a goroutine per
@@ -89,5 +119,25 @@ func TestReactorFloorsGossipCadence(t *testing.T) {
 	pgw := newPeerGossipWorker(log.NewNopLogger(), ps, cs, &p2pMsgSender{logger: log.NewNopLogger(), ps: ps}, r.cadence)
 	for i, hd := range pgw.handlers {
 		require.Equal(t, minGossipSleepDuration, hd.sleepDuration, "handler %d", i)
+	}
+}
+
+// A peer gossip worker starts and stops with every peer connection, so its
+// lifecycle must not reach Info-level logs.
+func TestPeerGossipWorkerLogsLifecycleAtTrace(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cs, _ := makeState(ctx, t, makeStateArgs{})
+	for level, want := range map[string]bool{log.LogLevelInfo: false, log.LogLevelTrace: true} {
+		logs := &bytes.Buffer{}
+		logger, err := log.NewLogger(level, logs)
+		require.NoError(t, err)
+		ps := NewPeerState(log.NewNopLogger(), types.NodeID("peer"))
+		pgw := newPeerGossipWorker(logger, ps, cs, &p2pMsgSender{logger: logger, ps: ps}, gossipCadence{time.Hour, time.Hour})
+		pgw.handlers = nil
+		require.NoError(t, pgw.Start(ctx))
+		pgw.Stop()
+		pgw.Wait()
+		require.Equal(t, want, strings.Contains(logs.String(), "stopped service"), "level %s: %s", level, logs)
 	}
 }

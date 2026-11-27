@@ -167,13 +167,13 @@ func (vc *ValidatorConnExecutor) OnStart(ctx context.Context) error {
 		vc.logger.Error("Warning: ValidatorConnExecutor OnStart failed", "error", err)
 	}
 
-	go func() {
+	vc.Go(ctx, func(ctx context.Context) {
 		var err error
 		for err == nil {
 			err = vc.receiveEvents(ctx)
 		}
 		vc.logger.Error("ValidatorConnExecutor goroutine finished", "reason", err)
-	}()
+	})
 	return nil
 }
 
@@ -186,7 +186,6 @@ func (vc *ValidatorConnExecutor) OnStop() {
 		if err != nil {
 			vc.logger.Error("cannot unsubscribe from channels", "error", err)
 		}
-		vc.eventBus = nil
 	}
 }
 

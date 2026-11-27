@@ -17,7 +17,7 @@ type simpleQueue struct {
 	input   chan Envelope
 	output  chan Envelope
 	closeFn func()
-	closeCh <-chan struct{}
+	closeCh chan struct{}
 
 	maxSize    int
 	metrics    *Metrics
@@ -37,7 +37,7 @@ func newSimplePriorityQueue(ctx context.Context, size int, metrics *Metrics, pri
 		maxSize:    maxSize,
 		metrics:    metrics,
 		priorityFn: priorityFn,
-		closeCh:    ctx.Done(),
+		closeCh:    make(chan struct{}),
 		closeFn:    cancel,
 	}
 
@@ -51,6 +51,7 @@ func (q *simpleQueue) close()                   { q.closeFn() }
 func (q *simpleQueue) closed() <-chan struct{}  { return q.closeCh }
 
 func (q *simpleQueue) run(ctx context.Context) {
+	defer close(q.closeCh)
 	defer q.closeFn()
 
 	pq := make(priorityQueue, 0, q.maxSize)
@@ -66,8 +67,6 @@ func (q *simpleQueue) run(ctx context.Context) {
 
 		select {
 		case <-ctx.Done():
-			return
-		case <-q.closeCh:
 			return
 		case e := <-q.input:
 			// enqueue the incoming Envelope

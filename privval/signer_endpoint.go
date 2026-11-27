@@ -2,6 +2,7 @@ package privval
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -24,6 +25,12 @@ type signerEndpoint struct {
 
 	connMtx sync.Mutex
 	conn    net.Conn
+	// liveConn mirrors conn for interruptConnection, which cannot take connMtx
+	// while blocked I/O holds it. Lock order: connMtx, then liveMtx.
+	liveMtx  sync.Mutex
+	liveConn net.Conn
+	// interrupted is set by interruptConnection; guarded by liveMtx.
+	interrupted bool
 
 	timeoutReadWrite time.Duration
 }
@@ -49,7 +56,8 @@ func (se *signerEndpoint) GetAvailableConnection(connectionAvailableCh chan net.
 	// Is there a connection ready?
 	select {
 	case se.conn = <-connectionAvailableCh:
-		return true
+		se.publishConn()
+		return se.isConnected()
 	default:
 	}
 	return false
@@ -61,9 +69,20 @@ func (se *signerEndpoint) WaitConnection(ctx context.Context, connectionAvailabl
 	defer se.connMtx.Unlock()
 
 	select {
+	case <-se.Stopping():
+		select {
+		case conn := <-connectionAvailableCh:
+			_ = conn.Close()
+		default:
+		}
+		return ErrEndpointClosed
 	case <-ctx.Done():
 		return ctx.Err()
 	case se.conn = <-connectionAvailableCh:
+		se.publishConn()
+		if !se.isConnected() {
+			return ErrEndpointClosed
+		}
 	case <-time.After(maxWait):
 		return ErrConnectionTimeout
 	}
@@ -76,6 +95,7 @@ func (se *signerEndpoint) SetConnection(newConnection net.Conn) {
 	se.connMtx.Lock()
 	defer se.connMtx.Unlock()
 	se.conn = newConnection
+	se.publishConn()
 }
 
 // IsConnected indicates if there is an active connection
@@ -148,15 +168,39 @@ func (se *signerEndpoint) WriteMessage(msg privvalproto.Message) (err error) {
 	return
 }
 
+// interruptConnection closes the current connection, and any published later,
+// without connMtx, so a read or write holding that lock fails promptly.
+func (se *signerEndpoint) interruptConnection() {
+	se.liveMtx.Lock()
+	se.interrupted = true
+	conn := se.liveConn
+	se.liveMtx.Unlock()
+	if conn != nil {
+		_ = conn.Close()
+	}
+}
+
+// publishConn must be called with connMtx held after conn changes.
+func (se *signerEndpoint) publishConn() {
+	se.liveMtx.Lock()
+	if se.interrupted && se.conn != nil {
+		_ = se.conn.Close()
+		se.conn = nil
+	}
+	se.liveConn = se.conn
+	se.liveMtx.Unlock()
+}
+
 func (se *signerEndpoint) isConnected() bool {
 	return se.conn != nil
 }
 
 func (se *signerEndpoint) dropConnection() {
 	if se.conn != nil {
-		if err := se.conn.Close(); err != nil {
+		if err := se.conn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 			se.logger.Error("signerEndpoint::dropConnection", "err", err)
 		}
 		se.conn = nil
+		se.publishConn()
 	}
 }

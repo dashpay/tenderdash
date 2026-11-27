@@ -2,6 +2,7 @@ package privval
 
 import (
 	"context"
+	"io"
 	"net"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/dashpay/tenderdash/libs/log"
 	tmnet "github.com/dashpay/tenderdash/libs/net"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
+	privvalproto "github.com/dashpay/tenderdash/proto/tendermint/privval"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -27,6 +29,39 @@ var (
 type dialerTestCase struct {
 	addr   string
 	dialer SocketDialer
+}
+
+type observedListener struct {
+	net.Listener
+	accepted chan struct{}
+}
+
+func (l *observedListener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err == nil {
+		close(l.accepted)
+	}
+	return conn, err
+}
+
+func TestListenerStopClosesPendingConnection(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	observed := &observedListener{Listener: listener, accepted: make(chan struct{})}
+	endpoint := NewSignerListenerEndpoint(log.NewNopLogger(), observed, func(endpoint *SignerListenerEndpoint) {
+		endpoint.timeoutReadWrite = time.Hour
+	})
+	require.NoError(t, endpoint.Start(context.Background()))
+	t.Cleanup(func() { endpoint.Stop(); endpoint.Wait() })
+	conn, err := net.Dial("tcp", listener.Addr().String())
+	require.NoError(t, err)
+	defer conn.Close()
+	<-observed.accepted
+	endpoint.Stop()
+	endpoint.Wait()
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(time.Second)))
+	_, err = conn.Read(make([]byte, 1))
+	require.ErrorIs(t, err, io.EOF)
 }
 
 // TestSignerRemoteRetryTCPOnly will test connection retry attempts over TCP. We
@@ -242,5 +277,79 @@ func TestSignerListenerEndpointStartupCanceledBeforeConnectRequest(t *testing.T)
 		}
 		sl.Wait()
 		require.False(t, sl.IsRunning())
+	}
+}
+
+// A request waiting for a signer that never answers holds the endpoint mutex
+// across network I/O. Stop must interrupt that I/O instead of waiting for the
+// read deadline.
+func TestListenerStopInterruptsPendingRequest(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	endpoint := NewSignerListenerEndpoint(log.NewNopLogger(), listener, SignerListenerEndpointTimeoutReadWrite(time.Hour))
+	require.NoError(t, endpoint.Start(context.Background()))
+	t.Cleanup(func() { endpoint.Stop(); endpoint.Wait() })
+	signer, err := net.Dial("tcp", listener.Addr().String())
+	require.NoError(t, err)
+	defer signer.Close()
+
+	requested := make(chan error, 1)
+	go func() {
+		_, err := endpoint.SendRequest(context.Background(), mustWrapMsg(&privvalproto.PingRequest{}))
+		requested <- err
+	}()
+	// The request is on the wire, so SendRequest now holds the endpoint mutex.
+	require.NoError(t, signer.SetReadDeadline(time.Now().Add(5*time.Second)))
+	_, err = signer.Read(make([]byte, 1))
+	require.NoError(t, err)
+
+	stopped := make(chan struct{})
+	go func() { endpoint.Stop(); close(stopped) }()
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		_ = signer.Close()
+		<-stopped
+		t.Fatal("Stop waited for a pending signer read")
+	}
+	require.Error(t, <-requested)
+}
+
+// A connection handed off after shutdown interrupted signer I/O must be closed
+// before use: Stop has already looked for one to interrupt.
+func TestListenerClosesConnectionHandedOffAfterStop(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	endpoint := NewSignerListenerEndpoint(log.NewNopLogger(), listener, SignerListenerEndpointTimeoutReadWrite(time.Second))
+	require.NoError(t, endpoint.Start(context.Background()))
+	endpoint.Stop()
+	endpoint.Wait()
+
+	for _, acquisition := range []string{"available", "wait", "ensure", "set"} {
+		t.Run(acquisition, func(t *testing.T) {
+			conn, peer := net.Pipe()
+			defer conn.Close()
+			defer peer.Close()
+			ready := make(chan net.Conn, 1)
+			ready <- conn
+			switch acquisition {
+			case "available":
+				require.False(t, endpoint.GetAvailableConnection(ready), "shutdown hand-off must not be available")
+			case "wait":
+				require.ErrorIs(t, endpoint.WaitConnection(context.Background(), ready, time.Second), ErrEndpointClosed)
+			case "ensure":
+				endpoint.connectionAvailableCh = ready
+				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+				defer cancel()
+				err := endpoint.ensureConnection(ctx, time.Hour)
+				require.ErrorIs(t, err, ErrEndpointClosed)
+			case "set":
+				endpoint.SetConnection(conn)
+			}
+			require.False(t, endpoint.IsConnected())
+			require.Nil(t, endpoint.conn)
+			require.Nil(t, endpoint.liveConn)
+			require.ErrorIs(t, conn.SetWriteDeadline(time.Now()), io.ErrClosedPipe)
+		})
 	}
 }

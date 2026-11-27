@@ -44,12 +44,13 @@ func NewSignerServer(endpoint *SignerDialerEndpoint, chainID string, privVal typ
 
 // OnStart implements service.Service.
 func (ss *SignerServer) OnStart(ctx context.Context) error {
-	go ss.serviceLoop(ctx)
+	ss.Go(ctx, ss.serviceLoop)
 	return nil
 }
 
 // OnStop implements service.Service.
 func (ss *SignerServer) OnStop() {
+	ss.endpoint.interruptConnection()
 	ss.endpoint.logger.Debug("SignerServer: OnStop calling Close")
 	_ = ss.endpoint.Close()
 }
@@ -62,7 +63,7 @@ func (ss *SignerServer) SetRequestHandler(validationRequestHandler ValidationReq
 }
 
 func (ss *SignerServer) servicePendingRequest(ctx context.Context) {
-	if !ss.IsRunning() {
+	if ctx.Err() != nil {
 		return // Ignore error from closing.
 	}
 

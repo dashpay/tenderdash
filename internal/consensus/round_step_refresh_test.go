@@ -29,26 +29,43 @@ func TestReactorRefreshesRoundStepAfterLostAnnouncement(t *testing.T) {
 	const refreshInterval = 20 * time.Millisecond
 	cs, _ := makeState(ctx, t, makeStateArgs{})
 	cs.config.PeerQueryMaj23SleepDuration = refreshInterval
-	r := NewReactor(log.NewNopLogger(), cs, nil, nil, cs.eventBus, false, NopMetrics())
 
 	announcements := make(chan *tmcons.NewRoundStep, 64)
-	stateCh := p2pmocks.NewChannel(t)
-	stateCh.On("Send", mock.Anything, mock.Anything).Maybe().
-		Run(func(args mock.Arguments) {
-			msg, ok := args.Get(1).(p2p.Envelope).Message.(*tmcons.NewRoundStep)
-			if !ok {
-				return
-			}
-			select {
-			case announcements <- msg:
-			default:
-			}
-		}).
-		Return(nil)
+	newChannel := func(capture bool) p2p.Channel {
+		ch := p2pmocks.NewChannel(t)
+		ch.On("Receive", mock.Anything).Maybe().Return(p2p.NewChannelIterator(make(chan p2p.Envelope)))
+		ch.On("SendError", mock.Anything, mock.Anything).Maybe().Return(nil)
+		ch.On("String").Maybe().Return("channel")
+		ch.On("Send", mock.Anything, mock.Anything).Maybe().
+			Run(func(args mock.Arguments) {
+				msg, ok := args.Get(1).(p2p.Envelope).Message.(*tmcons.NewRoundStep)
+				if !capture || !ok {
+					return
+				}
+				select {
+				case announcements <- msg:
+				default:
+				}
+			}).
+			Return(nil)
+		return ch
+	}
+	chCreator := func(_ context.Context, desc *p2p.ChannelDescriptor) (p2p.Channel, error) {
+		return newChannel(desc.ID == p2p.ConsensusStateChannel), nil
+	}
+	peerUpdatesCh := make(chan p2p.PeerUpdate, 1)
+	peerEvents := func(context.Context, string) *p2p.PeerUpdates {
+		return p2p.NewPeerUpdates(peerUpdatesCh, 1, "consensus")
+	}
 
-	peerUpdate := p2p.PeerUpdate{NodeID: "peer", Status: p2p.PeerStatusUp, ProTxHash: crypto.RandProTxHash()}
-	r.peerUp(ctx, peerUpdate, 3, channelBundle{state: stateCh})
-	defer r.peerDown(ctx, p2p.PeerUpdate{NodeID: "peer", Status: p2p.PeerStatusDown}, channelBundle{})
+	// Waiting for sync keeps the consensus state machine stopped, so the round
+	// state stays put; gossip starts once readySignal closes.
+	r := NewReactor(log.NewNopLogger(), cs, chCreator, peerEvents, cs.eventBus, true, NopMetrics())
+	require.NoError(t, r.Start(ctx))
+	t.Cleanup(func() { r.Stop(); r.Wait() })
+	close(r.readySignal)
+
+	peerUpdatesCh <- p2p.PeerUpdate{NodeID: "peer", Status: p2p.PeerStatusUp, ProTxHash: crypto.RandProTxHash()}
 
 	want := cs.GetRoundState()
 

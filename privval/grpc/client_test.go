@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 
@@ -182,6 +183,22 @@ func TestSignerClient_SignProposal(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, pbWant.Signature, pbHave.Signature)
+}
+
+// TestSignerClientCloseShutsDownConnection checks that Close releases the
+// connection the client was built on: the node registers Close as the only
+// teardown of a grpc:// signer connection.
+func TestSignerClientCloseShutsDownConnection(t *testing.T) {
+	conn, err := grpc.NewClient("localhost",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+
+	client, err := tmgrpc.NewSignerClient(conn, chainID, log.NewTestingLogger(t))
+	require.NoError(t, err)
+
+	require.NoError(t, client.Close())
+	assert.Equal(t, connectivity.Shutdown, conn.GetState())
 }
 
 // Heartbeats and skip votes are not part of the remote signer protocol. The
