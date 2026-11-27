@@ -16,28 +16,25 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Trusted, GitHub-hosted selector: no checkout of PR code; the inventory token
-  # never leaves this job. Outputs the test part routed to the self-hosted
-  # runner, or 'none' (fork PR, missing secret or image, API error, runner busy).
+  # Picks the test part that runs on the self-hosted runner, or 'none'.
+  # No checkout, no PR code. The inventory token is an environment secret, so
+  # only jobs that declare this environment receive it. Without the token (fork
+  # PRs) or on any API error the action falls back and every part stays hosted.
   select-runner:
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions: {}
-    env:
-      HAS_INVENTORY_TOKEN: ${{ secrets.RUNNER_INVENTORY_TOKEN != '' }}
+    environment:
+      name: runner-inventory
+      deployment: false
     outputs:
       primary-part: >-
         ${{ steps.choose.outcome == 'success'
-        && vars.TENDERDASH_CI_IMAGE != ''
         && contains(fromJSON(steps.choose.outputs.use-runner || '[]'), 'lklimek-tenderdash')
         && '03' || 'none' }}
     steps:
       - name: Check self-hosted runner availability
         id: choose
-        if: >-
-          env.HAS_INVENTORY_TOKEN == 'true'
-          && (github.event_name == 'push'
-          || github.event.pull_request.head.repo.full_name == github.repository)
         continue-on-error: true
         uses: lklimek/runner-fallback-action@07b67c1deaf3d980853669c82ae50a2fac345e1a
         with:
@@ -54,27 +51,17 @@ jobs:
     runs-on: >-
       ${{ matrix.part == needs.select-runner.outputs.primary-part
       && 'lklimek-tenderdash' || 'ubuntu-26.04' }}
-    # An empty string means no job container (hosted parts).
-    container: >-
-      ${{ matrix.part == needs.select-runner.outputs.primary-part
-      && vars.TENDERDASH_CI_IMAGE || '' }}
     timeout-minutes: 30
-    defaults:
-      run:
-        shell: bash
-    env:
-      ON_PRIMARY: ${{ matrix.part == needs.select-runner.outputs.primary-part }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
         part: ["00", "01", "02", "03", "04", "05"]
     steps:
-      # The runner keeps its work directory between jobs; a new container does not reset it.
-      - name: Clean workspace (job container)
-        if: env.ON_PRIMARY == 'true'
-        run: find "$GITHUB_WORKSPACE" -mindepth 1 -delete
-
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: technote-space/get-diff-action@v6
         if: github.event_name != 'push' || !github.event.created
@@ -91,44 +78,22 @@ jobs:
             Makefile
 
       - uses: actions/setup-go@v7.1.0
-        if: env.GIT_DIFF && env.ON_PRIMARY != 'true'
+        if: env.GIT_DIFF
         with:
           go-version: "1.27.4"
 
       - name: Install libpcap
-        if: env.GIT_DIFF && env.ON_PRIMARY != 'true'
+        if: env.GIT_DIFF
         run: sudo apt-get update && sudo apt-get install --yes libpcap-dev
 
       - uses: ./.github/actions/bls
         name: Install BLS library
-        if: env.GIT_DIFF && env.ON_PRIMARY != 'true'
+        if: env.GIT_DIFF
 
       - name: Run Go Tests
-        if: env.GIT_DIFF && env.ON_PRIMARY != 'true'
+        if: env.GIT_DIFF
         env:
           CGO_LDFLAGS: "-L/usr/local/lib -ldashbls -lrelic_s -lmimalloc-secure -lgmp"
           CGO_CXXFLAGS: "-I/usr/local/include"
         run: |
           make test-group-${{ matrix.part }} NUM_SPLIT=6
-
-      # The job image provides Go, the C toolchain, cmake, libgmp and libpcap.
-      - name: Build BLS library (job container)
-        if: env.GIT_DIFF && env.ON_PRIMARY == 'true'
-        run: make build-bls
-
-      - name: Run Go Tests (job container)
-        if: env.GIT_DIFF && env.ON_PRIMARY == 'true'
-        env:
-          PART: ${{ matrix.part }}
-        run: |
-          bls="$GITHUB_WORKSPACE/third_party/bls-signatures"
-          export GOCACHE="$RUNNER_TEMP/go-build" GOMODCACHE="$RUNNER_TEMP/go-mod"
-          export CGO_CXXFLAGS="-I$bls/build/depends/relic/include -I$bls/src/depends/mimalloc/include -I$bls/src/depends/relic/include -I$bls/src/include"
-          export CGO_LDFLAGS="-L$bls/build/depends/mimalloc -L$bls/build/depends/relic/lib -L$bls/build/src -ldashbls -lrelic_s -lmimalloc-secure -lgmp"
-          make "test-group-$PART" NUM_SPLIT=6
-
-      - name: Clean workspace and caches (job container)
-        if: always() && env.ON_PRIMARY == 'true'
-        run: |
-          rm -rf "$RUNNER_TEMP/go-build" "$RUNNER_TEMP/go-mod"
-          find "$GITHUB_WORKSPACE" -mindepth 1 -delete
