@@ -72,7 +72,7 @@ func TestDispatcherBasic(t *testing.T) {
 func TestDispatcherReturnsNoBlock(t *testing.T) {
 	t.Cleanup(leaktest.Check(t))
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	chans, ch := testChannel(100)
@@ -81,17 +81,21 @@ func TestDispatcherReturnsNoBlock(t *testing.T) {
 
 	peer := factory.NodeID(t, "a")
 
+	responded := make(chan error, 1)
 	go func() {
-		<-chans.Out
-		require.NoError(t, d.Respond(nil, peer, 0))
-		cancel()
+		select {
+		case <-chans.Out:
+			responded <- d.Respond(nil, peer, 0)
+		case <-ctx.Done():
+			responded <- ctx.Err()
+		}
 	}()
 
 	lb, err := d.LightBlock(ctx, 1, peer)
-	<-ctx.Done()
 
 	require.Nil(t, lb)
 	require.NoError(t, err)
+	require.NoError(t, <-responded)
 }
 
 // TestDispatcherReportsDeliveringConnection pins what fences a refusal to its sender:
@@ -291,21 +295,36 @@ func TestDispatcherFailedRequestFreesPeer(t *testing.T) {
 	block, err := mockLBResp(ctx, t, peer, 1, time.Now()).block.ToProto()
 	require.NoError(t, err)
 
-	chans, ch := testChannel(0)
+	chans, inner := testChannel(1)
+	ch := &blockingSendChannel{Channel: inner, sending: make(chan p2p.Envelope, 1)}
 	d := NewDispatcher(ch, log.NewTestingLogger(t))
 
-	sendCtx, sendCancel := context.WithTimeout(ctx, 50*time.Millisecond)
-	_, _, err = d.lightBlockWithConn(sendCtx, 1, peer)
+	// Fail the send only once the call is registered and the request is in Send.
+	sendCtx, sendCancel := context.WithCancel(ctx)
+	defer sendCancel()
+	failed := make(chan error, 1)
+	failedConnID := make(chan uint64, 1)
+	go func() {
+		_, connID, err := d.lightBlockWithConn(sendCtx, 1, peer)
+		failedConnID <- connID
+		failed <- err
+	}()
+	<-ch.sending
 	sendCancel()
-	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.ErrorIs(t, <-failed, context.Canceled)
+	require.Zero(t, <-failedConnID, "a request that was never sent has no delivering connection")
 
 	require.NotPanics(t, func() {
 		require.ErrorIs(t, d.Respond(block, peer, lateConnID), errUnsolicitedResponse)
 	})
 
+	ch.release.Store(true)
 	go func() {
-		<-chans.Out
-		assert.NoError(t, d.Respond(block, peer, nextConnID))
+		select {
+		case <-chans.Out:
+			assert.NoError(t, d.Respond(block, peer, nextConnID))
+		case <-ctx.Done():
+		}
 	}()
 	lb, connID, err := d.lightBlockWithConn(ctx, 1, peer)
 	require.NoError(t, err, "a failed request must not leave the peer busy")

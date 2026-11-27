@@ -190,8 +190,9 @@ func (d *Dispatcher) Respond(lb *tmproto.LightBlock, peer types.NodeID, connID u
 	return err
 }
 
-// Close shuts down the dispatcher and cancels any pending calls awaiting responses.
-// Peers awaiting responses that have not arrived are delivered a nil block.
+// Close drops every registered call, so later responses are refused as unsolicited.
+// It cancels nothing: callers end their outstanding sends and waits through their
+// own contexts.
 func (d *Dispatcher) Close() {
 	d.mtx.Lock()
 	defer d.mtx.Unlock()
