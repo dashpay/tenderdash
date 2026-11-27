@@ -195,12 +195,12 @@ Then open ONE draft PR in `dashpay/platform` that moves Platform to the new
 version. It updates:
 
 - the Tenderdash image dashmate pins in
-  `packages/dashmate/configs/defaults/getBaseConfigFactory.js`, when it must
-  change: the exact version tag for a prerelease or an older-line release whose
-  alias does not move, or a new `X.Y` for a new stable line, plus a dashmate
-  config migration that updates existing configs. For a patch on the current
-  stable line the configured `X.Y` stays: verify it now resolves to the new
-  image and leave the file unchanged;
+  `packages/dashmate/configs/defaults/getBaseConfigFactory.js`. The target tag
+  is the floating `X.Y` for a full release on the current stable line, else
+  the exact version tag (a prerelease, or an older-line release whose alias
+  does not move). If the configured tag differs, change it and add a dashmate
+  config migration that updates existing configs; if it already is that `X.Y`,
+  verify it resolves to the new image and leave the file unchanged;
 - the crate tag in `packages/rs-drive-abci/Cargo.toml` and
   `packages/rs-drive-proof-verifier/Cargo.toml` (`tenderdash-abci`) and
   `packages/dapi-grpc/Cargo.toml` (`tenderdash-proto`); all three move together;
