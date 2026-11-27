@@ -3,14 +3,19 @@ package consensus
 import (
 	"bytes"
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	abciclient "github.com/dashpay/tenderdash/abci/client"
 	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/dash"
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	sf "github.com/dashpay/tenderdash/internal/state/test/factory"
@@ -29,6 +34,13 @@ type verifyExtensionContractApp struct {
 
 	// rejectProposals makes ProcessProposal reject every block.
 	rejectProposals bool
+	// transientFailures is the number of initial calls that fail before acceptance.
+	transientFailures int
+	// failure is the error those calls return; a generic error when nil.
+	failure error
+	// corruptAppHash makes ProcessProposal accept every block with an app hash
+	// the block does not have.
+	corruptAppHash bool
 
 	mtx       sync.Mutex
 	calls     int // ProcessProposal calls, accepted or not
@@ -44,11 +56,21 @@ func (app *verifyExtensionContractApp) ProcessProposal(
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 	app.calls++
+	if app.calls <= app.transientFailures {
+		if app.failure != nil {
+			return nil, app.failure
+		}
+		return nil, errors.New("temporary ProcessProposal failure")
+	}
 	if app.rejectProposals {
 		return &abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_REJECT}, nil
 	}
 	app.processed = append(app.processed, processedProposal{height: req.Height, round: req.Round, hash: bytes.Clone(req.Hash)})
-	return app.BaseApplication.ProcessProposal(ctx, req)
+	resp, err := app.BaseApplication.ProcessProposal(ctx, req)
+	if app.corruptAppHash && err == nil {
+		resp.AppHash = bytes.Repeat([]byte{0xff}, crypto.DefaultAppHashSize)
+	}
+	return resp, err
 }
 
 func (app *verifyExtensionContractApp) VerifyVoteExtension(
@@ -221,6 +243,246 @@ func newLaggingPolkaNode(ctx context.Context, t *testing.T, app *verifyExtension
 	require.False(t, n.sd.Votes.Precommits(1).HasTwoThirdsAny())
 	require.False(t, n.sd.TriggeredTimeoutPrecommit)
 	return n, precommits
+}
+
+// startReceiveRoutine runs the node's consensus loop from n.sd until the
+// returned function stops it. n.sd must not be used while it runs.
+func (n *round1Node) startReceiveRoutine(t *testing.T) func() {
+	t.Helper()
+	require.NoError(t, n.sd.Save())
+	ctx, cancel := context.WithCancel(n.ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		n.cs.receiveRoutine(ctx, nil)
+	}()
+	return func() {
+		cancel()
+		<-done
+	}
+}
+
+// A polka block whose processing fails transiently is processed again by the
+// consensus loop, with no other input, so that the precommits for it, resent,
+// verify and start the precommit wait.
+func TestStatePolkaBlockRetryEndsThePrecommitStall(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	n, precommits := newLaggingPolkaNode(ctx, t, &verifyExtensionContractApp{transientFailures: 1})
+	n.deliverParts(t)
+	calls, _, _ := n.app.counts()
+	require.Equal(t, 1, calls)
+	require.False(t, processedFor(&n.sd.RoundState, 1))
+	require.Nil(t, n.sd.Proposal)
+
+	stop := n.startReceiveRoutine(t)
+	defer stop()
+	require.Eventually(t, func() bool {
+		calls, _, _ := n.app.counts()
+		return calls == 2
+	}, 5*time.Second, 10*time.Millisecond, "the consensus loop processes the block again")
+
+	peer := types.NodeID("aa00000000000000000000000000000000000000")
+	n.cs.msgInfoQueue.admitPeer(peer)
+	for _, v := range precommits {
+		require.NoError(t, n.cs.msgInfoQueue.send(n.ctx, &VoteMessage{Vote: v}, peer))
+	}
+	require.Eventually(t, func() bool {
+		return n.cs.GetStateData().TriggeredTimeoutPrecommit
+	}, 5*time.Second, 10*time.Millisecond, "precommit wait starts once every precommit counts")
+	stop()
+
+	sd := n.cs.GetStateData()
+	calls, accepted, rejected := n.app.counts()
+	require.Equal(t, [3]int{2, 2, 2}, [3]int{calls, accepted, rejected})
+	require.Nil(t, sd.Proposal)
+	require.True(t, processedFor(&sd.RoundState, 1))
+	require.Equal(t, int32(1), sd.Round)
+}
+
+// firePolkaRetry waits until the pending polka block retry is due and runs it,
+// as the consensus loop does.
+func (n *round1Node) firePolkaRetry(t *testing.T) {
+	t.Helper()
+	due := n.cs.blockExecutor.polkaRetryC()
+	require.NotNil(t, due, "a polka block retry is pending")
+	select {
+	case <-due:
+	case <-time.After(2 * polkaRetryMaxDelay):
+		require.FailNow(t, "the polka block retry never became due")
+	}
+	n.cs.blockExecutor.retryPolkaBlock(n.ctx, &n.sd.RoundState)
+}
+
+// While a retry is pending, further triggers for the same block do not process
+// it: only the retry does, with a growing delay after every failure.
+func TestStatePolkaBlockRetryCoalescesDuplicateTriggers(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	n, _ := newLaggingPolkaNode(ctx, t, &verifyExtensionContractApp{transientFailures: 2})
+	n.deliverParts(t)
+	for range 3 {
+		require.NoError(t, n.cs.ctrl.Dispatch(n.ctx, &ProposalCompletedEvent{Height: 1}, &n.sd))
+	}
+	calls, _, _ := n.app.counts()
+	require.Equal(t, 1, calls, "a pending retry holds off further attempts")
+
+	n.firePolkaRetry(t)
+	calls, _, _ = n.app.counts()
+	require.Equal(t, 2, calls)
+	require.Equal(t, 2*polkaRetryMinDelay, n.cs.blockExecutor.polkaRetry.delay, "the delay doubles")
+	require.NoError(t, n.cs.ctrl.Dispatch(n.ctx, &ProposalCompletedEvent{Height: 1}, &n.sd))
+	calls, _, _ = n.app.counts()
+	require.Equal(t, 2, calls, "a pending retry holds off further attempts")
+
+	n.firePolkaRetry(t)
+	calls, _, _ = n.app.counts()
+	require.Equal(t, 3, calls, "two failed attempts and one success")
+	require.True(t, processedFor(&n.sd.RoundState, 1))
+	require.Nil(t, n.cs.blockExecutor.polkaRetryC(), "no retry after a success")
+}
+
+// A failure that another attempt cannot fix schedules no retry.
+func TestStatePolkaBlockFailureNotWorthRetryingIsNotRetried(t *testing.T) {
+	testCases := map[string]*verifyExtensionContractApp{
+		// The response does not match the block: sm.ErrInvalidBlock.
+		"invalid block":    {corruptAppHash: true},
+		"client stopped":   {transientFailures: 1, failure: abciclient.ErrClientStopped},
+		"context canceled": {transientFailures: 1, failure: context.Canceled},
+	}
+	for name, app := range testCases {
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			n, _ := newLaggingPolkaNode(ctx, t, app)
+			n.deliverParts(t)
+			calls, _, _ := n.app.counts()
+			require.Equal(t, 1, calls)
+			require.Nil(t, n.cs.blockExecutor.polkaRetryC())
+		})
+	}
+	t.Run("canceled ctx", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		n, _ := newLaggingPolkaNode(ctx, t, &verifyExtensionContractApp{transientFailures: 2})
+		n.deliverParts(t)
+		require.NotNil(t, n.cs.blockExecutor.polkaRetryC())
+
+		canceled, cancelRetry := context.WithCancel(n.ctx)
+		cancelRetry()
+		n.cs.blockExecutor.retryPolkaBlock(canceled, &n.sd.RoundState)
+		calls, _, _ := n.app.counts()
+		require.Equal(t, 2, calls)
+		require.Nil(t, n.cs.blockExecutor.polkaRetryC())
+	})
+}
+
+// The delay between retries stops growing at polkaRetryMaxDelay.
+func TestStatePolkaBlockRetryDelayIsCapped(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	n, _ := newLaggingPolkaNode(ctx, t, &verifyExtensionContractApp{transientFailures: 2})
+	n.deliverParts(t)
+	n.cs.blockExecutor.polkaRetry.delay = polkaRetryMaxDelay - time.Second
+
+	n.cs.blockExecutor.retryPolkaBlock(n.ctx, &n.sd.RoundState)
+	calls, _, _ := n.app.counts()
+	require.Equal(t, 2, calls)
+	require.Equal(t, polkaRetryMaxDelay, n.cs.blockExecutor.polkaRetry.delay)
+	n.cs.blockExecutor.clearPolkaRetry()
+}
+
+// A retry that becomes due after the node no longer awaits the block it was
+// scheduled for is dropped without processing anything.
+func TestStatePolkaBlockRetryIgnoresStaleTarget(t *testing.T) {
+	testCases := map[string]func(t *testing.T, n *round1Node){
+		// Even the same block, with a polka in the next round, is not processed
+		// by a retry for the previous round.
+		"next round": func(t *testing.T, n *round1Node) {
+			n.sd.updateRoundStep(2, cstypes.RoundStepPrecommit)
+			for _, vs := range n.peers {
+				vs.Round = 2
+				added, err := n.sd.Votes.AddVote(n.vote(t, vs, tmproto.PrevoteType, n.blockID))
+				require.NoError(t, err)
+				require.True(t, added)
+			}
+			polka, ok := n.sd.Votes.Prevotes(2).TwoThirdsMajority()
+			require.True(t, ok && polka.Equals(n.blockID))
+		},
+		// A commit was applied and the node moved to the next height.
+		"next height": func(_ *testing.T, n *round1Node) {
+			n.sd.Height++
+		},
+		"block no longer complete": func(_ *testing.T, n *round1Node) {
+			n.sd.ProposalBlock = nil
+			n.sd.ProposalBlockParts = types.NewPartSetFromHeader(n.blockID.PartSetHeader)
+		},
+		"block processed elsewhere": func(t *testing.T, n *round1Node) {
+			require.NoError(t, n.cs.blockExecutor.ensureProcess(n.ctx, &n.sd.RoundState, 1))
+		},
+	}
+	for name, change := range testCases {
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			n, _ := newLaggingPolkaNode(ctx, t, &verifyExtensionContractApp{transientFailures: 1})
+			n.deliverParts(t)
+			change(t, n)
+			before, _, _ := n.app.counts()
+
+			n.firePolkaRetry(t)
+			calls, _, _ := n.app.counts()
+			require.Equal(t, before, calls, "a stale retry processes nothing")
+			require.Nil(t, n.cs.blockExecutor.polkaRetryC(), "a stale retry is dropped")
+		})
+	}
+}
+
+// A retry armed while replaying the intact part of a torn WAL survives the
+// repair: the replay that follows it sees only duplicates, which cannot arm the
+// retry again, and the started node processes the block.
+func TestStatePolkaBlockRetrySurvivesWALRepair(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	n := newRound1Node(ctx, t, &verifyExtensionContractApp{transientFailures: 1}, cstypes.RoundStepPrevote)
+	require.NoError(t, n.sd.Save())
+
+	// The WAL of a node that saw the polka, precommitted nil on the prevote-wait
+	// timeout and then received the block, torn after its last record.
+	walFile := n.cs.config.WalFile()
+	require.NoError(t, os.MkdirAll(filepath.Dir(walFile), 0o700))
+	f, err := os.Create(walFile)
+	require.NoError(t, err)
+	enc := NewWALEncoder(f)
+	write := func(msg WALMessage) {
+		require.NoError(t, enc.Encode(&TimedWALMessage{Time: tmtime.Now(), Msg: msg}))
+	}
+	peer := types.NodeID("aa00000000000000000000000000000000000000")
+	write(EndHeightMessage{Height: 0})
+	write(msgInfo{Msg: &VoteMessage{Vote: n.vote(t, n.self, tmproto.PrevoteType, types.BlockID{})}, PeerID: peer})
+	for _, vs := range n.peers {
+		write(msgInfo{Msg: &VoteMessage{Vote: n.vote(t, vs, tmproto.PrevoteType, n.blockID)}, PeerID: peer})
+	}
+	write(timeoutInfo{Height: 1, Round: 1, Step: cstypes.RoundStepPrevoteWait})
+	for i := 0; i < int(n.parts.Total()); i++ {
+		write(msgInfo{Msg: &BlockPartMessage{Height: 1, Round: 1, Part: n.parts.GetPart(i)}, PeerID: peer})
+	}
+	_, err = f.Write([]byte{0, 0, 0, 0}) // a checksum with no length after it
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	require.NoError(t, n.cs.Start(n.ctx))
+	defer func() {
+		n.cs.Stop()
+		n.cs.Wait()
+	}()
+	require.FileExists(t, walFile+".CORRUPTED", "the torn WAL is repaired")
+	require.Eventually(t, func() bool {
+		sd := n.cs.GetStateData()
+		return processedFor(&sd.RoundState, 1)
+	}, 5*time.Second, 10*time.Millisecond, "the retry armed before the repair processes the block")
+	calls, _, _ := n.app.counts()
+	require.Equal(t, 2, calls, "one failure while replaying, one success on the retry")
 }
 
 // A polka block that arrives in the precommit step is processed for the round
@@ -404,6 +666,7 @@ func TestStatePolkaBlockRejectedByTheApplicationIsNotRetried(t *testing.T) {
 	}
 	calls, accepted, rejected := n.app.counts()
 	require.Equal(t, [3]int{1, 0, 4}, [3]int{calls, accepted, rejected})
+	require.Nil(t, n.cs.blockExecutor.polkaRetryC(), "a rejected block is not retried")
 	require.Equal(t, cstypes.RoundStepPrecommit, n.sd.Step)
 	require.False(t, n.sd.TriggeredTimeoutPrecommit)
 }

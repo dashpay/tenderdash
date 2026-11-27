@@ -506,6 +506,7 @@ func (cs *State) OnStart(ctx context.Context) (err error) {
 			cs.wal = nilWAL{}
 			cs.timeoutTicker.Stop()
 			cs.timeoutTicker.Wait()
+			cs.blockExecutor.clearPolkaRetry()
 			if _, ok := cs.timeoutTicker.(*timeoutTicker); ok {
 				cs.timeoutTicker = NewTimeoutTicker(cs.logger)
 				cs.roundScheduler.timeoutTicker = cs.timeoutTicker
@@ -559,6 +560,9 @@ func (cs *State) OnStart(ctx context.Context) (err error) {
 			// 1) prep work
 			cs.wal.Stop()
 			cs.wal.Wait()
+			// A pending polka block retry is kept: the repaired WAL replays
+			// against the same round state, where block parts and prevotes
+			// already accepted do not arm it again.
 
 			repairAttempted = true
 
@@ -724,6 +728,7 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 		cs.wal.Wait()
 		cs.msgInfoQueue.stop()
 		cs.liveness.stop()
+		cs.blockExecutor.clearPolkaRetry()
 	}
 
 	defer func() {
@@ -824,6 +829,13 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 		case silence := <-cs.liveness.silent():
 			stateData := cs.stateDataStore.Get()
 			cs.handleProposerSilence(ctx, &stateData, silence)
+			err := stateData.Save()
+			if err != nil {
+				cs.logger.Error("failed update state-data", "err", err)
+			}
+		case <-cs.blockExecutor.polkaRetryC():
+			stateData := cs.stateDataStore.Get()
+			cs.blockExecutor.retryPolkaBlock(processCtx, &stateData.RoundState)
 			err := stateData.Save()
 			if err != nil {
 				cs.logger.Error("failed update state-data", "err", err)
