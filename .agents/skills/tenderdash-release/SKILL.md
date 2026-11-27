@@ -84,11 +84,10 @@ crate reject.
 
 Every release, not only an ABCI change, gets a matching rs-tenderdash-abci
 release with the same version: Platform consumes Tenderdash through both the
-Docker image and the crate tag. Prepare its PR before tagging. It carries the
-crate version, proto default version and changelog, so no separate version PR
-is needed. Its CI passes only once the Tenderdash tag and Docker image exist:
-after publication, rerun it, then tag the same version on the merge commit in
-`develop` and publish a GitHub release (a prerelease for `-dev.N`).
+Docker image and the crate tag. During release preparation, open its PR before
+tagging. It carries the crate version, proto default version and changelog, so
+no separate version PR is needed. Its CI passes only once the Tenderdash tag
+and Docker image exist (see [Update Dash Platform](#update-dash-platform)).
 
 **Stop and ask** before bumping `BlockProtocol` or preparing a release that
 changes it (full hard fork), even when the release was otherwise authorized, and
@@ -175,15 +174,18 @@ only the missing step; do not move tags or repeat a completed release blindly.
 
 Forward-port stable fixes and release metadata to dev with a reviewed merge or
 focused equivalent changes, preserving next-version metadata and resolving
-changelog conflicts deliberately. Report release/tag SHA, version decision,
-artifact links/provenance, the rs-tenderdash-abci release and Platform PR, and
-any unfinished rollout.
+changelog conflicts deliberately.
 
 ## Update Dash Platform
 
-Every release ends with ONE draft PR in `dashpay/platform` that moves it to the
-new version, once the image and the rs-tenderdash-abci tag exist. It belongs
-to an explicit release request; a preparation-only request stops before it.
+This belongs to an explicit release request; a preparation-only request stops
+before it. After the Tenderdash image is published, rerun the
+rs-tenderdash-abci PR's CI; once it is merged, tag the same version on its
+merge commit in `develop` and publish a GitHub release (a prerelease for
+`-dev.N`).
+
+Then open ONE draft PR in `dashpay/platform` that moves Platform to the new
+version. It updates together:
 
 - the Tenderdash image dashmate pins in
   `packages/dashmate/configs/defaults/getBaseConfigFactory.js`, plus a dashmate
@@ -197,3 +199,6 @@ to an explicit release request; a preparation-only request stops before it.
 Find the current pins first (`git grep` the old tag and image version) rather
 than assuming the paths above are complete. Never bump the image without the
 crate tags, or the reverse.
+
+Report the release/tag SHA, version decision, artifact links/provenance, the
+rs-tenderdash-abci release, the Platform PR, and any unfinished rollout.
