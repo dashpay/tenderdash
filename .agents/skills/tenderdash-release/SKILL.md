@@ -195,9 +195,11 @@ Then open ONE draft PR in `dashpay/platform` that moves Platform to the new
 version. It updates together:
 
 - the Tenderdash image dashmate pins in
-  `packages/dashmate/configs/defaults/getBaseConfigFactory.js`, plus a dashmate
-  config migration that updates existing configs: the floating `X.Y` tag for a
-  full release, the exact version tag for a prerelease;
+  `packages/dashmate/configs/defaults/getBaseConfigFactory.js`: the floating
+  `X.Y` tag for a full release on the current stable line (verify it now
+  resolves to the new image), the exact version tag for a prerelease or an
+  older-line release whose alias does not move; when the configured tag
+  changes, add a dashmate config migration that updates existing configs;
 - the crate tag in `packages/rs-drive-abci/Cargo.toml` and
   `packages/rs-drive-proof-verifier/Cargo.toml` (`tenderdash-abci`) and
   `packages/dapi-grpc/Cargo.toml` (`tenderdash-proto`); all three move together;
@@ -205,8 +207,8 @@ version. It updates together:
   (`cargo update -p tenderdash-abci -p tenderdash-proto`).
 
 Find the current pins first (`git grep` the old tag and image version) rather
-than assuming the paths above are complete. Never bump the image without the
-crate tags, or the reverse.
+than assuming the paths above are complete. Never move the crate tags without
+the image the PR points dashmate to, or the reverse.
 
 Through the floating `X.Y` tag, dashmate deliberately picks up later stable
 patch images before Platform bumps the crate: Drive checks ABCI compatibility,
