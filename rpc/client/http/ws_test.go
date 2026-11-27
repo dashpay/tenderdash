@@ -26,7 +26,7 @@ import (
 type fakeUpstream struct {
 	mtx        sync.Mutex
 	events     map[string][]string
-	failed     map[string]bool          // queries whose subscribe gets an RPC error
+	failed     map[string]bool          // queries whose subscribe gets an RPC error before their events
 	gates      map[string]chan struct{} // hold a query's events until closed
 	conn       *websocket.Conn
 	subscribes []string
@@ -79,7 +79,6 @@ func (u *fakeUpstream) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			if err := conn.WriteJSON(req.MakeErrorf(rpctypes.CodeInternalError, "subscribe failed")); err != nil {
 				return
 			}
-			continue
 		}
 		for _, query := range events {
 			res := req.MakeResponse(coretypes.ResultEvent{
@@ -385,12 +384,13 @@ func TestFailedResubscribeKeepsReplacedSubscription(t *testing.T) {
 
 // A leave and the cleanup of a query forgotten during its resubscribe can both
 // unsubscribe it. The second gets "subscription not found", which loses nothing,
-// so it must not hold the event loop for a resubscribe.
+// so it must not queue a resubscribe.
 func TestSubscriptionNotFoundDoesNotResubscribe(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	upstream := &fakeUpstream{
 		events:         map[string][]string{"q": {"q"}},
+		failed:         map[string]bool{"boom": true},
 		unsubscribeErr: pubsub.ErrSubscriptionNotFound,
 	}
 	srv := httptest.NewServer(upstream)
@@ -400,15 +400,22 @@ func TestSubscriptionNotFoundDoesNotResubscribe(t *testing.T) {
 	var logs bytes.Buffer
 	w.Logger, err = log.NewLogger(log.LogLevelDebug, &logs)
 	require.NoError(t, err)
-	w.resubscribeDelay = time.Hour // a resubscribe would hold the event loop
+	w.resubscribeDelay = time.Hour // only cancellation can end this delay
 	require.NoError(t, w.Start(ctx))
 	t.Cleanup(func() { requireStopReturns(t, w) })
 
 	_, err = w.Subscribe(ctx, "", "a")
 	require.NoError(t, err)
+
+	// Occupy the resubscriber so it cannot consume another queued retry.
+	require.NoError(t, w.ws.Subscribe(ctx, "boom"))
+	require.Eventually(t, func() bool { return goroutinesIn("(*wsEvents).redoSubscriptionsAfter") == 1 },
+		5*time.Second, time.Millisecond)
+
 	require.NoError(t, w.Unsubscribe(ctx, "", "a"))
 	// The upstream handles requests in order, so this event follows the error.
 	requireEvent(t, upstream.subscribe(ctx, t, w, "q"), "q")
+	require.Len(t, w.resubscribe, 0, "subscription not found queued a resubscribe")
 	cancel()
 	requireStopReturns(t, w)
 	require.Contains(t, logs.String(), `"message":"ignoring harmless WS subscription error"`)
@@ -463,8 +470,8 @@ func requireStopReturns(t *testing.T, w *wsEvents) {
 	}
 }
 
-// An upstream RPC error sends eventListener into a delayed resubscribe. Ending the
-// context there must end the worker, not strand it on a send nobody receives.
+// An upstream RPC error sends the resubscriber into a delayed resubscribe. Ending
+// the context there must end it, and Stop must join it with eventListener.
 func TestStopJoinsListenerDuringResubscribe(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
