@@ -10,8 +10,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	abciclient "github.com/dashpay/tenderdash/abci/client"
 	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/dash"
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	sf "github.com/dashpay/tenderdash/internal/state/test/factory"
@@ -32,6 +34,11 @@ type verifyExtensionContractApp struct {
 	rejectProposals bool
 	// transientFailures is the number of initial calls that fail before acceptance.
 	transientFailures int
+	// failure is the error those calls return; a generic error when nil.
+	failure error
+	// corruptAppHash makes ProcessProposal accept every block with an app hash
+	// the block does not have.
+	corruptAppHash bool
 
 	mtx       sync.Mutex
 	calls     int // ProcessProposal calls, accepted or not
@@ -48,13 +55,20 @@ func (app *verifyExtensionContractApp) ProcessProposal(
 	defer app.mtx.Unlock()
 	app.calls++
 	if app.calls <= app.transientFailures {
+		if app.failure != nil {
+			return nil, app.failure
+		}
 		return nil, errors.New("temporary ProcessProposal failure")
 	}
 	if app.rejectProposals {
 		return &abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_REJECT}, nil
 	}
 	app.processed = append(app.processed, processedProposal{height: req.Height, round: req.Round, hash: bytes.Clone(req.Hash)})
-	return app.BaseApplication.ProcessProposal(ctx, req)
+	resp, err := app.BaseApplication.ProcessProposal(ctx, req)
+	if app.corruptAppHash && err == nil {
+		resp.AppHash = bytes.Repeat([]byte{0xff}, crypto.DefaultAppHashSize)
+	}
+	return resp, err
 }
 
 func (app *verifyExtensionContractApp) VerifyVoteExtension(
@@ -324,6 +338,56 @@ func TestStatePolkaBlockRetryCoalescesDuplicateTriggers(t *testing.T) {
 	require.Equal(t, 3, calls, "two failed attempts and one success")
 	require.True(t, processedFor(&n.sd.RoundState, 1))
 	require.Nil(t, n.cs.blockExecutor.polkaRetryC(), "no retry after a success")
+}
+
+// A failure that another attempt cannot fix schedules no retry.
+func TestStatePolkaBlockFailureNotWorthRetryingIsNotRetried(t *testing.T) {
+	testCases := map[string]*verifyExtensionContractApp{
+		// The response does not match the block: sm.ErrInvalidBlock.
+		"invalid block":    {corruptAppHash: true},
+		"client stopped":   {transientFailures: 1, failure: abciclient.ErrClientStopped},
+		"context canceled": {transientFailures: 1, failure: context.Canceled},
+	}
+	for name, app := range testCases {
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			n, _ := newLaggingPolkaNode(ctx, t, app)
+			n.deliverParts(t)
+			calls, _, _ := n.app.counts()
+			require.Equal(t, 1, calls)
+			require.Nil(t, n.cs.blockExecutor.polkaRetryC())
+		})
+	}
+	t.Run("canceled ctx", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		n, _ := newLaggingPolkaNode(ctx, t, &verifyExtensionContractApp{transientFailures: 2})
+		n.deliverParts(t)
+		require.NotNil(t, n.cs.blockExecutor.polkaRetryC())
+
+		canceled, cancelRetry := context.WithCancel(n.ctx)
+		cancelRetry()
+		n.cs.blockExecutor.retryPolkaBlock(canceled, &n.sd.RoundState)
+		calls, _, _ := n.app.counts()
+		require.Equal(t, 2, calls)
+		require.Nil(t, n.cs.blockExecutor.polkaRetryC())
+	})
+}
+
+// The delay between retries stops growing at polkaRetryMaxDelay.
+func TestStatePolkaBlockRetryDelayIsCapped(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	n, _ := newLaggingPolkaNode(ctx, t, &verifyExtensionContractApp{transientFailures: 2})
+	n.deliverParts(t)
+	n.cs.blockExecutor.polkaRetry.delay = polkaRetryMaxDelay - time.Second
+
+	n.cs.blockExecutor.retryPolkaBlock(n.ctx, &n.sd.RoundState)
+	calls, _, _ := n.app.counts()
+	require.Equal(t, 2, calls)
+	require.Equal(t, polkaRetryMaxDelay, n.cs.blockExecutor.polkaRetry.delay)
+	n.cs.blockExecutor.clearPolkaRetry()
 }
 
 // A retry that becomes due after the node no longer awaits the block it was

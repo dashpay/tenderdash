@@ -506,6 +506,7 @@ func (cs *State) OnStart(ctx context.Context) (err error) {
 			cs.wal = nilWAL{}
 			cs.timeoutTicker.Stop()
 			cs.timeoutTicker.Wait()
+			cs.blockExecutor.clearPolkaRetry()
 			if _, ok := cs.timeoutTicker.(*timeoutTicker); ok {
 				cs.timeoutTicker = NewTimeoutTicker(cs.logger)
 				cs.roundScheduler.timeoutTicker = cs.timeoutTicker
@@ -559,6 +560,7 @@ func (cs *State) OnStart(ctx context.Context) (err error) {
 			// 1) prep work
 			cs.wal.Stop()
 			cs.wal.Wait()
+			cs.blockExecutor.clearPolkaRetry()
 
 			repairAttempted = true
 
@@ -724,6 +726,7 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 		cs.wal.Wait()
 		cs.msgInfoQueue.stop()
 		cs.liveness.stop()
+		cs.blockExecutor.clearPolkaRetry()
 	}
 
 	defer func() {
