@@ -23,7 +23,7 @@ jobs:
   # The environment must have no reviewers, wait timer, custom protection rules
   # or branch policy that excludes refs/pull/*/merge; those stall or fail it.
   lklimek-select-runner:
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-slim
     timeout-minutes: 5
     permissions: {}
     environment:
@@ -53,11 +53,11 @@ jobs:
     runs-on: >-
       ${{ matrix.part == needs.lklimek-select-runner.outputs.primary-part
       && 'lklimek-tenderdash' || 'ubuntu-26.04' }}
-    # Self-hosted part only: a fresh job container from the runner's local image.
-    # An empty string means no container, so hosted parts run on the VM.
+    # Self-hosted part only: the host resolves the profile to its local image
+    # and fixes the job limits. An empty string means no container.
     container: >-
       ${{ matrix.part == needs.lklimek-select-runner.outputs.primary-part
-      && 'home-infra/tenderdash-executor:ubuntu26-go1.27.4-runner2.338.2' || '' }}
+      && 'lklimek-tenderdash' || '' }}
     timeout-minutes: 30
     permissions:
       contents: read
@@ -90,9 +90,11 @@ jobs:
       # Without a git checkout get-diff-action reports no changes and the tests
       # are skipped. It also leaves a remote whose URL embeds the job token.
       - name: Check checkout and remove get-diff-action remote
+        if: ${{ !cancelled() }}
         run: |
           git rev-parse --git-dir > /dev/null
-          git remote remove get-diff-action || true
+          # Exit status 2 means the remote does not exist.
+          git remote remove get-diff-action || [[ $? == 2 ]]
 
       - uses: actions/setup-go@v7.1.0
         if: env.GIT_DIFF
