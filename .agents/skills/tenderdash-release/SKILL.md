@@ -80,12 +80,18 @@ work may need no release; do not manufacture a bump for an analysis request.
 When `ABCISemVer` changes, check it against the `check_version` caret rule
 (`^major.minor`) in `dashpay/rs-tenderdash-abci`: which existing apps still
 accept the new Tenderdash, and which Tenderdash versions apps built on the new
-crate reject. Prepare the matching rs-tenderdash-abci PR before tagging. It
-carries the crate version, proto default version and changelog, so no separate
-version PR is needed. Its CI passes only once the Tenderdash tag and Docker
-image exist: after publication, rerun it, then tag the same version on the
-merge commit in `develop` and publish a GitHub release (a prerelease for
-`-dev.N`). Drive links the crate by that tag.
+crate reject.
+
+Every release, not only an ABCI change, gets a matching rs-tenderdash-abci
+release: Platform consumes Tenderdash through both the Docker image and the
+crate tag. The crate's `major.minor` follows the Tenderdash release line, and
+`proto/build.rs` defaults to the new Tenderdash version; `check_version`
+enforces ABCI compatibility separately. Its patch level is independent of the
+Tenderdash patch (e.g. rs-tenderdash-abci `v1.8.1` builds against Tenderdash
+`v1.8.0`). During release preparation, open its PR before
+tagging. It carries the crate version, proto default version and changelog, so
+no separate version PR is needed. Its CI passes only once the Tenderdash tag
+and Docker image exist (see [Update Dash Platform](#update-dash-platform)).
 
 **Stop and ask** before bumping `BlockProtocol` or preparing a release that
 changes it (full hard fork), even when the release was otherwise authorized, and
@@ -98,7 +104,10 @@ Select the next unused `X.Y.Z` or `X.Y.Z-dev.N` consistent with the analysis and
 published history. A continuation of a prerelease series increments its suffix;
 if its compatibility scope changes, reconsider the core version. Promotion of an
 unchanged prerelease uses its reviewed core version. Never reuse or retarget a
-published version. Record baseline/source SHAs, rationale, affected contracts,
+published version. Choose the rs-tenderdash-abci version at the same time from
+its remote tags, releases and open release PRs, and recheck before publishing:
+an existing tag matches only if its `proto/build.rs` default is this Tenderdash
+version; resolve any conflict before publishing Tenderdash. Record baseline/source SHAs, rationale, affected contracts,
 Platform rollout, and required tests in the release plan.
 
 ## Prepare the reviewable release
@@ -172,5 +181,40 @@ only the missing step; do not move tags or repeat a completed release blindly.
 
 Forward-port stable fixes and release metadata to dev with a reviewed merge or
 focused equivalent changes, preserving next-version metadata and resolving
-changelog conflicts deliberately. Report release/tag SHA, version decision,
-artifact links/provenance, Platform coordination, and any unfinished rollout.
+changelog conflicts deliberately.
+
+## Update Dash Platform
+
+This belongs to an explicit release request; a preparation-only request stops
+before it. After the Tenderdash image is published, rerun the
+rs-tenderdash-abci PR's CI; once it is merged, tag its chosen version on the
+merge commit in `develop` and publish a GitHub release (a prerelease for
+`-dev.N`).
+
+Then open ONE draft PR in `dashpay/platform` that moves Platform to the new
+version. It updates:
+
+- the Tenderdash image dashmate pins in
+  `packages/dashmate/configs/defaults/getBaseConfigFactory.js`. The target tag
+  is the floating `X.Y` if it resolves to the new image once the Docker
+  workflow's alias promotion has finished (a full release on the current stable
+  line; check its digest), else the exact version tag. If
+  the configured tag differs, change it and add a dashmate config migration
+  that updates existing configs; otherwise leave the file unchanged;
+- the crate tag in `packages/rs-drive-abci/Cargo.toml` and
+  `packages/rs-drive-proof-verifier/Cargo.toml` (`tenderdash-abci`) and
+  `packages/dapi-grpc/Cargo.toml` (`tenderdash-proto`); all three move together;
+- `Cargo.lock` refreshed for those crates only
+  (`cargo update -p tenderdash-abci -p tenderdash-proto`).
+
+Find the current pins first (`git grep` the old tag and image version) rather
+than assuming the paths above are complete. The image dashmate gets and the
+crate tags must name the same release; never move one without the other.
+
+Through the floating `X.Y` tag, dashmate deliberately picks up later stable
+patch images before Platform bumps the crate: Drive checks ABCI compatibility,
+not tag equality, and a stable patch must keep that contract
+([versioning policy](../../../RELEASES.md#versioning-policy)).
+
+Report the release/tag SHA, version decision, artifact links/provenance, the
+rs-tenderdash-abci release, the Platform PR, and any unfinished rollout.

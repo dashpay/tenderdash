@@ -3,6 +3,7 @@ package types
 import (
 	"io"
 	"math"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -68,6 +69,29 @@ func TestBasicPartSet(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, data, data2)
+}
+
+// IsComplete is safe to call while another goroutine adds parts: consensus
+// gossip reads the completeness of the part set the consensus state fills.
+// The race detector reports an unsynchronized read.
+func TestPartSetIsCompleteConcurrentWithAddPart(t *testing.T) {
+	full := NewPartSetFromData(tmrand.Bytes(testPartSize*4), testPartSize)
+	partSet := NewPartSetFromHeader(full.Header())
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < int(full.Total()); i++ {
+			added, err := partSet.AddPart(full.GetPart(i))
+			assert.True(t, added)
+			assert.NoError(t, err)
+		}
+	}()
+	_ = partSet.IsComplete()
+	wg.Wait()
+
+	assert.True(t, partSet.IsComplete())
 }
 
 func TestWrongProof(t *testing.T) {

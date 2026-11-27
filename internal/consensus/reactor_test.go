@@ -600,6 +600,14 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 		}),
 	}
 	states, genDoc, _, validatorSetUpdates := gen.generate(ctx, t)
+	// Seven in-process nodes gossiping at the test defaults (5 ms, 250 ms)
+	// delay proposals past the 5 s propose timeout under -race, stalling a
+	// height. Production gossip intervals keep the test's message load sane.
+	gossipConfig := config.DefaultConsensusConfig()
+	for _, state := range states {
+		state.config.PeerGossipSleepDuration = gossipConfig.PeerGossipSleepDuration
+		state.config.PeerQueryMaj23SleepDuration = gossipConfig.PeerQueryMaj23SleepDuration
+	}
 	valsSets := make(map[int64]bytes.HexBytes, len(validatorSetUpdates))
 	for height, vsu := range validatorSetUpdates {
 		valsSet, err := types.PB2TM.ValidatorSetFromProtoUpdate(genDoc.QuorumType, &vsu)
