@@ -20,7 +20,7 @@ concurrency:
 jobs:
   govulncheck:
     name: govulncheck
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-slim
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
