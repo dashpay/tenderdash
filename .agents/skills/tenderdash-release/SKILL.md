@@ -196,11 +196,10 @@ version. It updates:
 
 - the Tenderdash image dashmate pins in
   `packages/dashmate/configs/defaults/getBaseConfigFactory.js`. The target tag
-  is the floating `X.Y` for a full release on the current stable line, else
-  the exact version tag (a prerelease, or an older-line release whose alias
-  does not move). If the configured tag differs, change it and add a dashmate
-  config migration that updates existing configs; if it already is that `X.Y`,
-  verify it resolves to the new image and leave the file unchanged;
+  is the floating `X.Y` if it now resolves to the new image (a full release on
+  the current stable line; check its digest), else the exact version tag. If
+  the configured tag differs, change it and add a dashmate config migration
+  that updates existing configs; otherwise leave the file unchanged;
 - the crate tag in `packages/rs-drive-abci/Cargo.toml` and
   `packages/rs-drive-proof-verifier/Cargo.toml` (`tenderdash-abci`) and
   `packages/dapi-grpc/Cargo.toml` (`tenderdash-proto`); all three move together;
