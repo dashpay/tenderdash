@@ -192,14 +192,15 @@ merge commit in `develop` and publish a GitHub release (a prerelease for
 `-dev.N`).
 
 Then open ONE draft PR in `dashpay/platform` that moves Platform to the new
-version. It updates together:
+version. It updates:
 
 - the Tenderdash image dashmate pins in
-  `packages/dashmate/configs/defaults/getBaseConfigFactory.js`: the floating
-  `X.Y` tag for a full release on the current stable line (verify it now
-  resolves to the new image), the exact version tag for a prerelease or an
-  older-line release whose alias does not move; when the configured tag
-  changes, add a dashmate config migration that updates existing configs;
+  `packages/dashmate/configs/defaults/getBaseConfigFactory.js`, when it must
+  change: the exact version tag for a prerelease or an older-line release whose
+  alias does not move, or a new `X.Y` for a new stable line, plus a dashmate
+  config migration that updates existing configs. For a patch on the current
+  stable line the configured `X.Y` stays: verify it now resolves to the new
+  image and leave the file unchanged;
 - the crate tag in `packages/rs-drive-abci/Cargo.toml` and
   `packages/rs-drive-proof-verifier/Cargo.toml` (`tenderdash-abci`) and
   `packages/dapi-grpc/Cargo.toml` (`tenderdash-proto`); all three move together;
@@ -207,8 +208,8 @@ version. It updates together:
   (`cargo update -p tenderdash-abci -p tenderdash-proto`).
 
 Find the current pins first (`git grep` the old tag and image version) rather
-than assuming the paths above are complete. Never move the crate tags without
-the image the PR points dashmate to, or the reverse.
+than assuming the paths above are complete. The image dashmate gets and the
+crate tags must name the same release; never move one without the other.
 
 Through the floating `X.Y` tag, dashmate deliberately picks up later stable
 patch images before Platform bumps the crate: Drive checks ABCI compatibility,
