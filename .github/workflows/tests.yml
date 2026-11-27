@@ -87,9 +87,12 @@ jobs:
             go.sum
             Makefile
 
-      # get-diff-action leaves a remote whose URL embeds the job token.
-      - name: Remove get-diff-action remote
-        run: git remote remove get-diff-action || true
+      # Without a git checkout get-diff-action reports no changes and the tests
+      # are skipped. It also leaves a remote whose URL embeds the job token.
+      - name: Check checkout and remove get-diff-action remote
+        run: |
+          git rev-parse --git-dir > /dev/null
+          git remote remove get-diff-action || true
 
       - uses: actions/setup-go@v7.1.0
         if: env.GIT_DIFF
