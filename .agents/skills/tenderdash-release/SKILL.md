@@ -84,10 +84,11 @@ crate reject.
 
 Every release, not only an ABCI change, gets a matching rs-tenderdash-abci
 release: Platform consumes Tenderdash through both the Docker image and the
-crate tag. The crate keeps the compatible `major.minor` (the ABCI contract) and
-defaults to the new Tenderdash version in `proto/build.rs`; its patch level is
-independent of the Tenderdash patch (e.g. rs-tenderdash-abci `v1.8.1` builds
-against Tenderdash `v1.8.0`). During release preparation, open its PR before
+crate tag. The crate's `major.minor` follows the Tenderdash release line, and
+`proto/build.rs` defaults to the new Tenderdash version; `check_version`
+enforces ABCI compatibility separately. Its patch level is independent of the
+Tenderdash patch (e.g. rs-tenderdash-abci `v1.8.1` builds against Tenderdash
+`v1.8.0`). During release preparation, open its PR before
 tagging. It carries the crate version, proto default version and changelog, so
 no separate version PR is needed. Its CI passes only once the Tenderdash tag
 and Docker image exist (see [Update Dash Platform](#update-dash-platform)).
