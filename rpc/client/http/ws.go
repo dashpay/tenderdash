@@ -11,6 +11,7 @@ import (
 	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/dashpay/tenderdash/internal/pubsub"
+	tmquery "github.com/dashpay/tenderdash/internal/pubsub/query"
 	"github.com/dashpay/tenderdash/libs/log"
 	rpcclient "github.com/dashpay/tenderdash/rpc/client"
 	"github.com/dashpay/tenderdash/rpc/coretypes"
@@ -36,6 +37,8 @@ type wsEvents struct {
 	lifetime     context.Context
 	endLifetime  context.CancelFunc
 	listenerDone chan struct{}
+	// orphans tracks unsubscribeOrphan calls; Stop joins them.
+	orphans sync.WaitGroup
 	// resubscribeDelay gives Tendermint time to restart after an RPC error.
 	resubscribeDelay time.Duration
 }
@@ -91,10 +94,12 @@ func (w *wsEvents) Start(ctx context.Context) error {
 }
 
 // Stop waits for the websocket client, which joins reconnect callbacks, to shut
-// down with the context passed to Start, then joins the event loop.
+// down with the context passed to Start, then joins the event loop and pending
+// unsubscribes from forgotten queries.
 func (w *wsEvents) Stop() error {
 	err := w.ws.Stop()
 	w.stopListener()
+	w.orphans.Wait()
 	return err
 }
 
@@ -283,11 +288,6 @@ func (w *wsEvents) redoSubscriptionsAfter(ctx context.Context, d time.Duration) 
 		if !ok {
 			continue
 		}
-		// If q is forgotten during this send, it can stay subscribed upstream
-		// until the next reconnect, holding one of the node's per-client
-		// subscription slots. eventListener drops its events meanwhile, and
-		// subscribing to q again adopts it (ErrAlreadySubscribed is ignored).
-		// Cleanup of orphaned subscriptions is tracked in #1641.
 		if err := w.ws.Subscribe(ctx, q); err != nil {
 			w.Logger.Error("failed to resubscribe", "query", q, "err", err)
 			w.mtx.Lock()
@@ -296,12 +296,70 @@ func (w *wsEvents) redoSubscriptionsAfter(ctx context.Context, d time.Duration) 
 				delete(w.subscriptions, q)
 			}
 			w.mtx.Unlock()
+			continue
+		}
+		w.mtx.RLock()
+		_, kept := w.subscriptions[q]
+		w.mtx.RUnlock()
+		if !kept {
+			// Forgotten during the send, so its unsubscribe may have gone first.
+			w.orphans.Add(1)
+			go w.unsubscribeOrphan(ctx, q)
 		}
 	}
 }
 
-func isErrAlreadySubscribed(err error) bool {
-	return strings.Contains(err.Error(), pubsub.ErrAlreadySubscribed.Error())
+// unsubscribeOrphan unsubscribes from query unless it was joined again. It runs
+// apart from eventListener, which must not wait for changes: the holder's send
+// can wait for the writer to restart, which waits for eventListener to read.
+func (w *wsEvents) unsubscribeOrphan(ctx context.Context, query string) {
+	defer w.orphans.Done()
+	if err := w.unsubscribeOrphanQuery(ctx, query); err != nil && ctx.Err() == nil {
+		w.Logger.Warn("failed to unsubscribe from a query forgotten during its resubscribe",
+			"query", query, "err", err)
+	}
+}
+
+// unsubscribeOrphanQuery holds changes through the canonical ownership check and send.
+func (w *wsEvents) unsubscribeOrphanQuery(ctx context.Context, query string) error {
+	canonical, err := canonicalQuery(query)
+	if err != nil {
+		// The server can interpret an invalid query as an unsubscribe-all.
+		w.Logger.Debug("skipping orphan cleanup for an invalid query", "query", query, "err", err)
+		return nil
+	}
+	if err := w.lockChanges(ctx); err != nil {
+		return err
+	}
+	defer w.unlockChanges()
+	w.mtx.RLock()
+	used := false
+	for q := range w.subscriptions {
+		if owned, err := canonicalQuery(q); err == nil && owned == canonical {
+			used = true
+			break
+		}
+	}
+	w.mtx.RUnlock()
+	if used {
+		return nil
+	}
+	return w.ws.Unsubscribe(ctx, query)
+}
+
+func canonicalQuery(query string) (string, error) {
+	q, err := tmquery.New(query)
+	if err != nil {
+		return "", err
+	}
+	return q.String(), nil
+}
+
+// isErrHarmless reports an error that loses no subscription: subscribing twice,
+// or unsubscribing twice, as a leave and unsubscribeOrphan can.
+func isErrHarmless(err error) bool {
+	return strings.Contains(err.Error(), pubsub.ErrAlreadySubscribed.Error()) ||
+		strings.Contains(err.Error(), pubsub.ErrSubscriptionNotFound.Error())
 }
 
 func (w *wsEvents) eventListener(ctx context.Context, done chan<- struct{}) {
@@ -314,16 +372,15 @@ func (w *wsEvents) eventListener(ctx context.Context, done chan<- struct{}) {
 			}
 
 			if resp.Error != nil {
-				w.Logger.Error("WS error", "err", resp.Error.Error())
-				// Error can be ErrAlreadySubscribed or max client (subscriptions per
-				// client) reached or Tendermint exited.
-				// We can ignore ErrAlreadySubscribed, but need to retry in other
-				// cases.
-				if !isErrAlreadySubscribed(resp.Error) {
-					// Resubscribe after a delay to give Tendermint time to restart (if
-					// crashed).
-					w.redoSubscriptionsAfter(ctx, w.resubscribeDelay)
+				if isErrHarmless(resp.Error) {
+					w.Logger.Debug("ignoring harmless WS subscription error", "err", resp.Error.Error())
+					continue
 				}
+				w.Logger.Error("WS error", "err", resp.Error.Error())
+				// Other errors, such as max subscriptions per client reached or
+				// Tendermint exited, need a retry. Resubscribe after a delay to give
+				// Tendermint time to restart (if crashed).
+				w.redoSubscriptionsAfter(ctx, w.resubscribeDelay)
 				continue
 			}
 
