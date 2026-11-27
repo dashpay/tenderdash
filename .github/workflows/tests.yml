@@ -30,10 +30,16 @@ jobs:
       name: lklimek-runner-inventory
       deployment: false
     outputs:
-      primary-part: >-
+      # One runner label per test slot: the self-hosted runner first, then the
+      # hosted fallback. The attempt guards against reuse by a partial rerun.
+      # TODO: take a per-slot list from the action once it can count several
+      # idle runners.
+      runners: >-
         ${{ steps.choose.outcome == 'success'
         && contains(fromJSON(steps.choose.outputs.use-runner || '[]'), 'lklimek-tenderdash')
-        && '03' || 'none' }}
+        && '["lklimek-tenderdash","ubuntu-26.04","ubuntu-26.04","ubuntu-26.04","ubuntu-26.04","ubuntu-26.04"]'
+        || '["ubuntu-26.04","ubuntu-26.04","ubuntu-26.04","ubuntu-26.04","ubuntu-26.04","ubuntu-26.04"]' }}
+      attempt: ${{ github.run_attempt }}
     steps:
       - name: Check self-hosted runner availability
         id: choose
@@ -47,16 +53,21 @@ jobs:
           fallback-on-error: true
 
   tests:
+    name: tests (${{ matrix.part }})
     needs: lklimek-select-runner
     # Run even if the selector failed: every part then uses the hosted runner.
     if: ${{ !cancelled() }}
     runs-on: >-
-      ${{ matrix.part == needs.lklimek-select-runner.outputs.primary-part
+      ${{ needs.lklimek-select-runner.result == 'success'
+      && needs.lklimek-select-runner.outputs.attempt == github.run_attempt
+      && fromJSON(needs.lklimek-select-runner.outputs.runners || '[]')[matrix.slot] == 'lklimek-tenderdash'
       && 'lklimek-tenderdash' || 'ubuntu-26.04' }}
-    # Self-hosted part only: the host resolves the profile to its local image
+    # Self-hosted slots only: the host resolves the profile to its local image
     # and fixes the job limits. An empty string means no container.
     container: >-
-      ${{ matrix.part == needs.lklimek-select-runner.outputs.primary-part
+      ${{ needs.lklimek-select-runner.result == 'success'
+      && needs.lklimek-select-runner.outputs.attempt == github.run_attempt
+      && fromJSON(needs.lklimek-select-runner.outputs.runners || '[]')[matrix.slot] == 'lklimek-tenderdash'
       && 'lklimek-tenderdash' || '' }}
     timeout-minutes: 30
     permissions:
@@ -67,7 +78,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        part: ["00", "01", "02", "03", "04", "05"]
+        # Slots take self-hosted runners first: part 03 is light and long,
+        # part 00 is the heaviest and most timing-sensitive.
+        include:
+          - {part: "03", slot: 0}
+          - {part: "04", slot: 1}
+          - {part: "05", slot: 2}
+          - {part: "02", slot: 3}
+          - {part: "01", slot: 4}
+          - {part: "00", slot: 5}
     steps:
       - uses: actions/checkout@v7
         with:
