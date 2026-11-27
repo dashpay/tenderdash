@@ -314,7 +314,8 @@ func (e *ProposalCompletedEvent) GetType() EventType {
 }
 
 type ProposalCompletedAction struct {
-	logger log.Logger
+	logger    log.Logger
+	blockExec *blockExecutor
 }
 
 func (c *ProposalCompletedAction) Execute(ctx context.Context, stateEvent StateEvent) error {
@@ -384,5 +385,6 @@ func (c *ProposalCompletedAction) Execute(ctx context.Context, stateEvent StateE
 		// Transit to EnterPrecommit
 		return stateEvent.Ctrl.Dispatch(ctx, &TryFinalizeCommitEvent{Height: height}, stateData)
 	}
+	c.blockExec.processPolkaBlock(ctx, &stateData.RoundState)
 	return nil
 }

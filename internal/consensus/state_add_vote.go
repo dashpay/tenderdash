@@ -44,7 +44,7 @@ type AddVoteAction struct {
 func newAddVoteAction(cs *State, ctrl *Controller, statsQueue *chanQueue[msgInfo]) *AddVoteAction {
 	addToVoteSet := addVoteToVoteSetFunc(cs.metrics, cs.eventPublisher)
 	loggingMw := addVoteLoggingMw()
-	updateValidBlockMw := addVoteUpdateValidBlockMw(cs.eventPublisher)
+	updateValidBlockMw := addVoteUpdateValidBlockMw(cs.eventPublisher, cs.blockExecutor)
 	dispatchPrevoteMw := addVoteDispatchPrevoteMw(ctrl)
 	validateVoteMw := addVoteValidateVoteMw()
 	errorMw := addVoteErrorMw(cs.evpool, cs.logger, cs.privValidator, cs.emitter)
@@ -135,7 +135,7 @@ func addVoteToVoteSetFunc(metrics *Metrics, ep *EventPublisher) AddVoteFunc {
 	}
 }
 
-func addVoteUpdateValidBlockMw(ep *EventPublisher) AddVoteMiddlewareFunc {
+func addVoteUpdateValidBlockMw(ep *EventPublisher, blockExec *blockExecutor) AddVoteMiddlewareFunc {
 	return func(next AddVoteFunc) AddVoteFunc {
 		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 			added, err := next(ctx, stateData, vote)
@@ -172,6 +172,11 @@ func addVoteUpdateValidBlockMw(ep *EventPublisher) AddVoteMiddlewareFunc {
 			// Dropping the Proposal keeps isProposalComplete false, so this round
 			// prevotes nil on timeoutPropose, not on the retargeted block completing.
 			stateData.retargetTo(blockID, retargetOnPolka)
+			// The round votes no more: a polka block already held is processed
+			// so that precommits for it verify (see processPolkaBlock).
+			if stateData.Step == cstypes.RoundStepPrecommit {
+				blockExec.processPolkaBlock(ctx, &stateData.RoundState)
+			}
 			err = stateData.Save()
 			if err != nil {
 				return added, err
