@@ -1,3 +1,135 @@
+## [2.0.0] - 2026-11-26
+
+First stable release of the 2.0 line. This section covers every change since 1.8.2; the `2.0.0-dev.N` sections below list the same changes per prerelease. Breaking Changes and Migration Notes are the complete list; [UPGRADING.md](UPGRADING.md) has detailed steps for selected changes.
+
+### Breaking Changes
+
+- Consensus: new `CONSENSUS_VERSION_2` (proposer liveness and round skipping); once a chain enables it, only nodes running 2.0.0 or later can follow it, so every node must upgrade before activation (#1572)
+- ABCI: Tenderdash calls `VerifyVoteExtension` for the vote extensions of a commit, with an empty `validator_pro_tx_hash`, after `ProcessProposal` and before it saves the block; an application that does not return `ACCEPT` for a valid commit stops block production, so deploy application support first (#1520)
+- RPC: `broadcast_tx`, `broadcast_tx_sync` and `broadcast_tx_commit` return the original `CheckTx` rejection, not "tx already exists in cache", for resubmitted invalid transactions when `keep-invalid-txs-in-cache` is enabled (#1530)
+- RPC: `broadcast_evidence` returns `ErrEvidenceDisabled` while the committed `evidence.max_bytes` is zero (#1547)
+
+### Migration Notes
+
+- Invalid `[p2p]` configuration prevents startup: an `incoming-connection-window` below 1ms (including an explicit zero), a `max-packet-msg-payload-size` of zero or less, `max-outgoing-connections` above `max-connections`, negative rates or durations, and `allowlist-only` without persistent or bootstrap peers; the defaults pass (#1550)
+- The PostgreSQL event sink and `tx-index.psql-conn` are removed; `indexer = ["psql"]` or any other unsupported indexer prevents startup, so select `kv` or `null`; a leftover `psql-conn` key is ignored and existing PostgreSQL data is untouched (#1553)
+- The CLI waits up to `--shutdown-timeout` (default 30s) for cleanup after a termination signal and exits with an error on timeout; the Docker entrypoint now waits for that shutdown, so give `docker stop`, orchestrators and supervisors a grace period longer than 30s (Docker's default is 10s) to avoid a SIGKILL during cleanup (#1513, #1607)
+- On a chain at consensus version 2, a validator using a socket or gRPC remote signer cannot sign proposer heartbeats or round skip votes, so the other validators skip its rounds that wait for transactions; the Dash Core and file signers sign both (#1572)
+- `consensus.wal-skip-rounds-to-last` has no effect on a chain at consensus version 2 (#1572)
+- `consensus.peer-query-maj23-sleep-duration` (default 2s) also paces round state re-announcements and the redelivery of votes and commits a peer has not acknowledged; raising it slows recovery from lost consensus messages (#1598, #1599, #1624)
+- When a peer's outbound queue is full, consensus state-channel messages to that peer are dropped instead of blocking delivery to other peers; drops are counted in `p2p_router_channel_queue_dropped_msgs` with `ch_id="32"` (#1625)
+- New metrics `consensus_proposer_heartbeats_sent`, `consensus_proposer_heartbeats_received`, `consensus_proposer_silences` and `consensus_round_skips`; new `consensus_block_sync_apply_stage_duration` stage `decode` and `state_block_apply_stage_duration` stage `process_proposal_prevalidate` (#1572, #1595, #1616)
+- `consensus_commit_verify_failures` gains `reason="extensions_rejected"` and also counts commits refused in block sync and the commit built from the node's own precommits (#1520)
+- ABCI: Tenderdash may call `ProcessProposal` again at the same height, for another round or for the same round and block, and finalizes only the round processed last; `ExtendVote` must be free of side effects and return the vote extensions that commit-level `VerifyVoteExtension` accepts (#1520)
+- ABCI: on a chain at consensus version 2, a proposer that waits for transactions sends heartbeats only while the application answers `Echo`, on every backend that receives `PrepareProposal`, within the heartbeat interval; otherwise the other validators skip its idle rounds (#1572)
+- ABCI: an `ExtendVote` response with `DEFAULT` vote extensions makes the node panic with a clear error before it signs the vote; such a response previously crashed the signer or produced votes peers rejected (#1565)
+- Go API: `types.PrivValidator` gains `SignProposerHeartbeat` and `SignRoundSkipVote`; signer implementations outside this repository must add them (#1572)
+- Go API: exported database APIs use Tenderdash's own `libs/db` interfaces; custom providers must update imports and `Batch`/`Iterator` return types (#1551, #1566)
+- Go API: services embedding `libs/service.BaseService` get an `OnStart` context that is cancelled before `OnStop`; callers must `Stop` then `Wait` before releasing resources, and `TimeoutTicker` implementations must provide `Wait` (#1513)
+- Go API: the generated type `blocksync.BlockResponse.Block` is `[]byte` (the serialized block) instead of `*types.Block`; the wire format is unchanged (#1595)
+- The Go module path stays `github.com/dashpay/tenderdash`, so Go tooling does not resolve `v2.x` tags; Go consumers pin commit pseudo-versions
+
+### Dash Platform Integration
+
+- Drive: applications built on `rs-tenderdash-abci` accept `^major.minor` of the ABCI version they link; Drive 5.1.0-rc.1 links ABCI 1.5, so it accepts Tenderdash 2.0.0 and rejects 1.8.x (ABCI 1.4.0)
+- Drive 5.1.0-rc.1 handles the commit-level `VerifyVoteExtension` call; upgrade Drive and Tenderdash together, as dashmate does
+- ABCI stays 1.5.0 with the commit-level `VerifyVoteExtension` call (#1520), because Drive, the only ABCI application, handles it from 5.1.0-rc.1; the version handshake does not check this, as an application built for ABCI 1.4 (`^1.4`) accepts 1.5.0
+- dashmate: set the Tenderdash image to `dashpay/tenderdash:2.0.0`; the configuration dashmate 5.1.0-rc.1 generates passes the new validation (`kv` indexer, no `psql-conn`, valid `[p2p]` limits), and it stops the container with a 40s grace period
+- Before activation: on a chain at consensus version 0 or 1, 2.0.0 nodes keep block protocol 14, pass the peer compatibility check of 1.8.x nodes (it compares the block protocol, not the P2P protocol) and do not send the new consensus messages, so a network upgrades node by node
+- Activation: Drive enables consensus version 2 with Platform protocol version 15, through a consensus parameter update that applies from the next height; every validator and full node must run 2.0.0 before that, and a node cannot return to 1.8.x afterwards
+
+### Protocol Versions
+
+- ABCI 1.5.0 (was 1.4.0): consensus params add `CONSENSUS_VERSION_2` and the `proposer_heartbeat`/`proposer_silence` timeouts (#1572)
+- P2P protocol 11 (was 10): new `ProposerHeartbeat`, `RoundSkipVote` and `RoundSkipCertificate` state-channel messages, sent only on chains at consensus version 2 (#1572)
+- Block protocol stays 14: no block, vote or commit format changes; `BlockResponse.block` changes from an embedded block message to its bytes, which is the same encoding on the wire (#1595); at consensus version 2 the proposer liveness timeouts are hashed into the header's `ConsensusHash`, which is unchanged at versions 0 and 1 (#1572)
+
+### Features
+
+- Hand a silent proposer's idle round to the next proposer; activated by consensus version 2, which every node must support before a chain enables it (#1572)
+- Follow live chain evidence settings (#1547)
+- Return the cached `CheckTx` rejection for resubmitted transactions (#1530)
+- Add `--shutdown-timeout` to `tenderdash start` (#1513)
+
+### Bug Fixes
+
+- Validate a fresh block's proposer before prevoting (#1527)
+- Validate a proposed block against the committed state before `ProcessProposal`, so a block that does not continue the chain gets a nil prevote without reaching the application; WAL replay judges proposal timeliness again (#1616)
+- Never extend a relock precommit without `ProcessProposal` for the round (#1523)
+- Propose a freshly built block without a POL round (#1564)
+- Verify commit vote extensions before a commit is taken (#1520)
+- Replay blocks with their historical quorum (#1567)
+- Re-announce round state to each peer periodically, so a peer that missed an announcement still receives proposals (#1598)
+- Stop a previous-height precommit from marking the peer's current-height votes as received (#1601)
+- Resend same-round votes the peer never acknowledged (#1599)
+- Resend a commit the peer has not acknowledged (#1624)
+- Wait for consensus and block sync workers to stop before the node closes its stores on shutdown (#1513)
+- Keep healthy block sync peers during slow local application (#1548)
+- Schedule block sync peers by active response service (#1549)
+- Serve block sync blocks as the bytes they were committed with, so blocks with unknown fields or non-canonical encoding can be synced (#1595)
+- Hand over from block sync to consensus at the chain tip despite peers claiming heights they do not serve (#1618)
+- Enforce peer penalties and validate network settings (#1550)
+- Stop router dialing when the context deadline expires (#1588)
+- Trim the simple priority queue on every push (#1596)
+- Stop a congested peer from stalling consensus round-state gossip to other peers (#1625)
+- Stop a JSON-RPC batch whose caller has disconnected (#1610)
+- Stop the RPC WebSocket client from resubscribing subscription IDs as queries after a reconnect, which stalled event delivery (#1623)
+- Wait for Tenderdash to exit after the Docker entrypoint forwards a signal (#1607)
+
+### Refactor
+
+- Own GoLevelDB and memory database adapters (#1551, #1566)
+- Remove the PostgreSQL event sink (#1553)
+
+### Documentation
+
+- Add a source-derived consensus protocol specification (#1562)
+- Document proposer liveness and round skipping (#1606)
+- Migrate generated documentation to mdBook (#1585)
+- Align consensus references and guides with current behavior (#1586)
+- Version releases by RPC, ABCI, P2P/consensus and block-format contracts (#1603)
+- Document running targeted tests with BLS cgo flags (#1622)
+
+### Testing
+
+- Exercise block sync during slow local application (#1560)
+- Wait for goroutines before first-commit cleanup (#1507)
+- Build block sync handover tests against `BlockResponse.Height` (#1621)
+- Assert real budget contention under a sustained vote flood (#1626)
+
+### Build
+
+- Update Go to 1.27.4 (#1617)
+- Use supported Alpine 3.24 Docker bases (#1591)
+- Bump google.golang.org/grpc to 1.85.0 (#1580)
+- Bump golang.org/x/crypto to 0.59.0 (#1631)
+- Bump golang.org/x/net to 0.63.0 (#1638)
+- Bump golang.org/x/sync to 0.25.0 (#1614)
+- Bump golang.org/x/sys to 0.50.0 (#1613)
+- Bump github.com/fxamacker/cbor/v2 to 2.10.0 (#1539, #1579)
+- Bump github.com/prometheus/common to 0.74.0 (#1542, #1581, #1629)
+- Bump github.com/prometheus/client_golang to 1.25.0 (#1538)
+- Bump github.com/oasisprotocol/oasis-core/go to 0.2605.0 (#1531, #1615, #1637)
+- Bump github.com/bufbuild/buf to 1.75.0 (#1556, #1570)
+
+### Miscellaneous Tasks
+
+- Replace the release script and GoReleaser workflow with the Dash Platform release process (#1552)
+- Align dev checks and Docker release versions; manual Docker runs build only existing release tags (#1594)
+- Make `dev` the only development branch (#1608)
+- Assign merged pull requests to their release line's milestone (#1619)
+- Gate govulncheck on an allowlist; GO-2026-6278 (gorilla/websocket client frame-mask PRNG) is accepted until gorilla/websocket tags a fixed release (#1640)
+- Build and test on Ubuntu 26.04 (#1590)
+- Pin Docker workflow actions to commit SHAs and restrict token permissions (#1589)
+- Replace Janitor with native PR concurrency (#1592)
+- Migrate proto lint to buf-action (#1561)
+- Migrate the golangci-lint configuration to gomodguard_v2 (#1524)
+- Check Markdown links on every PR and fix dead links (#1609)
+- Run Claudius reviews after green tests, on push or label (#1512, #1516, #1525, #1526)
+- Align the PR template with the TL;DR / user story / scenario structure (#1529)
+- Let PR Hygiene post its verdicts to the dashboard (#1634)
+- Update CI actions and PR Hygiene pins (#1505, #1508, #1510, #1511, #1514, #1517, #1518, #1519, #1521, #1528, #1533, #1557, #1571, #1611, #1612, #1632, #1633, #1635, #1636)
+
 ## [2.0.0-dev.3] - 2026-11-17
 
 ### Migration Notes
