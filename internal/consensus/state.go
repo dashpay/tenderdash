@@ -560,8 +560,9 @@ func (cs *State) OnStart(ctx context.Context) (err error) {
 			// 1) prep work
 			cs.wal.Stop()
 			cs.wal.Wait()
-			// A pending polka block retry is kept: replaying the records again
-			// cannot arm it, as they are all duplicates by then.
+			// A pending polka block retry is kept: the repaired WAL replays
+			// against the same round state, where block parts and prevotes
+			// already accepted do not arm it again.
 
 			repairAttempted = true
 
