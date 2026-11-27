@@ -2,7 +2,7 @@
 
 This guide provides instructions for upgrading to specific versions of Tenderdash.
 
-## Unreleased
+## v2.0.0
 
 ### BREAKING: the `[p2p]` config section is now validated at startup
 
