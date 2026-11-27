@@ -28,7 +28,7 @@ concurrency:
 
 jobs:
   check-mocks:
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
 
