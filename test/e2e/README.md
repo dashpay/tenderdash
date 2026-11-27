@@ -1,13 +1,13 @@
 # End-to-End Tests
 
-Spins up and tests Tenderdash networks in Docker Compose based on a testnet manifest. To run the CI testnet:
+Spins up and tests Tenderdash networks in Docker Compose based on a testnet manifest. To run the Dash Core testnet:
 
 ```sh
 make
-./build/runner -f networks/ci.toml
+./build/runner -f networks/dashcore.toml
 ```
 
-This creates and runs a testnet named `ci` under `networks/ci/`.
+This creates and runs a testnet named `dashcore` under `networks/dashcore/`.
 
 ## Conceptual Overview
 
@@ -31,7 +31,7 @@ The tests must take into account the network and/or node configuration, and tole
 
 ## Testnet Manifests
 
-Testnets are specified as TOML manifests. For an example see [`networks/ci.toml`](networks/ci.toml), and for documentation see [`pkg/manifest.go`](pkg/manifest.go).
+Testnets are specified as TOML manifests. For an example see [`networks/dashcore.toml`](networks/dashcore.toml), and for documentation see [`pkg/manifest.go`](pkg/manifest.go).
 
 ## Random Testnet Generation
 
@@ -88,11 +88,11 @@ Test cases are written as normal Go tests in `tests/`. They use a `testNode()` h
 
 ### Running Manual Tests
 
-To run tests manually, set the `E2E_MANIFEST` environment variable to the path of the testnet manifest (e.g. `networks/ci.toml`) and run them as normal, e.g.:
+To run tests manually, set the `E2E_MANIFEST` environment variable to the path of the testnet manifest (e.g. `networks/dashcore.toml`) and run them as normal, e.g.:
 
 ```sh
-./build/runner -f networks/ci.toml start
-E2E_MANIFEST=networks/ci.toml go test -v ./tests/...
+./build/runner -f networks/dashcore.toml start
+E2E_MANIFEST=networks/dashcore.toml go test -v ./tests/...
 ```
 
 Optionally, `E2E_NODE` specifies the name of a single testnet node to test.
@@ -103,7 +103,7 @@ These environment variables can also be specified in `tests/e2e_test.go` to run 
 func init() {
 	// This can be used to manually specify a testnet manifest and/or node to
 	// run tests against. The testnet must have been started by the runner first.
-	os.Setenv("E2E_MANIFEST", "networks/ci.toml")
+	os.Setenv("E2E_MANIFEST", "networks/dashcore.toml")
 	os.Setenv("E2E_NODE", "validator01")
 }
 ```
@@ -201,7 +201,7 @@ You can run container binaries using the Delve debugger.
 To enable Delve, set the `DEBUG` environment variable when setting up the runner:
 
 ```bash
-DEBUG=1 ./build/runner -f networks/ci.toml setup
+DEBUG=1 ./build/runner -f networks/dashcore.toml setup
 ```
 
 If you set DEBUG to `stop`, the app won't start automatically.

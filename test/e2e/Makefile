@@ -34,9 +34,6 @@ e2e/app/compile:
 runner/simple: runner tests e2e/app/compile
 	./build/runner -f networks/simple.toml
 
-runner/ci: runner tests e2e/app/compile
-	./build/runner -f networks/ci.toml
-
 runner/dashcore: runner tests e2e/app/compile
 	./build/runner -f networks/dashcore.toml
 
