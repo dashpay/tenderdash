@@ -179,9 +179,10 @@ func (c *blockExecutor) ensureOwnRound(ctx context.Context, rs *cstypes.RoundSta
 // this node, with no timeout to fall back on, never leaves the round.
 //
 // The block is processed, not voted on. A failure is logged, not returned. A
-// failure other than a rejection, an invalid block, a stopped ABCI client or a
-// canceled ctx schedules one retry, run by retryPolkaBlock on the consensus
-// goroutine; until it is due, a new call for the same block does nothing.
+// failure other than a rejection, an invalid block, a malformed response, a
+// stopped ABCI client or a canceled ctx schedules one retry, run by
+// retryPolkaBlock on the consensus goroutine; until it is due, a new call for
+// the same block does nothing.
 func (c *blockExecutor) processPolkaBlock(ctx context.Context, rs *cstypes.RoundState) {
 	blockID, ok := unprocessedPolkaBlock(rs)
 	if !ok || c.polkaRetry.is(rs.Height, rs.Round, blockID) {
@@ -225,7 +226,8 @@ func (c *blockExecutor) tryPolkaBlock(ctx context.Context, rs *cstypes.RoundStat
 		return
 	}
 	if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, sm.ErrBlockRejected) ||
-		errors.As(err, &sm.ErrInvalidBlock{}) || errors.Is(err, abciclient.ErrClientStopped) {
+		errors.As(err, &sm.ErrInvalidBlock{}) || errors.Is(err, sm.ErrMalformedResponse) ||
+		errors.Is(err, abciclient.ErrClientStopped) {
 		c.logger.Error("cannot process the round's polka block; precommits for it will be rejected",
 			"height", rs.Height, "round", rs.Round, "hash", blockID.Hash, "error", err)
 		return

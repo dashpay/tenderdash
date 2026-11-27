@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"time"
 
@@ -363,6 +362,7 @@ func deterministicPrepareProposalHashes(request *abci.RequestPrepareProposal, re
 // ProcessProposal sends the proposal to ABCI App and verifies the response.
 // With verify, the block is validated against state before the app sees it,
 // and against the app's response afterwards; a failure returns ErrInvalidBlock.
+// A response breaking the protocol returns an error wrapping ErrMalformedResponse.
 func (blockExec *BlockExecutor) ProcessProposal(
 	ctx context.Context,
 	block *types.Block,
@@ -403,16 +403,18 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		return CurrentRoundState{}, fmt.Errorf("ProcessProposal abci method: %w", err)
 	}
 	if resp.IsStatusUnknown() {
-		return CurrentRoundState{}, fmt.Errorf("ProcessProposal responded with status %s", resp.Status.String())
+		return CurrentRoundState{}, fmt.Errorf("%w: ProcessProposal responded with status %s",
+			ErrMalformedResponse, resp.Status.String())
 	}
 	if !resp.IsAccepted() {
 		return CurrentRoundState{}, ErrBlockRejected
 	}
 	if err := resp.Validate(); err != nil {
-		return CurrentRoundState{}, fmt.Errorf("ProcessProposal responded with invalid response: %w", err)
+		return CurrentRoundState{}, fmt.Errorf("%w: ProcessProposal responded with invalid response: %w",
+			ErrMalformedResponse, err)
 	}
 	if err := validateExecTxResults(resp.TxResults, block.Data.Txs); err != nil {
-		return CurrentRoundState{}, fmt.Errorf("invalid tx results: %w", err)
+		return CurrentRoundState{}, fmt.Errorf("%w: invalid tx results: %w", ErrMalformedResponse, err)
 	}
 
 	stages.done("process_proposal_abci")
@@ -429,7 +431,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		blockExec.logger.Error(
 			"Client returned invalid app hash size", "bytesLength", len(resp.AppHash),
 		)
-		return stateChanges, errors.New("invalid App Hash size")
+		return stateChanges, fmt.Errorf("%w: invalid App Hash size", ErrMalformedResponse)
 	}
 
 	stages.done("process_proposal_changeset")

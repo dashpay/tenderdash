@@ -339,6 +339,49 @@ func TestProcessProposalValidatesBlockBeforeApp(t *testing.T) {
 	}
 }
 
+// TestProcessProposalMalformedResponse checks that a malformed response is
+// refused with ErrMalformedResponse, which tells it apart from a failed call.
+func TestProcessProposalMalformedResponse(t *testing.T) {
+	testCases := map[string]func(*abci.ResponseProcessProposal){
+		"well-formed":     nil,
+		"app hash size":   func(r *abci.ResponseProcessProposal) { r.AppHash = r.AppHash[1:] },
+		"tx result count": func(r *abci.ResponseProcessProposal) { r.TxResults = r.TxResults[1:] },
+		"unknown status":  func(r *abci.ResponseProcessProposal) { r.Status = abci.ResponseProcessProposal_UNKNOWN },
+	}
+	for name, malform := range testCases {
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			state, stateDB, _ := makeState(t, 1, 1)
+			block, err := sf.MakeBlock(state, state.InitialHeight, new(types.Commit), 1)
+			require.NoError(t, err)
+			require.NotEmpty(t, block.Txs)
+			resp := &abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_ACCEPT,
+				AppHash: make([]byte, crypto.DefaultAppHashSize), TxResults: factory.ExecTxResults(block.Txs)}
+			if malform != nil {
+				malform(resp)
+			}
+			app := abcimocks.NewApplication(t)
+			app.On("ProcessProposal", mock.Anything, mock.Anything).Return(resp, nil).Once()
+			logger := log.NewNopLogger()
+			proxyApp := proxy.New(abciclient.NewLocalClient(logger, app), logger, proxy.NopMetrics())
+			require.NoError(t, proxyApp.Start(ctx))
+			eventBus := eventbus.NewDefault(logger)
+			require.NoError(t, eventBus.Start(ctx))
+			blockExec := sm.NewBlockExecutor(sm.NewStore(stateDB), proxyApp, new(mpmocks.Mempool),
+				sm.EmptyEvidencePool{}, store.NewBlockStore(dbm.NewMemDB()), eventBus)
+
+			_, err = blockExec.ProcessProposal(ctx, block, 0, state, false, types.VerifiedCommit{})
+			if malform == nil {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, sm.ErrMalformedResponse)
+		})
+	}
+}
+
 func TestUpdateConsensusParams(t *testing.T) {
 	const (
 		height = 1
