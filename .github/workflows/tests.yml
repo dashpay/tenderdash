@@ -22,12 +22,12 @@ jobs:
   # PRs) or on any API error the action falls back and every part stays hosted.
   # The environment must have no reviewers, wait timer, custom protection rules
   # or branch policy that excludes refs/pull/*/merge; those stall or fail it.
-  select-runner:
+  lklimek-select-runner:
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions: {}
     environment:
-      name: runner-inventory
+      name: lklimek-runner-inventory
       deployment: false
     outputs:
       primary-part: >-
@@ -40,22 +40,30 @@ jobs:
         continue-on-error: true
         uses: lklimek/runner-fallback-action@07b67c1deaf3d980853669c82ae50a2fac345e1a
         with:
-          github-token: ${{ secrets.RUNNER_INVENTORY_TOKEN }}
+          github-token: ${{ secrets.LKLIMEK_RUNNER_INVENTORY_TOKEN }}
           primary-runner: lklimek-tenderdash
           fallback-runner: ubuntu-26.04
           primaries-required: "1"
           fallback-on-error: true
 
   tests:
-    needs: select-runner
+    needs: lklimek-select-runner
     # Run even if the selector failed: every part then uses the hosted runner.
     if: ${{ !cancelled() }}
     runs-on: >-
-      ${{ matrix.part == needs.select-runner.outputs.primary-part
+      ${{ matrix.part == needs.lklimek-select-runner.outputs.primary-part
       && 'lklimek-tenderdash' || 'ubuntu-26.04' }}
+    # Self-hosted part only: a fresh job container from the runner's local image.
+    # An empty string means no container, so hosted parts run on the VM.
+    container: >-
+      ${{ matrix.part == needs.lklimek-select-runner.outputs.primary-part
+      && 'home-infra/tenderdash-executor:ubuntu26-go1.27.4-runner2.338.2' || '' }}
     timeout-minutes: 30
     permissions:
       contents: read
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
