@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   tests:
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-slim
     strategy:
       fail-fast: false
       matrix:
