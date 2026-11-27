@@ -828,6 +828,13 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 			if err != nil {
 				cs.logger.Error("failed update state-data", "err", err)
 			}
+		case <-cs.blockExecutor.polkaRetryC():
+			stateData := cs.stateDataStore.Get()
+			cs.blockExecutor.retryPolkaBlock(processCtx, &stateData.RoundState)
+			err := stateData.Save()
+			if err != nil {
+				cs.logger.Error("failed update state-data", "err", err)
+			}
 		case signed := <-cs.roundSkipSigner.signed():
 			stateData := cs.stateDataStore.Get()
 			cs.handleSignedRoundSkipVote(ctx, &stateData, signed)
