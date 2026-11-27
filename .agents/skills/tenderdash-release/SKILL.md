@@ -196,8 +196,9 @@ version. It updates:
 
 - the Tenderdash image dashmate pins in
   `packages/dashmate/configs/defaults/getBaseConfigFactory.js`. The target tag
-  is the floating `X.Y` if it now resolves to the new image (a full release on
-  the current stable line; check its digest), else the exact version tag. If
+  is the floating `X.Y` if it resolves to the new image once the Docker
+  workflow's alias promotion has finished (a full release on the current stable
+  line; check its digest), else the exact version tag. If
   the configured tag differs, change it and add a dashmate config migration
   that updates existing configs; otherwise leave the file unchanged;
 - the crate tag in `packages/rs-drive-abci/Cargo.toml` and
