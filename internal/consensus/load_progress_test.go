@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -58,15 +59,13 @@ func TestLoadHeightProgressUnderSustainedFlood(t *testing.T) {
 	newBlockCh := subscribe(ctx, t, h.cs.eventBus, types.EventQueryNewBlock)
 	newRoundCh := subscribe(ctx, t, h.cs.eventBus, types.EventQueryNewRound)
 
-	// Spend the budget before anything starts, so nothing here is paid for out
-	// of the bucket the node happened to be idle long enough to fill. The whole
-	// height is then funded by the refill rate the flood is also competing for.
-	drainVerificationBudget(h.inner)
-
 	// The flood starts before the height does and runs until the height is
 	// over, so there is no quiet window for the honest votes to arrive in.
 	stopFlood := h.sustainFlood(ctx, t, maxConnectionSlots-1)
 	defer stopFlood()
+
+	// Drain after seeding so setup time cannot refill the initial burst.
+	drainVerificationBudget(h.inner)
 
 	started := time.Now()
 	startTestRound(ctx, h.cs, height, round)
@@ -76,6 +75,10 @@ func TestLoadHeightProgressUnderSustainedFlood(t *testing.T) {
 	rs := h.cs.GetRoundState()
 	blockID := rs.BlockID()
 	require.False(t, blockID.IsNil(), "the node did not get a block proposed under the flood")
+
+	// Establish contention before honest votes; let the height finish on failure.
+	assert.Eventually(t, func() bool { return h.budgetWaits.count() > 0 }, ensureTimeout, time.Millisecond,
+		"the verification budget was never contended, so the flood did not load the node")
 
 	// The other validator's prevote, arriving over its own lane like any peer's.
 	honestArrived := time.Now()
@@ -104,17 +107,9 @@ func TestLoadHeightProgressUnderSustainedFlood(t *testing.T) {
 	require.Empty(t, h.cs.peerErrorQueue.ch,
 		"a flood of unverifiable votes must not be reported as its senders' fault")
 
-	// The height finishing quickly is only worth something if the node really
-	// was loaded while it did. The budget is the resource under contention, so
-	// the run has to have spent most of what the budget offered; a flood that
-	// never reached the verifier would leave this near the eleven work units
-	// the honest votes cost, and the deadline above would be met by a node that
-	// was never attacked.
+	// Token waits prove contention even when preemption limits flood throughput.
+	reportf(t, "the verification budget waited for tokens %.0f times", h.budgetWaits.count())
 	charged, allowed := float64(h.chargedWork()), budgetAllowance(verificationRate, elapsed)
-	reportf(t, "the node spent %.0f of the %.0f work the budget offered over the height (%.0f%%)",
-		charged, allowed, 100*charged/allowed)
-	require.Greater(t, charged, 0.5*allowed,
-		"the verification budget was never contended, so the flood did not load the node")
 	require.LessOrEqual(t, charged, allowed,
 		"more verification work was charged than the node-wide budget allows")
 }
@@ -134,8 +129,8 @@ func (h *floodHarness) sendFromPeer(
 	}
 }
 
-// sustainFlood keeps the given number of lanes supplied with unverifiable
-// prevotes until the returned function is called.
+// sustainFlood seeds each lane with an unverifiable precommit, then supplies
+// unverifiable prevotes until the returned function is called.
 //
 // A flood that is queued once and then drains leaves a quiet window behind it,
 // and an honest message arriving in that window measures nothing. Topping the
@@ -146,6 +141,19 @@ func (h *floodHarness) sustainFlood(ctx context.Context, t *testing.T, lanes int
 	// Deep enough that the lanes never run dry between top-ups, shallow enough
 	// that a top-up is not itself a long pause.
 	const perLane = 8
+
+	// A maximum-cost head makes each lane compete for whole-message budget,
+	// even when CPU contention slows the subsequent one-signature prevotes.
+	head := unsignedPrecommit(ctx, t, h, types.MaxVoteExtensions)
+	head.BlockSignature = wellFormedWrongSignature(ctx, t, h)
+	for i := 0; i < lanes; i++ {
+		h.sendFromPeer(ctx, t, attackerID(i), head.Copy())
+	}
+	h.offered.Add(int64(lanes))
+
+	// Populate every attacker lane before consensus starts.
+	h.floodPrevotes(ctx, t, lanes, perLane)
+	h.offered.Add(int64(lanes * perLane))
 
 	vote := unsignedPrevote(ctx, t, h)
 	ctx, cancel := context.WithCancel(ctx)

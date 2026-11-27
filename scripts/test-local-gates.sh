@@ -41,11 +41,10 @@ expect_lint_failure() {
 	test ! -s "$GATE_LOG"
 }
 
-# During migration, the current PR base is the explicit fallback.
+# Historical versioned refs must not substitute for the integration branch.
 git update-ref refs/remotes/origin/v1.8-dev HEAD
 git update-ref refs/remotes/origin/v9.0-dev HEAD
-expected_base=origin/v1.8-dev
-expect_lint_base
+expect_lint_failure
 
 git update-ref refs/remotes/origin/dev HEAD
 expected_base=origin/dev
@@ -75,4 +74,9 @@ expect_lint_base LINT_BASE=HEAD
 make --no-print-directory vet lint-all > output.log 2>&1
 grep -Fx 'vet ./...' "$GATE_LOG"
 grep -E 'golangci-lint@[^ ]+ run --timeout 10m$' "$GATE_LOG"
+for version in 2.0.0 2.0.0-rc.1 unreleased-dev-0123456789abcdef; do
+	: > "$GATE_LOG"
+	make --no-print-directory build-binary VERSION="$version" > output.log 2>&1
+	grep -F -- "-X github.com/dashpay/tenderdash/version.TMCoreSemVer=$version" "$GATE_LOG"
+done
 echo 'Local quality gate tests passed'

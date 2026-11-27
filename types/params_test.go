@@ -2,11 +2,14 @@ package types
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"math"
 	"sort"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
@@ -442,4 +445,221 @@ func TestFromProto(t *testing.T) {
 
 func durationPtr(t time.Duration) *time.Duration {
 	return &t
+}
+
+func TestProposerLivenessTimeouts(t *testing.T) {
+	t.Run("should derive whichever of the pair a chain leaves unset", func(t *testing.T) {
+		testCases := map[string]struct {
+			heartbeat, silence         time.Duration
+			wantHeartbeat, wantSilence time.Duration
+		}{
+			"neither set":            {0, 0, time.Second, 5 * time.Second},
+			"only a long heartbeat":  {10 * time.Second, 0, 10 * time.Second, 50 * time.Second},
+			"only a short heartbeat": {100 * time.Millisecond, 0, 100 * time.Millisecond, 5 * time.Second},
+			"only a short silence":   {0, 2 * time.Second, 400 * time.Millisecond, 2 * time.Second},
+			"only a long silence":    {0, 30 * time.Second, time.Second, 30 * time.Second},
+			"both set":               {2 * time.Second, 3 * time.Second, 2 * time.Second, 3 * time.Second},
+		}
+		for name, tc := range testCases {
+			t.Run(name, func(t *testing.T) {
+				tp := TimeoutParams{ProposerHeartbeat: tc.heartbeat, ProposerSilence: tc.silence}.TimeoutParamsOrDefaults()
+				assert.Equal(t, tc.wantHeartbeat, tp.ProposerHeartbeat)
+				assert.Equal(t, tc.wantSilence, tp.ProposerSilence)
+			})
+		}
+	})
+
+	t.Run("should keep a valid pair when an update names only one of them", func(t *testing.T) {
+		base := *DefaultConsensusParams()
+		require.NoError(t, base.ValidateConsensusParams())
+
+		heartbeat := 10 * time.Second
+		updated := base.UpdateConsensusParams(&tmproto.ConsensusParams{
+			Timeout: &tmproto.TimeoutParams{ProposerHeartbeat: &heartbeat},
+		})
+		require.NoError(t, updated.ValidateConsensusParams())
+		assert.Equal(t, heartbeat, updated.Timeout.ProposerHeartbeat)
+		assert.Zero(t, updated.Timeout.ProposerSilence, "the other is derived from the one named")
+		assert.Equal(t, 50*time.Second, updated.Timeout.TimeoutParamsOrDefaults().ProposerSilence)
+
+		silence := 2 * time.Second
+		updated = base.UpdateConsensusParams(&tmproto.ConsensusParams{
+			Timeout: &tmproto.TimeoutParams{ProposerSilence: &silence},
+		})
+		require.NoError(t, updated.ValidateConsensusParams())
+		assert.Equal(t, silence, updated.Timeout.ProposerSilence)
+	})
+
+	// A node that state-syncs over RPC takes the params /consensus_params
+	// reports, with every timeout filled in, where the chain may hold the
+	// liveness timeouts unset. Both hash alike, and must go on hashing alike
+	// through later updates, or the synced node refuses the chain's blocks.
+	t.Run("should update params taken from /consensus_params like the chain's own", func(t *testing.T) {
+		chain := *DefaultConsensusParams()
+		chain.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_2)
+		synced := chain
+		// What internal/rpc/core/consensus.go hands the syncing node.
+		synced.Timeout = synced.Timeout.TimeoutParamsOrDefaults()
+		require.NotEqual(t, chain.Timeout, synced.Timeout)
+		require.Equal(t, chain.HashConsensusParams(), synced.HashConsensusParams())
+
+		heartbeat, silence, propose := 2*time.Second, 7*time.Second, 4*time.Second
+		for name, update := range map[string]*tmproto.TimeoutParams{
+			"heartbeat only": {ProposerHeartbeat: &heartbeat},
+			"silence only":   {ProposerSilence: &silence},
+			"both":           {ProposerHeartbeat: &heartbeat, ProposerSilence: &silence},
+			"neither":        {Propose: &propose},
+		} {
+			t.Run(name, func(t *testing.T) {
+				fromChain := chain.UpdateConsensusParams(&tmproto.ConsensusParams{Timeout: update})
+				fromSynced := synced.UpdateConsensusParams(&tmproto.ConsensusParams{Timeout: update})
+				require.NoError(t, fromChain.ValidateConsensusParams())
+				require.NoError(t, fromSynced.ValidateConsensusParams())
+				assert.Equal(t, fromChain.HashConsensusParams(), fromSynced.HashConsensusParams())
+				assert.Equal(t, fromChain.Timeout.TimeoutParamsOrDefaults(), fromSynced.Timeout.TimeoutParamsOrDefaults())
+			})
+		}
+	})
+
+	// Before consensus version 2 the hash does not cover the liveness timeouts,
+	// so a node that state-synced holds whatever its provider gave it. The
+	// update that turns version 2 on must start both nodes from the same pair.
+	t.Run("should start the liveness timeouts from the update that turns version 2 on", func(t *testing.T) {
+		chain := *DefaultConsensusParams()
+		chain.Version.ConsensusVersion = int32(tmproto.VersionParams_CONSENSUS_VERSION_1)
+		synced := chain
+		synced.Timeout.ProposerHeartbeat, synced.Timeout.ProposerSilence = 2*time.Second, 10*time.Second
+		require.NoError(t, synced.ValidateConsensusParams())
+		require.Equal(t, chain.HashConsensusParams(), synced.HashConsensusParams(),
+			"version 1 authenticates neither timeout, so a provider may substitute them")
+
+		version2 := tmproto.VersionParams{ConsensusVersion: tmproto.VersionParams_CONSENSUS_VERSION_2}
+		heartbeat := 3 * time.Second
+		for name, update := range map[string]*tmproto.ConsensusParams{
+			"version only":     {Version: &version2},
+			"with a heartbeat": {Version: &version2, Timeout: &tmproto.TimeoutParams{ProposerHeartbeat: &heartbeat}},
+		} {
+			t.Run(name, func(t *testing.T) {
+				fromChain := chain.UpdateConsensusParams(update)
+				fromSynced := synced.UpdateConsensusParams(update)
+				require.True(t, fromChain.Version.ProposerLivenessEnabled())
+				require.NoError(t, fromChain.ValidateConsensusParams())
+				require.NoError(t, fromSynced.ValidateConsensusParams())
+				assert.Equal(t, fromChain.HashConsensusParams(), fromSynced.HashConsensusParams())
+				assert.Equal(t, fromChain.Timeout.TimeoutParamsOrDefaults(), fromSynced.Timeout.TimeoutParamsOrDefaults())
+			})
+		}
+
+		kept := chain
+		kept.Version.ConsensusVersion = int32(version2.ConsensusVersion)
+		kept.Timeout.ProposerHeartbeat, kept.Timeout.ProposerSilence = 2*time.Second, 10*time.Second
+		later := kept.UpdateConsensusParams(&tmproto.ConsensusParams{Version: &version2})
+		assert.Equal(t, kept.Timeout, later.Timeout, "an update that leaves version 2 on keeps the pair")
+	})
+
+	t.Run("should refuse a pair that cannot work", func(t *testing.T) {
+		testCases := map[string]TimeoutParams{
+			"negative heartbeat":              {ProposerHeartbeat: -time.Second},
+			"negative silence":                {ProposerSilence: -time.Second},
+			"silence no longer than the beat": {ProposerHeartbeat: 2 * time.Second, ProposerSilence: 2 * time.Second},
+			"silence too short to beat in":    {ProposerSilence: 3 * time.Nanosecond},
+		}
+		for name, timeouts := range testCases {
+			t.Run(name, func(t *testing.T) {
+				params := *DefaultConsensusParams()
+				params.Timeout.ProposerHeartbeat = timeouts.ProposerHeartbeat
+				params.Timeout.ProposerSilence = timeouts.ProposerSilence
+				assert.Error(t, params.ValidateConsensusParams())
+			})
+		}
+	})
+
+	t.Run("should leave both out of the encoding while unset", func(t *testing.T) {
+		params := *DefaultConsensusParams()
+		pb := params.ToProto()
+		assert.Nil(t, pb.Timeout.ProposerHeartbeat)
+		assert.Nil(t, pb.Timeout.ProposerSilence)
+		assert.Equal(t, params, ConsensusParamsFromProto(pb))
+	})
+
+	t.Run("should survive a proto round trip once set", func(t *testing.T) {
+		params := *DefaultConsensusParams()
+		params.Timeout.ProposerHeartbeat = 2 * time.Second
+		params.Timeout.ProposerSilence = 9 * time.Second
+		decoded := ConsensusParamsFromProto(params.ToProto())
+		assert.Equal(t, 2*time.Second, decoded.Timeout.ProposerHeartbeat)
+		assert.Equal(t, 9*time.Second, decoded.Timeout.ProposerSilence)
+	})
+
+	t.Run("should grow the silence by one heartbeat a round", func(t *testing.T) {
+		tp := TimeoutParams{ProposerHeartbeat: time.Second, ProposerSilence: 5 * time.Second}
+		assert.Equal(t, 5*time.Second, tp.ProposerSilenceTimeout(0))
+		assert.Equal(t, 8*time.Second, tp.ProposerSilenceTimeout(3))
+	})
+
+	t.Run("should derive the longest silence rather than wrap from a very long heartbeat", func(t *testing.T) {
+		params := *DefaultConsensusParams()
+		params.Timeout.ProposerHeartbeat = 5_000_000_000_000_000_000
+		require.NoError(t, params.ValidateConsensusParams())
+
+		tp := params.Timeout.TimeoutParamsOrDefaults()
+		assert.Equal(t, time.Duration(math.MaxInt64), tp.ProposerSilence)
+		assert.Equal(t, time.Duration(math.MaxInt64), tp.ProposerSilenceTimeout(3))
+	})
+
+	t.Run("should stop growing the silence at the longest duration rather than wrap", func(t *testing.T) {
+		params := *DefaultConsensusParams()
+		params.Timeout.ProposerHeartbeat = 5_000_000_000_000_000_000
+		params.Timeout.ProposerSilence = 6_000_000_000_000_000_000
+		require.NoError(t, params.ValidateConsensusParams(), "validation bounds neither from above")
+
+		tp := params.Timeout.TimeoutParamsOrDefaults()
+		assert.Equal(t, params.Timeout.ProposerSilence, tp.ProposerSilenceTimeout(0))
+		for _, round := range []int32{1, 2, math.MaxInt32} {
+			assert.Equal(t, time.Duration(math.MaxInt64), tp.ProposerSilenceTimeout(round), "round %d", round)
+		}
+	})
+}
+
+func TestConsensusParamsHashProposerLivenessTimeouts(t *testing.T) {
+	withVersion := func(version tmproto.VersionParams_ConsensusVersion, heartbeat, silence time.Duration) ConsensusParams {
+		params := *DefaultConsensusParams()
+		params.Version.ConsensusVersion = int32(version)
+		params.Timeout.ProposerHeartbeat = heartbeat
+		params.Timeout.ProposerSilence = silence
+		return params
+	}
+
+	t.Run("should hash params before CONSENSUS_VERSION_2 exactly as before", func(t *testing.T) {
+		for _, version := range []tmproto.VersionParams_ConsensusVersion{
+			tmproto.VersionParams_CONSENSUS_VERSION_0, tmproto.VersionParams_CONSENSUS_VERSION_1,
+		} {
+			params := withVersion(version, 3*time.Second, 20*time.Second)
+			legacy, err := (&tmproto.HashedParams{
+				BlockMaxBytes:    params.Block.MaxBytes,
+				BlockMaxGas:      params.Block.MaxGas,
+				ConsensusVersion: params.Version.ConsensusVersion,
+			}).Marshal()
+			require.NoError(t, err)
+			sum := sha256.Sum256(legacy)
+			assert.Equal(t, sum[:], []byte(params.HashConsensusParams()), "version %v", version)
+		}
+	})
+
+	t.Run("should cover the timeouts from CONSENSUS_VERSION_2", func(t *testing.T) {
+		v2 := tmproto.VersionParams_CONSENSUS_VERSION_2
+		base := withVersion(v2, 2*time.Second, 10*time.Second).HashConsensusParams()
+		assert.NotEqual(t, base, withVersion(v2, 3*time.Second, 10*time.Second).HashConsensusParams())
+		assert.NotEqual(t, base, withVersion(v2, 2*time.Second, 11*time.Second).HashConsensusParams())
+	})
+
+	t.Run("should hash unset timeouts as the defaults they stand for", func(t *testing.T) {
+		v2 := tmproto.VersionParams_CONSENSUS_VERSION_2
+		assert.Equal(t,
+			withVersion(v2, 0, 0).HashConsensusParams(),
+			withVersion(v2, time.Second, 5*time.Second).HashConsensusParams())
+		assert.Equal(t,
+			withVersion(v2, 10*time.Second, 0).HashConsensusParams(),
+			withVersion(v2, 10*time.Second, 50*time.Second).HashConsensusParams())
+	})
 }

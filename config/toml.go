@@ -550,13 +550,13 @@ fetchers = "{{ .StateSync.Fetchers }}"
 wal-file = "{{ js .Consensus.WalPath }}"
 # wal-skip-rounds-to-last set to true will skip replaying all non-committed rounds stored in
 # WAL, increasing performance in a significant way. It should be set to false by default, as it
-# can have security side-effects.
+# can have security side-effects. It has no effect on a chain that skips the rounds of silent
+# proposers (consensus version 2), whose replay needs every round of the height.
 wal-skip-rounds-to-last = "{{ .Consensus.WalSkipRoundsToLast }}"
 
-# How many blocks to look back to check existence of the node's consensus votes before joining consensus
-# When non-zero, the node will panic upon restart
-# if the same consensus key was used to sign {double-sign-check-height} last blocks.
-# So, validators should stop the state machine, wait for some blocks, and then restart the state machine to avoid panic.
+# Legacy compatibility setting; currently unused by consensus.
+# This does not provide double-sign protection. Preserve the signer's state
+# and never run two active signers with the same consensus identity.
 double-sign-check-height = {{ .Consensus.DoubleSignCheckHeight }}
 
 # EmptyBlocks mode and possible interval between empty blocks
@@ -566,7 +566,13 @@ create-empty-blocks-interval = "{{ .Consensus.CreateEmptyBlocksInterval }}"
 # Reactor sleep duration parameters. peer-gossip-sleep-duration also sets the
 # tick rate a lagging peer's catch-up block-part replay is metered against
 # (a fixed 500ms internal throttle): raising this above 500ms disables that
-# throttle.
+# throttle. peer-query-maj23-sleep-duration also sets how often the node
+# re-announces its round state to each peer (recovery latency after a lost
+# announcement) and paces the redelivery of votes a peer has not acknowledged:
+# one interval after a vote went out, then doubling up to 8 intervals. Raising
+# it slows stall recovery. Either duration under 1ms is run at 1ms, which only
+# prevents a busy loop: well below the defaults, peers drop this node's state
+# updates over their per-peer allowance.
 peer-gossip-sleep-duration = "{{ .Consensus.PeerGossipSleepDuration }}"
 peer-query-maj23-sleep-duration = "{{ .Consensus.PeerQueryMaj23SleepDuration }}"
 
@@ -616,7 +622,7 @@ peer-data-rate-limit = {{ .Consensus.PeerDataRateLimit }}
 
 # This field provides an unsafe override of the Vote timeout consensus parameter.
 # This field configures how long the consensus engine will wait after
-# receiving +2/3 votes in a round.
+# receiving the configured voting threshold in a round.
 # If this field is set to a value greater than 0, it will take effect.
 # unsafe-vote-timeout-override = {{ .Consensus.UnsafeVoteTimeoutOverride }}
 

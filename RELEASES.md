@@ -36,14 +36,57 @@ A fix for another deployed line starts from its exact released tag and requires
 an explicit Platform support decision rather than automatic maintenance promises.
 
 Release tags remain `vX.Y.Z`; prereleases use `vX.Y.Z-dev.N`. The skill evaluates
-SemVer from compatibility, not branch names or `feat`/`fix` labels. It separately
-reviews `P2PProtocol`, `BlockProtocol`, and `ABCISemVer`; a software version bump
-does not update those contracts automatically.
+SemVer from compatibility, not branch names or `feat`/`fix` labels.
+
+A pull request merged into `dev` is assigned to the next release's milestone
+(`.github/workflows/milestone.yml`): the open `vX.Y` milestone with the lowest
+version above the latest stable release, so with `v1.8.2` released it lands in
+`v2.0`, and in `v2.1` once `v2.0.0` is released. Keep the next release's
+milestone open; with none above the latest stable release the pull request's
+milestone is left unchanged.
 
 Full-release promotion and stable-to-dev synchronization should preserve
 ancestry. Master currently has protection rules that must be reconciled with
 that merge strategy by maintainers before a release. The skill must report any
 block and must not bypass or modify branch protections.
+
+## Versioning policy
+
+The software version (`TMVersionDefault`) is decided only by these contracts:
+
+| Contract | Covers |
+| --- | --- |
+| RPC | Methods, parameters, responses and their semantics |
+| ABCI | Application methods, messages, return handling and app coordination |
+| P2P and consensus | Message/channel formats, consensus rules and versions, proposer selection, peer compatibility |
+| Block format | Serialization, hashes, signing and validity of blocks, votes and commits |
+
+- **Major:** a backward-incompatible change to any of them. A new consensus
+  version (for example `CONSENSUS_VERSION_3`) is a major even when a chain
+  parameter activates it, as are changes older nodes cannot follow, removed or
+  semantically changed RPC, and an `ABCISemVer` major.
+- **Minor:** a backward-compatible extension, such as new optional fields, RPC
+  methods or parameters that leave existing networks unchanged.
+- **Patch:** fixes that change none of these contracts. A security or consensus
+  fix is not automatically patch-safe; classify it by its contract effect.
+
+Exported Go APIs, configuration and CLI (including removed settings and tightened
+validation), tooling, CI and documentation do not affect the version; the
+changelog describes them and any operator action. Persisted data is not versioned:
+storage changes must migrate automatically and invisibly to operators, since most
+data can be rebuilt by resync and rollback is an edge case. A change that needs a
+manual migration blocks the release.
+
+Protocol counters are reviewed separately; a software version bump does not
+update them automatically:
+
+- `ABCISemVer` is the ABCI contract's own SemVer. Drive (rs-tenderdash-abci)
+  accepts `^major.minor` of its linked version.
+- `P2PProtocol` changes with P2P messages or behavior.
+- `BlockProtocol` changes only with the block format. Nodes enforce it strictly,
+  so its bump also requires a major. It is a full hard fork and a red flag: it
+  needs explicit confirmation from the release owner for that specific change,
+  even within an otherwise authorized release.
 
 ## Validation and artifacts
 
@@ -62,10 +105,19 @@ and arm64 binaries with detached GPG signatures, tarballs, `SHA256SUMS`, and
 plus the local database license, provenance and NOTICE when present in that
 source revision. It does not upload, overwrite assets, or select a release.
 
-When preparing an older deployment-line fix, check Docker alias behavior before
-publishing: the current workflow promotes every non-dev release to `latest`
-and the major alias. An older-line release needs a separate approved publishing
-path that preserves newer aliases. Do not publish and repair the aliases later.
+Docker publication binds the release tag to its exact source SHA and passes the
+version explicitly to the build. Prereleases publish their complete version only.
+A separate serialized promotion step updates `latest`, major and minor aliases
+only for the current GitHub latest stable release, and never below a higher stable
+version already tagged. API failures stop promotion. An older-line release keeps
+its exact version image without replacing those aliases.
+
+Manual Docker runs do not promote stable aliases. Enter an existing release tag
+to build that exact source, or leave it empty to build the selected branch/tag.
+Branch builds carry an `unreleased-<branch>-<SHA>` binary version and a SHA image
+tag; integration also publishes the `dev` image tag. The workflow does not publish
+images automatically on dev pushes. Tagged source predating explicit Docker
+`VERSION` support requires a separately reviewed legacy publishing path.
 
 Local checks for this workflow:
 

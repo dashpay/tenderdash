@@ -46,7 +46,7 @@ To ease the burden of collecting different pieces of data Tenderdash Core provid
 tenderdash debug kill <pid> </path/to/out.zip> — home=</path/to/app.d>
 ```
 
-Here’s the official documentation page — <README.md>
+Here’s the official documentation page — [debugging guide](README.md)
 
 If you’re using a process supervisor, like systemd, it will restart the Tenderdash automatically. We strongly advise you to have one in production. If not, you will need to restart the node by hand.
 

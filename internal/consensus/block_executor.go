@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
 
+	abciclient "github.com/dashpay/tenderdash/abci/client"
 	abci "github.com/dashpay/tenderdash/abci/types"
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	sm "github.com/dashpay/tenderdash/internal/state"
@@ -23,9 +25,31 @@ type blockExecutor struct {
 	blockExec          sm.Executor
 	proposedAppVersion uint64
 	committedState     sm.State
-	// expectations is touched only by the consensus goroutine; mtx does not
-	// guard it.
+	// expectations and polkaRetry are touched only by the consensus goroutine;
+	// mtx does not guard them.
 	expectations commitExpectations
+	polkaRetry   *polkaRetry
+}
+
+// Bounds of the delay between attempts to process a polka block (see
+// processPolkaBlock); it doubles after every failure.
+const (
+	polkaRetryMinDelay = 100 * time.Millisecond
+	polkaRetryMaxDelay = 5 * time.Second
+)
+
+// polkaRetry is the pending attempt to process the polka block of a round
+// again, due when timer fires.
+type polkaRetry struct {
+	height  int64
+	round   int32
+	blockID types.BlockID
+	delay   time.Duration
+	timer   *time.Timer
+}
+
+func (r *polkaRetry) is(height int64, round int32, blockID types.BlockID) bool {
+	return r != nil && r.height == height && r.round == round && r.blockID.Equals(blockID)
 }
 
 // Create the next block to propose and return it. Returns nil block upon error.
@@ -96,7 +120,7 @@ func (c *blockExecutor) ensureProcess(ctx context.Context, rs *cstypes.RoundStat
 		if err != nil {
 			rs.CurrentRoundState = sm.CurrentRoundState{}
 			rs.ProcessedBlockID = types.BlockID{}
-			return fmt.Errorf("ProcessProposal abci method: %w", err)
+			return fmt.Errorf("process proposal: %w", err)
 		}
 		rs.CurrentRoundState = uncommittedState
 		rs.ProcessedBlockID = block.BlockID(rs.ProposalBlockParts).Copy()
@@ -126,12 +150,10 @@ func processedFor(rs *cstypes.RoundState, round int32) bool {
 //
 // After a failed ProcessProposal, here or elsewhere, no round counts as
 // processed, so it does nothing and is not retried for every resent precommit:
-// the precommit goes to VerifyVoteExtension with no known context until a
-// ProcessProposal succeeds on the round's own path (prevote, precommit or
-// commit). That is safe. VerifyVoteExtension is not fatal and, unlike
-// ExtendVote, needs no round's context: Drive checks only the height and
-// rejects without an execution context. A rejected precommit is not stored,
-// so gossip delivers it again.
+// the precommit goes to VerifyVoteExtension with no known context, which
+// rejects it, and gossip delivers it again. Only a failure in processPolkaBlock
+// is retried (see there); after any other, here or in a commit check, the block
+// is processed again only by a commit for it or by the round's own path.
 func (c *blockExecutor) ensureOwnRound(ctx context.Context, rs *cstypes.RoundState) error {
 	processed := rs.CurrentRoundState.Round
 	// Cheapest first: this runs for every peer precommit, and hashing the block
@@ -141,6 +163,96 @@ func (c *blockExecutor) ensureOwnRound(ctx context.Context, rs *cstypes.RoundSta
 		return nil
 	}
 	return c.ensureProcess(ctx, rs, rs.Round)
+}
+
+// processPolkaBlock has the application process rs.ProposalBlock for rs.Round
+// when it is the round's non-nil polka block and is not processed yet, whatever
+// this node votes: it may have voted before the block or its polka arrived, may
+// lack the round's proposal, or may precommit nil over a proposal timestamp the
+// block does not match. An application can verify an extension only for a block
+// it processed: Drive checks one against the block it accepted in that round or,
+// failing that, the same block accepted in another round of the height, and
+// rejects it when it accepted the block in neither; other applications may
+// require the same round. A precommit whose extension is rejected is not stored:
+// with the block unprocessed, the precommits of the validators that had it
+// never count towards the +2/3 of any kind that start the precommit wait, and
+// this node, with no timeout to fall back on, never leaves the round.
+//
+// The block is processed, not voted on. A failure is logged, not returned. A
+// failure other than a rejection, an invalid block, a stopped ABCI client or a
+// canceled ctx schedules one retry, run by retryPolkaBlock on the consensus
+// goroutine; until it is due, a new call for the same block does nothing.
+func (c *blockExecutor) processPolkaBlock(ctx context.Context, rs *cstypes.RoundState) {
+	blockID, ok := unprocessedPolkaBlock(rs)
+	if !ok || c.polkaRetry.is(rs.Height, rs.Round, blockID) {
+		return
+	}
+	c.tryPolkaBlock(ctx, rs, blockID, polkaRetryMinDelay)
+}
+
+// polkaRetryC returns the channel the pending polka block retry is due on, nil
+// when there is none.
+func (c *blockExecutor) polkaRetryC() <-chan time.Time {
+	if c.polkaRetry == nil {
+		return nil
+	}
+	return c.polkaRetry.timer.C
+}
+
+// retryPolkaBlock runs the pending polka block retry, once due. It is dropped
+// when rs has moved to another height, round or polka block, or has the block
+// processed already.
+func (c *blockExecutor) retryPolkaBlock(ctx context.Context, rs *cstypes.RoundState) {
+	r := c.polkaRetry
+	if r == nil {
+		return
+	}
+	if blockID, ok := unprocessedPolkaBlock(rs); !ok || !r.is(rs.Height, rs.Round, blockID) {
+		c.clearPolkaRetry()
+		return
+	}
+	c.tryPolkaBlock(ctx, rs, r.blockID, min(2*r.delay, polkaRetryMaxDelay))
+}
+
+// tryPolkaBlock processes the polka block blockID for rs.Round and, on a
+// failure worth retrying, schedules a retry after delay.
+func (c *blockExecutor) tryPolkaBlock(ctx context.Context, rs *cstypes.RoundState, blockID types.BlockID, delay time.Duration) {
+	c.clearPolkaRetry()
+	err := c.ensureProcess(ctx, rs, rs.Round)
+	if err == nil {
+		c.logger.Debug("processed the round's polka block so that precommits for it verify",
+			"height", rs.Height, "round", rs.Round, "hash", blockID.Hash)
+		return
+	}
+	if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, sm.ErrBlockRejected) ||
+		errors.As(err, &sm.ErrInvalidBlock{}) || errors.Is(err, abciclient.ErrClientStopped) {
+		c.logger.Error("cannot process the round's polka block; precommits for it will be rejected",
+			"height", rs.Height, "round", rs.Round, "hash", blockID.Hash, "error", err)
+		return
+	}
+	c.logger.Warn("cannot process the round's polka block yet; will retry",
+		"height", rs.Height, "round", rs.Round, "hash", blockID.Hash, "retry_in", delay, "error", err)
+	c.polkaRetry = &polkaRetry{height: rs.Height, round: rs.Round, blockID: blockID.Copy(), delay: delay,
+		timer: time.NewTimer(delay)}
+}
+
+// clearPolkaRetry stops and drops the pending polka block retry, if any.
+func (c *blockExecutor) clearPolkaRetry() {
+	if c.polkaRetry != nil {
+		c.polkaRetry.timer.Stop()
+		c.polkaRetry = nil
+	}
+}
+
+// unprocessedPolkaBlock returns the non-nil polka block ID of rs.Round when
+// rs.ProposalBlock is that block, complete and not processed for the round.
+func unprocessedPolkaBlock(rs *cstypes.RoundState) (types.BlockID, bool) {
+	blockID, ok := rs.Votes.Prevotes(rs.Round).TwoThirdsMajority()
+	if !ok || blockID.IsNil() || processedFor(rs, rs.Round) ||
+		!rs.ProposalBlock.BlockID(rs.ProposalBlockParts).Equals(blockID) {
+		return types.BlockID{}, false
+	}
+	return blockID, true
 }
 
 // refuseUnprocessedCommit returns an error wrapping

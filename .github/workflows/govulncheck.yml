@@ -1,19 +1,21 @@
 ---
 name: Vulnerability Scan
 # Runs govulncheck to detect known vulnerabilities in Go dependencies.
-# The scan is GATING: the job fails if any vulnerability is found.
+# The scan is GATING: the job fails if the code calls a vulnerable symbol
+# that .github/govulncheck-allowlist.txt does not justify.
 on:
   pull_request:
   push:
     branches:
       - master
       - dev
-      # Keep both names until the integration-branch migration is complete.
-      - v1.8-dev
-      - v1.9-dev
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   govulncheck:
@@ -25,9 +27,9 @@ jobs:
 
       # Runs after checkout so the Go cache key files exist; listing this
       # workflow file keeps its cache separate from other workflows.
-      - uses: actions/setup-go@v7.0.0
+      - uses: actions/setup-go@v7.1.0
         with:
-          go-version: "1.27.3"
+          go-version: "1.27.4"
           cache-dependency-path: |
             go.sum
             .github/workflows/govulncheck.yml
@@ -37,6 +39,9 @@ jobs:
 
       - name: Install libpcap
         run: sudo apt-get update && sudo apt-get install --yes libpcap-dev
+
+      - name: Check the allowlist gate
+        run: python3 -B -m unittest discover -s scripts/tests -p test_govulncheck_gate.py
 
       - name: Run govulncheck
         run: make vulncheck

@@ -3,7 +3,7 @@ order: 12
 ---
 # BFT Time
 
-> **Historical.** Tenderdash does not implement BFT Time. Block timestamps
+> **Historical and outdated.** Tenderdash does not implement BFT Time. Block timestamps
 > are chosen by the proposer and validated for timeliness as specified in
 > [Proposal timestamps and time rules](./consensus-alternative-flows.md#proposal-timestamps-and-time-rules);
 > [Proposer-Based Timestamps](./proposer-based-timestamp/README.md) is

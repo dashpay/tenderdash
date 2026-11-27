@@ -11,9 +11,10 @@ on:
     branches:
       - master
       - dev
-      # Keep both names until the integration-branch migration is complete.
-      - v1.8-dev
-      - v1.9-dev
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   lint:
@@ -32,7 +33,7 @@ jobs:
             exit 1
           fi
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
-      - uses: bufbuild/buf-action@v1.6.0
+      - uses: bufbuild/buf-action@v1.7.0
         with:
           version: ${{ steps.buf.outputs.version }}
           github_token: ${{ github.token }}

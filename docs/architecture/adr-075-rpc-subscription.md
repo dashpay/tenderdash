@@ -665,8 +665,8 @@ The following alternative approaches were considered:
    - [indexer: unbuffered event subscription slow down the consensus][i7247] (#7247)
    - [rpc: remove duplication of events when querying][i7273] (#7273)
 
-[rfc006]:        https://github.com/dashpay/tenderdash/blob/master/docs/rfc/rfc-006-event-subscription.md
-[rpc-service]:   https://github.com/dashpay/tenderdash/blob/master/rpc/openapi/openapi.yaml
+[rfc006]:        ../rfc/rfc-006-event-subscription.md
+[rpc-service]:   ../../rpc/openapi/openapi.yaml
 [query-grammar]: https://pkg.go.dev/github.com/dashpay/tenderdash/internal/pubsub/query/syntax
 [ws]:            https://datatracker.ietf.org/doc/html/rfc6455
 [jsonrpc2]:      https://www.jsonrpc.org/specification

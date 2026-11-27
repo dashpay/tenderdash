@@ -9,7 +9,7 @@ parent:
 
 
 State sync allows new nodes to rapidly bootstrap and join the network by discovering, fetching,
-and restoring state machine snapshots. For more information, see the [state sync ABCI section](../../../spec/abci/abci.md#state-sync)).
+and restoring state machine snapshots. For more information, see the [state sync ABCI section](../../../spec/abci/methods.md#listsnapshots)).
 
 The state sync reactor has two main responsibilities:
 

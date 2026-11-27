@@ -1147,7 +1147,8 @@ type ConsensusConfig struct {
 	RootDir string `mapstructure:"home"`
 	WalPath string `mapstructure:"wal-file"`
 	walFile string // overrides WalPath if set
-	// Use "true" to skip the rounds to the last during WAL replay messages
+	// Use "true" to skip the rounds to the last during WAL replay messages.
+	// Ignored on a chain that skips the rounds of silent proposers.
 	WalSkipRoundsToLast bool `mapstructure:"wal-skip-rounds-to-last"`
 
 	// EmptyBlocks mode and possible interval between empty blocks
@@ -1166,7 +1167,18 @@ type ConsensusConfig struct {
 	// tick then already exceeds the gap it is meant to enforce. Lowering it
 	// does not shrink the gap — it only fits more ticks (and so more sends of
 	// a multi-part block) into that same fixed window before it applies.
-	PeerGossipSleepDuration     time.Duration `mapstructure:"peer-gossip-sleep-duration"`
+	//
+	// Either duration under 1ms is run at 1ms, which only prevents a busy loop:
+	// well below the defaults, peers drop this node's state updates over their
+	// per-peer allowance.
+	PeerGossipSleepDuration time.Duration `mapstructure:"peer-gossip-sleep-duration"`
+	// PeerQueryMaj23SleepDuration is the cadence of the per-peer majority-claim
+	// gossip and of the repairs paced against it: round state re-announces
+	// (which bound how long a peer's view of this node stays stale after a lost
+	// announcement), round skip certificate and round vote resends, and the
+	// redelivery of votes a peer has not acknowledged (one interval after a
+	// vote went out, then doubling up to 8 intervals). Raising it to cut
+	// majority-claim chatter slows stall recovery.
 	PeerQueryMaj23SleepDuration time.Duration `mapstructure:"peer-query-maj23-sleep-duration"`
 
 	// PeerVoteRateLimit bounds the per-second token budget a single peer may

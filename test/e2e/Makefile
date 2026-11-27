@@ -43,6 +43,9 @@ runner/dashcore: runner tests e2e/app/compile
 runner/rotate: runner tests e2e/app/compile
 	./build/runner -f networks/rotate.toml
 
+runner/blocksync-slow-apply: runner tests e2e/app/compile
+	./build/runner -f networks/blocksync-slow-apply.toml
+
 generator:
 	$(GO) build -o build/generator ./generator
 

@@ -76,6 +76,20 @@ func setup(
 	size int,
 ) *reactorTestSuite {
 	t.Helper()
+	return setupWithChannels(ctx, t, numNodes, states, size, nil)
+}
+
+// setupWithChannels is setup with each node's reactor given the channels
+// wrap returns for it, if wrap is set.
+func setupWithChannels(
+	ctx context.Context,
+	t *testing.T,
+	numNodes int,
+	states []*State,
+	size int,
+	wrap func(nodeID types.NodeID, chID p2p.ChannelID, ch p2p.Channel) p2p.Channel,
+) *reactorTestSuite {
+	t.Helper()
 
 	privProTxHashes := make([]crypto.ProTxHash, len(states))
 	for i, state := range states {
@@ -99,18 +113,23 @@ func setup(
 
 	chCreator := func(nodeID types.NodeID) p2p.ChannelCreator {
 		return func(_ctx context.Context, desc *p2p.ChannelDescriptor) (p2p.Channel, error) {
+			var ch p2p.Channel
 			switch desc.ID {
 			case p2p.ConsensusStateChannel:
-				return rts.stateChannels[nodeID], nil
+				ch = rts.stateChannels[nodeID]
 			case p2p.ConsensusDataChannel:
-				return rts.dataChannels[nodeID], nil
+				ch = rts.dataChannels[nodeID]
 			case p2p.ConsensusVoteChannel:
-				return rts.voteChannels[nodeID], nil
+				ch = rts.voteChannels[nodeID]
 			case p2p.VoteSetBitsChannel:
-				return rts.voteSetBitsChannels[nodeID], nil
+				ch = rts.voteSetBitsChannels[nodeID]
 			default:
 				return nil, fmt.Errorf("invalid channel; %v", desc.ID)
 			}
+			if wrap != nil {
+				ch = wrap(nodeID, desc.ID, ch)
+			}
+			return ch, nil
 		}
 	}
 
@@ -581,6 +600,14 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 		}),
 	}
 	states, genDoc, _, validatorSetUpdates := gen.generate(ctx, t)
+	// Seven in-process nodes gossiping at the test defaults (5 ms, 250 ms)
+	// delay proposals past the 5 s propose timeout under -race, stalling a
+	// height. Production gossip intervals keep the test's message load sane.
+	gossipConfig := config.DefaultConsensusConfig()
+	for _, state := range states {
+		state.config.PeerGossipSleepDuration = gossipConfig.PeerGossipSleepDuration
+		state.config.PeerQueryMaj23SleepDuration = gossipConfig.PeerQueryMaj23SleepDuration
+	}
 	valsSets := make(map[int64]bytes.HexBytes, len(validatorSetUpdates))
 	for height, vsu := range validatorSetUpdates {
 		valsSet, err := types.PB2TM.ValidatorSetFromProtoUpdate(genDoc.QuorumType, &vsu)

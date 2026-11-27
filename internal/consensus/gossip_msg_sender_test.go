@@ -76,6 +76,11 @@ func TestP2PMsgSender_Send(t *testing.T) {
 			msg:         &tmcons.VoteSetMaj23{},
 			want:        &tmcons.VoteSetMaj23{},
 		},
+		{
+			mockChannel: mockStateChannelFn,
+			msg:         &tmcons.NewValidBlock{},
+			want:        &tmcons.NewValidBlock{},
+		},
 	}
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
