@@ -2,6 +2,7 @@ package selectproposer_test
 
 import (
 	"bytes"
+	"fmt"
 	"math/rand"
 	"strings"
 	"testing"
@@ -14,11 +15,49 @@ import (
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
 	selectproposer "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
+	"github.com/dashpay/tenderdash/internal/state/mocks"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )
 
 //-------------------------------------------------------------------
+
+func TestProposerSelectionQuorumRotation(t *testing.T) {
+	for _, version := range []int32{0, 1, 2} {
+		for _, size := range []int{1, 2} {
+			t.Run(fmt.Sprintf("version_%d/validators_%d", version, size), func(t *testing.T) {
+				oldSet, _ := types.GenerateValidatorSet(types.NewValSetParam(crypto.RandProTxHashes(3)))
+				valSet, _ := types.GenerateValidatorSet(types.NewValSetParam(crypto.RandProTxHashes(size)))
+				bs := mocks.NewBlockStore(t)
+				bs.On("Base").Return(int64(1))
+				bs.On("LoadBlockMeta", int64(1011)).Return((*types.BlockMeta)(nil)).Once()
+				bs.On("LoadBlockMeta", int64(1010)).Return(&types.BlockMeta{
+					Header: types.Header{ValidatorsHash: oldSet.Hash(), ProposerProTxHash: oldSet.Proposer().ProTxHash},
+					Round:  2,
+				}).Once()
+				params := types.ConsensusParams{Version: types.VersionParams{ConsensusVersion: version}}
+				selector, err := selectproposer.NewProposerSelector(params, valSet, 1011, 0, bs, nil)
+				require.NoError(t, err)
+				want := valSet.GetByIndex(0)
+				if version == 0 && size > 1 {
+					want = valSet.GetByIndex(1)
+				}
+				proposer, err := selector.GetProposer(1011, 0)
+				require.NoError(t, err)
+				require.Equal(t, want.ProTxHash, proposer.ProTxHash)
+				if size == 1 {
+					for height := int64(1011); height < 1014; height++ {
+						for round := int32(0); round < 3; round++ {
+							proposer, err = selector.GetProposer(height, round)
+							require.NoError(t, err)
+							require.Equal(t, want.ProTxHash, proposer.ProTxHash)
+						}
+					}
+				}
+			})
+		}
+	}
+}
 
 func TestProposerSelection1(t *testing.T) {
 	fooProTxHash := crypto.ProTxHash(crypto.Checksum([]byte("foo")))
