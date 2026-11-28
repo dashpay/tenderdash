@@ -101,10 +101,8 @@ Tenderdash validators use BLS consensus keys and Dash quorum information. Protec
 both the private key and the signing state that prevents conflicting votes.
 Never run two active signers with the same consensus identity.
 
-A remote signer must support Tenderdash's BLS keys and quorum-aware signing
-requests. Check compatibility before choosing a key management server or HSM;
-support for Ed25519 in another consensus system does not establish compatibility.
-See [remote signers](./remote-signer.md) and the
+Tenderdash supports the file PV and the Dash Core signer configured through
+`[priv-validator] core-rpc-host`. See the
 [signing specification](../../spec/consensus/signing.md).
 
 ## Committing a Block

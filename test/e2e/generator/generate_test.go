@@ -35,7 +35,7 @@ func TestGenerator(t *testing.T) {
 					})
 					if e2e.Mode(node.Mode) != e2e.ModeLight {
 						t.Run("PrivvalProtocol", func(t *testing.T) {
-							require.NotZero(t, node.PrivvalProtocol)
+							require.Contains(t, []string{"file", "dashcore"}, node.PrivvalProtocol)
 						})
 					}
 				})

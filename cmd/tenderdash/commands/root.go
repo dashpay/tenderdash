@@ -20,6 +20,11 @@ const ctxTimeout = 4 * time.Second
 // ParseConfig retrieves the default environment configuration,
 // sets up the Tendermint root and ensures that the root exists
 func ParseConfig(conf *config.Config) (*config.Config, error) {
+	// The removed remote signer's key is no longer in the config template, so
+	// bind its environment variable explicitly for ValidateBasic to reject it.
+	if err := viper.BindEnv("priv-validator.laddr"); err != nil {
+		return nil, err
+	}
 	if err := viper.Unmarshal(conf); err != nil {
 		return nil, err
 	}

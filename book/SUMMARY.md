@@ -19,7 +19,6 @@
 - [Configure a Light Client](docs/nodes/light-client.md)
 - [Output level for logging, including package level options](docs/nodes/logging.md)
 - [Metrics](docs/nodes/metrics.md)
-- [Remote signer](docs/nodes/remote-signer.md)
 - [Running in production](docs/nodes/running-in-production.md)
 - [Configure State-Sync](docs/nodes/state-sync.md)
 - [Validators](docs/nodes/validators.md)

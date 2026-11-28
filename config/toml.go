@@ -196,11 +196,6 @@ key-file = "{{ js .PrivValidator.Key }}"
 # Path to the JSON file containing the last sign state of a validator
 state-file = "{{ js .PrivValidator.State }}"
 
-# TCP or UNIX socket address for Tendermint to listen on for
-# connections from an external PrivValidator process
-# when the listenAddr is prefixed with grpc instead of tcp it will use the gRPC Client
-laddr = "{{ .PrivValidator.ListenAddr }}"
-
 # Local Dash Core Host to connect to
 # If this is set, the node follows a Dash Core PrivValidator process
 core-rpc-host = "{{ .PrivValidator.CoreRPCHost }}"
@@ -210,17 +205,6 @@ core-rpc-username = "{{ .PrivValidator.CoreRPCUsername }}"
 
 # Local Dash Core RPC Password
 core-rpc-password = "{{ .PrivValidator.CoreRPCPassword }}"
-
-# Path to the client certificate generated while creating needed files for secure connection.
-# If a remote validator address is provided but no certificate, the connection will be insecure
-client-certificate-file = "{{ js .PrivValidator.ClientCertificate }}"
-
-# Client key generated while creating certificates for secure connection
-client-key-file = "{{ js .PrivValidator.ClientKey }}"
-
-# Path to the Root Certificate Authority used to sign both client and server certificates
-root-ca-file = "{{ js .PrivValidator.RootCA }}"
-
 
 #######################################################################
 ###                 Advanced Configuration Options                  ###

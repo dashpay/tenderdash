@@ -167,11 +167,8 @@ type ManifestNode struct {
 	// Defaults to "goleveldb".
 	Database string `toml:"database"`
 
-	// PrivvalProtocol specifies the protocol used to sign consensus messages:
-	// "file", "unix", "tcp", "dashcore" or "grpc". Defaults to "file". For tcp and unix, the ABCI
-	// application will launch a remote signer client in a separate goroutine.
-	// For grpc the ABCI application will launch a remote signer server.
-	// Only nodes with mode=validator will actually make use of this.
+	// PrivvalProtocol selects "file" (default) or "dashcore" for consensus signing.
+	// With dashcore, the ABCI application launches a mock Dash Core RPC server.
 	PrivvalProtocol string `toml:"privval_protocol"`
 
 	// StartAt specifies the block height at which the node will be started. The

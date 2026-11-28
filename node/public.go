@@ -37,6 +37,10 @@ func New(
 	cf abciclient.Client,
 	gen *types.GenesisDoc,
 ) (service.Service, error) {
+	if err := conf.PrivValidator.ValidateBasic(); err != nil {
+		return nil, err
+	}
+
 	nodeKey, err := types.LoadOrGenNodeKey(conf.NodeKeyFile())
 	if err != nil {
 		return nil, fmt.Errorf("failed to load or gen node key %s: %w", conf.NodeKeyFile(), err)

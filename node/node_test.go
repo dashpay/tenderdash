@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/fortytw2/leaktest"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -27,7 +28,6 @@ import (
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
-	"github.com/dashpay/tenderdash/crypto/ed25519"
 	"github.com/dashpay/tenderdash/dash/quorum"
 	"github.com/dashpay/tenderdash/internal/eventbus"
 	"github.com/dashpay/tenderdash/internal/evidence"
@@ -46,7 +46,6 @@ import (
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
 	"github.com/dashpay/tenderdash/libs/service"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
-	"github.com/dashpay/tenderdash/privval"
 	"github.com/dashpay/tenderdash/rpc/coretypes"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -411,149 +410,6 @@ func TestNodeSetAppVersion(t *testing.T) {
 
 	// check version is set in node info
 	assert.Equal(t, n.nodeInfo.ProtocolVersion.App, appVersion)
-}
-
-func TestNodeSetPrivValTCP(t *testing.T) {
-	addr := "tcp://" + testFreeAddr(t)
-
-	t.Cleanup(leaktest.Check(t))
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	logger := log.NewNopLogger()
-
-	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
-	require.NoError(t, err)
-	defer os.RemoveAll(cfg.RootDir)
-	cfg.PrivValidator.ListenAddr = addr
-
-	dialer := privval.DialTCPFn(addr, 2*time.Second, ed25519.GenPrivKey())
-	dialerEndpoint := privval.NewSignerDialerEndpoint(logger, dialer)
-	privval.SignerDialerEndpointTimeoutReadWrite(2 * time.Second)(dialerEndpoint)
-
-	// We need to get the quorum hash used in config to set up the node
-	pv, err := privval.LoadOrGenFilePV(cfg.PrivValidator.KeyFile(), cfg.PrivValidator.StateFile())
-	require.NoError(t, err)
-	quorumHash, err := pv.GetFirstQuorumHash(context.Background())
-	require.NoError(t, err)
-
-	signerServer := privval.NewSignerServer(
-		dialerEndpoint,
-		cfg.ChainID(),
-		types.NewMockPVForQuorum(quorumHash),
-	)
-
-	// Use a buffered channel so the goroutine never blocks; assert on the test goroutine.
-	startErrCh := make(chan error, 1)
-	go func() {
-		startErrCh <- signerServer.Start(ctx)
-	}()
-	defer signerServer.Stop()
-
-	// Poll until the server is running, surfacing a Start() failure immediately
-	// with its actual error rather than a generic timeout message.
-	timeout := time.After(5 * time.Second)
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	for !signerServer.IsRunning() {
-		select {
-		case err := <-startErrCh:
-			require.NoError(t, err, "signer server Start returned unexpected error")
-		case <-timeout:
-			t.Fatal("signer server did not start in time")
-		case <-ticker.C:
-		}
-	}
-
-	genDoc, err := defaultGenesisDocProviderFunc(cfg)()
-	require.NoError(t, err)
-
-	pval, err := createPrivval(ctx, logger, cfg, genDoc)
-	require.NoError(t, err)
-
-	assert.IsType(t, &privval.RetrySignerClient{}, pval)
-}
-
-// address without a protocol must result in error
-func TestPrivValidatorListenAddrNoProtocol(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping test in short mode")
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	addrNoPrefix := testFreeAddr(t)
-
-	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
-	require.NoError(t, err)
-	defer os.RemoveAll(cfg.RootDir)
-	cfg.PrivValidator.ListenAddr = addrNoPrefix
-
-	logger := log.NewNopLogger()
-
-	n, err := newDefaultNode(ctx, cfg, logger)
-
-	assert.Error(t, err)
-
-	if n != nil && n.IsRunning() {
-		cancel()
-		n.Wait()
-	}
-}
-
-func TestNodeSetPrivValIPC(t *testing.T) {
-
-	tmpfile := t.TempDir() + "/kms." + tmrand.Str(6) + ".sock"
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
-	require.NoError(t, err)
-	defer os.RemoveAll(cfg.RootDir)
-	cfg.PrivValidator.ListenAddr = "unix://" + tmpfile
-
-	logger := log.NewNopLogger()
-
-	dialer := privval.DialUnixFn(tmpfile)
-	dialerEndpoint := privval.NewSignerDialerEndpoint(logger, dialer)
-
-	privval.SignerDialerEndpointTimeoutReadWrite(100 * time.Millisecond)(dialerEndpoint)
-
-	// We need to get the quorum hash used in config to set up the node
-	pv, err := privval.LoadOrGenFilePV(cfg.PrivValidator.KeyFile(), cfg.PrivValidator.StateFile())
-	require.NoError(t, err)
-	quorumHash, err := pv.GetFirstQuorumHash(context.Background())
-	require.NoError(t, err)
-
-	pvsc := privval.NewSignerServer(
-		dialerEndpoint,
-		cfg.ChainID(),
-		types.NewMockPVForQuorum(quorumHash),
-	)
-
-	go func() {
-		err := pvsc.Start(ctx)
-		require.NoError(t, err)
-	}()
-	defer pvsc.Stop()
-	genDoc, err := defaultGenesisDocProviderFunc(cfg)()
-	require.NoError(t, err)
-
-	pval, err := createPrivval(ctx, logger, cfg, genDoc)
-	require.NoError(t, err)
-
-	assert.IsType(t, &privval.RetrySignerClient{}, pval)
-}
-
-// testFreeAddr claims a free port so we don't block on listener being ready.
-func testFreeAddr(t *testing.T) string {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	defer ln.Close()
-
-	return fmt.Sprintf("127.0.0.1:%d", ln.Addr().(*net.TCPAddr).Port)
 }
 
 // create a proposal block using real and full
@@ -1352,4 +1208,74 @@ func TestNodeStartDuringFirstCommit(t *testing.T) {
 	state, err := n.stateStore.Load()
 	require.NoError(t, err)
 	require.Zero(t, state.LastBlockHeight, "the application has not completed FinalizeBlock")
+}
+
+func TestCreatePrivvalRejectsRemovedSigner(t *testing.T) {
+	for _, addr := range []string{"tcp://127.0.0.1:1234", "unix:///tmp/signer.sock", "grpc://127.0.0.1:1234", "127.0.0.1:1234"} {
+		for _, core := range []string{"", "127.0.0.1:19998"} {
+			t.Run(addr+"/"+core, func(t *testing.T) {
+				v := viper.New()
+				v.Set("priv-validator.laddr", addr)
+				cfg := config.DefaultConfig().SetRoot(t.TempDir())
+				cfg.Mode = config.ModeValidator
+				cfg.PrivValidator.CoreRPCHost = core
+				require.NoError(t, v.Unmarshal(cfg))
+
+				pv, err := createPrivval(context.Background(), log.NewNopLogger(), cfg, nil)
+				require.Nil(t, pv)
+				require.ErrorContains(t, err, "remote signer has been removed")
+				require.ErrorContains(t, err, "core-rpc-host")
+				require.ErrorContains(t, err, "file PV")
+				require.NoFileExists(t, cfg.PrivValidator.KeyFile())
+			})
+		}
+	}
+}
+
+func TestNodeRejectsRemovedSignerBeforeInitialization(t *testing.T) {
+	for _, mode := range []string{config.ModeValidator, config.ModeFull, config.ModeSeed} {
+		for _, constructor := range []string{"default", "custom"} {
+			t.Run(mode+"/"+constructor, func(t *testing.T) {
+				cfg := config.DefaultConfig().SetRoot(t.TempDir())
+				cfg.Mode = mode
+				v := viper.New()
+				v.Set("priv-validator.laddr", "tcp://127.0.0.1:1234")
+				require.NoError(t, v.Unmarshal(cfg))
+				var svc service.Service
+				var err error
+				if constructor == "default" {
+					svc, err = NewDefault(context.Background(), cfg, log.NewNopLogger())
+				} else {
+					svc, err = New(context.Background(), cfg, log.NewNopLogger(), nil, nil)
+				}
+				require.Nil(t, svc)
+				require.ErrorContains(t, err, "remote signer has been removed")
+				require.NoFileExists(t, cfg.NodeKeyFile())
+			})
+		}
+	}
+}
+
+func TestSeedNodeWithoutPrivateValidator(t *testing.T) {
+	for _, constructor := range []string{"default", "custom"} {
+		t.Run(constructor, func(t *testing.T) {
+			cfg, err := config.ResetTestRoot(t.TempDir(), strings.ReplaceAll(t.Name(), "/", "-"))
+			require.NoError(t, err)
+			cfg.Mode = config.ModeSeed
+			cfg.PrivValidator = nil
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			var svc service.Service
+			if constructor == "default" {
+				svc, err = NewDefault(ctx, cfg, log.NewNopLogger())
+			} else {
+				svc, err = New(ctx, cfg, log.NewNopLogger(), nil, nil)
+			}
+			require.NoError(t, err)
+			t.Cleanup(svc.Wait)
+			require.NoError(t, svc.Start(ctx))
+			require.True(t, svc.IsRunning())
+			cancel()
+		})
+	}
 }

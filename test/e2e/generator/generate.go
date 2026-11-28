@@ -43,11 +43,10 @@ var (
 		"unix": 10,
 	}
 	nodePrivvalProtocols = weightedChoice{
-		"file": 50,
-		"grpc": 20,
-		"tcp":  20,
-		"unix": 10,
+		"file":     50,
+		"dashcore": 50,
 	}
+
 	nodeStateSyncs = weightedChoice{
 		e2e.StateSyncDisabled: 10,
 		e2e.StateSyncP2P:      45,

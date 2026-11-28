@@ -33,9 +33,6 @@ const (
 	AppAddressTCP  = "tcp://127.0.0.1:30000"
 	AppAddressUNIX = "unix:///var/run/app.sock"
 
-	PrivvalAddressTCP      = "tcp://0.0.0.0:27559"
-	PrivvalAddressGRPC     = "grpc://0.0.0.0:27559"
-	PrivvalAddressUNIX     = "unix:///var/run/privval.sock"
 	PrivvalAddressDashCore = "127.0.0.1:19998"
 	PrivvalKeyFile         = "config/priv_validator_key.json"
 	PrivvalStateFile       = "data/priv_validator_state.json"
@@ -252,11 +249,7 @@ func MakeConfig(node *e2e.Node) (*config.Config, error) {
 		return nil, fmt.Errorf("unexpected ABCI protocol setting %q", node.Testnet.ABCIProtocol)
 	}
 
-	// Tenderdash errors if it does not have a privval key set up, regardless of whether
-	// it's actually needed (e.g. for remote KMS or non-validators). We set up a dummy
-	// key here by default, and use the real key for actual validators that should use
-	// the file privval.
-	cfg.PrivValidator.ListenAddr = ""
+	// Non-validators use dummy keys; validators use their own key and state files.
 	cfg.PrivValidator.Key = PrivvalDummyKeyFile
 	cfg.PrivValidator.State = PrivvalDummyStateFile
 
@@ -267,16 +260,7 @@ func MakeConfig(node *e2e.Node) (*config.Config, error) {
 	switch node.Mode {
 	case e2e.ModeValidator:
 		switch node.PrivvalProtocol {
-		case e2e.ProtocolFile:
-			cfg.PrivValidator.Key = PrivvalKeyFile
-			cfg.PrivValidator.State = PrivvalStateFile
-		case e2e.ProtocolUNIX:
-			cfg.PrivValidator.ListenAddr = PrivvalAddressUNIX
-		case e2e.ProtocolTCP:
-			cfg.PrivValidator.ListenAddr = PrivvalAddressTCP
-		case e2e.ProtocolGRPC:
-			cfg.PrivValidator.ListenAddr = PrivvalAddressGRPC
-		case e2e.ProtocolDashCore:
+		case e2e.ProtocolFile, e2e.ProtocolDashCore:
 			cfg.PrivValidator.Key = PrivvalKeyFile
 			cfg.PrivValidator.State = PrivvalStateFile
 		default:
@@ -376,34 +360,6 @@ func MakeAppConfig(node *e2e.Node) ([]byte, error) {
 		cfg["protocol"] = "builtin"
 	default:
 		return nil, fmt.Errorf("unexpected ABCI protocol setting %q", node.Testnet.ABCIProtocol)
-	}
-	if node.Mode == e2e.ModeValidator {
-		switch node.PrivvalProtocol {
-		case e2e.ProtocolFile:
-		case e2e.ProtocolTCP:
-			cfg["privval_server_type"] = "tcp"
-			cfg["privval_server"] = PrivvalAddressTCP
-			cfg["privval_key"] = PrivvalKeyFile
-			cfg["privval_state"] = PrivvalStateFile
-		case e2e.ProtocolDashCore:
-			cfg["privval_server_type"] = "dashcore"
-			cfg["privval_server"] = PrivvalAddressDashCore
-		case e2e.ProtocolUNIX:
-			cfg["privval_server_type"] = "unix"
-			cfg["privval_server"] = PrivvalAddressUNIX
-			cfg["privval_key"] = PrivvalKeyFile
-			cfg["privval_state"] = PrivvalStateFile
-		case e2e.ProtocolGRPC:
-			cfg["privval_server_type"] = ABCIGRPC
-			cfg["privval_server"] = PrivvalAddressGRPC
-			cfg["privval_key"] = PrivvalKeyFile
-			cfg["privval_state"] = PrivvalStateFile
-		default:
-			return nil, fmt.Errorf("unexpected privval protocol setting %q", node.PrivvalProtocol)
-		}
-	} else if node.PrivvalProtocol == e2e.ProtocolDashCore {
-		cfg["privval_server_type"] = "dashcore"
-		cfg["privval_server"] = PrivvalAddressDashCore
 	}
 
 	if len(node.Testnet.ValidatorUpdates) > 0 {

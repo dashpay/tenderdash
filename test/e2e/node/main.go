@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -13,26 +12,21 @@ import (
 
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/spf13/viper"
-	"google.golang.org/grpc"
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
 	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	"github.com/dashpay/tenderdash/abci/server"
 	"github.com/dashpay/tenderdash/config"
-	"github.com/dashpay/tenderdash/crypto/ed25519"
 	dashcore "github.com/dashpay/tenderdash/dash/core"
 	"github.com/dashpay/tenderdash/internal/p2p"
 	rpccore "github.com/dashpay/tenderdash/internal/rpc/core"
 	"github.com/dashpay/tenderdash/libs/log"
-	tmnet "github.com/dashpay/tenderdash/libs/net"
 	"github.com/dashpay/tenderdash/light"
 	lproxy "github.com/dashpay/tenderdash/light/proxy"
 	lrpc "github.com/dashpay/tenderdash/light/rpc"
 	dbs "github.com/dashpay/tenderdash/light/store/db"
 	"github.com/dashpay/tenderdash/node"
 	"github.com/dashpay/tenderdash/privval"
-	grpcprivval "github.com/dashpay/tenderdash/privval/grpc"
-	privvalproto "github.com/dashpay/tenderdash/proto/tendermint/privval"
 	rpcserver "github.com/dashpay/tenderdash/rpc/jsonrpc/server"
 	"github.com/dashpay/tenderdash/test/e2e/app"
 	e2e "github.com/dashpay/tenderdash/test/e2e/pkg"
@@ -106,9 +100,9 @@ func run(ctx context.Context, configFile string) error {
 }
 
 func startAppServer(ctx context.Context, cfg *Config, logger log.Logger) error {
-	// Start remote signer (must start before node if running builtin)
+	// Start mock Dash Core before the node, which queries its quorum data.
 	if cfg.PrivValServer != "" {
-		err := startRemoteSigner(ctx, cfg, logger)
+		err := startMockCoreSrv(cfg, logger)
 		if err != nil {
 			return err
 		}
@@ -147,23 +141,6 @@ func startMockCoreSrv(cfg *Config, logger log.Logger) error {
 	)
 	if err != nil {
 		return fmt.Errorf("connection to Dash Core RPC failed: %w", err)
-	}
-	return nil
-}
-
-func startRemoteSigner(ctx context.Context, cfg *Config, logger log.Logger) error {
-	if cfg.PrivValServerType == "dashcore" {
-		return startMockCoreSrv(cfg, logger)
-	}
-	err := startSigner(ctx, logger, cfg)
-	if err != nil {
-		logger.Error("starting signer",
-			"server", cfg.PrivValServer,
-			"err", err)
-		return err
-	}
-	if cfg.Protocol == "builtin" {
-		time.Sleep(1 * time.Second)
 	}
 	return nil
 }
@@ -294,59 +271,6 @@ func startLightNode(ctx context.Context, logger log.Logger, cfg *Config) error {
 		logger.Error("proxy ListenAndServe", "err", err)
 	}
 
-	return nil
-}
-
-// startSigner starts a signer server connecting to the given endpoint.
-func startSigner(ctx context.Context, logger log.Logger, cfg *Config) error {
-	filePV, err := privval.LoadFilePV(cfg.PrivValKey, cfg.PrivValState)
-	if err != nil {
-		return err
-	}
-
-	protocol, address := tmnet.ProtocolAndAddress(cfg.PrivValServer)
-	var dialFn privval.SocketDialer
-	switch protocol {
-	case "tcp":
-		dialFn = privval.DialTCPFn(address, 3*time.Second, ed25519.GenPrivKey())
-	case "unix":
-		dialFn = privval.DialUnixFn(address)
-	case "grpc":
-		lis, err := net.Listen("tcp", address)
-		if err != nil {
-			return err
-		}
-		ss := grpcprivval.NewSignerServer(logger, cfg.ChainID, filePV)
-
-		s := grpc.NewServer()
-
-		privvalproto.RegisterPrivValidatorAPIServer(s, ss)
-
-		go func() { // no need to clean up since we remove docker containers
-			if err := s.Serve(lis); err != nil {
-				panic(err)
-			}
-			go func() {
-				<-ctx.Done()
-				s.GracefulStop()
-			}()
-		}()
-
-		return nil
-	default:
-		return fmt.Errorf("invalid privval protocol %q", protocol)
-	}
-
-	endpoint := privval.NewSignerDialerEndpoint(logger, dialFn,
-		privval.SignerDialerEndpointRetryWaitInterval(1*time.Second),
-		privval.SignerDialerEndpointConnRetries(100))
-
-	err = privval.NewSignerServer(endpoint, cfg.ChainID, filePV).Start(ctx)
-	if err != nil {
-		return err
-	}
-
-	logger.Info(fmt.Sprintf("Remote signer connecting to %v", cfg.PrivValServer))
 	return nil
 }
 
