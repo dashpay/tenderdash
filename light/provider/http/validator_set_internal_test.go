@@ -142,3 +142,19 @@ func TestValidatorSetThresholdKey(t *testing.T) {
 }
 
 func heightPtr(h int64) *int64 { return &h }
+
+func TestValidatorSetPublicKeyAvailability(t *testing.T) {
+	for _, missing := range []bool{false, true} {
+		vs, _ := types.RandValidatorSet(3)
+		if missing {
+			vs.Validators[0].PubKey = nil
+		}
+		client := &rpcmock.RemoteClient{}
+		client.On("Validators", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+			Return(page(vs, vs.Validators, true), nil)
+		got, err := validatorSetProvider(t, client).validatorSet(context.Background(), heightPtr(5), vs.Proposer().ProTxHash)
+		require.NoError(t, err)
+		require.Equal(t, !missing, got.HasPublicKeys)
+		require.Equal(t, vs.Hash(), got.Hash())
+	}
+}

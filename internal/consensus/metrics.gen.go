@@ -26,6 +26,12 @@ func PrometheusMetrics(namespace string, labelsAndValues ...string) *Metrics {
 			Name:      "validator_last_signed_height",
 			Help:      "Last height signed by this validator if the node is a validator.",
 		}, append(labels, "validator_address")).With(labelsAndValues...),
+		ValidatorMissingQuorumKeys: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: MetricsSubsystem,
+			Name:      "validator_missing_quorum_keys",
+			Help:      "Whether this node is an active validator missing its quorum's member public keys (0 or 1).",
+		}, labels).With(labelsAndValues...),
 		Rounds: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: MetricsSubsystem,
@@ -309,6 +315,7 @@ func NopMetrics() *Metrics {
 	return &Metrics{
 		Height:                       discard.NewGauge(),
 		ValidatorLastSignedHeight:    discard.NewGauge(),
+		ValidatorMissingQuorumKeys:   discard.NewGauge(),
 		Rounds:                       discard.NewGauge(),
 		RoundDuration:                discard.NewHistogram(),
 		Validators:                   discard.NewGauge(),

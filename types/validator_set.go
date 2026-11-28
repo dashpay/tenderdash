@@ -106,12 +106,7 @@ func NewValidatorSetCheckPublicKeys(
 	quorumHash crypto.QuorumHash,
 	params *ValidatorParams,
 ) *ValidatorSet {
-	hasPublicKeys := true
-	for _, val := range valz {
-		if val.PubKey == nil || len(val.PubKey.Bytes()) == 0 {
-			hasPublicKeys = false
-		}
-	}
+	hasPublicKeys := (&ValidatorSet{Validators: valz}).HasCompletePublicKeys()
 	return NewValidatorSet(valz, newThresholdPublicKey, quorumType, quorumHash, hasPublicKeys, params)
 }
 
@@ -932,7 +927,11 @@ func (vals *ValidatorSet) UpdateWithChangeSet(
 	newThresholdPublicKey crypto.PubKey,
 	newQuorumHash crypto.QuorumHash,
 ) error {
-	return vals.updateWithChangeSet(changes, true, newThresholdPublicKey, newQuorumHash)
+	if err := vals.updateWithChangeSet(changes, true, newThresholdPublicKey, newQuorumHash); err != nil {
+		return err
+	}
+	vals.HasPublicKeys = vals.HasCompletePublicKeys()
+	return nil
 }
 
 // VerifyCommit verifies +2/3 of the set had signed the given commit.
@@ -1339,7 +1338,8 @@ func ValidatorSetFromProto(vp *tmproto.ValidatorSet) (*ValidatorSet, error) {
 
 	vals.QuorumHash = vp.QuorumHash
 
-	vals.HasPublicKeys = vp.HasPublicKeys
+	// Availability is local derived state, not a trusted property of the wire format.
+	vals.HasPublicKeys = vals.HasCompletePublicKeys()
 
 	return vals, vals.ValidateBasic()
 }

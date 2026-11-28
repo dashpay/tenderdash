@@ -27,6 +27,9 @@ type Metrics struct {
 	// Last height signed by this validator if the node is a validator.
 	ValidatorLastSignedHeight metrics.Gauge `metrics_labels:"validator_address"`
 
+	// Whether this node is an active validator missing its quorum's member public keys (0 or 1).
+	ValidatorMissingQuorumKeys metrics.Gauge
+
 	// Number of rounds.
 	Rounds metrics.Gauge
 
