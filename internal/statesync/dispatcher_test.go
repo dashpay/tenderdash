@@ -319,15 +319,18 @@ func TestDispatcherFailedRequestFreesPeer(t *testing.T) {
 	})
 
 	ch.release.Store(true)
+	responded := make(chan error, 1)
 	go func() {
 		select {
 		case <-chans.Out:
-			assert.NoError(t, d.Respond(block, peer, nextConnID))
+			responded <- d.Respond(block, peer, nextConnID)
 		case <-ctx.Done():
+			responded <- ctx.Err()
 		}
 	}()
 	lb, connID, err := d.lightBlockWithConn(ctx, 1, peer)
 	require.NoError(t, err, "a failed request must not leave the peer busy")
+	require.NoError(t, <-responded)
 	require.NotNil(t, lb)
 	require.Equal(t, nextConnID, connID)
 	require.Empty(t, d.calls)
