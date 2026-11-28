@@ -95,6 +95,11 @@ message VersionParams {
     // CONSENSUS_VERSION_2 adds proposer liveness: the proposer of a round that waits for transactions
     // sends heartbeats, so validators can tell a live proposer from a silent one.
     CONSENSUS_VERSION_2 = 2;
+    // CONSENSUS_VERSION_3 adds same-block randomness on top of CONSENSUS_VERSION_2: the threshold signature
+    // recovered from a block's prevotes is the block's random beacon, the application applies it with
+    // ApplyBlockRandomness, and precommits sign the resulting randomness-applied app hash. Proposer selection
+    // is the same as in CONSENSUS_VERSION_1.
+    CONSENSUS_VERSION_3 = 3;
   }
 }
 

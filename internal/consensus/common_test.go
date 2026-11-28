@@ -854,7 +854,7 @@ func consensusLogger(t *testing.T) log.Logger {
 func makeConsensusState(
 	ctx context.Context,
 	t *testing.T,
-	_cfg *config.Config,
+	cfg *config.Config,
 	nValidators int,
 	testName string,
 	tickerFunc func() TimeoutTicker,

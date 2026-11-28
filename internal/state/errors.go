@@ -9,6 +9,9 @@ var (
 	ErrBlockRejected            = errors.New("block not accepted by abci app")
 	ErrCommitExtensionsRejected = errors.New("commit vote extensions not accepted by abci app")
 	ErrVoteExtensionRejected    = errors.New("vote extensions not accepted by abci app")
+	// ErrAppHashMismatch means the application reached another app hash than the one a commit signs
+	// after applying the block's randomness: this node has diverged.
+	ErrAppHashMismatch = errors.New("app hash after ApplyBlockRandomness does not match the commit")
 )
 
 type (

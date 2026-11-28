@@ -11,6 +11,7 @@ import (
 	"github.com/dashpay/tenderdash/dash"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/test/factory"
+	dbm "github.com/dashpay/tenderdash/libs/db"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -31,12 +32,14 @@ func TestReplayRejectsCommitExtensionsBeforeFinalize(t *testing.T) {
 			client := abciclient.NewLocalClient(log.NewNopLogger(), app)
 			exec := sm.NewBlockExecutor(nil, client, nil, nil, nil, nil)
 			n.node.blockStore.SaveBlock(n.block, n.parts, n.commit)
-			replayer := NewBlockReplayer(client, nil, n.node.blockStore, nil, nil, exec)
+			stateStore := sm.NewStore(dbm.NewMemDB())
+			require.NoError(t, stateStore.Save(sd.state))
+			replayer := NewBlockReplayer(client, stateStore, n.node.blockStore, nil, nil, exec)
 			var err error
 			if applyState {
 				_, err = replayer.syncStateAt(ctx, sd.state, n.block.Height, exec)
 			} else {
-				_, err = replayer.replayBlock(ctx, n.block, n.commit, sd.state, n.block.Height)
+				_, _, err = replayer.replayBlock(ctx, n.block, n.commit, sd.state, n.block.Height)
 			}
 			require.ErrorIs(t, err, sm.ErrCommitExtensionsRejected)
 			require.ErrorContains(t, err, "roll back or re-sync the node", "both paths give the operator's remedy")

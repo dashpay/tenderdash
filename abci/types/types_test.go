@@ -1,6 +1,7 @@
 package types_test
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -129,4 +130,12 @@ func TestVoteExtensionDoesNotSharetheApplicationsBytes(t *testing.T) {
 
 	require.Equal(t, []byte("returned by the application"), converted.Extension)
 	require.Equal(t, []byte("also returned by the application"), converted.GetSignRequestId())
+}
+
+// TestBaseApplicationApplyBlockRandomness checks that the base application refuses ApplyBlockRandomness:
+// an empty app hash must never pass as an answer.
+func TestBaseApplicationApplyBlockRandomness(t *testing.T) {
+	resp, err := abci.NewBaseApplication().ApplyBlockRandomness(context.Background(), &abci.RequestApplyBlockRandomness{})
+	require.ErrorIs(t, err, abci.ErrApplyBlockRandomnessNotImplemented)
+	require.Nil(t, resp)
 }
