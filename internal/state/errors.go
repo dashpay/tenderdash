@@ -9,6 +9,9 @@ var (
 	ErrBlockRejected            = errors.New("block not accepted by abci app")
 	ErrCommitExtensionsRejected = errors.New("commit vote extensions not accepted by abci app")
 	ErrVoteExtensionRejected    = errors.New("vote extensions not accepted by abci app")
+	// ErrMalformedResponse marks an abci app response that breaks the protocol,
+	// as opposed to a failed call: sending the request again cannot fix it.
+	ErrMalformedResponse = errors.New("malformed response from abci app")
 )
 
 type (

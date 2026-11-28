@@ -41,6 +41,9 @@ type verifyExtensionContractApp struct {
 	// corruptAppHash makes ProcessProposal accept every block with an app hash
 	// the block does not have.
 	corruptAppHash bool
+	// shortAppHash makes ProcessProposal accept every block with an app hash
+	// one byte too short, a malformed response.
+	shortAppHash bool
 
 	mtx       sync.Mutex
 	calls     int // ProcessProposal calls, accepted or not
@@ -69,6 +72,9 @@ func (app *verifyExtensionContractApp) ProcessProposal(
 	resp, err := app.BaseApplication.ProcessProposal(ctx, req)
 	if app.corruptAppHash && err == nil {
 		resp.AppHash = bytes.Repeat([]byte{0xff}, crypto.DefaultAppHashSize)
+	}
+	if app.shortAppHash && err == nil {
+		resp.AppHash = make([]byte, crypto.DefaultAppHashSize-1)
 	}
 	return resp, err
 }
@@ -346,9 +352,12 @@ func TestStatePolkaBlockRetryCoalescesDuplicateTriggers(t *testing.T) {
 func TestStatePolkaBlockFailureNotWorthRetryingIsNotRetried(t *testing.T) {
 	testCases := map[string]*verifyExtensionContractApp{
 		// The response does not match the block: sm.ErrInvalidBlock.
-		"invalid block":    {corruptAppHash: true},
-		"client stopped":   {transientFailures: 1, failure: abciclient.ErrClientStopped},
-		"context canceled": {transientFailures: 1, failure: context.Canceled},
+		"invalid block": {corruptAppHash: true},
+		// The application accepts the block in a malformed response:
+		// sm.ErrMalformedResponse.
+		"malformed response": {shortAppHash: true},
+		"client stopped":     {transientFailures: 1, failure: abciclient.ErrClientStopped},
+		"context canceled":   {transientFailures: 1, failure: context.Canceled},
 	}
 	for name, app := range testCases {
 		t.Run(name, func(t *testing.T) {
