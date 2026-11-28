@@ -129,7 +129,9 @@ compatibility. Fill every applicable repository PR-template section with the
 compatibility rationale and validation, including AI attribution.
 
 A prerelease preparation PR targets `dev`, a full-release PR promotes the frozen
-candidate to `master`, and a stable patch PR targets `master`. Follow the
+candidate to `master`, and a stable patch PR targets `master`. Use a `release_*`
+head branch for PRs into `master` to trigger Docker staging of the candidate
+SHA; fork PRs cannot stage images. Follow the
 promotion and branch-protection rules in [RELEASES.md](../../../RELEASES.md#branches-and-release-sources);
 report a protection conflict instead of bypassing it. Stop after the requested
 preparation or PR phase if no release publication was requested.
@@ -155,6 +157,20 @@ the same tag/SHA; inspect and reuse rather than deleting/recreating them. Look
 drafts up by tag name: a draft's URL shows `untagged-…`, and its
 `targetCommitish` (the default branch) is irrelevant once the tag exists.
 
+Immediately after creating or reusing the draft, dispatch Docker staging (drafts
+emit no release events):
+
+```sh
+gh workflow run docker.yml --ref dev -f source_ref=refs/tags/TAG
+```
+
+Use a workflow ref containing the build/promotion flow and the exact reviewed
+tag as `source_ref`; do not use the manual-publication `tag` input. Wait for
+success and record the staged GHCR digest/source SHA before publishing. A PR's
+head SHA can differ from the merge SHA; its build does not replace this step.
+The release tag must itself contain the new workflow/helper: release events
+execute the workflow at that tag, regardless of the staging workflow ref.
+
 When signed binaries are required, run from a checkout with that exact tag:
 
 ```sh
@@ -168,7 +184,10 @@ uploading to the matching draft. Compare existing assets rather than overwriting
 them with `--clobber`. When no binaries are built, state which artifacts are
 omitted in the release notes.
 
-Publishing the draft triggers `.github/workflows/docker.yml` (tag and alias rules
+Publishing the draft triggers `.github/workflows/docker.yml`: it verifies the
+staged digest's revision, version, build options and both architectures, then
+re-tags that exact digest on Docker Hub. Missing/incompatible staging or a failed
+promotion falls back to building the exact tag (tag and alias rules
 in [RELEASES.md](../../../RELEASES.md#validation-and-artifacts)). Check that the
 Platform rollout and release request authorize this publication. Before
 publishing, record the digests of the stable aliases (`latest`, `X`, `X.Y`) and
