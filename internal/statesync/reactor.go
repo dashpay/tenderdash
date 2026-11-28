@@ -356,7 +356,8 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 // OnStop stops the reactor by signaling to all spawned goroutines to exit and
 // blocking until they all exit.
 func (r *Reactor) OnStop() {
-	// tell the dispatcher to stop sending any more requests
+	// Drop pending light block calls so late responses are refused. Their
+	// requests end with the contexts they were made with, not here.
 	r.dispatcher.Close()
 }
 

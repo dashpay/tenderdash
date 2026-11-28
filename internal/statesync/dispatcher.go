@@ -38,6 +38,13 @@ type lightBlockResult struct {
 	connID uint64
 }
 
+// pendingCall is a light block request awaiting its one answer. answered is set,
+// under the dispatcher lock, once that answer is queued.
+type pendingCall struct {
+	ch       chan lightBlockResult
+	answered bool
+}
+
 // A Dispatcher multiplexes concurrent requests by multiple peers for light blocks.
 // Only one request per peer can be sent at a time. Subsequent concurrent requests will
 // report an error from the LightBlock method.
@@ -48,14 +55,14 @@ type Dispatcher struct {
 	logger    log.Logger
 	mtx       sync.Mutex
 	// all pending calls that have been dispatched and are awaiting an answer
-	calls map[types.NodeID]chan lightBlockResult
+	calls map[types.NodeID]*pendingCall
 }
 
 func NewDispatcher(requestChannel p2p.Channel, logger log.Logger) *Dispatcher {
 	return &Dispatcher{
 		logger:    logger.With("module", "lb-dispatcher"),
 		requestCh: requestChannel,
-		calls:     make(map[types.NodeID]chan lightBlockResult),
+		calls:     make(map[types.NodeID]*pendingCall),
 	}
 }
 
@@ -76,15 +83,7 @@ func (d *Dispatcher) lightBlockWithConn(ctx context.Context, height int64, peer 
 		return nil, 0, err
 	}
 
-	// clean up the call after a response is returned
-	defer func() {
-		d.mtx.Lock()
-		defer d.mtx.Unlock()
-		if call, ok := d.calls[peer]; ok {
-			delete(d.calls, peer)
-			close(call)
-		}
-	}()
+	defer d.release(peer, callCh)
 
 	// wait for a response, cancel or timeout
 	start := time.Now()
@@ -113,38 +112,43 @@ func (d *Dispatcher) lightBlockWithConn(ctx context.Context, height int64, peer 
 	}
 }
 
-// dispatch takes a peer and allocates it a channel so long as it's not already
-// busy and the receiving channel is still running. It then dispatches the message
+// dispatch registers a call for a peer that is not already busy, then sends the
+// request. The send happens outside the lock, so responses are not held up by it.
 func (d *Dispatcher) dispatch(ctx context.Context, peer types.NodeID, height int64) (chan lightBlockResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	d.mtx.Lock()
-	defer d.mtx.Unlock()
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	default:
-	}
-
-	ch := make(chan lightBlockResult, 1)
-
-	// check if a request for the same peer has already been made
 	if _, ok := d.calls[peer]; ok {
-		close(ch)
-		return ch, errPeerAlreadyBusy
+		d.mtx.Unlock()
+		return nil, errPeerAlreadyBusy
 	}
-	d.calls[peer] = ch
+	ch := make(chan lightBlockResult, 1)
+	d.calls[peer] = &pendingCall{ch: ch}
+	d.mtx.Unlock()
 
-	// send request
 	if err := d.requestCh.Send(ctx, p2p.Envelope{
 		To: peer,
 		Message: &ssproto.LightBlockRequest{
 			Height: uint64(height),
 		},
 	}); err != nil {
-		close(ch)
-		return ch, err
+		d.release(peer, ch)
+		return nil, err
 	}
 
 	return ch, nil
+}
+
+// release removes the peer's call if it is still the one that owns ch. Close may
+// have dropped it already, and the peer may have a newer call by now.
+func (d *Dispatcher) release(peer types.NodeID, ch chan lightBlockResult) {
+	d.mtx.Lock()
+	defer d.mtx.Unlock()
+	if call, ok := d.calls[peer]; ok && call.ch == ch {
+		delete(d.calls, peer)
+	}
 }
 
 // Respond allows the underlying process which receives requests on the
@@ -159,57 +163,43 @@ func (d *Dispatcher) Respond(lb *tmproto.LightBlock, peer types.NodeID, connID u
 	d.mtx.Lock()
 	defer d.mtx.Unlock()
 
-	// check that the response came from a request
-	answerCh, ok := d.calls[peer]
-	if !ok {
-		// this can also happen if the response came in after the timeout
+	// A call takes one answer; anything else, including a response after the
+	// caller's timeout, is refused.
+	call, ok := d.calls[peer]
+	if !ok || call.answered {
 		return errUnsolicitedResponse
 	}
 
-	// If lb is nil we take that to mean that the peer didn't have the requested light
-	// block and thus pass on the nil to the caller.
-	if lb == nil {
-		return deliverLightBlockResult(answerCh, lightBlockResult{connID: connID})
-	}
-
-	// LightBlockFromProto runs the ValidateBasic of every part it decodes, so this
-	// covers the whole of the header, commit and validator set - including the
-	// quorum type, whose sign-hash conversion panics on a value outside a uint8.
-	block, err := types.LightBlockFromProto(lb)
-	if err != nil {
-		err = fmt.Errorf("%w: %w", errMalformedLightBlock, err)
-		if deliverErr := deliverLightBlockResult(answerCh, lightBlockResult{err: err, connID: connID}); deliverErr != nil {
-			return deliverErr
+	// A nil lb means the peer does not have the requested light block; the caller
+	// gets a nil block.
+	result := lightBlockResult{connID: connID}
+	var err error
+	if lb != nil {
+		// LightBlockFromProto runs the ValidateBasic of every part it decodes, so this
+		// covers the whole of the header, commit and validator set - including the
+		// quorum type, whose sign-hash conversion panics on a value outside a uint8.
+		if result.block, err = types.LightBlockFromProto(lb); err != nil {
+			err = fmt.Errorf("%w: %w", errMalformedLightBlock, err)
+			result.err = err
 		}
-		return err
 	}
 
-	return deliverLightBlockResult(answerCh, lightBlockResult{block: block, connID: connID})
+	// The channel has room for exactly this one answer, so the send never waits.
+	call.answered = true
+	call.ch <- result
+	return err
 }
 
-// deliverLightBlockResult never waits. A call takes one answer and its channel has
-// room for exactly that, so a full channel means this response is surplus. Waiting
-// for room would hold the dispatcher lock against the caller's cleanup, which needs
-// that lock and no longer reads the channel.
-func deliverLightBlockResult(answerCh chan<- lightBlockResult, result lightBlockResult) error {
-	select {
-	case answerCh <- result:
-		return nil
-	default:
-		return errUnsolicitedResponse
-	}
-}
-
-// Close shuts down the dispatcher and cancels any pending calls awaiting responses.
-// Peers awaiting responses that have not arrived are delivered a nil block.
+// Close drops every registered call, so later responses are refused as unsolicited.
+// It cancels nothing: callers end their outstanding sends and waits through their
+// own contexts.
 func (d *Dispatcher) Close() {
 	d.mtx.Lock()
 	defer d.mtx.Unlock()
 	for peer := range d.calls {
+		// Channels are never closed: a caller still waiting gives up on its own
+		// context, and an answer is never sent to a call no longer registered.
 		delete(d.calls, peer)
-		// don't close the channel here as it's closed in
-		// other handlers, and would otherwise get garbage
-		// collected.
 	}
 }
 

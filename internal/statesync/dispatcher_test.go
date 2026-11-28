@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -71,7 +72,7 @@ func TestDispatcherBasic(t *testing.T) {
 func TestDispatcherReturnsNoBlock(t *testing.T) {
 	t.Cleanup(leaktest.Check(t))
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	chans, ch := testChannel(100)
@@ -80,17 +81,21 @@ func TestDispatcherReturnsNoBlock(t *testing.T) {
 
 	peer := factory.NodeID(t, "a")
 
+	responded := make(chan error, 1)
 	go func() {
-		<-chans.Out
-		require.NoError(t, d.Respond(nil, peer, 0))
-		cancel()
+		select {
+		case <-chans.Out:
+			responded <- d.Respond(nil, peer, 0)
+		case <-ctx.Done():
+			responded <- ctx.Err()
+		}
 	}()
 
 	lb, err := d.LightBlock(ctx, 1, peer)
-	<-ctx.Done()
 
 	require.Nil(t, lb)
 	require.NoError(t, err)
+	require.NoError(t, <-responded)
 }
 
 // TestDispatcherReportsDeliveringConnection pins what fences a refusal to its sender:
@@ -187,19 +192,23 @@ func TestDispatcherDeliversUndecodableResponse(t *testing.T) {
 }
 
 // TestDispatcherSurplusResponseDoesNotBlock pins that one request takes one answer.
-// Respond runs on the loop that handles every statesync channel and holds the
-// dispatcher lock, so a response with nowhere to go must be refused at once: waiting
-// for room would stall that loop, and would deadlock with the caller's cleanup, which
-// needs the same lock.
+// Respond runs on the loop that handles every statesync channel, so a further
+// response must be refused at once, whether or not the caller has already read the
+// first one, and must not replace it: the caller attributes what it got to the
+// connection that delivered the first answer.
 func TestDispatcherSurplusResponseDoesNotBlock(t *testing.T) {
+	const firstConnID, surplusConnID = uint64(11), uint64(22)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	peer := factory.NodeID(t, "a")
-	resp := mockLBResp(ctx, t, peer, 1, time.Now())
-	block, err := resp.block.ToProto()
+	first, err := mockLBResp(ctx, t, peer, 1, time.Now()).block.ToProto()
 	require.NoError(t, err)
-	malformed, err := resp.block.ToProto()
+	other := mockLBResp(ctx, t, peer, 2, time.Now()).block
+	block, err := other.ToProto()
+	require.NoError(t, err)
+	malformed, err := other.ToProto()
 	require.NoError(t, err)
 	malformed.ValidatorSet.QuorumType = int32(outOfRangeQuorumType)
 
@@ -209,34 +218,210 @@ func TestDispatcherSurplusResponseDoesNotBlock(t *testing.T) {
 		"malformed": malformed,
 	}
 	for name, surplus := range testCases {
-		t.Run(name, func(t *testing.T) {
-			t.Cleanup(leaktest.Check(t))
+		for _, readFirst := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/first answer read %t", name, readFirst), func(t *testing.T) {
+				t.Cleanup(leaktest.Check(t))
 
-			ctx, cancel := context.WithCancel(ctx)
-			defer cancel()
+				ctx, cancel := context.WithCancel(ctx)
+				defer cancel()
 
-			_, ch := testChannel(1)
-			d := NewDispatcher(ch, log.NewTestingLogger(t))
+				_, ch := testChannel(1)
+				d := NewDispatcher(ch, log.NewTestingLogger(t))
 
-			callCh, err := d.dispatch(ctx, peer, 1)
-			require.NoError(t, err)
-			require.NoError(t, d.Respond(block, peer, 0))
+				callCh, err := d.dispatch(ctx, peer, 1)
+				require.NoError(t, err)
+				require.NoError(t, d.Respond(first, peer, firstConnID))
 
-			done := make(chan error, 1)
-			go func() { done <- d.Respond(surplus, peer, 0) }()
+				var result lightBlockResult
+				if readFirst {
+					// The call stays registered until its caller cleans up.
+					result = <-callCh
+				}
 
-			select {
-			case err := <-done:
-				require.ErrorIs(t, err, errUnsolicitedResponse)
-			case <-time.After(5 * time.Second):
-				t.Fatal("a surplus response blocked the dispatcher")
-			}
+				done := make(chan error, 1)
+				go func() { done <- d.Respond(surplus, peer, surplusConnID) }()
 
-			result := <-callCh
-			require.NoError(t, result.err)
-			require.NotNil(t, result.block, "the first answer must survive the surplus one")
-		})
+				select {
+				case err := <-done:
+					require.ErrorIs(t, err, errUnsolicitedResponse)
+				case <-time.After(5 * time.Second):
+					t.Fatal("a surplus response blocked the dispatcher")
+				}
+
+				if readFirst {
+					require.Empty(t, callCh, "a surplus response must not be queued for the caller")
+				} else {
+					result = <-callCh
+				}
+				require.NoError(t, result.err)
+				require.NotNil(t, result.block)
+				require.EqualValues(t, 1, result.block.Height, "the first answer must survive the surplus one")
+				require.Equal(t, firstConnID, result.connID,
+					"the answer must stay attributed to the connection that delivered it")
+			})
+		}
 	}
+}
+
+// blockingSendChannel holds each request until the request's context ends, and
+// reports it on sending; once release is set, requests pass through.
+type blockingSendChannel struct {
+	p2p.Channel
+	sending chan p2p.Envelope
+	release atomic.Bool
+}
+
+func (c *blockingSendChannel) Send(ctx context.Context, e p2p.Envelope) error {
+	if c.release.Load() {
+		return c.Channel.Send(ctx, e)
+	}
+	c.sending <- e
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+// TestDispatcherFailedRequestFreesPeer pins that a request that could not be sent
+// leaves nothing behind: the peer can be asked again, and a response it sends
+// anyway is refused as unsolicited - not a panic, which the reactor would report
+// against the peer.
+func TestDispatcherFailedRequestFreesPeer(t *testing.T) {
+	t.Cleanup(leaktest.Check(t))
+	const lateConnID, nextConnID = uint64(33), uint64(44)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	peer := factory.NodeID(t, "a")
+	block, err := mockLBResp(ctx, t, peer, 1, time.Now()).block.ToProto()
+	require.NoError(t, err)
+
+	chans, inner := testChannel(1)
+	ch := &blockingSendChannel{Channel: inner, sending: make(chan p2p.Envelope, 1)}
+	d := NewDispatcher(ch, log.NewTestingLogger(t))
+
+	// Fail the send only once the call is registered and the request is in Send.
+	sendCtx, sendCancel := context.WithCancel(ctx)
+	defer sendCancel()
+	failed := make(chan error, 1)
+	failedConnID := make(chan uint64, 1)
+	go func() {
+		_, connID, err := d.lightBlockWithConn(sendCtx, 1, peer)
+		failedConnID <- connID
+		failed <- err
+	}()
+	<-ch.sending
+	sendCancel()
+	require.ErrorIs(t, <-failed, context.Canceled)
+	require.Zero(t, <-failedConnID, "a request that was never sent has no delivering connection")
+
+	require.NotPanics(t, func() {
+		require.ErrorIs(t, d.Respond(block, peer, lateConnID), errUnsolicitedResponse)
+	})
+
+	ch.release.Store(true)
+	responded := make(chan error, 1)
+	go func() {
+		select {
+		case <-chans.Out:
+			responded <- d.Respond(block, peer, nextConnID)
+		case <-ctx.Done():
+			responded <- ctx.Err()
+		}
+	}()
+	lb, connID, err := d.lightBlockWithConn(ctx, 1, peer)
+	require.NoError(t, err, "a failed request must not leave the peer busy")
+	require.NoError(t, <-responded)
+	require.NotNil(t, lb)
+	require.Equal(t, nextConnID, connID)
+	require.Empty(t, d.calls)
+}
+
+// TestDispatcherRespondDoesNotWaitForPendingRequest pins that a request waiting to
+// be sent does not hold up responses, which arrive on the loop that serves every
+// statesync channel.
+func TestDispatcherRespondDoesNotWaitForPendingRequest(t *testing.T) {
+	t.Cleanup(leaktest.Check(t))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, inner := testChannel(1)
+	ch := &blockingSendChannel{Channel: inner, sending: make(chan p2p.Envelope, 1)}
+	d := NewDispatcher(ch, log.NewTestingLogger(t))
+	pending, other := factory.NodeID(t, "a"), factory.NodeID(t, "b")
+
+	callCtx, callCancel := context.WithCancel(ctx)
+	defer callCancel()
+	failed := make(chan error, 1)
+	go func() {
+		_, _, err := d.lightBlockWithConn(callCtx, 1, pending)
+		failed <- err
+	}()
+	<-ch.sending
+
+	done := make(chan error, 1)
+	go func() { done <- d.Respond(nil, other, 1) }()
+	select {
+	case err := <-done:
+		require.ErrorIs(t, err, errUnsolicitedResponse)
+	case <-time.After(5 * time.Second):
+		t.Fatal("a response waited for a request still being sent")
+	}
+
+	callCancel()
+	require.ErrorIs(t, <-failed, context.Canceled)
+	require.Empty(t, d.calls)
+}
+
+// TestDispatcherFailedRequestKeepsNewerCall pins that a request that fails to send
+// removes only its own call: once Close has dropped it, the peer can be asked again,
+// and the older failure must not cancel that newer call.
+func TestDispatcherFailedRequestKeepsNewerCall(t *testing.T) {
+	t.Cleanup(leaktest.Check(t))
+	const connID = uint64(55)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	peer := factory.NodeID(t, "a")
+	block, err := mockLBResp(ctx, t, peer, 1, time.Now()).block.ToProto()
+	require.NoError(t, err)
+
+	_, inner := testChannel(1)
+	ch := &blockingSendChannel{Channel: inner, sending: make(chan p2p.Envelope, 1)}
+	d := NewDispatcher(ch, log.NewTestingLogger(t))
+
+	oldCtx, oldCancel := context.WithCancel(ctx)
+	defer oldCancel()
+	oldDone := make(chan error, 1)
+	go func() {
+		_, _, err := d.lightBlockWithConn(oldCtx, 1, peer)
+		oldDone <- err
+	}()
+	<-ch.sending
+
+	closed := make(chan struct{})
+	go func() {
+		d.Close()
+		close(closed)
+	}()
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close waited for a request still being sent")
+	}
+
+	ch.release.Store(true)
+	newCh, err := d.dispatch(ctx, peer, 1)
+	require.NoError(t, err)
+
+	oldCancel()
+	require.ErrorIs(t, <-oldDone, context.Canceled)
+
+	require.NoError(t, d.Respond(block, peer, connID), "the newer call must still be registered")
+	result := <-newCh
+	require.NoError(t, result.err)
+	require.Equal(t, connID, result.connID)
 }
 
 func TestDispatcherTimeOutWaitingOnLightBlock(t *testing.T) {
