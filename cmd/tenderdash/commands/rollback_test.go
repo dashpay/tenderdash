@@ -3,6 +3,7 @@ package commands_test
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,11 +22,21 @@ func TestRollbackIntegration(t *testing.T) {
 		t.Skip("skipping test in short mode")
 	}
 
-	var height int64
+	t.Run("keep blocks", func(t *testing.T) { testRollbackIntegration(t, false) })
+	// With the block store rolled back too, the restarted node finds the app, the state and the store at the
+	// same height, so the handshake compares the app's app hash with the rolled back state's.
+	t.Run("roll back blocks", func(t *testing.T) { testRollbackIntegration(t, true) })
+}
+
+func testRollbackIntegration(t *testing.T, rollbackStore bool) {
+	var (
+		height  int64
+		appHash []byte
+	)
 	dir := t.TempDir()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	cfg, err := rpctest.CreateConfig(t, t.Name())
+	cfg, err := rpctest.CreateConfig(t, strings.ReplaceAll(t.Name(), "/", "_"))
 	require.NoError(t, err)
 	cfg.BaseConfig.DBBackend = "goleveldb"
 
@@ -72,7 +83,7 @@ func TestRollbackIntegration(t *testing.T) {
 	t.Run("Rollback", func(t *testing.T) {
 		time.Sleep(time.Second)
 		require.NoError(t, app.Rollback())
-		height, _, err = commands.RollbackState(cfg, false)
+		height, appHash, err = commands.RollbackState(cfg, rollbackStore)
 		require.NoError(t, err, "%d", height)
 	})
 	t.Run("Restart", func(t *testing.T) {
@@ -88,6 +99,16 @@ func TestRollbackIntegration(t *testing.T) {
 
 		client, err := local.New(logger, node2.(local.NodeService))
 		require.NoError(t, err)
+
+		if rollbackStore {
+			// The handshake passed. The only validator signed the next heights before the rollback and refuses
+			// to sign them again, so check where the node starts instead of waiting for blocks.
+			status, err := client.Status(ctx)
+			require.NoError(t, err)
+			require.Equal(t, height, status.SyncInfo.LatestBlockHeight)
+			require.EqualValues(t, appHash, status.SyncInfo.LatestAppHash)
+			return
+		}
 
 		ticker := time.NewTicker(200 * time.Millisecond)
 		for {

@@ -120,9 +120,8 @@ func (s *stateProviderRPC) verifyLightBlockAtHeight(ctx context.Context, height 
 	return s.lc.VerifyLightBlockAtHeight(ctx, int64(height), ts)
 }
 
-// AppHash implements part of StateProvider. It calls the application to verify the
-// light blocks at heights h+1 and h+2 and, if verification succeeds, reports the app
-// hash for the block at height h+1 which correlates to the state at height h.
+// AppHash implements part of StateProvider. It verifies the light block at height h and,
+// if verification succeeds, reports its app hash, the app state after block h.
 func (s *stateProviderRPC) AppHash(ctx context.Context, height uint64) (tmbytes.HexBytes, error) {
 	s.Lock()
 	defer s.Unlock()
@@ -182,8 +181,9 @@ func (s *stateProviderRPC) State(ctx context.Context, height uint64) (sm.State, 
 	state.LastBlockTime = lastLightBlock.Time
 	state.LastBlockID = lastLightBlock.Commit.BlockID
 	state.LastCoreChainLockedBlockHeight = lastLightBlock.Header.CoreChainLockedHeight
-	state.LastAppHash = currentLightBlock.AppHash
-	state.LastResultsHash = currentLightBlock.ResultsHash
+	// Execution is same-block: header H carries the app and results hashes after block H.
+	state.LastAppHash = lastLightBlock.AppHash
+	state.LastResultsHash = lastLightBlock.ResultsHash
 	state.LastValidators, err = authenticateStateSyncValidatorSet(lastLightBlock, s.dashCoreClient)
 	if err != nil {
 		return sm.State{}, fmt.Errorf("authenticating last validator set: %w", err)
@@ -339,8 +339,9 @@ func (s *stateProviderP2P) State(ctx context.Context, height uint64) (sm.State, 
 	state.LastBlockTime = lastLightBlock.Time
 	state.LastBlockID = lastLightBlock.Commit.BlockID
 	state.LastCoreChainLockedBlockHeight = lastLightBlock.Header.CoreChainLockedHeight
-	state.LastAppHash = currentLightBlock.AppHash
-	state.LastResultsHash = currentLightBlock.ResultsHash
+	// Execution is same-block: header H carries the app and results hashes after block H.
+	state.LastAppHash = lastLightBlock.AppHash
+	state.LastResultsHash = lastLightBlock.ResultsHash
 	state.LastValidators, err = authenticateStateSyncValidatorSet(lastLightBlock, s.dashCoreClient)
 	if err != nil {
 		return sm.State{}, fmt.Errorf("authenticating last validator set: %w", err)
