@@ -399,6 +399,8 @@ func (r *Reactor) Sync(ctx context.Context) (sm.State, error) {
 	if err != nil {
 		return sm.State{}, fmt.Errorf("sync any: %w", err)
 	}
+	// Before consensus version 2 a commit carries no beacon; see WithoutRandomBeacon.
+	commit = commit.WithoutRandomBeacon()
 
 	err = r.publishCommitEvent(commit)
 	if err != nil {
@@ -915,8 +917,11 @@ func (r *Reactor) backfill(
 				return fmt.Errorf("authenticating backfill validator set at height %d: %w", resp.block.Height, err)
 			}
 
-			// save the signed headers
-			if err := r.blockStore.SaveSignedHeader(resp.block.SignedHeader, trustedBlockID); err != nil {
+			// save the signed headers; before consensus version 2 a commit carries no beacon, see
+			// WithoutRandomBeacon
+			signedHeader := *resp.block.SignedHeader
+			signedHeader.Commit = signedHeader.Commit.WithoutRandomBeacon()
+			if err := r.blockStore.SaveSignedHeader(&signedHeader, trustedBlockID); err != nil {
 				return err
 			}
 

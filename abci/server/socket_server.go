@@ -280,6 +280,12 @@ func (s *SocketServer) processRequest(ctx context.Context, req *types.Request) (
 			return nil, err
 		}
 		return types.ToResponseFinalizeBlock(res), nil
+	case *types.Request_ApplyBlockRandomness:
+		res, err := s.app.ApplyBlockRandomness(ctx, r.ApplyBlockRandomness)
+		if err != nil {
+			return nil, err
+		}
+		return types.ToResponseApplyBlockRandomness(res), nil
 	default:
 		return types.ToResponseException("Unknown request"), errors.New("unknown request type")
 	}

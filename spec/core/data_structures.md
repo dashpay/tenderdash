@@ -55,7 +55,7 @@ and a list of evidence of malfeasance (ie. signing conflicting votes).
 | Header | [Header](#header) | Header corresponding to the block. This field contains information used throughout consensus and other areas of the protocol. To find out what it contains, visit [header] (#header) | Must adhere to the validation rules of [header](#header) |
 | Data | [Data](#data) | Data contains a list of transactions. The contents of the transaction is unknown to Tenderdash. | This field can be empty or populated, but no validation is performed. Applications can perform validation on individual transactions prior to block creation using [checkTx](../abci/methods.md#checktx). |
 | Evidence | [EvidenceList](#evidencelist) | Evidence contains a list of infractions committed by validators. | Can be empty, but when populated the validations rules from [evidenceList](#evidencelist) apply |
-| LastCommit | [Commit](#commit) | The threshold-signed commit of the previous block. | Must not be nil, must carry no threshold block signature at the initial height, and must adhere to the validation rules of [commit](#commit). |
+| LastCommit | [Commit](#commit) | The threshold-signed commit of the previous block. | Must not be nil, must carry no threshold block signature at the initial height, and must adhere to the validation rules of [commit](#commit), except for Beacon and AppHash: a LastCommit whose Beacon or AppHash breaks their rule, or does not have the bytes wire type, is read without both instead of refused, as releases that do not know the fields skip them. |
 | CoreChainLock | `CoreChainLock` (optional) | Core chain lock carried by the block. | When present, must pass `CoreChainLock.ValidateBasic`. |
 
 ## Execution
@@ -162,6 +162,8 @@ Commit proves that a quorum decided a block: it carries the threshold-recovered 
 | QuorumHash | slice of bytes (`[]byte`) | Hash of the quorum that signed the commit. | |
 | ThresholdBlockSignature | [Signature](#signature) | Threshold-recovered block signature. | At height >= 1, must be of length 96 |
 | ThresholdVoteExtensions | Array of [VoteExtension](#voteextension) | Threshold-recovered vote extensions. | No nil entries; every type must be a defined enum value |
+| Beacon | slice of bytes (`[]byte`) | Random beacon: the threshold signature recovered from the prevotes of the commit round. Set from consensus version 2; empty before. Not covered by the commit's signature. | Must be empty with an empty AppHash, or 96 bytes with a 32-byte AppHash |
+| AppHash | slice of bytes (`[]byte`) | App hash returned by `ApplyBlockRandomness` for the block and round, which the precommits sign through `BlockID.StateID`. Set from consensus version 2; empty before. Not covered by the commit's signature. | Must be empty with an empty Beacon, or 32 bytes with a 96-byte Beacon |
 
 ## BlockIDFlag
 

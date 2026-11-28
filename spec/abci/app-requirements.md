@@ -134,8 +134,10 @@ for the block can pass it. See [VerifyVoteExtension](methods.md#verifyvoteextens
 Tenderdash does on each path when a commit is rejected.
 
 * Requirement 10 [_all_, no-side-effects]: $p$'s calls to `RequestPrepareProposal`,
-  `RequestProcessProposal`, `RequestExtendVote`, and `RequestVerifyVoteExtension` at height $h$ do
-  not modify $s_{p,h-1}$.
+  `RequestProcessProposal`, `RequestApplyBlockRandomness`, `RequestExtendVote`, and
+  `RequestVerifyVoteExtension` at height $h$ do not modify $s_{p,h-1}$. Tenderdash may call
+  `RequestApplyBlockRandomness` for a round that never commits, so the randomized state it produces
+  stays a candidate until `FinalizeBlock` commits the one for the commit round.
 
 * Requirement 11 [`ExtendVote`, `FinalizeBlock`, non-dependency]: for any correct process $p$,
 and any vote extensions $e$ that $p$ received at height $h$, the computation of

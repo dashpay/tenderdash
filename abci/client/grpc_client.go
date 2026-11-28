@@ -274,3 +274,7 @@ func (cli *grpcClient) VerifyVoteExtension(ctx context.Context, params *types.Re
 func (cli *grpcClient) FinalizeBlock(ctx context.Context, params *types.RequestFinalizeBlock) (*types.ResponseFinalizeBlock, error) {
 	return cli.client.FinalizeBlock(ctx, types.ToRequestFinalizeBlock(params).GetFinalizeBlock(), grpc.WaitForReady(true))
 }
+
+func (cli *grpcClient) ApplyBlockRandomness(ctx context.Context, params *types.RequestApplyBlockRandomness) (*types.ResponseApplyBlockRandomness, error) {
+	return cli.client.ApplyBlockRandomness(ctx, types.ToRequestApplyBlockRandomness(params).GetApplyBlockRandomness(), grpc.WaitForReady(true))
+}
